@@ -1,0 +1,250 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================
+   COLMEIA DESIGN SYSTEM
+   Theme: Amarelo Mel + Cinza Fibra de Carbono
+   Visual: Hexagonos (favos de mel)
+   ===================================================== */
+
+@layer base {
+  :root {
+    --background: 45 10% 97%;
+    --foreground: 220 15% 15%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 15%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
+    
+    --primary: 45 93% 47%;
+    --primary-foreground: 220 20% 10%;
+    
+    --secondary: 220 10% 90%;
+    --secondary-foreground: 220 15% 20%;
+    
+    --muted: 220 10% 94%;
+    --muted-foreground: 220 10% 45%;
+    
+    --accent: 40 96% 40%;
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 20% 10%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    
+    --border: 220 10% 88%;
+    --input: 220 10% 88%;
+    --ring: 45 93% 47%;
+    
+    --radius: 0.75rem;
+    
+    --sidebar-background: 220 10% 96%;
+    --sidebar-foreground: 220 15% 25%;
+    --sidebar-primary: 45 93% 47%;
+    --sidebar-primary-foreground: 220 20% 10%;
+    --sidebar-accent: 40 96% 40%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 10% 90%;
+    --sidebar-ring: 45 93% 47%;
+
+    --glow-primary: 45 100% 50%;
+    --glow-accent: 40 96% 45%;
+    --glow-neon: 45 100% 60%;
+
+    --status-open: 45 93% 47%;
+    --status-in-progress: 199 89% 48%;
+    --status-waiting: 38 92% 50%;
+    --status-resolved: 142 76% 36%;
+    --status-closed: 220 10% 50%;
+
+    --priority-low: 142 76% 36%;
+    --priority-medium: 45 93% 47%;
+    --priority-high: 25 95% 53%;
+    --priority-critical: 0 84% 60%;
+
+    --level-bronze: 30 60% 50%;
+    --level-silver: 220 10% 60%;
+    --level-gold: 45 93% 47%;
+    --level-platinum: 220 10% 75%;
+    --level-diamond: 40 96% 50%;
+  }
+
+  .dark {
+    --background: 220 15% 6%;
+    --foreground: 45 10% 95%;
+    
+    --card: 220 12% 10%;
+    --card-foreground: 45 10% 95%;
+    
+    --popover: 220 12% 8%;
+    --popover-foreground: 45 10% 95%;
+    
+    --primary: 45 93% 50%;
+    --primary-foreground: 220 20% 8%;
+    
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 45 10% 90%;
+    
+    --muted: 220 12% 14%;
+    --muted-foreground: 220 10% 55%;
+    
+    --accent: 40 96% 45%;
+    --accent-foreground: 220 20% 8%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 142 76% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 20% 10%;
+    --info: 199 89% 55%;
+    --info-foreground: 0 0% 100%;
+    
+    --border: 220 12% 18%;
+    --input: 220 12% 18%;
+    --ring: 45 93% 50%;
+    
+    --sidebar-background: 220 15% 5%;
+    --sidebar-foreground: 45 10% 90%;
+    --sidebar-primary: 45 93% 50%;
+    --sidebar-primary-foreground: 220 20% 8%;
+    --sidebar-accent: 40 96% 45%;
+    --sidebar-accent-foreground: 220 20% 8%;
+    --sidebar-border: 220 12% 15%;
+    --sidebar-ring: 45 93% 50%;
+
+    --glow-primary: 45 100% 55%;
+    --glow-accent: 40 96% 50%;
+    --glow-neon: 45 100% 65%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl backdrop-blur-xl;
+    background: hsl(var(--card) / 0.8);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  .premium-card {
+    @apply relative overflow-hidden rounded-xl bg-card border border-border transition-all duration-300;
+  }
+
+  .premium-card:hover {
+    border-color: hsl(var(--primary) / 0.4);
+    box-shadow: 0 0 25px -5px hsl(var(--glow-primary) / 0.3);
+  }
+
+  .gradient-border::before {
+    content: '';
+    @apply absolute inset-0 rounded-xl p-[1px] pointer-events-none;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+
+  .btn-colmeia {
+    @apply relative overflow-hidden font-semibold transition-all duration-300;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    box-shadow: 0 4px 15px -3px hsl(var(--primary) / 0.4);
+  }
+
+  .btn-colmeia:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px -5px hsl(var(--primary) / 0.5);
+  }
+
+  .glass-header {
+    background: hsl(var(--background) / 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  .glass-sidebar {
+    background: hsl(var(--sidebar-background) / 0.95);
+    backdrop-filter: blur(16px);
+  }
+
+  .active-indicator {
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full;
+    background: linear-gradient(180deg, hsl(var(--primary)), hsl(var(--accent)));
+    box-shadow: 0 0 10px hsl(var(--glow-primary) / 0.5);
+  }
+
+  .neon-text {
+    text-shadow: 0 0 10px hsl(var(--glow-primary) / 0.5);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+  }
+
+  .shadow-glow {
+    box-shadow: 0 0 20px -5px hsl(var(--glow-primary) / 0.3);
+  }
+
+  .shadow-honey {
+    box-shadow: 0 4px 20px -4px hsl(var(--primary) / 0.3);
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300;
+  }
+
+  .hover-lift:hover {
+    @apply -translate-y-1;
+    box-shadow: 0 10px 30px -10px hsl(var(--primary) / 0.3);
+  }
+
+  .scrollbar-premium::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.3);
+    border-radius: 3px;
+  }
+}
+
+/* Animations removed to prevent flickering on remote connections */
+/* If you want to re-enable animations, uncomment the following: */
+/*
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes hexagon-pulse {
+  0%, 100% { opacity: 0.03; }
+  50% { opacity: 0.08; }
+}
+
+.animate-float { animation: float 6s ease-in-out infinite; }
+.animate-float-delayed { animation: float 8s ease-in-out infinite 2s; }
+.animate-hexagon-pulse { animation: hexagon-pulse 4s ease-in-out infinite; }
+*/

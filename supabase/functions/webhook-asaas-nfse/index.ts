@@ -1,0 +1,363 @@
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Declare EdgeRuntime for background tasks
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
+// ============ EVENT LOGGING ============
+async function logNfseEvent(
+  supabase: SupabaseClient,
+  nfseHistoryId: string,
+  eventType: string,
+  eventLevel: "info" | "warn" | "error",
+  message: string,
+  correlationId: string,
+  details?: Record<string, unknown>
+) {
+  try {
+    await supabase.from("nfse_event_logs").insert({
+      nfse_history_id: nfseHistoryId,
+      event_type: eventType,
+      event_level: eventLevel,
+      message,
+      details: details || null,
+      correlation_id: correlationId,
+      source: "webhook-asaas-nfse",
+    });
+  } catch (e) {
+    console.warn("[WEBHOOK-ASAAS] Failed to log event:", e);
+  }
+}
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const STATUS_MAP: Record<string, string> = {
+  SCHEDULED: "processando",
+  SYNCHRONIZED: "processando",
+  AUTHORIZATION_PENDING: "processando",
+  AUTHORIZED: "autorizada",
+  CANCELED: "cancelada",
+  CANCELLATION_PENDING: "processando",
+  CANCELLATION_DENIED: "erro",
+  ERROR: "erro",
+};
+
+// Payment status for payment webhooks
+const PAYMENT_STATUS_MAP: Record<string, string> = {
+  PENDING: "pendente",
+  RECEIVED: "pago",
+  CONFIRMED: "pago",
+  RECEIVED_IN_CASH: "pago",
+  OVERDUE: "vencida",
+  REFUNDED: "estornada",
+  DELETED: "cancelada",
+};
+
+async function verifyWebhookAuth(req: Request, supabase: SupabaseClient): Promise<boolean> {
+  const webhookSecret = Deno.env.get("WEBHOOK_SECRET_ASAAS");
+
+  // Check token in query params first (fastest check)
+  const url = new URL(req.url);
+  const tokenParam = url.searchParams.get("token");
+  
+  if (webhookSecret && tokenParam === webhookSecret) {
+    return true;
+  }
+
+  // Check X-Webhook-Secret header
+  const headerToken = req.headers.get("X-Webhook-Secret");
+  if (webhookSecret && headerToken === webhookSecret) {
+    return true;
+  }
+
+  // Check against stored webhook_token in integration_settings
+  const { data: settings } = await supabase
+    .from("integration_settings")
+    .select("settings")
+    .eq("integration_type", "asaas")
+    .maybeSingle();
+
+  if (settings?.settings) {
+    const asaasSettings = settings.settings as { webhook_token?: string };
+    if (asaasSettings.webhook_token && tokenParam === asaasSettings.webhook_token) {
+      return true;
+    }
+  }
+
+  // If no secret configured and no valid token, fail closed
+  if (!webhookSecret) {
+    console.error("[WEBHOOK-ASAAS] CRITICAL: No WEBHOOK_SECRET_ASAAS configured - denying request");
+  }
+
+  return false;
+}
+
+async function downloadAndStoreFile(
+  supabase: SupabaseClient,
+  url: string,
+  nfseId: string,
+  fileType: "xml" | "pdf"
+): Promise<string | null> {
+  try {
+    console.log(`[WEBHOOK-ASAAS] Baixando ${fileType} de ${url}`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`[WEBHOOK-ASAAS] Falha ao baixar ${fileType}: ${response.status}`);
+      return null;
+    }
+
+    const content = await response.arrayBuffer();
+    const fileName = `${nfseId}.${fileType}`;
+    const filePath = `nfse/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from("nfse-files")
+      .upload(filePath, content, {
+        contentType: fileType === "xml" ? "application/xml" : "application/pdf",
+        upsert: true,
+      });
+
+    if (error) {
+      console.error(`[WEBHOOK-ASAAS] Erro ao salvar ${fileType}:`, error);
+      return null;
+    }
+
+    console.log(`[WEBHOOK-ASAAS] ${fileType.toUpperCase()} salvo em ${filePath}`);
+    return filePath;
+  } catch (error) {
+    console.error(`[WEBHOOK-ASAAS] Erro ao processar ${fileType}:`, error);
+    return null;
+  }
+}
+
+async function createNotification(
+  supabase: SupabaseClient,
+  title: string,
+  message: string,
+  type: "info" | "success" | "warning" | "error"
+) {
+  try {
+    const { data: adminUsers } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .in("role", ["admin", "financial"]);
+
+    if (!adminUsers || adminUsers.length === 0) return;
+
+    const notifications = adminUsers.map((user) => ({
+      user_id: user.user_id,
+      title,
+      message,
+      type,
+      read: false,
+    }));
+
+    await supabase.from("notifications").insert(notifications);
+    console.log(`[WEBHOOK-ASAAS] Notificações criadas para ${adminUsers.length} usuários`);
+  } catch (error) {
+    console.error("[WEBHOOK-ASAAS] Erro ao criar notificações:", error);
+  }
+}
+
+// Background processing for invoice (NFS-e) webhooks
+async function processInvoiceWebhook(
+  supabase: SupabaseClient,
+  event: string,
+  invoice: Record<string, unknown>
+) {
+  const correlationId = `webhook-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  console.log(`[WEBHOOK-ASAAS] Processando invoice webhook: ${event}`);
+
+  if (!invoice?.id) {
+    console.log("[WEBHOOK-ASAAS] Payload sem invoice.id, ignorando");
+    return;
+  }
+
+  const { data: nfseRecord, error: findError } = await supabase
+    .from("nfse_history")
+    .select("id, status, valor_servico, client_id, invoice_id, numero_nfse")
+    .eq("asaas_invoice_id", invoice.id)
+    .maybeSingle();
+
+  if (findError) {
+    console.error("[WEBHOOK-ASAAS] Erro ao buscar NFS-e:", findError);
+    return;
+  }
+
+  if (!nfseRecord) {
+    console.log(`[WEBHOOK-ASAAS] NFS-e não encontrada para asaas_invoice_id: ${invoice.id}`);
+    return;
+  }
+
+  const invoiceStatus = invoice.status as string;
+  const newStatus = STATUS_MAP[invoiceStatus] || "processando";
+  const oldStatus = nfseRecord.status;
+
+  console.log(`[WEBHOOK-ASAAS] ${invoice.id}: ${oldStatus} -> ${newStatus}`);
+  
+  // Log webhook received
+  await logNfseEvent(supabase, nfseRecord.id, "webhook", "info",
+    `Webhook recebido: ${event}. Status Asaas: ${invoiceStatus}`,
+    correlationId, { event, asaas_status: invoiceStatus, asaas_invoice_id: invoice.id });
+
+  const updateData: Record<string, unknown> = {
+    status: newStatus,
+    asaas_status: invoiceStatus,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (invoiceStatus === "AUTHORIZED") {
+    updateData.numero_nfse = String(invoice.number || "");
+    updateData.codigo_verificacao = invoice.validationCode;
+    updateData.data_autorizacao = new Date().toISOString();
+
+    if (invoice.pdfUrl) {
+      const pdfPath = await downloadAndStoreFile(supabase, invoice.pdfUrl as string, nfseRecord.id, "pdf");
+      if (pdfPath) {
+        updateData.pdf_url = pdfPath;
+        await logNfseEvent(supabase, nfseRecord.id, "file_download", "info",
+          "PDF da NFS-e salvo com sucesso", correlationId, { file_type: "pdf", path: pdfPath });
+      }
+    }
+
+    if (invoice.xmlUrl) {
+      const xmlPath = await downloadAndStoreFile(supabase, invoice.xmlUrl as string, nfseRecord.id, "xml");
+      if (xmlPath) {
+        updateData.xml_url = xmlPath;
+        await logNfseEvent(supabase, nfseRecord.id, "file_download", "info",
+          "XML da NFS-e salvo com sucesso", correlationId, { file_type: "xml", path: xmlPath });
+      }
+    }
+
+    // Log status change to authorized
+    await logNfseEvent(supabase, nfseRecord.id, "status_change", "info",
+      `NFS-e autorizada! Número: ${invoice.number}. Valor: R$ ${nfseRecord.valor_servico?.toFixed(2)}`,
+      correlationId, { old_status: oldStatus, new_status: "autorizada", numero_nfse: invoice.number });
+
+    await createNotification(
+      supabase,
+      "NFS-e Autorizada via Asaas",
+      `NFS-e #${invoice.number} foi autorizada. Valor: R$ ${nfseRecord.valor_servico?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+      "success"
+    );
+  }
+
+  if (invoiceStatus === "ERROR" || invoiceStatus === "CANCELLATION_DENIED") {
+    updateData.mensagem_erro = invoice.statusDescription || "Erro no processamento da NFS-e";
+
+    // Log error event
+    await logNfseEvent(supabase, nfseRecord.id, "error", "error",
+      `Erro na NFS-e: ${invoice.statusDescription || "Erro no processamento"}`,
+      correlationId, { asaas_status: invoiceStatus, error_description: invoice.statusDescription });
+
+    await createNotification(
+      supabase,
+      "Erro na NFS-e via Asaas",
+      `Erro ao processar NFS-e: ${invoice.statusDescription || "Verifique os dados fiscais"}`,
+      "error"
+    );
+  }
+
+  if (invoiceStatus === "CANCELED") {
+    // Log cancellation
+    await logNfseEvent(supabase, nfseRecord.id, "cancelled", "info",
+      `NFS-e cancelada. Número: ${invoice.number || nfseRecord.numero_nfse}`,
+      correlationId, { numero_nfse: invoice.number || nfseRecord.numero_nfse });
+
+    await createNotification(
+      supabase,
+      "NFS-e Cancelada",
+      `NFS-e #${invoice.number || nfseRecord.numero_nfse} foi cancelada`,
+      "warning"
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("nfse_history")
+    .update(updateData)
+    .eq("id", nfseRecord.id);
+
+  if (updateError) {
+    console.error("[WEBHOOK-ASAAS] Erro ao atualizar NFS-e:", updateError);
+    return;
+  }
+
+  console.log(`[WEBHOOK-ASAAS] NFS-e ${nfseRecord.id} atualizada com sucesso`);
+}
+
+// Background processing for payment webhooks
+async function processPaymentWebhook(
+  supabase: SupabaseClient,
+  event: string,
+  payment: Record<string, unknown>
+) {
+  console.log(`[WEBHOOK-ASAAS] Processando payment webhook: ${event}, payment_id: ${payment.id}`);
+  
+  // Log the event for audit purposes
+  console.log(`[WEBHOOK-ASAAS] Payment status: ${payment.status}, value: ${payment.value}`);
+  
+  // For now, just log payment events - can be extended to update invoices table
+  // if payments are linked to invoices via external_reference
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
+
+  try {
+    // Verify webhook authentication FIRST
+    const isValid = await verifyWebhookAuth(req, supabase);
+    if (!isValid) {
+      console.error("[WEBHOOK-ASAAS] Autenticação inválida");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const payload = await req.json();
+    const event = payload.event as string;
+    console.log("[WEBHOOK-ASAAS] Evento recebido:", event);
+
+    // Determine event type and process in background
+    const isInvoiceEvent = event?.startsWith("INVOICE_") || payload.invoice;
+    const isPaymentEvent = event?.startsWith("PAYMENT_") || payload.payment;
+
+    if (isInvoiceEvent && payload.invoice) {
+      // Process invoice webhook in background
+      EdgeRuntime.waitUntil(processInvoiceWebhook(supabase, event, payload.invoice));
+    } else if (isPaymentEvent && payload.payment) {
+      // Process payment webhook in background
+      EdgeRuntime.waitUntil(processPaymentWebhook(supabase, event, payload.payment));
+    } else {
+      console.log(`[WEBHOOK-ASAAS] Evento não processado: ${event}`);
+    }
+
+    // Return immediate success response
+    return new Response(
+      JSON.stringify({ success: true, event, received_at: new Date().toISOString() }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("[WEBHOOK-ASAAS] Erro:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Erro interno" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
+
+// Handle shutdown for background tasks
+addEventListener("beforeunload", (ev) => {
+  console.log("[WEBHOOK-ASAAS] Função encerrando:", (ev as CustomEvent).detail?.reason);
+});

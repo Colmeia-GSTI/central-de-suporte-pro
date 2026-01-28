@@ -1,0 +1,3286 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
+  public: {
+    Tables: {
+      alert_escalation_settings: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          escalate_to_role: string
+          escalation_minutes: number
+          id: string
+          is_active: boolean
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          escalate_to_role?: string
+          escalation_minutes?: number
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          escalate_to_role?: string
+          escalation_minutes?: number
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_escalation_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["asset_type"]
+          brand: string | null
+          client_id: string
+          created_at: string
+          id: string
+          location: string | null
+          model: string | null
+          name: string
+          notes: string | null
+          purchase_date: string | null
+          purchase_value: number | null
+          responsible_contact: string | null
+          serial_number: string | null
+          status: Database["public"]["Enums"]["asset_status"]
+          updated_at: string
+        }
+        Insert: {
+          asset_type: Database["public"]["Enums"]["asset_type"]
+          brand?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          model?: string | null
+          name: string
+          notes?: string | null
+          purchase_date?: string | null
+          purchase_value?: number | null
+          responsible_contact?: string | null
+          serial_number?: string | null
+          status?: Database["public"]["Enums"]["asset_status"]
+          updated_at?: string
+        }
+        Update: {
+          asset_type?: Database["public"]["Enums"]["asset_type"]
+          brand?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          location?: string | null
+          model?: string | null
+          name?: string
+          notes?: string | null
+          purchase_date?: string | null
+          purchase_value?: number | null
+          responsible_contact?: string | null
+          serial_number?: string | null
+          status?: Database["public"]["Enums"]["asset_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_responsible_contact_fkey"
+            columns: ["responsible_contact"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          new_data: Json | null
+          old_data: Json | null
+          record_id: string | null
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      badges: {
+        Row: {
+          created_at: string
+          criteria: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          criteria?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          criteria?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      calendar_events: {
+        Row: {
+          all_day: boolean
+          client_id: string | null
+          color: string | null
+          created_at: string
+          description: string | null
+          end_time: string
+          event_type: Database["public"]["Enums"]["event_type"]
+          google_calendar_id: string | null
+          google_event_id: string | null
+          id: string
+          invoice_id: string | null
+          location: string | null
+          reminder_sent: boolean
+          start_time: string
+          ticket_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          all_day?: boolean
+          client_id?: string | null
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_time: string
+          event_type?: Database["public"]["Enums"]["event_type"]
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          location?: string | null
+          reminder_sent?: boolean
+          start_time: string
+          ticket_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          all_day?: boolean
+          client_id?: string | null
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_time?: string
+          event_type?: Database["public"]["Enums"]["event_type"]
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          location?: string | null
+          reminder_sent?: boolean
+          start_time?: string
+          ticket_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      certificates: {
+        Row: {
+          arquivo_url: string | null
+          company_id: string | null
+          created_at: string | null
+          descricao: string | null
+          emissor: string | null
+          id: string
+          is_primary: boolean | null
+          nome: string
+          numero_serie: string | null
+          senha_hash: string | null
+          tipo: string | null
+          titular: string | null
+          updated_at: string | null
+          uploaded_at: string | null
+          validade: string | null
+        }
+        Insert: {
+          arquivo_url?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          emissor?: string | null
+          id?: string
+          is_primary?: boolean | null
+          nome: string
+          numero_serie?: string | null
+          senha_hash?: string | null
+          tipo?: string | null
+          titular?: string | null
+          updated_at?: string | null
+          uploaded_at?: string | null
+          validade?: string | null
+        }
+        Update: {
+          arquivo_url?: string | null
+          company_id?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          emissor?: string | null
+          id?: string
+          is_primary?: boolean | null
+          nome?: string
+          numero_serie?: string | null
+          senha_hash?: string | null
+          tipo?: string | null
+          titular?: string | null
+          updated_at?: string | null
+          uploaded_at?: string | null
+          validade?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company_settings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_contacts: {
+        Row: {
+          client_id: string
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          name: string
+          notify_whatsapp: boolean | null
+          phone: string | null
+          role: string | null
+          user_id: string | null
+          username: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          name: string
+          notify_whatsapp?: boolean | null
+          phone?: string | null
+          role?: string | null
+          user_id?: string | null
+          username?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          name?: string
+          notify_whatsapp?: boolean | null
+          phone?: string | null
+          role?: string | null
+          user_id?: string | null
+          username?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_external_mappings: {
+        Row: {
+          client_id: string
+          created_at: string
+          external_id: string
+          external_name: string | null
+          external_source: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          external_id: string
+          external_name?: string | null
+          external_source: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          external_id?: string
+          external_name?: string | null
+          external_source?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_external_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_history: {
+        Row: {
+          action: string
+          changes: Json | null
+          client_id: string
+          comment: string | null
+          created_at: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          changes?: Json | null
+          client_id: string
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          changes?: Json | null
+          client_id?: string
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_notification_rules: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          notify_email: boolean
+          notify_on_critical: boolean
+          notify_on_info: boolean
+          notify_on_warning: boolean
+          notify_push: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          notify_email?: boolean
+          notify_on_critical?: boolean
+          notify_on_info?: boolean
+          notify_on_warning?: boolean
+          notify_push?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          notify_email?: boolean
+          notify_on_critical?: boolean
+          notify_on_info?: boolean
+          notify_on_warning?: boolean
+          notify_push?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_notification_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_technicians: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          client_id: string
+          id: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          client_id: string
+          id?: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          client_id?: string
+          id?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_technicians_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          address: string | null
+          asaas_customer_id: string | null
+          city: string | null
+          created_at: string
+          document: string | null
+          documentation: string | null
+          email: string | null
+          financial_email: string | null
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          phone: string | null
+          state: string | null
+          trade_name: string | null
+          updated_at: string
+          whatsapp: string | null
+          whatsapp_validated: boolean | null
+          whatsapp_validated_at: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          address?: string | null
+          asaas_customer_id?: string | null
+          city?: string | null
+          created_at?: string
+          document?: string | null
+          documentation?: string | null
+          email?: string | null
+          financial_email?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+          trade_name?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+          whatsapp_validated?: boolean | null
+          whatsapp_validated_at?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          address?: string | null
+          asaas_customer_id?: string | null
+          city?: string | null
+          created_at?: string
+          document?: string | null
+          documentation?: string | null
+          email?: string | null
+          financial_email?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+          trade_name?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+          whatsapp_validated?: boolean | null
+          whatsapp_validated_at?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
+      company_settings: {
+        Row: {
+          business_hours: Json | null
+          certificado_arquivo_url: string | null
+          certificado_senha_hash: string | null
+          certificado_tipo: string | null
+          certificado_uploaded_at: string | null
+          certificado_validade: string | null
+          cnpj: string
+          created_at: string | null
+          email: string | null
+          endereco_bairro: string | null
+          endereco_cep: string | null
+          endereco_cidade: string | null
+          endereco_codigo_ibge: string | null
+          endereco_complemento: string | null
+          endereco_logradouro: string | null
+          endereco_numero: string | null
+          endereco_uf: string | null
+          id: string
+          inscricao_estadual: string | null
+          inscricao_municipal: string | null
+          nfse_aliquota_padrao: number | null
+          nfse_ambiente: string | null
+          nfse_cnae_padrao: string | null
+          nfse_codigo_tributacao_padrao: string | null
+          nfse_descricao_servico_padrao: string | null
+          nfse_incentivador_cultural: boolean | null
+          nfse_optante_simples: boolean | null
+          nfse_regime_tributario: string | null
+          nome_fantasia: string | null
+          razao_social: string
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          business_hours?: Json | null
+          certificado_arquivo_url?: string | null
+          certificado_senha_hash?: string | null
+          certificado_tipo?: string | null
+          certificado_uploaded_at?: string | null
+          certificado_validade?: string | null
+          cnpj?: string
+          created_at?: string | null
+          email?: string | null
+          endereco_bairro?: string | null
+          endereco_cep?: string | null
+          endereco_cidade?: string | null
+          endereco_codigo_ibge?: string | null
+          endereco_complemento?: string | null
+          endereco_logradouro?: string | null
+          endereco_numero?: string | null
+          endereco_uf?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
+          nfse_aliquota_padrao?: number | null
+          nfse_ambiente?: string | null
+          nfse_cnae_padrao?: string | null
+          nfse_codigo_tributacao_padrao?: string | null
+          nfse_descricao_servico_padrao?: string | null
+          nfse_incentivador_cultural?: boolean | null
+          nfse_optante_simples?: boolean | null
+          nfse_regime_tributario?: string | null
+          nome_fantasia?: string | null
+          razao_social?: string
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          business_hours?: Json | null
+          certificado_arquivo_url?: string | null
+          certificado_senha_hash?: string | null
+          certificado_tipo?: string | null
+          certificado_uploaded_at?: string | null
+          certificado_validade?: string | null
+          cnpj?: string
+          created_at?: string | null
+          email?: string | null
+          endereco_bairro?: string | null
+          endereco_cep?: string | null
+          endereco_cidade?: string | null
+          endereco_codigo_ibge?: string | null
+          endereco_complemento?: string | null
+          endereco_logradouro?: string | null
+          endereco_numero?: string | null
+          endereco_uf?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
+          nfse_aliquota_padrao?: number | null
+          nfse_ambiente?: string | null
+          nfse_cnae_padrao?: string | null
+          nfse_codigo_tributacao_padrao?: string | null
+          nfse_descricao_servico_padrao?: string | null
+          nfse_incentivador_cultural?: boolean | null
+          nfse_optante_simples?: boolean | null
+          nfse_regime_tributario?: string | null
+          nome_fantasia?: string | null
+          razao_social?: string
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      contract_history: {
+        Row: {
+          action: string
+          changes: Json | null
+          comment: string | null
+          contract_id: string
+          created_at: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          changes?: Json | null
+          comment?: string | null
+          contract_id: string
+          created_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          changes?: Json | null
+          comment?: string | null
+          contract_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_history_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_services: {
+        Row: {
+          contract_id: string
+          created_at: string
+          description: string | null
+          id: string
+          multiplier_override: number | null
+          name: string
+          quantity: number | null
+          service_id: string | null
+          unit_value: number | null
+          value: number
+        }
+        Insert: {
+          contract_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          multiplier_override?: number | null
+          name: string
+          quantity?: number | null
+          service_id?: string | null
+          unit_value?: number | null
+          value?: number
+        }
+        Update: {
+          contract_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          multiplier_override?: number | null
+          name?: string
+          quantity?: number | null
+          service_id?: string | null
+          unit_value?: number | null
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_services_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contracts: {
+        Row: {
+          adjustment_date: string | null
+          adjustment_index: string | null
+          auto_renew: boolean
+          billing_day: number | null
+          client_id: string
+          created_at: string
+          description: string | null
+          end_date: string | null
+          hours_included: number | null
+          id: string
+          internal_notes: string | null
+          monthly_value: number
+          name: string
+          nfse_cnae: string | null
+          nfse_descricao_customizada: string | null
+          nfse_enabled: boolean | null
+          nfse_service_code: string | null
+          nfse_service_code_id: string | null
+          payment_preference: string | null
+          start_date: string
+          status: Database["public"]["Enums"]["contract_status"]
+          support_model: Database["public"]["Enums"]["support_model"]
+          updated_at: string
+        }
+        Insert: {
+          adjustment_date?: string | null
+          adjustment_index?: string | null
+          auto_renew?: boolean
+          billing_day?: number | null
+          client_id: string
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          hours_included?: number | null
+          id?: string
+          internal_notes?: string | null
+          monthly_value?: number
+          name: string
+          nfse_cnae?: string | null
+          nfse_descricao_customizada?: string | null
+          nfse_enabled?: boolean | null
+          nfse_service_code?: string | null
+          nfse_service_code_id?: string | null
+          payment_preference?: string | null
+          start_date?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          support_model?: Database["public"]["Enums"]["support_model"]
+          updated_at?: string
+        }
+        Update: {
+          adjustment_date?: string | null
+          adjustment_index?: string | null
+          auto_renew?: boolean
+          billing_day?: number | null
+          client_id?: string
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          hours_included?: number | null
+          id?: string
+          internal_notes?: string | null
+          monthly_value?: number
+          name?: string
+          nfse_cnae?: string | null
+          nfse_descricao_customizada?: string | null
+          nfse_enabled?: boolean | null
+          nfse_service_code?: string | null
+          nfse_service_code_id?: string | null
+          payment_preference?: string | null
+          start_date?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          support_model?: Database["public"]["Enums"]["support_model"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_nfse_service_code_id_fkey"
+            columns: ["nfse_service_code_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_service_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cost_centers: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
+      department_members: {
+        Row: {
+          created_at: string | null
+          department_id: string
+          id: string
+          is_lead: boolean | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          department_id: string
+          id?: string
+          is_lead?: boolean | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          department_id?: string
+          id?: string
+          is_lead?: boolean | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_members_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          manager_id: string | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          manager_id?: string | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          manager_id?: string | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      financial_entries: {
+        Row: {
+          amount: number
+          category: string | null
+          client_id: string | null
+          cost_center_id: string | null
+          created_at: string
+          date: string
+          description: string
+          id: string
+          invoice_id: string | null
+          is_reconciled: boolean
+          type: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          client_id?: string | null
+          cost_center_id?: string | null
+          created_at?: string
+          date: string
+          description: string
+          id?: string
+          invoice_id?: string | null
+          is_reconciled?: boolean
+          type: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          client_id?: string | null
+          cost_center_id?: string | null
+          created_at?: string
+          date?: string
+          description?: string
+          id?: string
+          invoice_id?: string | null
+          is_reconciled?: boolean
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "cost_centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gamification_goals: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          period: string
+          points_reward: number
+          target_value: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          period: string
+          points_reward: number
+          target_value: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          period?: string
+          points_reward?: number
+          target_value?: number
+        }
+        Relationships: []
+      }
+      google_calendar_integrations: {
+        Row: {
+          access_token: string | null
+          calendar_id: string | null
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          refresh_token: string | null
+          sync_enabled: boolean
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          calendar_id?: string | null
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          refresh_token?: string | null
+          sync_enabled?: boolean
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          calendar_id?: string | null
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          refresh_token?: string | null
+          sync_enabled?: boolean
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      integration_settings: {
+        Row: {
+          created_at: string
+          id: string
+          integration_type: string
+          is_active: boolean
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          integration_type: string
+          is_active?: boolean
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          integration_type?: string
+          is_active?: boolean
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      invoice_generation_log: {
+        Row: {
+          contract_id: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          invoice_id: string | null
+          reference_month: string
+          status: string
+        }
+        Insert: {
+          contract_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          invoice_id?: string | null
+          reference_month: string
+          status?: string
+        }
+        Update: {
+          contract_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          invoice_id?: string | null
+          reference_month?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_generation_log_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_generation_log_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_items: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string
+          quantity: number
+          total_value: number
+          unit_value: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          invoice_id: string
+          quantity?: number
+          total_value: number
+          unit_value: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string
+          quantity?: number
+          total_value?: number
+          unit_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_notification_logs: {
+        Row: {
+          channel: string
+          created_by: string | null
+          error_message: string | null
+          id: string
+          invoice_id: string
+          notification_type: string
+          sent_at: string | null
+          success: boolean | null
+        }
+        Insert: {
+          channel: string
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          invoice_id: string
+          notification_type: string
+          sent_at?: string | null
+          success?: boolean | null
+        }
+        Update: {
+          channel?: string
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          invoice_id?: string
+          notification_type?: string
+          sent_at?: string | null
+          success?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_notification_logs_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount: number
+          auto_payment_generated: boolean | null
+          boleto_barcode: string | null
+          boleto_url: string | null
+          client_id: string
+          contract_id: string | null
+          created_at: string
+          description: string | null
+          due_date: string
+          id: string
+          installment_number: number | null
+          invoice_number: number
+          notes: string | null
+          paid_date: string | null
+          parent_invoice_id: string | null
+          payment_method: string | null
+          pix_code: string | null
+          service_id: string | null
+          status: Database["public"]["Enums"]["invoice_status"]
+          ticket_id: string | null
+          total_installments: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          auto_payment_generated?: boolean | null
+          boleto_barcode?: string | null
+          boleto_url?: string | null
+          client_id: string
+          contract_id?: string | null
+          created_at?: string
+          description?: string | null
+          due_date: string
+          id?: string
+          installment_number?: number | null
+          invoice_number?: number
+          notes?: string | null
+          paid_date?: string | null
+          parent_invoice_id?: string | null
+          payment_method?: string | null
+          pix_code?: string | null
+          service_id?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          ticket_id?: string | null
+          total_installments?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          auto_payment_generated?: boolean | null
+          boleto_barcode?: string | null
+          boleto_url?: string | null
+          client_id?: string
+          contract_id?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string
+          id?: string
+          installment_number?: number | null
+          invoice_number?: number
+          notes?: string | null
+          paid_date?: string | null
+          parent_invoice_id?: string | null
+          payment_method?: string | null
+          pix_code?: string | null
+          service_id?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          ticket_id?: string | null
+          total_installments?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_parent_invoice_id_fkey"
+            columns: ["parent_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_articles: {
+        Row: {
+          author_id: string | null
+          category_id: string | null
+          client_id: string | null
+          content: string
+          created_at: string
+          id: string
+          is_public: boolean
+          title: string
+          updated_at: string
+          views: number
+        }
+        Insert: {
+          author_id?: string | null
+          category_id?: string | null
+          client_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_public?: boolean
+          title: string
+          updated_at?: string
+          views?: number
+        }
+        Update: {
+          author_id?: string | null
+          category_id?: string | null
+          client_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_public?: boolean
+          title?: string
+          updated_at?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_articles_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_articles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      license_assets: {
+        Row: {
+          asset_id: string
+          id: string
+          installed_at: string
+          license_id: string
+        }
+        Insert: {
+          asset_id: string
+          id?: string
+          installed_at?: string
+          license_id: string
+        }
+        Update: {
+          asset_id?: string
+          id?: string
+          installed_at?: string
+          license_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "license_assets_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "license_assets_license_id_fkey"
+            columns: ["license_id"]
+            isOneToOne: false
+            referencedRelation: "software_licenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "license_assets_license_id_fkey"
+            columns: ["license_id"]
+            isOneToOne: false
+            referencedRelation: "software_licenses_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenances: {
+        Row: {
+          asset_id: string
+          cost: number | null
+          created_at: string
+          description: string | null
+          downtime_hours: number | null
+          id: string
+          performed_at: string
+          performed_by: string | null
+          ticket_id: string | null
+          type: string
+        }
+        Insert: {
+          asset_id: string
+          cost?: number | null
+          created_at?: string
+          description?: string | null
+          downtime_hours?: number | null
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+          ticket_id?: string | null
+          type: string
+        }
+        Update: {
+          asset_id?: string
+          cost?: number | null
+          created_at?: string
+          description?: string | null
+          downtime_hours?: number | null
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+          ticket_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenances_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenances_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_logs: {
+        Row: {
+          channel: string
+          created_at: string
+          delivered_at: string | null
+          error_message: string | null
+          external_message_id: string | null
+          id: string
+          message: string
+          read_at: string | null
+          recipient: string
+          related_id: string | null
+          related_type: string | null
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          message: string
+          read_at?: string | null
+          recipient: string
+          related_id?: string | null
+          related_type?: string | null
+          sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          external_message_id?: string | null
+          id?: string
+          message?: string
+          read_at?: string | null
+          recipient?: string
+          related_id?: string | null
+          related_type?: string | null
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      monitored_devices: {
+        Row: {
+          asset_id: string | null
+          client_id: string
+          created_at: string
+          device_type: string | null
+          external_id: string | null
+          external_source: string | null
+          hostname: string | null
+          id: string
+          ip_address: string | null
+          is_online: boolean
+          last_seen_at: string | null
+          name: string
+          updated_at: string
+          uptime_percent: number | null
+        }
+        Insert: {
+          asset_id?: string | null
+          client_id: string
+          created_at?: string
+          device_type?: string | null
+          external_id?: string | null
+          external_source?: string | null
+          hostname?: string | null
+          id?: string
+          ip_address?: string | null
+          is_online?: boolean
+          last_seen_at?: string | null
+          name: string
+          updated_at?: string
+          uptime_percent?: number | null
+        }
+        Update: {
+          asset_id?: string | null
+          client_id?: string
+          created_at?: string
+          device_type?: string | null
+          external_id?: string | null
+          external_source?: string | null
+          hostname?: string | null
+          id?: string
+          ip_address?: string | null
+          is_online?: boolean
+          last_seen_at?: string | null
+          name?: string
+          updated_at?: string
+          uptime_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitored_devices_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monitored_devices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      monitoring_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          created_at: string
+          device_id: string
+          escalated_at: string | null
+          escalated_to: string | null
+          id: string
+          level: Database["public"]["Enums"]["alert_level"]
+          message: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["alert_status"]
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          created_at?: string
+          device_id: string
+          escalated_at?: string | null
+          escalated_to?: string | null
+          id?: string
+          level: Database["public"]["Enums"]["alert_level"]
+          message?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["alert_status"]
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          created_at?: string
+          device_id?: string
+          escalated_at?: string | null
+          escalated_to?: string | null
+          id?: string
+          level?: Database["public"]["Enums"]["alert_level"]
+          message?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["alert_status"]
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitoring_alerts_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfse_event_logs: {
+        Row: {
+          correlation_id: string | null
+          created_at: string | null
+          details: Json | null
+          event_level: string
+          event_type: string
+          id: string
+          message: string
+          nfse_history_id: string
+          source: string | null
+        }
+        Insert: {
+          correlation_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          event_level?: string
+          event_type: string
+          id?: string
+          message: string
+          nfse_history_id: string
+          source?: string | null
+        }
+        Update: {
+          correlation_id?: string | null
+          created_at?: string | null
+          details?: Json | null
+          event_level?: string
+          event_type?: string
+          id?: string
+          message?: string
+          nfse_history_id?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfse_event_logs_nfse_history_id_fkey"
+            columns: ["nfse_history_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_event_logs_nfse_history_id_fkey"
+            columns: ["nfse_history_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfse_history: {
+        Row: {
+          aliquota: number | null
+          ambiente: string | null
+          asaas_invoice_id: string | null
+          asaas_payment_id: string | null
+          asaas_status: string | null
+          chave_acesso: string | null
+          client_id: string | null
+          cnae: string | null
+          codigo_retorno: string | null
+          codigo_tributacao: string | null
+          codigo_verificacao: string | null
+          competencia: string
+          contract_id: string | null
+          created_at: string | null
+          danfse_url: string | null
+          data_autorizacao: string | null
+          data_cancelamento: string | null
+          data_emissao: string | null
+          descricao_servico: string | null
+          emitido_por: string | null
+          id: string
+          invoice_id: string | null
+          mensagem_retorno: string | null
+          motivo_cancelamento: string | null
+          municipal_service_id: string | null
+          nfse_substituta_id: string | null
+          numero_lote: string | null
+          numero_nfse: string | null
+          pdf_url: string | null
+          protocolo: string | null
+          provider: string | null
+          serie: string | null
+          status: string
+          updated_at: string | null
+          valor_iss: number | null
+          valor_servico: number
+          xml_url: string | null
+        }
+        Insert: {
+          aliquota?: number | null
+          ambiente?: string | null
+          asaas_invoice_id?: string | null
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          chave_acesso?: string | null
+          client_id?: string | null
+          cnae?: string | null
+          codigo_retorno?: string | null
+          codigo_tributacao?: string | null
+          codigo_verificacao?: string | null
+          competencia: string
+          contract_id?: string | null
+          created_at?: string | null
+          danfse_url?: string | null
+          data_autorizacao?: string | null
+          data_cancelamento?: string | null
+          data_emissao?: string | null
+          descricao_servico?: string | null
+          emitido_por?: string | null
+          id?: string
+          invoice_id?: string | null
+          mensagem_retorno?: string | null
+          motivo_cancelamento?: string | null
+          municipal_service_id?: string | null
+          nfse_substituta_id?: string | null
+          numero_lote?: string | null
+          numero_nfse?: string | null
+          pdf_url?: string | null
+          protocolo?: string | null
+          provider?: string | null
+          serie?: string | null
+          status?: string
+          updated_at?: string | null
+          valor_iss?: number | null
+          valor_servico: number
+          xml_url?: string | null
+        }
+        Update: {
+          aliquota?: number | null
+          ambiente?: string | null
+          asaas_invoice_id?: string | null
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          chave_acesso?: string | null
+          client_id?: string | null
+          cnae?: string | null
+          codigo_retorno?: string | null
+          codigo_tributacao?: string | null
+          codigo_verificacao?: string | null
+          competencia?: string
+          contract_id?: string | null
+          created_at?: string | null
+          danfse_url?: string | null
+          data_autorizacao?: string | null
+          data_cancelamento?: string | null
+          data_emissao?: string | null
+          descricao_servico?: string | null
+          emitido_por?: string | null
+          id?: string
+          invoice_id?: string | null
+          mensagem_retorno?: string | null
+          motivo_cancelamento?: string | null
+          municipal_service_id?: string | null
+          nfse_substituta_id?: string | null
+          numero_lote?: string | null
+          numero_nfse?: string | null
+          pdf_url?: string | null
+          protocolo?: string | null
+          provider?: string | null
+          serie?: string | null
+          status?: string
+          updated_at?: string | null
+          valor_iss?: number | null
+          valor_servico?: number
+          xml_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfse_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_nfse_substituta_id_fkey"
+            columns: ["nfse_substituta_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_nfse_substituta_id_fkey"
+            columns: ["nfse_substituta_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfse_service_codes: {
+        Row: {
+          aliquota_sugerida: number | null
+          ativo: boolean | null
+          categoria: string | null
+          cnae_principal: string | null
+          codigo_tributacao: string
+          created_at: string | null
+          descricao: string
+          id: string
+          item_lista: string | null
+          subitem_lista: string | null
+        }
+        Insert: {
+          aliquota_sugerida?: number | null
+          ativo?: boolean | null
+          categoria?: string | null
+          cnae_principal?: string | null
+          codigo_tributacao: string
+          created_at?: string | null
+          descricao: string
+          id?: string
+          item_lista?: string | null
+          subitem_lista?: string | null
+        }
+        Update: {
+          aliquota_sugerida?: number | null
+          ativo?: boolean | null
+          categoria?: string | null
+          cnae_principal?: string | null
+          codigo_tributacao?: string
+          created_at?: string | null
+          descricao?: string
+          id?: string
+          item_lista?: string | null
+          subitem_lista?: string | null
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          related_id: string | null
+          related_type: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          related_id?: string | null
+          related_type?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          related_id?: string | null
+          related_type?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          notify_email: boolean | null
+          notify_telegram: boolean | null
+          notify_whatsapp: boolean | null
+          phone: string | null
+          telegram_chat_id: string | null
+          updated_at: string
+          user_id: string
+          whatsapp_number: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          notify_email?: boolean | null
+          notify_telegram?: boolean | null
+          notify_whatsapp?: boolean | null
+          phone?: string | null
+          telegram_chat_id?: string | null
+          updated_at?: string
+          user_id: string
+          whatsapp_number?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          notify_email?: boolean | null
+          notify_telegram?: boolean | null
+          notify_whatsapp?: boolean | null
+          phone?: string | null
+          telegram_chat_id?: string | null
+          updated_at?: string
+          user_id?: string
+          whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string | null
+          endpoint: string
+          id: string
+          p256dh: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string | null
+          endpoint: string
+          id?: string
+          p256dh: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string | null
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      role_permission_overrides: {
+        Row: {
+          action: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_allowed: boolean
+          module: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_allowed?: boolean
+          module: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_allowed?: boolean
+          module?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      services: {
+        Row: {
+          base_value: number
+          c_nat_rend: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          ind_inc_fisc: boolean | null
+          is_active: boolean | null
+          multiplier: number
+          name: string
+          nfse_cnae: string | null
+          nfse_service_code: string | null
+          tax_cofins: number | null
+          tax_csll: number | null
+          tax_inss: number | null
+          tax_irrf: number | null
+          tax_iss: number | null
+          tax_pis: number | null
+          trib_municipio_recolhimento: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          base_value?: number
+          c_nat_rend?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          ind_inc_fisc?: boolean | null
+          is_active?: boolean | null
+          multiplier?: number
+          name: string
+          nfse_cnae?: string | null
+          nfse_service_code?: string | null
+          tax_cofins?: number | null
+          tax_csll?: number | null
+          tax_inss?: number | null
+          tax_irrf?: number | null
+          tax_iss?: number | null
+          tax_pis?: number | null
+          trib_municipio_recolhimento?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          base_value?: number
+          c_nat_rend?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          ind_inc_fisc?: boolean | null
+          is_active?: boolean | null
+          multiplier?: number
+          name?: string
+          nfse_cnae?: string | null
+          nfse_service_code?: string | null
+          tax_cofins?: number | null
+          tax_csll?: number | null
+          tax_inss?: number | null
+          tax_irrf?: number | null
+          tax_iss?: number | null
+          tax_pis?: number | null
+          trib_municipio_recolhimento?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      sla_configs: {
+        Row: {
+          category_id: string | null
+          client_id: string | null
+          created_at: string
+          id: string
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          resolution_hours: number
+          response_hours: number
+        }
+        Insert: {
+          category_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          resolution_hours?: number
+          response_hours?: number
+        }
+        Update: {
+          category_id?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          resolution_hours?: number
+          response_hours?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sla_configs_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sla_configs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      software_licenses: {
+        Row: {
+          client_id: string
+          created_at: string
+          expire_date: string | null
+          id: string
+          license_key: string | null
+          name: string
+          notes: string | null
+          purchase_date: string | null
+          purchase_value: number | null
+          total_licenses: number
+          updated_at: string
+          used_licenses: number
+          vendor: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          expire_date?: string | null
+          id?: string
+          license_key?: string | null
+          name: string
+          notes?: string | null
+          purchase_date?: string | null
+          purchase_value?: number | null
+          total_licenses?: number
+          updated_at?: string
+          used_licenses?: number
+          vendor?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          expire_date?: string | null
+          id?: string
+          license_key?: string | null
+          name?: string
+          notes?: string | null
+          purchase_date?: string | null
+          purchase_value?: number | null
+          total_licenses?: number
+          updated_at?: string
+          used_licenses?: number
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "software_licenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      technician_badges: {
+        Row: {
+          badge_id: string
+          earned_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          badge_id: string
+          earned_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          badge_id?: string
+          earned_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technician_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      technician_points: {
+        Row: {
+          created_at: string
+          id: string
+          points: number
+          reason: string
+          ticket_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          points: number
+          reason: string
+          ticket_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          points?: number
+          reason?: string
+          ticket_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technician_points_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sla_hours: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sla_hours?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sla_hours?: number | null
+        }
+        Relationships: []
+      }
+      ticket_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_internal: boolean
+          ticket_id: string
+          user_id: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id: string
+          user_id?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          ticket_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_history: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          new_status: Database["public"]["Enums"]["ticket_status"] | null
+          old_status: Database["public"]["Enums"]["ticket_status"] | null
+          ticket_id: string
+          user_id: string | null
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          new_status?: Database["public"]["Enums"]["ticket_status"] | null
+          old_status?: Database["public"]["Enums"]["ticket_status"] | null
+          ticket_id: string
+          user_id?: string | null
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          new_status?: Database["public"]["Enums"]["ticket_status"] | null
+          old_status?: Database["public"]["Enums"]["ticket_status"] | null
+          ticket_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_history_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_pauses: {
+        Row: {
+          auto_resume_at: string | null
+          created_at: string | null
+          id: string
+          pause_reason: string
+          pause_type: string
+          paused_at: string
+          paused_by: string
+          resumed_at: string | null
+          third_party_name: string | null
+          ticket_id: string
+        }
+        Insert: {
+          auto_resume_at?: string | null
+          created_at?: string | null
+          id?: string
+          pause_reason: string
+          pause_type: string
+          paused_at?: string
+          paused_by: string
+          resumed_at?: string | null
+          third_party_name?: string | null
+          ticket_id: string
+        }
+        Update: {
+          auto_resume_at?: string | null
+          created_at?: string | null
+          id?: string
+          pause_reason?: string
+          pause_type?: string
+          paused_at?: string
+          paused_by?: string
+          resumed_at?: string | null
+          third_party_name?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_pauses_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_time_entries: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          duration_minutes: number
+          ended_at: string | null
+          entry_type: string
+          id: string
+          is_billable: boolean | null
+          started_at: string | null
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number
+          ended_at?: string | null
+          entry_type?: string
+          id?: string
+          is_billable?: boolean | null
+          started_at?: string | null
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          duration_minutes?: number
+          ended_at?: string | null
+          entry_type?: string
+          id?: string
+          is_billable?: boolean | null
+          started_at?: string | null
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_time_entries_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_transfers: {
+        Row: {
+          created_at: string | null
+          from_department_id: string | null
+          from_user_id: string | null
+          id: string
+          reason: string | null
+          ticket_id: string
+          to_department_id: string | null
+          to_user_id: string | null
+          transferred_by: string
+        }
+        Insert: {
+          created_at?: string | null
+          from_department_id?: string | null
+          from_user_id?: string | null
+          id?: string
+          reason?: string | null
+          ticket_id: string
+          to_department_id?: string | null
+          to_user_id?: string | null
+          transferred_by: string
+        }
+        Update: {
+          created_at?: string | null
+          from_department_id?: string | null
+          from_user_id?: string | null
+          id?: string
+          reason?: string | null
+          ticket_id?: string
+          to_department_id?: string | null
+          to_user_id?: string | null
+          transferred_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_transfers_from_department_id_fkey"
+            columns: ["from_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_transfers_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_transfers_to_department_id_fkey"
+            columns: ["to_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          asset_id: string | null
+          assigned_to: string | null
+          category_id: string | null
+          client_id: string | null
+          closed_at: string | null
+          contract_id: string | null
+          created_at: string
+          created_by: string | null
+          department_id: string | null
+          description: string | null
+          first_response_at: string | null
+          id: string
+          origin: Database["public"]["Enums"]["ticket_origin"]
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          requester_contact_id: string | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          satisfaction_comment: string | null
+          satisfaction_rating: number | null
+          sla_deadline: string | null
+          status: Database["public"]["Enums"]["ticket_status"]
+          ticket_number: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          category_id?: string | null
+          client_id?: string | null
+          closed_at?: string | null
+          contract_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          description?: string | null
+          first_response_at?: string | null
+          id?: string
+          origin?: Database["public"]["Enums"]["ticket_origin"]
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          requester_contact_id?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          satisfaction_comment?: string | null
+          satisfaction_rating?: number | null
+          sla_deadline?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          ticket_number?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_id?: string | null
+          assigned_to?: string | null
+          category_id?: string | null
+          client_id?: string | null
+          closed_at?: string | null
+          contract_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          department_id?: string | null
+          description?: string | null
+          first_response_at?: string | null
+          id?: string
+          origin?: Database["public"]["Enums"]["ticket_origin"]
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          requester_contact_id?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          satisfaction_comment?: string | null
+          satisfaction_rating?: number | null
+          sla_deadline?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"]
+          ticket_number?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_requester_contact_id_fkey"
+            columns: ["requester_contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tv_dashboard_config: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          logo_url: string | null
+          name: string
+          rotation_interval: number
+          show_metrics: boolean
+          show_monitoring: boolean
+          show_ranking: boolean
+          show_tickets: boolean
+          theme: string
+          updated_at: string
+        }
+        Insert: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name?: string
+          rotation_interval?: number
+          show_metrics?: boolean
+          show_monitoring?: boolean
+          show_ranking?: boolean
+          show_tickets?: boolean
+          theme?: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name?: string
+          rotation_interval?: number
+          show_metrics?: boolean
+          show_monitoring?: boolean
+          show_ranking?: boolean
+          show_tickets?: boolean
+          theme?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      uptime_history: {
+        Row: {
+          checked_at: string
+          device_id: string
+          id: string
+          is_online: boolean
+          response_time_ms: number | null
+          uptime_percent: number | null
+        }
+        Insert: {
+          checked_at?: string
+          device_id: string
+          id?: string
+          is_online: boolean
+          response_time_ms?: number | null
+          uptime_percent?: number | null
+        }
+        Update: {
+          checked_at?: string
+          device_id?: string
+          id?: string
+          is_online?: boolean
+          response_time_ms?: number | null
+          uptime_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uptime_history_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      warranties: {
+        Row: {
+          asset_id: string
+          contact_info: string | null
+          created_at: string
+          end_date: string
+          id: string
+          provider: string
+          start_date: string
+          terms: string | null
+        }
+        Insert: {
+          asset_id: string
+          contact_info?: string | null
+          created_at?: string
+          end_date: string
+          id?: string
+          provider: string
+          start_date: string
+          terms?: string | null
+        }
+        Update: {
+          asset_id?: string
+          contact_info?: string | null
+          created_at?: string
+          end_date?: string
+          id?: string
+          provider?: string
+          start_date?: string
+          terms?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warranties_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      nfse_history_safe: {
+        Row: {
+          aliquota: number | null
+          ambiente: string | null
+          chave_acesso: string | null
+          client_id: string | null
+          codigo_verificacao: string | null
+          contract_id: string | null
+          created_at: string | null
+          danfse_url: string | null
+          data_autorizacao: string | null
+          data_cancelamento: string | null
+          data_emissao: string | null
+          descricao_servico: string | null
+          id: string | null
+          invoice_id: string | null
+          numero_nfse: string | null
+          pdf_url: string | null
+          provider: string | null
+          status: string | null
+          updated_at: string | null
+          valor_iss: number | null
+          valor_servico: number | null
+          xml_url: string | null
+        }
+        Insert: {
+          aliquota?: number | null
+          ambiente?: string | null
+          chave_acesso?: never
+          client_id?: string | null
+          codigo_verificacao?: never
+          contract_id?: string | null
+          created_at?: string | null
+          danfse_url?: string | null
+          data_autorizacao?: string | null
+          data_cancelamento?: string | null
+          data_emissao?: string | null
+          descricao_servico?: string | null
+          id?: string | null
+          invoice_id?: string | null
+          numero_nfse?: string | null
+          pdf_url?: string | null
+          provider?: string | null
+          status?: string | null
+          updated_at?: string | null
+          valor_iss?: number | null
+          valor_servico?: number | null
+          xml_url?: string | null
+        }
+        Update: {
+          aliquota?: number | null
+          ambiente?: string | null
+          chave_acesso?: never
+          client_id?: string | null
+          codigo_verificacao?: never
+          contract_id?: string | null
+          created_at?: string | null
+          danfse_url?: string | null
+          data_autorizacao?: string | null
+          data_cancelamento?: string | null
+          data_emissao?: string | null
+          descricao_servico?: string | null
+          id?: string | null
+          invoice_id?: string | null
+          numero_nfse?: string | null
+          pdf_url?: string | null
+          provider?: string | null
+          status?: string | null
+          updated_at?: string | null
+          valor_iss?: number | null
+          valor_servico?: number | null
+          xml_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfse_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      software_licenses_safe: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          expire_date: string | null
+          id: string | null
+          license_key: string | null
+          name: string | null
+          notes: string | null
+          purchase_date: string | null
+          purchase_value: number | null
+          total_licenses: number | null
+          updated_at: string | null
+          used_licenses: number | null
+          vendor: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          expire_date?: string | null
+          id?: string | null
+          license_key?: never
+          name?: string | null
+          notes?: string | null
+          purchase_date?: string | null
+          purchase_value?: number | null
+          total_licenses?: number | null
+          updated_at?: string | null
+          used_licenses?: number | null
+          vendor?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          expire_date?: string | null
+          id?: string | null
+          license_key?: never
+          name?: string | null
+          notes?: string | null
+          purchase_date?: string | null
+          purchase_value?: number | null
+          total_licenses?: number | null
+          updated_at?: string | null
+          used_licenses?: number | null
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "software_licenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Functions: {
+      cleanup_old_monitoring_alerts: { Args: never; Returns: undefined }
+      get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
+      get_technician_ranking: {
+        Args: { limit_count?: number; start_date: string }
+        Returns: Json
+      }
+      get_ticket_form_data: { Args: { p_client_id?: string }; Returns: Json }
+      get_ticket_report_stats: { Args: { start_date: string }; Returns: Json }
+      get_weekly_ticket_trend: {
+        Args: never
+        Returns: {
+          day: string
+          day_date: string
+          resolved: number
+          tickets: number
+        }[]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_staff: { Args: { _user_id: string }; Returns: boolean }
+      verify_tv_dashboard_token: {
+        Args: { token_param: string }
+        Returns: {
+          access_token: string
+          created_at: string
+          id: string
+          logo_url: string | null
+          name: string
+          rotation_interval: number
+          show_metrics: boolean
+          show_monitoring: boolean
+          show_ranking: boolean
+          show_tickets: boolean
+          theme: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tv_dashboard_config"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+    }
+    Enums: {
+      alert_level: "critical" | "warning" | "info"
+      alert_status: "active" | "acknowledged" | "resolved"
+      app_role:
+        | "admin"
+        | "manager"
+        | "technician"
+        | "financial"
+        | "client"
+        | "client_master"
+      asset_status: "active" | "maintenance" | "disposed" | "loaned"
+      asset_type:
+        | "computer"
+        | "notebook"
+        | "server"
+        | "printer"
+        | "switch"
+        | "router"
+        | "software"
+        | "license"
+        | "other"
+      contract_status: "active" | "expired" | "cancelled" | "pending"
+      event_type:
+        | "visit"
+        | "meeting"
+        | "on_call"
+        | "unavailable"
+        | "personal"
+        | "billing_reminder"
+      invoice_status: "pending" | "paid" | "overdue" | "cancelled"
+      support_model: "ticket" | "hours_bank" | "unlimited"
+      technician_level: "bronze" | "silver" | "gold" | "platinum" | "diamond"
+      ticket_origin: "portal" | "phone" | "email" | "chat" | "whatsapp"
+      ticket_priority: "low" | "medium" | "high" | "critical"
+      ticket_status:
+        | "open"
+        | "in_progress"
+        | "waiting"
+        | "resolved"
+        | "closed"
+        | "paused"
+        | "waiting_third_party"
+        | "no_contact"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      alert_level: ["critical", "warning", "info"],
+      alert_status: ["active", "acknowledged", "resolved"],
+      app_role: [
+        "admin",
+        "manager",
+        "technician",
+        "financial",
+        "client",
+        "client_master",
+      ],
+      asset_status: ["active", "maintenance", "disposed", "loaned"],
+      asset_type: [
+        "computer",
+        "notebook",
+        "server",
+        "printer",
+        "switch",
+        "router",
+        "software",
+        "license",
+        "other",
+      ],
+      contract_status: ["active", "expired", "cancelled", "pending"],
+      event_type: [
+        "visit",
+        "meeting",
+        "on_call",
+        "unavailable",
+        "personal",
+        "billing_reminder",
+      ],
+      invoice_status: ["pending", "paid", "overdue", "cancelled"],
+      support_model: ["ticket", "hours_bank", "unlimited"],
+      technician_level: ["bronze", "silver", "gold", "platinum", "diamond"],
+      ticket_origin: ["portal", "phone", "email", "chat", "whatsapp"],
+      ticket_priority: ["low", "medium", "high", "critical"],
+      ticket_status: [
+        "open",
+        "in_progress",
+        "waiting",
+        "resolved",
+        "closed",
+        "paused",
+        "waiting_third_party",
+        "no_contact",
+      ],
+    },
+  },
+} as const

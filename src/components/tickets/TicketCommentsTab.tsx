@@ -1,0 +1,211 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { User, Lock } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+
+interface TicketCommentsTabProps {
+  ticketId: string;
+}
+
+export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
+  const [comment, setComment] = useState("");
+  const [isInternal, setIsInternal] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  type CommentWithProfile = {
+    id: string;
+    ticket_id: string;
+    user_id: string | null;
+    content: string;
+    is_internal: boolean;
+    created_at: string;
+    user_full_name?: string | null;
+  };
+
+  const { data: comments = [], isLoading } = useQuery({
+    queryKey: ["ticket-comments", ticketId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ticket_comments")
+        .select("id, ticket_id, user_id, content, is_internal, created_at")
+        .eq("ticket_id", ticketId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+
+      const rows = (data || []) as CommentWithProfile[];
+      const userIds = Array.from(
+        new Set(rows.map((r) => r.user_id).filter(Boolean))
+      ) as string[];
+
+      const nameByUserId = new Map<string, string>();
+      if (userIds.length) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", userIds);
+
+        if (!profilesError && profilesData) {
+          for (const p of profilesData as { user_id: string; full_name: string }[]) {
+            nameByUserId.set(p.user_id, p.full_name);
+          }
+        }
+      }
+
+      return rows.map((r) => ({
+        ...r,
+        user_full_name: r.user_id ? nameByUserId.get(r.user_id) ?? null : null,
+      }));
+    },
+  });
+
+  const addCommentMutation = useMutation({
+    mutationFn: async ({ content, internal }: { content: string; internal: boolean }) => {
+      const { error } = await supabase.from("ticket_comments").insert({
+        ticket_id: ticketId,
+        content,
+        user_id: user?.id,
+        is_internal: internal,
+      });
+      if (error) throw error;
+
+      // Registrar no histórico
+      const { error: historyError } = await supabase.from("ticket_history").insert({
+        ticket_id: ticketId,
+        user_id: user?.id,
+        old_status: null,
+        new_status: null,
+        comment: internal ? "Comentário interno adicionado" : "Comentário adicionado",
+      });
+      if (historyError) {
+        console.warn("Failed to insert comment history:", historyError);
+      }
+
+      // Disparar notificação para cliente (apenas para comentários não internos)
+      if (!internal) {
+        supabase.functions.invoke("send-ticket-notification", {
+          body: {
+            ticket_id: ticketId,
+            event_type: "commented",
+            comment: content.substring(0, 200), // Limitar tamanho
+          },
+        }).catch(console.error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ticket-comments", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
+      setComment("");
+      setIsInternal(false);
+      toast({ title: "Comentário adicionado" });
+    },
+    onError: () => {
+      toast({ title: "Erro ao adicionar comentário", variant: "destructive" });
+    },
+  });
+
+  const handleAddComment = () => {
+    if (!comment.trim()) return;
+    addCommentMutation.mutate({ content: comment, internal: isInternal });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex gap-3">
+            <div className="h-8 w-8 rounded-full bg-muted" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-24 bg-muted rounded" />
+              <div className="h-12 w-full bg-muted rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Comment List */}
+      <div className="space-y-4 max-h-80 overflow-y-auto">
+        {comments.map((c) => (
+          <div key={c.id} className="flex gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback>
+                <User className="h-4 w-4" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">
+                  {c.user_full_name || "Usuário"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {formatDistanceToNow(new Date(c.created_at), {
+                    addSuffix: true,
+                    locale: ptBR,
+                  })}
+                </span>
+                {c.is_internal && (
+                  <Badge variant="secondary" className="text-xs gap-1">
+                    <Lock className="h-3 w-3" />
+                    Interno
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm mt-1 whitespace-pre-wrap bg-muted/50 p-3 rounded-lg">
+                {c.content}
+              </p>
+            </div>
+          </div>
+        ))}
+        {comments.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            Nenhum comentário ainda
+          </p>
+        )}
+      </div>
+
+      {/* Add Comment Form */}
+      <div className="space-y-3 border-t pt-4">
+        <Textarea
+          placeholder="Adicione um comentário..."
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={3}
+        />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="internal-comment"
+              checked={isInternal}
+              onCheckedChange={setIsInternal}
+            />
+            <Label htmlFor="internal-comment" className="text-sm flex items-center gap-1">
+              <Lock className="h-3 w-3" />
+              Comentário interno
+            </Label>
+          </div>
+          <Button
+            onClick={handleAddComment}
+            disabled={!comment.trim() || addCommentMutation.isPending}
+          >
+            {addCommentMutation.isPending ? "Enviando..." : "Enviar Comentário"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

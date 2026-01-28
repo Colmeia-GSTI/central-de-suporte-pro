@@ -1,0 +1,442 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UserForm } from "./UserForm";
+import { TableSkeleton } from "@/components/ui/loading-skeleton";
+import type { Tables, Enums } from "@/integrations/supabase/types";
+
+type ProfileWithRoles = Tables<"profiles"> & {
+  user_roles: { role: Enums<"app_role"> }[];
+};
+
+const roleLabels: Record<Enums<"app_role">, string> = {
+  admin: "Administrador",
+  manager: "Gerente",
+  technician: "Técnico",
+  financial: "Financeiro",
+  client: "Cliente",
+  client_master: "Cliente Master",
+};
+
+const roleColors: Record<Enums<"app_role">, string> = {
+  admin: "bg-priority-critical text-white",
+  manager: "bg-priority-high text-white",
+  technician: "bg-status-progress text-white",
+  financial: "bg-status-warning text-white",
+  client: "bg-muted text-muted-foreground",
+  client_master: "bg-primary text-primary-foreground",
+};
+
+export function UsersTab() {
+  const [search, setSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState<ProfileWithRoles | null>(null);
+  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<ProfileWithRoles | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { can } = usePermissions();
+
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ["users-with-roles", search],
+    queryFn: async () => {
+      // First get profiles
+      let profilesQuery = supabase
+        .from("profiles")
+        .select("id, user_id, full_name, email, phone, avatar_url")
+        .order("full_name");
+
+      if (search) {
+        profilesQuery = profilesQuery.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+
+      const { data: profiles, error: profilesError } = await profilesQuery;
+      if (profilesError) throw profilesError;
+
+      // Then get roles for each user
+      const userIds = profiles?.map(p => p.user_id) || [];
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", userIds);
+      if (rolesError) throw rolesError;
+
+      // Combine data
+      return (profiles || []).map(profile => ({
+        ...profile,
+        user_roles: (roles || []).filter(r => r.user_id === profile.user_id).map(r => ({ role: r.role })),
+      })) as ProfileWithRoles[];
+    },
+  });
+
+  const addRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: Enums<"app_role"> }) => {
+      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      toast({ title: "Papel adicionado com sucesso" });
+      setIsRoleDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const removeRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: Enums<"app_role"> }) => {
+      const { error } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId)
+        .eq("role", role);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      toast({ title: "Papel removido com sucesso" });
+    },
+  });
+
+  const handleAddRole = (role: string) => {
+    if (selectedUser) {
+      addRoleMutation.mutate({ userId: selectedUser.user_id, role: role as Enums<"app_role"> });
+    }
+  };
+
+  const handleRemoveRole = (userId: string, role: Enums<"app_role">) => {
+    removeRoleMutation.mutate({ userId, role });
+  };
+
+  const createUserMutation = useMutation({
+    mutationFn: async (data: {
+      email: string;
+      password: string;
+      full_name: string;
+      phone?: string;
+      roles: string[];
+    }) => {
+      const { data: result, error } = await supabase.functions.invoke("create-user", {
+        body: data,
+      });
+      
+      // Handle edge function invocation errors
+      if (error) {
+        console.error("Edge function error:", error);
+        throw new Error(
+          error.message?.includes("non-2xx")
+            ? "Erro de comunicação com o servidor. Tente novamente."
+            : error.message || "Erro desconhecido ao criar usuário"
+        );
+      }
+      
+      // Handle application-level errors returned by the function
+      if (result?.error) {
+        const errorMessage = translateErrorMessage(result.error);
+        throw new Error(errorMessage);
+      }
+      
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      toast({ title: "Usuário criado com sucesso" });
+      setIsCreateUserOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao criar usuário",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Helper function to translate error messages to Portuguese
+  const translateErrorMessage = (error: string): string => {
+    const errorMap: Record<string, string> = {
+      "User already registered": "Este email já está cadastrado no sistema",
+      "Email already exists": "Este email já está em uso",
+      "Password should be at least 6 characters": "A senha deve ter pelo menos 6 caracteres",
+      "Invalid email": "Email inválido",
+      "Missing required fields": "Preencha todos os campos obrigatórios",
+      "Only admins can create users": "Apenas administradores podem criar usuários",
+      "Unauthorized": "Você não tem permissão para esta ação",
+      "No authorization header": "Sessão expirada. Faça login novamente.",
+      "Failed to create user profile": "Erro ao criar perfil do usuário. Tente novamente.",
+    };
+    
+    // Check for partial matches
+    for (const [key, value] of Object.entries(errorMap)) {
+      if (error.toLowerCase().includes(key.toLowerCase())) {
+        return value;
+      }
+    }
+    
+    return error || "Erro desconhecido";
+  };
+
+  const handleCreateUser = (data: {
+    email: string;
+    password: string;
+    full_name: string;
+    phone?: string;
+    roles: string[];
+  }) => {
+    createUserMutation.mutate(data);
+  };
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+      const { data, error } = await supabase.functions.invoke("reset-password", {
+        body: { user_id: userId, new_password: password },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Senha redefinida com sucesso" });
+      setIsResetPasswordOpen(false);
+      setResetPasswordUser(null);
+      setNewPassword("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao redefinir senha",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleOpenResetPassword = (user: ProfileWithRoles) => {
+    setResetPasswordUser(user);
+    setNewPassword("");
+    setIsResetPasswordOpen(true);
+  };
+
+  const handleResetPassword = () => {
+    if (resetPasswordUser && newPassword) {
+      resetPasswordMutation.mutate({ userId: resetPasswordUser.user_id, password: newPassword });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gestão de Usuários</CardTitle>
+        <CardDescription>
+          Gerencie usuários e seus papéis no sistema
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar usuários..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <PermissionGate module="users" action="create">
+            <Button onClick={() => setIsCreateUserOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Novo Usuário
+            </Button>
+          </PermissionGate>
+        </div>
+
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Papéis</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell><div className="h-4 w-32 bg-muted animate-pulse rounded" /></TableCell>
+                    <TableCell><div className="h-4 w-40 bg-muted animate-pulse rounded" /></TableCell>
+                    <TableCell><div className="flex gap-1"><div className="h-6 w-16 bg-muted animate-pulse rounded" /></div></TableCell>
+                    <TableCell className="text-right"><div className="h-8 w-28 bg-muted animate-pulse rounded ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    Nenhum usuário encontrado
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.full_name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {user.user_roles.map((r, i) => (
+                          <Badge
+                            key={i}
+                            className={`${roleColors[r.role]} ${can("users", "edit") ? "cursor-pointer" : ""}`}
+                            onClick={() => can("users", "edit") && handleRemoveRole(user.user_id, r.role)}
+                          >
+                            {roleLabels[r.role]}
+                            {can("users", "edit") && <Trash2 className="ml-1 h-3 w-3" />}
+                          </Badge>
+                        ))}
+                        {user.user_roles.length === 0 && (
+                          <span className="text-sm text-muted-foreground">Sem papéis</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <PermissionGate module="users" action="edit">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setIsRoleDialogOpen(true);
+                            }}
+                          >
+                            <Shield className="mr-2 h-4 w-4" />
+                            Papel
+                          </Button>
+                        </PermissionGate>
+                        <PermissionGate module="users" action="edit">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenResetPassword(user)}
+                          >
+                            <KeyRound className="mr-2 h-4 w-4" />
+                            Senha
+                          </Button>
+                        </PermissionGate>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adicionar Papel</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Adicionar papel para: <strong>{selectedUser?.full_name}</strong>
+              </p>
+              <Select onValueChange={handleAddRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um papel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="manager">Gerente</SelectItem>
+                  <SelectItem value="technician">Técnico</SelectItem>
+                  <SelectItem value="financial">Financeiro</SelectItem>
+                  <SelectItem value="client">Cliente</SelectItem>
+                  <SelectItem value="client_master">Cliente Master</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <UserForm
+          open={isCreateUserOpen}
+          onOpenChange={setIsCreateUserOpen}
+          onSubmit={handleCreateUser}
+          isLoading={createUserMutation.isPending}
+        />
+
+        {/* Reset Password Dialog */}
+        <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Redefinir Senha</DialogTitle>
+              <DialogDescription>
+                Definir nova senha para: <strong>{resetPasswordUser?.full_name}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">Nova Senha</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  placeholder="Mínimo 6 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsResetPasswordOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleResetPassword}
+                disabled={newPassword.length < 6 || resetPasswordMutation.isPending}
+              >
+                {resetPasswordMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Redefinir Senha
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}

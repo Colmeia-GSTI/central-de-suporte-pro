@@ -1,0 +1,195 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileText, MessageSquare, History, ArrowRightLeft, Pause, CheckCircle } from "lucide-react";
+import type { Tables, Enums } from "@/integrations/supabase/types";
+import { TicketDetailsTab } from "./TicketDetailsTab";
+import { TicketCommentsTab } from "./TicketCommentsTab";
+import { TicketHistoryTab } from "./TicketHistoryTab";
+import { TicketTransferDialog } from "./TicketTransferDialog";
+import { TicketPauseDialog } from "./TicketPauseDialog";
+import { TicketResolveDialog } from "./TicketResolveDialog";
+import { SLAIndicator } from "./SLAIndicator";
+
+type TicketWithRelations = Tables<"tickets"> & {
+  clients: Tables<"clients"> | null;
+  ticket_categories: Tables<"ticket_categories"> | null;
+};
+
+interface TicketDetailsProps {
+  ticket: TicketWithRelations;
+  onClose: () => void;
+}
+
+const statusLabels: Record<Enums<"ticket_status">, string> = {
+  open: "Aberto",
+  in_progress: "Em Andamento",
+  waiting: "Aguardando",
+  paused: "Pausado",
+  waiting_third_party: "Aguardando Terceiro",
+  no_contact: "Sem Contato",
+  resolved: "Resolvido",
+  closed: "Fechado",
+};
+
+const statusColors: Record<Enums<"ticket_status">, string> = {
+  open: "bg-status-open text-white",
+  in_progress: "bg-status-progress text-white",
+  waiting: "bg-status-waiting text-white",
+  paused: "bg-amber-500 text-white",
+  waiting_third_party: "bg-purple-500 text-white",
+  no_contact: "bg-orange-500 text-white",
+  resolved: "bg-status-success text-white",
+  closed: "bg-muted text-muted-foreground",
+};
+
+// Status that can show pause button
+const canPauseStatuses: Enums<"ticket_status">[] = ["open", "in_progress", "waiting"];
+
+// Status that can be resolved
+const canResolveStatuses: Enums<"ticket_status">[] = [
+  "open", "in_progress", "waiting", "paused", "waiting_third_party", "no_contact"
+];
+
+export function TicketDetails({ ticket, onClose }: TicketDetailsProps) {
+  const [activeTab, setActiveTab] = useState("details");
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isPauseOpen, setIsPauseOpen] = useState(false);
+  const [isResolveOpen, setIsResolveOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleUpdate = () => {
+    queryClient.invalidateQueries({ queryKey: ["tickets"] });
+  };
+
+  const canPause = canPauseStatuses.includes(ticket.status);
+  const canResolve = canResolveStatuses.includes(ticket.status);
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div>
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground font-mono">
+              Chamado #{ticket.ticket_number}
+            </p>
+            <h2 className="text-xl font-semibold">{ticket.title}</h2>
+            <SLAIndicator
+              ticket={{
+                id: ticket.id,
+                created_at: ticket.created_at,
+                first_response_at: ticket.first_response_at,
+                resolved_at: ticket.resolved_at,
+                priority: ticket.priority,
+                client_id: ticket.client_id,
+                category_id: ticket.category_id,
+              }}
+            />
+          </div>
+        <div className="flex items-center gap-2">
+            {canResolve && (
+              <Button
+                size="sm"
+                onClick={() => setIsResolveOpen(true)}
+                className="gap-1 bg-green-600 hover:bg-green-700 text-white"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Finalizar
+              </Button>
+            )}
+            {canPause && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsPauseOpen(true)}
+                className="gap-1"
+              >
+                <Pause className="h-4 w-4" />
+                Pausar
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsTransferOpen(true)}
+              className="gap-1"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              Transferir
+            </Button>
+            <Badge className={statusColors[ticket.status]}>
+              {statusLabels[ticket.status]}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="details" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Detalhes
+          </TabsTrigger>
+          <TabsTrigger value="comments" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Comentários
+          </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2">
+            <History className="h-4 w-4" />
+            Histórico
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="mt-4">
+          <TicketDetailsTab ticket={ticket} onUpdate={handleUpdate} />
+        </TabsContent>
+
+        <TabsContent value="comments" className="mt-4">
+          <TicketCommentsTab ticketId={ticket.id} />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <TicketHistoryTab ticketId={ticket.id} />
+        </TabsContent>
+      </Tabs>
+
+      {/* Transfer Dialog */}
+      <TicketTransferDialog
+        open={isTransferOpen}
+        onOpenChange={setIsTransferOpen}
+        ticketId={ticket.id}
+        currentAssignedTo={ticket.assigned_to}
+        currentDepartmentId={ticket.department_id}
+        onSuccess={handleUpdate}
+      />
+
+      {/* Pause Dialog */}
+      <TicketPauseDialog
+        open={isPauseOpen}
+        onOpenChange={setIsPauseOpen}
+        ticketId={ticket.id}
+        onSuccess={handleUpdate}
+      />
+
+      {/* Resolve Dialog */}
+      <TicketResolveDialog
+        open={isResolveOpen}
+        onOpenChange={setIsResolveOpen}
+        ticketId={ticket.id}
+        ticketNumber={ticket.ticket_number}
+        currentStatus={ticket.status}
+        categoryId={ticket.category_id}
+        clientId={ticket.client_id}
+        ticketTitle={ticket.title}
+        onSuccess={handleUpdate}
+      />
+    </div>
+  );
+}
