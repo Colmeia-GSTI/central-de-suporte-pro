@@ -2,12 +2,13 @@
   "name": "Colmeia GSTI - Central de Suporte",
   "short_name": "Colmeia GSTI",
   "description": "Central de Suporte e Helpdesk da Colmeia GSTI. Gestão de tickets, monitoramento, contratos e muito mais.",
-  "start_url": "/",
+  "start_url": "https://suporte.colmeiagsti.com.br/",
   "display": "standalone",
   "background_color": "#0f1114",
   "theme_color": "#ffb300",
   "orientation": "portrait-primary",
-  "scope": "/",
+  "scope": "https://suporte.colmeiagsti.com.br/",
+  "id": "https://suporte.colmeiagsti.com.br/",
   "lang": "pt-BR",
   "icons": [
     {
