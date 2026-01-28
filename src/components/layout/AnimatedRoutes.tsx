@@ -14,6 +14,7 @@ const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const Register = lazy(() => import("@/pages/Register"));
 const Unauthorized = lazy(() => import("@/pages/Unauthorized"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const Setup = lazy(() => import("@/pages/Setup"));
 const ClientsPage = lazy(() => import("@/pages/clients/ClientsPage"));
 const ClientDetailPage = lazy(() => import("@/pages/clients/ClientDetailPage"));
 const ContractsPage = lazy(() => import("@/pages/contracts/ContractsPage"));
@@ -57,6 +58,7 @@ export function AnimatedRoutes() {
       <Route path="/forgot-password" element={<LazyPage><ForgotPassword /></LazyPage>} />
       <Route path="/register" element={<LazyPage><Register /></LazyPage>} />
       <Route path="/unauthorized" element={<LazyPage><Unauthorized /></LazyPage>} />
+      <Route path="/setup" element={<LazyPage><Setup /></LazyPage>} />
       
       {/* Public routes */}
       <Route path="/tv-dashboard" element={<LazyPage><TVDashboardPage /></LazyPage>} />
