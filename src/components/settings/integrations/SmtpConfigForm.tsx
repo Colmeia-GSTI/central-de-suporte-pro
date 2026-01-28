@@ -100,10 +100,40 @@ export function SmtpConfigForm() {
       return;
     }
 
+    if (!settings.host || !settings.username || !settings.password) {
+      toast.error("Preencha as configurações SMTP antes de testar");
+      return;
+    }
+
     setTesting(true);
     try {
-      // First save settings
-      await handleSave();
+      // Auto-enable when testing
+      const wasActive = isActive;
+      if (!wasActive) {
+        setIsActive(true);
+      }
+
+      // Save with active = true
+      const { data: existing } = await supabase
+        .from("integration_settings")
+        .select("id")
+        .eq("integration_type", "smtp")
+        .maybeSingle();
+
+      const savePayload = {
+        integration_type: "smtp",
+        settings: settings as unknown as Json,
+        is_active: true, // Always enable when testing
+      };
+
+      if (existing) {
+        await supabase
+          .from("integration_settings")
+          .update({ settings: settings as unknown as Json, is_active: true })
+          .eq("integration_type", "smtp");
+      } else {
+        await supabase.from("integration_settings").insert(savePayload);
+      }
 
       const { data, error } = await supabase.functions.invoke("send-email-smtp", {
         body: {
