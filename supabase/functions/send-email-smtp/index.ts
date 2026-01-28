@@ -147,13 +147,18 @@ serve(async (req) => {
     const sanitizedText = text ? String(text).slice(0, MAX_HTML_LENGTH) : sanitizedHtml.replace(/<[^>]*>/g, '');
 
     // Safe logging (no sensitive data)
+    const port = settings.port || 587;
+    console.log(`[send-email-smtp] Connecting to ${settings.host}:${port}`);
     console.log(`[send-email-smtp] Sending to ${emailValidation.emails.length} recipient(s)`);
 
+    // Port 465 uses implicit TLS (SMTPS), port 587 uses STARTTLS
+    const useImplicitTLS = port === 465;
+    
     const client = new SMTPClient({
       connection: {
         hostname: settings.host,
-        port: settings.port || 587,
-        tls: settings.use_tls !== false,
+        port: port,
+        tls: useImplicitTLS || settings.use_tls !== false,
         auth: {
           username: settings.username,
           password: settings.password,
@@ -161,27 +166,53 @@ serve(async (req) => {
       },
     });
 
-    await client.send({
-      from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
-      to: emailValidation.emails,
-      subject: sanitizedSubject,
-      content: sanitizedText,
-      html: sanitizedHtml,
-    });
+    try {
+      await client.send({
+        from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
+        to: emailValidation.emails,
+        subject: sanitizedSubject,
+        content: sanitizedText,
+        html: sanitizedHtml,
+      });
 
-    await client.close();
+      await client.close();
 
-    console.log("[send-email-smtp] Email sent successfully");
+      console.log("[send-email-smtp] Email sent successfully");
 
-    return new Response(
-      JSON.stringify({ success: true, message: "Email enviado com sucesso" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+      return new Response(
+        JSON.stringify({ success: true, message: "Email enviado com sucesso" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (sendError: unknown) {
+      const errorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
+      console.error("[send-email-smtp] Send error:", errorMsg);
+      if (sendError instanceof Error && sendError.stack) {
+        console.error("[send-email-smtp] Stack:", sendError.stack);
+      }
+      throw sendError;
+    } finally {
+      try {
+        await client.close();
+      } catch {
+        // Ignore close errors
+      }
+    }
   } catch (error: unknown) {
-    // Never expose internal error details
-    console.error("[send-email-smtp] Error:", error instanceof Error ? error.message : "Unknown error");
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("[send-email-smtp] Error:", errorMsg);
+    
+    // Return more specific error messages for debugging
+    let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
+    if (errorMsg.includes("connect")) {
+      userMessage = "Não foi possível conectar ao servidor SMTP. Verifique host e porta.";
+    } else if (errorMsg.includes("auth") || errorMsg.includes("credentials")) {
+      userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
+    } else if (errorMsg.includes("certificate") || errorMsg.includes("TLS")) {
+      userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
+    }
+    
     return new Response(
-      JSON.stringify({ error: "Erro ao enviar email. Verifique as configurações SMTP." }),
+      JSON.stringify({ error: userMessage, details: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
