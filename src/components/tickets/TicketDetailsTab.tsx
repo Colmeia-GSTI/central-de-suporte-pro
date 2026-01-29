@@ -217,8 +217,6 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         .eq("id", ticket.id);
       if (error) throw error;
     },
-      if (error) throw error;
-    },
     onSuccess: async () => {
       // Update tags
       const currentTagIds = ticketTags.map((t) => t.tag_id);
