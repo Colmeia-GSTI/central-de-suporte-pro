@@ -31,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -52,6 +53,9 @@ import {
   Mail,
   MessageCircle,
   Send,
+  Zap,
+  XCircle,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,6 +73,8 @@ type InvoiceWithClient = Tables<"invoices"> & {
   clients: { name: string } | null;
   contract_id: string | null;
 };
+
+type NfseByInvoice = Record<string, { status: string; numero_nfse: string | null }>;
 
 const statusLabels: Record<Enums<"invoice_status">, string> = {
   pending: "Pendente",
@@ -91,11 +97,21 @@ const statusIcons: Record<Enums<"invoice_status">, React.ReactNode> = {
   cancelled: null,
 };
 
+const nfseStatusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
+  autorizada: { label: "Autorizada", icon: <CheckCircle2 className="h-3 w-3" />, className: "bg-status-success/20 text-status-success border-status-success/30" },
+  processando: { label: "Processando", icon: <RefreshCw className="h-3 w-3 animate-spin" />, className: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-400" },
+  pendente: { label: "Pendente", icon: <Clock className="h-3 w-3" />, className: "bg-status-warning/20 text-status-warning border-status-warning/30" },
+  rejeitada: { label: "Rejeitada", icon: <XCircle className="h-3 w-3" />, className: "bg-status-danger/20 text-status-danger border-status-danger/30" },
+  erro: { label: "Erro", icon: <XCircle className="h-3 w-3" />, className: "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-400" },
+  cancelada: { label: "Cancelada", icon: <XCircle className="h-3 w-3" />, className: "bg-muted text-muted-foreground" },
+};
+
 export function BillingInvoicesTab() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [generatingPayment, setGeneratingPayment] = useState<string | null>(null);
+  const [processingComplete, setProcessingComplete] = useState<string | null>(null);
   const [nfseInvoice, setNfseInvoice] = useState<InvoiceWithClient | null>(null);
   const [pixDialogInvoice, setPixDialogInvoice] = useState<InvoiceWithClient | null>(null);
   const [isNfseAvulsaOpen, setIsNfseAvulsaOpen] = useState(false);
@@ -117,6 +133,27 @@ export function BillingInvoicesTab() {
       const { data, error } = await query;
       if (error) throw error;
       return data as InvoiceWithClient[];
+    },
+  });
+
+  // Query para buscar NFS-e vinculadas às faturas
+  const { data: nfseByInvoice = {} } = useQuery({
+    queryKey: ["nfse-by-invoices"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("nfse_history")
+        .select("invoice_id, status, numero_nfse")
+        .not("invoice_id", "is", null);
+      
+      if (error) throw error;
+      
+      // Criar map: { invoice_id: { status, numero_nfse } }
+      return (data || []).reduce<NfseByInvoice>((acc, n) => {
+        if (n.invoice_id) {
+          acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse };
+        }
+        return acc;
+      }, {});
     },
   });
 
@@ -202,6 +239,95 @@ export function BillingInvoicesTab() {
       toast.error("Erro ao reenviar cobrança", { description: error.message });
     } finally {
       setSendingNotification(null);
+    }
+  };
+
+  // Função "Emitir Completo" - Boleto + PIX + NFS-e + Enviar
+  const handleEmitComplete = async (invoice: InvoiceWithClient) => {
+    setProcessingComplete(invoice.id);
+    const steps: string[] = [];
+    
+    try {
+      // 1. Gerar boleto se não existe
+      if (!invoice.boleto_url) {
+        const { data, error } = await supabase.functions.invoke("banco-inter", {
+          body: { invoice_id: invoice.id, payment_type: "boleto" },
+        });
+        if (error) throw error;
+        if (data.error && data.configured !== false) throw new Error(data.error);
+        if (!data.error) steps.push("Boleto gerado");
+      } else {
+        steps.push("Boleto já existente");
+      }
+      
+      // 2. Gerar PIX se não existe
+      if (!invoice.pix_code) {
+        const { data, error } = await supabase.functions.invoke("banco-inter", {
+          body: { invoice_id: invoice.id, payment_type: "pix" },
+        });
+        if (error) throw error;
+        if (data.error && data.configured !== false) throw new Error(data.error);
+        if (!data.error) steps.push("PIX gerado");
+      } else {
+        steps.push("PIX já existente");
+      }
+      
+      // 3. Emitir NFS-e se tiver contrato e não existir NFS-e autorizada
+      if (invoice.contract_id) {
+        const existingNfse = nfseByInvoice[invoice.id];
+        if (!existingNfse || !["autorizada", "processando"].includes(existingNfse.status)) {
+          // Buscar dados do contrato
+          const { data: contract } = await supabase
+            .from("contracts")
+            .select("name, description, nfse_descricao_customizada")
+            .eq("id", invoice.contract_id)
+            .single();
+          
+          const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+            body: {
+              action: "emit",
+              client_id: invoice.client_id,
+              invoice_id: invoice.id,
+              contract_id: invoice.contract_id,
+              value: invoice.amount,
+              service_description: contract?.nfse_descricao_customizada || contract?.description || `Prestação de serviços - ${contract?.name}`,
+            },
+          });
+          if (error) throw error;
+          if (!data.success) throw new Error(data.error || "Erro ao emitir NFS-e");
+          steps.push("NFS-e emitida");
+        } else {
+          steps.push(`NFS-e ${existingNfse.status}`);
+        }
+      }
+      
+      // 4. Enviar notificações (Email + WhatsApp)
+      const { data: notifData, error: notifError } = await supabase.functions.invoke("resend-payment-notification", {
+        body: { invoice_id: invoice.id, channels: ["email", "whatsapp"] },
+      });
+      
+      if (notifError) throw notifError;
+      if (notifData.success) {
+        steps.push("Notificações enviadas");
+      } else {
+        const failedChannels = notifData.results?.filter((r: any) => !r.success).map((r: any) => r.channel) || [];
+        if (failedChannels.length > 0) {
+          steps.push(`Notificações: ${failedChannels.length} falha(s)`);
+        }
+      }
+      
+      toast.success("Fatura processada com sucesso!", {
+        description: steps.join(" • "),
+      });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (error: any) {
+      toast.error("Erro no processamento completo", {
+        description: `${steps.length > 0 ? `Completado: ${steps.join(", ")}. ` : ""}Erro: ${error.message}`,
+      });
+    } finally {
+      setProcessingComplete(null);
     }
   };
 
@@ -471,10 +597,23 @@ export function BillingInvoicesTab() {
                     })}
                   </TableCell>
                   <TableCell>
-                    <Badge className={statusColors[invoice.status]}>
-                      {statusIcons[invoice.status]}
-                      <span className="ml-1">{statusLabels[invoice.status]}</span>
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge className={statusColors[invoice.status]}>
+                        {statusIcons[invoice.status]}
+                        <span className="ml-1">{statusLabels[invoice.status]}</span>
+                      </Badge>
+                      {/* Badge NFS-e vinculada */}
+                      {nfseByInvoice[invoice.id] && (() => {
+                        const nfseInfo = nfseByInvoice[invoice.id];
+                        const config = nfseStatusConfig[nfseInfo.status] || nfseStatusConfig.pendente;
+                        return (
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 gap-1 ${config.className}`}>
+                            {config.icon}
+                            <span>NFS-e</span>
+                          </Badge>
+                        );
+                      })()}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -511,6 +650,22 @@ export function BillingInvoicesTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            {/* Emitir Completo - Ação principal integrada */}
+                            <DropdownMenuItem
+                              onClick={() => handleEmitComplete(invoice)}
+                              disabled={processingComplete !== null || generatingPayment !== null}
+                              className="font-medium text-primary"
+                            >
+                              {processingComplete === invoice.id ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Zap className="mr-2 h-4 w-4" />
+                              )}
+                              Emitir Completo
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuSeparator />
+                            
                             {!invoice.boleto_url && (
                               <DropdownMenuItem
                                 onClick={() => handleGeneratePayment(invoice.id, "boleto")}
@@ -535,8 +690,10 @@ export function BillingInvoicesTab() {
                               <CheckCircle2 className="mr-2 h-4 w-4" />
                               Marcar como Pago
                             </DropdownMenuItem>
+                            
                             {(invoice.boleto_url || invoice.pix_code) && (
                               <>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => handleResendNotification(invoice.id, ["email"])}
                                   disabled={sendingNotification !== null}
@@ -560,11 +717,15 @@ export function BillingInvoicesTab() {
                                 </DropdownMenuItem>
                               </>
                             )}
+                            
                             {invoice.contract_id && (
-                              <DropdownMenuItem onClick={() => setNfseInvoice(invoice)}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                Emitir NFS-e
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setNfseInvoice(invoice)}>
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  Emitir NFS-e Manual
+                                </DropdownMenuItem>
+                              </>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
