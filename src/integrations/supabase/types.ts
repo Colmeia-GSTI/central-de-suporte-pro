@@ -1604,6 +1604,8 @@ export type Database = {
           is_online: boolean
           last_seen_at: string | null
           name: string
+          needs_reboot: boolean | null
+          service_data: Json | null
           updated_at: string
           uptime_percent: number | null
         }
@@ -1620,6 +1622,8 @@ export type Database = {
           is_online?: boolean
           last_seen_at?: string | null
           name: string
+          needs_reboot?: boolean | null
+          service_data?: Json | null
           updated_at?: string
           uptime_percent?: number | null
         }
@@ -1636,6 +1640,8 @@ export type Database = {
           is_online?: boolean
           last_seen_at?: string | null
           name?: string
+          needs_reboot?: boolean | null
+          service_data?: Json | null
           updated_at?: string
           uptime_percent?: number | null
         }
@@ -1660,6 +1666,7 @@ export type Database = {
         Row: {
           acknowledged_at: string | null
           acknowledged_by: string | null
+          check_output: string | null
           created_at: string
           device_id: string
           escalated_at: string | null
@@ -1668,12 +1675,14 @@ export type Database = {
           level: Database["public"]["Enums"]["alert_level"]
           message: string | null
           resolved_at: string | null
+          service_name: string | null
           status: Database["public"]["Enums"]["alert_status"]
           title: string
         }
         Insert: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
+          check_output?: string | null
           created_at?: string
           device_id: string
           escalated_at?: string | null
@@ -1682,12 +1691,14 @@ export type Database = {
           level: Database["public"]["Enums"]["alert_level"]
           message?: string | null
           resolved_at?: string | null
+          service_name?: string | null
           status?: Database["public"]["Enums"]["alert_status"]
           title: string
         }
         Update: {
           acknowledged_at?: string | null
           acknowledged_by?: string | null
+          check_output?: string | null
           created_at?: string
           device_id?: string
           escalated_at?: string | null
@@ -1696,6 +1707,7 @@ export type Database = {
           level?: Database["public"]["Enums"]["alert_level"]
           message?: string | null
           resolved_at?: string | null
+          service_name?: string | null
           status?: Database["public"]["Enums"]["alert_status"]
           title?: string
         }

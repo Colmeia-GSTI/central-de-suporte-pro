@@ -89,13 +89,13 @@ interface CacheEntry {
 
 interface CacheData {
   tactical_rmm?: CacheEntry;
-  uptime_kuma?: CacheEntry;
+  checkmk?: CacheEntry;
 }
 
-function loadCacheFromStorage(): { tactical_rmm: ExternalClient[]; uptime_kuma: ExternalClient[] } {
+function loadCacheFromStorage(): { tactical_rmm: ExternalClient[]; checkmk: ExternalClient[] } {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
-    if (!cached) return { tactical_rmm: [], uptime_kuma: [] };
+    if (!cached) return { tactical_rmm: [], checkmk: [] };
     
     const parsed: CacheData = JSON.parse(cached);
     const now = Date.now();
@@ -104,16 +104,16 @@ function loadCacheFromStorage(): { tactical_rmm: ExternalClient[]; uptime_kuma: 
       tactical_rmm: parsed.tactical_rmm && (now - parsed.tactical_rmm.timestamp < CACHE_TTL_MS) 
         ? parsed.tactical_rmm.data 
         : [],
-      uptime_kuma: parsed.uptime_kuma && (now - parsed.uptime_kuma.timestamp < CACHE_TTL_MS) 
-        ? parsed.uptime_kuma.data 
+      checkmk: parsed.checkmk && (now - parsed.checkmk.timestamp < CACHE_TTL_MS) 
+        ? parsed.checkmk.data 
         : [],
     };
   } catch {
-    return { tactical_rmm: [], uptime_kuma: [] };
+    return { tactical_rmm: [], checkmk: [] };
   }
 }
 
-function saveCacheToStorage(source: "tactical_rmm" | "uptime_kuma", data: ExternalClient[]) {
+function saveCacheToStorage(source: "tactical_rmm" | "checkmk", data: ExternalClient[]) {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
     const existing: CacheData = cached ? JSON.parse(cached) : {};
@@ -154,7 +154,7 @@ export function ClientMappingsTab() {
 
   const [loadingExternal, setLoadingExternal] = useState({
     tactical_rmm: false,
-    uptime_kuma: false,
+    checkmk: false,
   });
 
   // Clientes externos derivados da fonte selecionada
@@ -178,13 +178,13 @@ export function ClientMappingsTab() {
   }, [clients, mappings, selectedSource]);
 
   // Buscar clientes de uma fonte e salvar no cache
-  const fetchAndCacheSource = async (source: "tactical_rmm" | "uptime_kuma") => {
-    const functionName = source === "tactical_rmm" ? "tactical-rmm-sync" : "uptime-kuma-sync";
+  const fetchAndCacheSource = async (source: "tactical_rmm" | "checkmk") => {
+    const functionName = source === "tactical_rmm" ? "tactical-rmm-sync" : "checkmk-sync";
     
     setLoadingExternal(prev => ({ ...prev, [source]: true }));
     try {
       const { data } = await supabase.functions.invoke(functionName, {
-        body: { action: "list_clients" },
+        body: { action: source === "checkmk" ? "list_folders" : "list_clients" },
       });
       if (data?.clients) {
         setExternalClientsCache(prev => ({ ...prev, [source]: data.clients }));
@@ -206,15 +206,13 @@ export function ClientMappingsTab() {
     if (cachedData.tactical_rmm.length === 0) {
       await fetchAndCacheSource("tactical_rmm");
     } else {
-      // Atualiza em background sem loading indicator
       fetchAndCacheSource("tactical_rmm");
     }
     
-    if (cachedData.uptime_kuma.length === 0) {
-      await fetchAndCacheSource("uptime_kuma");
+    if (cachedData.checkmk.length === 0) {
+      await fetchAndCacheSource("checkmk");
     } else {
-      // Atualiza em background sem loading indicator
-      fetchAndCacheSource("uptime_kuma");
+      fetchAndCacheSource("checkmk");
     }
   };
 
@@ -280,15 +278,15 @@ export function ClientMappingsTab() {
 
   // Atualizar clientes de uma fonte específica (com feedback visual)
   const refreshExternalClients = async (source: string) => {
-    const sourceKey = source as "tactical_rmm" | "uptime_kuma";
+    const sourceKey = source as "tactical_rmm" | "checkmk";
     setLoadingExternal(prev => ({ ...prev, [source]: true }));
     try {
       const functionName = source === "tactical_rmm" 
         ? "tactical-rmm-sync" 
-        : "uptime-kuma-sync";
+        : "checkmk-sync";
 
       const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { action: "list_clients" },
+        body: { action: source === "checkmk" ? "list_folders" : "list_clients" },
       });
 
       if (error || data?.error) {
@@ -317,7 +315,7 @@ export function ClientMappingsTab() {
       // Sync both sources
       const results = await Promise.allSettled([
         supabase.functions.invoke("tactical-rmm-sync", { body: { action: "sync" } }),
-        supabase.functions.invoke("uptime-kuma-sync", { body: { action: "sync" } }),
+        supabase.functions.invoke("checkmk-sync", { body: { action: "sync" } }),
       ]);
 
       let totalCreated = 0;
@@ -326,7 +324,7 @@ export function ClientMappingsTab() {
       const errors: string[] = [];
 
       results.forEach((result, idx) => {
-        const source = idx === 0 ? "Tactical RMM" : "Uptime Kuma";
+        const source = idx === 0 ? "Tactical RMM" : "CheckMK";
         if (result.status === "fulfilled" && result.value.data) {
           const d = result.value.data;
         if (d.error) {
@@ -394,7 +392,7 @@ export function ClientMappingsTab() {
       // Sincronizar automaticamente após criar mapeamento
       const functionName = selectedSource === "tactical_rmm" 
         ? "tactical-rmm-sync" 
-        : "uptime-kuma-sync";
+        : "checkmk-sync";
       
       const { data: syncData } = await supabase.functions.invoke(functionName, {
         body: { action: "sync" },
@@ -439,7 +437,7 @@ export function ClientMappingsTab() {
       // Sincronizar automaticamente após criar mapeamentos em massa
       const functionName = selectedSource === "tactical_rmm" 
         ? "tactical-rmm-sync" 
-        : "uptime-kuma-sync";
+        : "checkmk-sync";
       
       const { data: syncData } = await supabase.functions.invoke(functionName, {
         body: { action: "sync" },
@@ -479,8 +477,8 @@ export function ClientMappingsTab() {
     switch (source) {
       case "tactical_rmm":
         return "Tactical RMM";
-      case "uptime_kuma":
-        return "Uptime Kuma";
+      case "checkmk":
+        return "CheckMK";
       default:
         return source;
     }
@@ -517,7 +515,7 @@ export function ClientMappingsTab() {
                 </div>
               </CardTitle>
               <CardDescription>
-                Vincule clientes do sistema com clientes externos (Tactical RMM, Uptime Kuma)
+                Vincule clientes do sistema com clientes externos (Tactical RMM, CheckMK)
               </CardDescription>
             </div>
           </div>

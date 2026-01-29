@@ -3,7 +3,7 @@ import { SmtpConfigForm } from "./integrations/SmtpConfigForm";
 import { GoogleCalendarConfigForm } from "./integrations/GoogleCalendarConfigForm";
 import { BancoInterConfigForm } from "./integrations/BancoInterConfigForm";
 import { AsaasConfigForm } from "./integrations/AsaasConfigForm";
-import { UptimeKumaConfigForm } from "./integrations/UptimeKumaConfigForm";
+import { CheckMkConfigForm } from "./integrations/CheckMkConfigForm";
 import { TacticalRmmConfigForm } from "./integrations/TacticalRmmConfigForm";
 import { EvolutionApiConfigForm } from "./integrations/EvolutionApiConfigForm";
 import { TelegramConfigForm } from "./integrations/TelegramConfigForm";
@@ -60,7 +60,7 @@ export function IntegrationsTab() {
         </TabsContent>
 
         <TabsContent value="monitoramento" className="space-y-4 mt-4">
-          <UptimeKumaConfigForm />
+          <CheckMkConfigForm />
           <TacticalRmmConfigForm />
         </TabsContent>
 
