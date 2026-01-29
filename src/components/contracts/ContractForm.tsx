@@ -31,7 +31,8 @@ import { useToast } from "@/hooks/use-toast";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
-import { FileText, Lock } from "lucide-react";
+import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
+import { FileText, Lock, Calendar, CreditCard, TrendingUp, MessageSquare } from "lucide-react";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const contractSchema = z.object({
@@ -46,6 +47,16 @@ const contractSchema = z.object({
   status: z.enum(["active", "expired", "cancelled", "pending"]),
   auto_renew: z.boolean().default(false),
   internal_notes: z.string().optional(),
+  // Billing fields
+  billing_day: z.coerce.number().min(1).max(28).default(10),
+  days_before_due: z.coerce.number().min(1).max(30).default(5),
+  payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
+  // Adjustment fields
+  adjustment_date: z.string().optional(),
+  adjustment_index: z.enum(["IGPM", "IPCA", "INPC", "FIXO"]).default("IGPM"),
+  adjustment_percentage: z.coerce.number().optional(),
+  // Notification
+  notification_message: z.string().optional(),
   // NFSE fields
   nfse_enabled: z.boolean().default(true),
   nfse_service_code: z.string().optional(),
@@ -88,6 +99,16 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
       status: contract?.status || "active",
       auto_renew: contract?.auto_renew || false,
       internal_notes: (contract as any)?.internal_notes || "",
+      // Billing defaults
+      billing_day: (contract as any)?.billing_day || 10,
+      days_before_due: (contract as any)?.days_before_due || 5,
+      payment_preference: (contract as any)?.payment_preference || "boleto",
+      // Adjustment defaults
+      adjustment_date: (contract as any)?.adjustment_date || "",
+      adjustment_index: (contract as any)?.adjustment_index || "IGPM",
+      adjustment_percentage: (contract as any)?.adjustment_percentage || undefined,
+      // Notification
+      notification_message: (contract as any)?.notification_message || "",
       // NFSE defaults
       nfse_enabled: (contract as any)?.nfse_enabled ?? true,
       nfse_service_code: (contract as any)?.nfse_service_code || "010701",
@@ -156,6 +177,16 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
         status: data.status as Enums<"contract_status">,
         auto_renew: data.auto_renew,
         internal_notes: data.internal_notes || null,
+        // Billing fields
+        billing_day: data.billing_day,
+        days_before_due: data.days_before_due,
+        payment_preference: data.payment_preference,
+        // Adjustment fields
+        adjustment_date: data.adjustment_date || null,
+        adjustment_index: data.adjustment_index,
+        adjustment_percentage: data.adjustment_percentage || null,
+        // Notification
+        notification_message: data.notification_message || null,
         // NFSE fields
         nfse_enabled: data.nfse_enabled,
         nfse_service_code: data.nfse_service_code || null,
@@ -446,6 +477,138 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
           />
         </div>
 
+        {/* Billing Section */}
+        <Separator className="my-6" />
+        
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <CreditCard className="h-5 w-5 text-primary" />
+            Faturamento
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <FormField
+              control={form.control}
+              name="billing_day"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Dia do Vencimento</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="1" max="28" {...field} />
+                  </FormControl>
+                  <FormDescription>Dia 1 a 28</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="days_before_due"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Dias de Antecedência</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="1" max="30" {...field} />
+                  </FormControl>
+                  <FormDescription>Para geração automática</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="payment_preference"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Preferência de Pagamento</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="boleto">Boleto</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="both">Boleto + PIX</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+
+        {/* Adjustment Section */}
+        <Separator className="my-6" />
+        
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Reajuste Anual
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <FormField
+              control={form.control}
+              name="adjustment_date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Data do Próximo Reajuste</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormDescription>Geralmente 1 ano após início</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="adjustment_index"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Índice de Reajuste</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="IGPM">IGP-M</SelectItem>
+                      <SelectItem value="IPCA">IPCA</SelectItem>
+                      <SelectItem value="INPC">INPC</SelectItem>
+                      <SelectItem value="FIXO">Percentual Fixo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {form.watch("adjustment_index") === "FIXO" && (
+              <FormField
+                control={form.control}
+                name="adjustment_percentage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Percentual Fixo (%)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="5.00" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+          </div>
+        </div>
+
         {/* Services Section */}
         <Separator className="my-6" />
         
@@ -478,6 +641,33 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
           />
         )}
 
+        {/* Notification Message Section */}
+        <Separator className="my-6" />
+        
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            Mensagem de Cobrança
+          </div>
+
+          <FormField
+            control={form.control}
+            name="notification_message"
+            render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <ContractNotificationMessageForm
+                    value={field.value || ""}
+                    onChange={field.onChange}
+                    clientName={clients.find((c) => c.id === form.watch("client_id"))?.name}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
         {/* Internal Notes Section */}
         <Separator className="my-6" />
 
@@ -497,6 +687,16 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
                     placeholder="Anotações visíveis apenas para a equipe..."
                     rows={3}
                     {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Estas observações não aparecem para o cliente
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
                   />
                 </FormControl>
                 <FormDescription>

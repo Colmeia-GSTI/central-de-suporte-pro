@@ -719,6 +719,107 @@ export type Database = {
         }
         Relationships: []
       }
+      contract_additional_charges: {
+        Row: {
+          amount: number
+          applied: boolean | null
+          applied_invoice_id: string | null
+          contract_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string
+          id: string
+          reference_month: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          applied?: boolean | null
+          applied_invoice_id?: string | null
+          contract_id: string
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          id?: string
+          reference_month: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          applied?: boolean | null
+          applied_invoice_id?: string | null
+          contract_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          id?: string
+          reference_month?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_additional_charges_applied_invoice_id_fkey"
+            columns: ["applied_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_additional_charges_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_adjustments: {
+        Row: {
+          adjustment_date: string
+          applied_by: string | null
+          contract_id: string
+          created_at: string | null
+          id: string
+          index_used: string
+          index_value: number
+          new_monthly_value: number
+          notes: string | null
+          old_monthly_value: number
+        }
+        Insert: {
+          adjustment_date: string
+          applied_by?: string | null
+          contract_id: string
+          created_at?: string | null
+          id?: string
+          index_used: string
+          index_value: number
+          new_monthly_value: number
+          notes?: string | null
+          old_monthly_value: number
+        }
+        Update: {
+          adjustment_date?: string
+          applied_by?: string | null
+          contract_id?: string
+          created_at?: string | null
+          id?: string
+          index_used?: string
+          index_value?: number
+          new_monthly_value?: number
+          notes?: string | null
+          old_monthly_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_adjustments_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contract_history: {
         Row: {
           action: string
@@ -753,6 +854,57 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_service_history: {
+        Row: {
+          action: string
+          contract_id: string
+          created_at: string | null
+          id: string
+          new_value: Json | null
+          old_value: Json | null
+          service_id: string | null
+          service_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          contract_id: string
+          created_at?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          service_id?: string | null
+          service_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          contract_id?: string
+          created_at?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          service_id?: string | null
+          service_name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_service_history_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_service_history_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
             referencedColumns: ["id"]
           },
         ]
@@ -815,10 +967,12 @@ export type Database = {
         Row: {
           adjustment_date: string | null
           adjustment_index: string | null
+          adjustment_percentage: number | null
           auto_renew: boolean
           billing_day: number | null
           client_id: string
           created_at: string
+          days_before_due: number | null
           description: string | null
           end_date: string | null
           hours_included: number | null
@@ -831,6 +985,7 @@ export type Database = {
           nfse_enabled: boolean | null
           nfse_service_code: string | null
           nfse_service_code_id: string | null
+          notification_message: string | null
           payment_preference: string | null
           start_date: string
           status: Database["public"]["Enums"]["contract_status"]
@@ -840,10 +995,12 @@ export type Database = {
         Insert: {
           adjustment_date?: string | null
           adjustment_index?: string | null
+          adjustment_percentage?: number | null
           auto_renew?: boolean
           billing_day?: number | null
           client_id: string
           created_at?: string
+          days_before_due?: number | null
           description?: string | null
           end_date?: string | null
           hours_included?: number | null
@@ -856,6 +1013,7 @@ export type Database = {
           nfse_enabled?: boolean | null
           nfse_service_code?: string | null
           nfse_service_code_id?: string | null
+          notification_message?: string | null
           payment_preference?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["contract_status"]
@@ -865,10 +1023,12 @@ export type Database = {
         Update: {
           adjustment_date?: string | null
           adjustment_index?: string | null
+          adjustment_percentage?: number | null
           auto_renew?: boolean
           billing_day?: number | null
           client_id?: string
           created_at?: string
+          days_before_due?: number | null
           description?: string | null
           end_date?: string | null
           hours_included?: number | null
@@ -881,6 +1041,7 @@ export type Database = {
           nfse_enabled?: boolean | null
           nfse_service_code?: string | null
           nfse_service_code_id?: string | null
+          notification_message?: string | null
           payment_preference?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["contract_status"]
@@ -1296,6 +1457,7 @@ export type Database = {
           parent_invoice_id: string | null
           payment_method: string | null
           pix_code: string | null
+          reference_month: string | null
           service_id: string | null
           status: Database["public"]["Enums"]["invoice_status"]
           ticket_id: string | null
@@ -1320,6 +1482,7 @@ export type Database = {
           parent_invoice_id?: string | null
           payment_method?: string | null
           pix_code?: string | null
+          reference_month?: string | null
           service_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           ticket_id?: string | null
@@ -1344,6 +1507,7 @@ export type Database = {
           parent_invoice_id?: string | null
           payment_method?: string | null
           pix_code?: string | null
+          reference_month?: string | null
           service_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           ticket_id?: string | null

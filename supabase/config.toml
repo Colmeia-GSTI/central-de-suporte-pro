@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.checkmk-sync]
 verify_jwt = false
+
+[functions.apply-contract-adjustment]
+verify_jwt = false
+
+[functions.check-contract-adjustments]
+verify_jwt = false
