@@ -102,7 +102,11 @@ serve(async (req) => {
     const sanitizedMessage = message.slice(0, 4096);
 
     // Evolution API endpoint for sending text messages
-    const evolutionUrl = `${settings.api_url.replace(/\/$/, "")}/message/sendText/${settings.instance_name}`;
+    // Handle case where user may have included manager path in api_url
+    let baseUrl = settings.api_url.replace(/\/$/, "");
+    // Remove manager/instance path if present
+    baseUrl = baseUrl.replace(/\/manager\/instance\/[a-f0-9-]+$/i, "");
+    const evolutionUrl = `${baseUrl}/message/sendText/${encodeURIComponent(settings.instance_name)}`;
 
     const response = await fetchWithTimeout(evolutionUrl, {
       method: "POST",
