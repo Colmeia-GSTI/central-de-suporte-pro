@@ -1,107 +1,127 @@
 
+# Plano: Unificar Perfil e Corrigir UX de Permissão Push
 
-# Plano: Implementar Push Nativo (Navegador) com Web Push
+## Problemas Identificados
 
-## Resumo
+### 1. Erro "Permissão negada"
+O toast vermelho aparece quando o navegador nega a permissão de notificação. Isso acontece quando:
+- O usuário já negou permissão anteriormente no navegador
+- O navegador está configurado para bloquear notificações
+- O site não está em HTTPS (push requer conexão segura)
 
-Para que as notificações push funcionem mesmo com a aba fechada, é necessário configurar corretamente o protocolo **Web Push** que requer:
-1. Par de chaves VAPID (pública e privada) para autenticação do servidor
-2. Criptografia adequada das mensagens usando o padrão Web Push
-3. Service Worker registrado para receber e exibir as notificações
+### 2. Duplicação de Interfaces de Perfil
+Atualmente existem dois locais para edição de perfil:
+- **`/profile`** - Página completa com dados pessoais, notificações e permissões
+- **`/settings` > Meu Perfil** - Apenas preferências de notificação (mais completa que a página /profile para notificações)
 
-## O Que Já Existe
+### 3. Inconsistência de Funcionalidades
+| Funcionalidade | /profile | /settings > Meu Perfil |
+|----------------|----------|------------------------|
+| Dados pessoais (nome, telefone) | Sim | Nao |
+| Notificações Email/WhatsApp/Telegram | Sim (básico) | Sim (avançado) |
+| Push Nativo do navegador | Nao | Sim |
+| Push Toast em tempo real | Nao | Sim |
+| Som de notificação | Nao | Sim |
+| Tipos de alerta (crítico/aviso/info) | Nao | Sim |
+| Visualização de permissões | Sim | Nao |
 
-- Hook `usePushNotifications` que gerencia subscrições
-- Tabela `push_subscriptions` no banco de dados
-- Service Worker `sw-push.js` para receber e exibir notificações
-- Edge function `send-push-notification` (precisa de ajustes)
+---
 
-## O Que Falta
+## Solução Proposta
 
-1. **Secret VAPID_PRIVATE_KEY não está configurado** - sem isso, o servidor não consegue autenticar as mensagens push
-2. A edge function não implementa a criptografia correta do Web Push (precisa usar a biblioteca `web-push`)
+### Abordagem: Unificar tudo na página `/profile`
+
+Centralizar todas as configurações do usuário na página `/profile`, tornando-a a única fonte de verdade para:
+- Dados pessoais
+- Todas as preferências de notificação
+- Visualização de permissões
+
+A aba "Meu Perfil" em `/settings` será **removida** ou redirecionará para `/profile`.
 
 ---
 
 ## Etapas de Implementação
 
-### Etapa 1: Gerar e Configurar Chaves VAPID
+### Etapa 1: Melhorar UX de Permissão Push Negada
+- Ao invés de apenas mostrar um toast vermelho, adicionar orientações claras
+- Detectar se a permissão está bloqueada (`Notification.permission === "denied"`)
+- Mostrar instruções específicas para reabilitar no navegador
 
-Você precisará gerar um novo par de chaves VAPID. O sistema já usa uma chave pública hardcoded, então vou:
-- Gerar novas chaves VAPID
-- Atualizar a chave pública no frontend (`usePushNotifications.ts`)
-- Solicitar que você adicione a chave privada como secret
+### Etapa 2: Unificar ProfilePage
+Reorganizar `/profile` em abas mais completas:
+- **Dados Pessoais**: Nome, telefone, email, avatar
+- **Notificações**: Todos os canais (incluindo Push Nativo, Som, tipos de alerta)
+- **Segurança**: Alterar senha (futuro)
+- **Permissões**: Visualização do que o usuário pode acessar
 
-### Etapa 2: Atualizar Edge Function com Web Push
+### Etapa 3: Remover Aba "Meu Perfil" de Settings
+- Remover a aba "Meu Perfil" da página de Configurações
+- A página de configurações fica apenas para administradores configurarem o sistema
+- Adicionar link de acesso rápido ao perfil na sidebar (já existe)
 
-Reescrever a edge function `send-push-notification` para:
-- Usar a biblioteca `web-push` do Deno que implementa corretamente o protocolo
-- Assinar as mensagens com VAPID
-- Criptografar o payload corretamente com as chaves p256dh e auth do subscriber
-
-```text
-+------------------+        +-------------------+        +------------------+
-|  Colmeia App     |        |  Edge Function    |        |  Push Service    |
-|  (Frontend)      |        |  send-push-notif  |        |  (FCM/APNS)      |
-+--------+---------+        +--------+----------+        +--------+---------+
-         |                           |                            |
-         | 1. Subscribe to push      |                            |
-         |-------------------------->|                            |
-         |                           |                            |
-         | 2. Save subscription      |                            |
-         |   (endpoint, p256dh, auth)|                            |
-         |                           |                            |
-         |                           | 3. Send encrypted message  |
-         |                           |   + VAPID signature        |
-         |                           |--------------------------->|
-         |                           |                            |
-         |                           |                            | 4. Deliver
-         |<--------------------------------------------------------|
-         |                   5. Show notification                 |
-```
-
-### Etapa 3: Adicionar Botão de Teste
-
-Adicionar um botão para testar as notificações push diretamente das preferências, similar ao botão "Testar Som" existente.
-
-### Etapa 4: Integrar com Sistema de Notificações
-
-Garantir que o sistema de notificações (tickets, alertas, SLA) chame a edge function de push quando apropriado.
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/hooks/usePushNotifications.ts` | Atualizar chave VAPID pública |
-| `supabase/functions/send-push-notification/index.ts` | Implementar Web Push corretamente |
-| `src/components/settings/profile/NotificationPreferencesForm.tsx` | Adicionar botão de teste push |
-
-## Secret Necessário
-
-Será solicitado que você adicione:
-- **VAPID_PRIVATE_KEY**: Chave privada para assinar mensagens Web Push
+### Etapa 4: Atualizar Sidebar e Navegação
+- O link no footer da sidebar já leva para `/profile` (correto)
+- Garantir que o perfil seja acessível a todos os usuários
 
 ---
 
 ## Detalhes Técnicos
 
-### Geração de Chaves VAPID
+### Arquivos a Modificar
 
-As chaves VAPID são um par de chaves EC (curva P-256):
-- **Pública**: Usada no frontend para identificar o servidor ao se inscrever
-- **Privada**: Usada no backend para assinar as mensagens (prova que o servidor é quem diz ser)
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/profile/ProfilePage.tsx` | Expandir com todas as preferências de notificação |
+| `src/pages/settings/SettingsPage.tsx` | Remover aba "Meu Perfil" |
+| `src/hooks/usePushNotifications.ts` | Melhorar feedback quando permissão negada |
+| `src/components/settings/profile/NotificationPreferencesForm.tsx` | Mover lógica para ProfilePage |
 
-### Fluxo de uma Notificação Push
+### Novo Fluxo de Permissão Push
 
-1. Usuário clica "Ativar Push" → navegador pede permissão
-2. Navegador cria subscription com endpoint único + chaves de criptografia
-3. Subscription é salva no banco (user_id, endpoint, p256dh, auth)
-4. Quando evento ocorre (novo ticket, alerta), edge function:
-   - Busca subscriptions dos usuários alvo
-   - Para cada subscription, criptografa o payload com as chaves
-   - Envia para o endpoint com assinatura VAPID
-5. Push Service entrega ao navegador (mesmo offline/aba fechada)
-6. Service Worker recebe e exibe a notificação
+```text
+Usuario clica "Ativar Push"
+        |
+        v
++-------------------+
+| Verificar status  |
+| da permissão      |
++--------+----------+
+         |
+    +----+----+----+
+    |         |    |
+"default" "granted" "denied"
+    |         |       |
+    v         v       v
+Solicitar   Já está   Mostrar card
+permissão   ativo!    de instrução
+    |                 "Como reativar"
+    v
++------------+
+| Navegador  |
+| pergunta   |
++-----+------+
+      |
+  +---+---+
+  |       |
+Permitir  Bloquear
+  |          |
+  v          v
+Registrar   Mostrar
+subscrição  instrução
+```
 
+### UX Melhorada para Permissão Negada
+
+Ao invés do toast vermelho genérico, mostrar:
+- Card informativo explicando que a permissão foi bloqueada
+- Instruções passo-a-passo para o navegador específico
+- Botão para verificar novamente
+
+---
+
+## Benefícios
+
+1. **Experiência unificada**: Um único local para todas as configurações pessoais
+2. **Menos confusão**: Usuário sabe exatamente onde ir para editar seu perfil
+3. **Melhor feedback**: Instruções claras quando push não funciona
+4. **Separação clara**: Settings = configurações do sistema | Profile = configurações pessoais
