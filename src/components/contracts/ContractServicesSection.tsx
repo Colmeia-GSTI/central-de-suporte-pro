@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Package } from "lucide-react";
+import { Plus, Trash2, Package, History } from "lucide-react";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface Service {
   id: string;
@@ -36,18 +52,39 @@ export interface ContractService {
   subtotal: number;
 }
 
+interface ServiceHistoryEntry {
+  id: string;
+  action: string;
+  service_name: string;
+  old_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  created_at: string;
+}
+
 interface ContractServicesSectionProps {
+  contractId?: string;
   initialServices?: ContractService[];
   onChange: (services: ContractService[], total: number) => void;
 }
 
 export function ContractServicesSection({
+  contractId,
   initialServices = [],
   onChange,
 }: ContractServicesSectionProps) {
   const [services, setServices] = useState<ContractService[]>(initialServices);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  // Keep track of original services for comparison
+  const [originalServices, setOriginalServices] = useState<ContractService[]>(initialServices);
+
+  useEffect(() => {
+    if (initialServices.length > 0 && originalServices.length === 0) {
+      setOriginalServices(initialServices);
+    }
+  }, [initialServices, originalServices.length]);
 
   // Fetch available services
   const { data: availableServices = [] } = useQuery({
@@ -63,11 +100,30 @@ export function ContractServicesSection({
     },
   });
 
+  // Fetch service history if contract exists
+  const { data: serviceHistory = [] } = useQuery({
+    queryKey: ["contract-service-history", contractId],
+    queryFn: async () => {
+      if (!contractId) return [];
+      const { data, error } = await supabase
+        .from("contract_service_history")
+        .select("id, action, service_name, old_value, new_value, created_at")
+        .eq("contract_id", contractId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data as ServiceHistoryEntry[];
+    },
+    enabled: !!contractId,
+  });
+
   // Calculate total whenever services change
+  const stableOnChange = useCallback(onChange, []);
+  
   useEffect(() => {
     const total = services.reduce((acc, s) => acc + s.subtotal, 0);
-    onChange(services, total);
-  }, [services, onChange]);
+    stableOnChange(services, total);
+  }, [services, stableOnChange]);
 
   const handleAddService = () => {
     if (!selectedServiceId) return;
@@ -117,11 +173,84 @@ export function ContractServicesSection({
 
   const total = services.reduce((acc, s) => acc + s.subtotal, 0);
 
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case "added": return "Adicionado";
+      case "removed": return "Removido";
+      case "updated": return "Atualizado";
+      default: return action;
+    }
+  };
+
+  const getActionColor = (action: string) => {
+    switch (action) {
+      case "added": return "text-green-600 dark:text-green-400";
+      case "removed": return "text-red-600 dark:text-red-400";
+      case "updated": return "text-blue-600 dark:text-blue-400";
+      default: return "text-muted-foreground";
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-lg font-semibold">
-        <Package className="h-5 w-5 text-primary" />
-        Serviços do Contrato
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-lg font-semibold">
+          <Package className="h-5 w-5 text-primary" />
+          Serviços do Contrato
+        </div>
+        {contractId && serviceHistory.length > 0 && (
+          <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <History className="h-4 w-4 mr-1" />
+                Histórico
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  Histórico de Alterações
+                </DialogTitle>
+              </DialogHeader>
+              <ScrollArea className="h-[400px] pr-4">
+                <div className="space-y-4">
+                  {serviceHistory.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="border-b pb-3 last:border-0"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className={`font-medium ${getActionColor(entry.action)}`}>
+                            {getActionLabel(entry.action)}
+                          </span>
+                          <span className="text-muted-foreground ml-2">
+                            {entry.service_name}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(entry.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        </span>
+                      </div>
+                      {entry.action === "updated" && entry.old_value && entry.new_value && (
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          <span>Qtd: {(entry.old_value as any).quantity || 0}</span>
+                          <span className="mx-1">→</span>
+                          <span>{(entry.new_value as any).quantity || 0}</span>
+                          {" | "}
+                          <span>Valor: {formatCurrencyBRLWithSymbol((entry.old_value as any).value || 0)}</span>
+                          <span className="mx-1">→</span>
+                          <span>{formatCurrencyBRLWithSymbol((entry.new_value as any).value || 0)}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Add Service Form */}
@@ -195,14 +324,21 @@ export function ContractServicesSection({
                     {formatCurrencyBRLWithSymbol(service.subtotal)}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveService(service.service_id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveService(service.service_id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Remover serviço</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </TableCell>
                 </TableRow>
               ))}
