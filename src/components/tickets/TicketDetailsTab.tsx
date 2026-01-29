@@ -24,11 +24,14 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { EntityHistoryTimeline, HistoryEntry } from "@/components/ui/EntityHistoryTimeline";
+import { TagsInput } from "@/components/tickets/TagsInput";
+import { TagBadge } from "@/components/tickets/TagBadge";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
   ticket_categories: Tables<"ticket_categories"> | null;
+  ticket_subcategories?: { id: string; name: string } | null;
 };
 
 interface TicketDetailsTabProps {
@@ -80,9 +83,11 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     status: ticket.status,
     priority: ticket.priority,
     category_id: ticket.category_id || "",
+    subcategory_id: (ticket as any).subcategory_id || "",
     assigned_to: ticket.assigned_to || "",
     asset_id: ticket.asset_id || "",
   });
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -95,10 +100,29 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
       status: ticket.status,
       priority: ticket.priority,
       category_id: ticket.category_id || "",
+      subcategory_id: (ticket as any).subcategory_id || "",
       assigned_to: ticket.assigned_to || "",
       asset_id: ticket.asset_id || "",
     });
   }, [ticket]);
+
+  // Load current tags for this ticket
+  const { data: ticketTags = [] } = useQuery({
+    queryKey: ["ticket-tags-assignments", ticket.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ticket_tag_assignments")
+        .select("tag_id, ticket_tags(id, name, color)")
+        .eq("ticket_id", ticket.id);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Sync selectedTagIds with current tags
+  useEffect(() => {
+    setSelectedTagIds(ticketTags.map((t) => t.tag_id));
+  }, [ticketTags]);
 
   // CONSOLIDATED: Single RPC call for all form data (technicians, categories, assets)
   const { data: formDataRpc } = useQuery({
@@ -116,6 +140,23 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
   const technicians = useMemo(() => formDataRpc?.technicians || [], [formDataRpc]);
   const categories = useMemo(() => formDataRpc?.categories || [], [formDataRpc]);
   const assets = useMemo(() => formDataRpc?.assets || [], [formDataRpc]);
+
+  // Fetch subcategories based on selected category
+  const { data: subcategories = [] } = useQuery({
+    queryKey: ["subcategories-for-category", formData.category_id],
+    queryFn: async () => {
+      if (!formData.category_id) return [];
+      const { data, error } = await supabase
+        .from("ticket_subcategories")
+        .select("id, name")
+        .eq("category_id", formData.category_id)
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!formData.category_id,
+  });
 
   // Fetch recent history for timeline
   const { data: recentHistory = [], isLoading: isHistoryLoading } = useQuery({
@@ -171,12 +212,35 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
           assigned_to: updates.assigned_to || null,
           asset_id: updates.asset_id || null,
           category_id: updates.category_id || null,
+          subcategory_id: updates.subcategory_id || null,
         })
         .eq("id", ticket.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      // Update tags
+      const currentTagIds = ticketTags.map((t) => t.tag_id);
+      const tagsToAdd = selectedTagIds.filter((id) => !currentTagIds.includes(id));
+      const tagsToRemove = currentTagIds.filter((id) => !selectedTagIds.includes(id));
+
+      if (tagsToAdd.length > 0) {
+        await supabase.from("ticket_tag_assignments").insert(
+          tagsToAdd.map((tagId) => ({ ticket_id: ticket.id, tag_id: tagId }))
+        );
+      }
+
+      if (tagsToRemove.length > 0) {
+        await supabase
+          .from("ticket_tag_assignments")
+          .delete()
+          .eq("ticket_id", ticket.id)
+          .in("tag_id", tagsToRemove);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-tags-assignments", ticket.id] });
       queryClient.invalidateQueries({ queryKey: ["ticket-recent-history", ticket.id] });
       setIsEditing(false);
       toast({ title: "Chamado atualizado" });
@@ -222,9 +286,11 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
       status: ticket.status,
       priority: ticket.priority,
       category_id: ticket.category_id || "",
+      subcategory_id: (ticket as any).subcategory_id || "",
       assigned_to: ticket.assigned_to || "",
       asset_id: ticket.asset_id || "",
     });
+    setSelectedTagIds(ticketTags.map((t) => t.tag_id));
     setIsEditing(false);
   };
 
@@ -302,7 +368,11 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
           {isEditing ? (
             <Select
               value={formData.category_id}
-              onValueChange={(value) => setFormData((prev) => ({ ...prev, category_id: value }))}
+              onValueChange={(value) => setFormData((prev) => ({ 
+                ...prev, 
+                category_id: value,
+                subcategory_id: "" // Reset subcategory when category changes
+              }))}
             >
               <SelectTrigger className="h-8">
                 <SelectValue placeholder="Selecionar" />
@@ -316,9 +386,35 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
               </SelectContent>
             </Select>
           ) : (
-            <p className="font-medium">{ticket.ticket_categories?.name || "-"}</p>
+            <div>
+              <p className="font-medium">{ticket.ticket_categories?.name || "-"}</p>
+              {ticket.ticket_subcategories?.name && (
+                <p className="text-xs text-muted-foreground">→ {ticket.ticket_subcategories.name}</p>
+              )}
+            </div>
           )}
         </div>
+        {/* Subcategory - only show in edit mode */}
+        {isEditing && subcategories.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">Subcategoria</p>
+            <Select
+              value={formData.subcategory_id}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, subcategory_id: value }))}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue placeholder="Selecionar" />
+              </SelectTrigger>
+              <SelectContent>
+                {subcategories.map((sub) => (
+                  <SelectItem key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" />
@@ -402,6 +498,34 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
           </div>
         </div>
       )}
+
+      {/* Tags */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2">
+          <Tag className="h-3 w-3" />
+          Tags
+        </Label>
+        {isEditing ? (
+          <TagsInput
+            selectedTagIds={selectedTagIds}
+            onChange={setSelectedTagIds}
+          />
+        ) : (
+          <div className="flex flex-wrap gap-1 min-h-[24px]">
+            {ticketTags.length === 0 ? (
+              <span className="text-sm text-muted-foreground">Nenhuma tag</span>
+            ) : (
+              ticketTags.map((assignment) => (
+                <TagBadge
+                  key={assignment.tag_id}
+                  name={(assignment.ticket_tags as any)?.name || ""}
+                  color={(assignment.ticket_tags as any)?.color || "#6b7280"}
+                />
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Assignment & Asset */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

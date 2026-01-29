@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TicketForm } from "@/components/tickets/TicketForm";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
@@ -44,6 +44,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
   ticket_categories: Tables<"ticket_categories"> | null;
+  ticket_subcategories: { id: string; name: string } | null;
+  ticket_tag_assignments: { ticket_tags: { id: string; name: string; color: string | null } }[];
 };
 
 const statusLabels: Record<Enums<"ticket_status">, string> = {
@@ -134,7 +136,9 @@ export default function TicketsPage() {
         .select(`
           *,
           clients(id, name),
-          ticket_categories(id, name)
+          ticket_categories(id, name),
+          ticket_subcategories(id, name),
+          ticket_tag_assignments(ticket_tags(id, name, color))
         `, { count: "exact" })
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE + 1); // Fetch one extra to check if there's a next page
@@ -328,6 +332,7 @@ export default function TicketsPage() {
                 <TableHead>Título</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Categoria</TableHead>
+                <TableHead>Tags</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Prioridade</TableHead>
                 <TableHead>SLA</TableHead>
@@ -344,15 +349,17 @@ export default function TicketsPage() {
                     <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : tickets.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <Ticket className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <p className="mt-2 text-muted-foreground">
                       Nenhum chamado encontrado
@@ -380,9 +387,42 @@ export default function TicketsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {ticket.ticket_categories?.name || (
-                        <span className="text-muted-foreground">-</span>
-                      )}
+                      <div className="flex flex-col gap-0.5">
+                        <span>{ticket.ticket_categories?.name || (
+                          <span className="text-muted-foreground">-</span>
+                        )}</span>
+                        {ticket.ticket_subcategories?.name && (
+                          <span className="text-xs text-muted-foreground">
+                            → {ticket.ticket_subcategories.name}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1 max-w-32">
+                        {ticket.ticket_tag_assignments?.slice(0, 3).map((assignment) => (
+                          <span
+                            key={assignment.ticket_tags.id}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium border"
+                            style={{
+                              backgroundColor: `${assignment.ticket_tags.color || "#6b7280"}20`,
+                              borderColor: assignment.ticket_tags.color || "#6b7280",
+                              color: assignment.ticket_tags.color || "#6b7280",
+                            }}
+                          >
+                            <span 
+                              className="w-1 h-1 rounded-full" 
+                              style={{ backgroundColor: assignment.ticket_tags.color || "#6b7280" }}
+                            />
+                            {assignment.ticket_tags.name}
+                          </span>
+                        ))}
+                        {ticket.ticket_tag_assignments?.length > 3 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{ticket.ticket_tag_assignments.length - 3}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={statusColors[ticket.status]}>

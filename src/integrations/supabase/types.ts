@@ -2488,6 +2488,104 @@ export type Database = {
           },
         ]
       }
+      ticket_subcategories: {
+        Row: {
+          category_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sla_hours_override: number | null
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sla_hours_override?: number | null
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sla_hours_override?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_subcategories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_tag_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          tag_id: string
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          tag_id: string
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          tag_id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_tag_assignments_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_tag_assignments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_tags: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          is_system: boolean
+          name: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_system?: boolean
+          name: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_system?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       ticket_time_entries: {
         Row: {
           created_at: string | null
@@ -2616,6 +2714,7 @@ export type Database = {
           satisfaction_rating: number | null
           sla_deadline: string | null
           status: Database["public"]["Enums"]["ticket_status"]
+          subcategory_id: string | null
           ticket_number: number
           title: string
           updated_at: string
@@ -2642,6 +2741,7 @@ export type Database = {
           satisfaction_rating?: number | null
           sla_deadline?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
+          subcategory_id?: string | null
           ticket_number?: number
           title: string
           updated_at?: string
@@ -2668,6 +2768,7 @@ export type Database = {
           satisfaction_rating?: number | null
           sla_deadline?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
+          subcategory_id?: string | null
           ticket_number?: number
           title?: string
           updated_at?: string
@@ -2713,6 +2814,13 @@ export type Database = {
             columns: ["requester_contact_id"]
             isOneToOne: false
             referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_subcategory_id_fkey"
+            columns: ["subcategory_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_subcategories"
             referencedColumns: ["id"]
           },
         ]
