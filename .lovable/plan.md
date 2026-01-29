@@ -1,413 +1,673 @@
 
-# Plano Completo: Reestruturação do Sistema de Monitoramento
 
-## Resumo Executivo
+# Relatório de Análise e Reestruturação do Sistema de Faturamento
 
-Este plano consolida as últimas 4 interações e implementa uma reestruturação completa do sistema de monitoramento, substituindo o **Uptime Kuma** pelo **CheckMK** e otimizando o **Tactical RMM** com visualização detalhada e economia de recursos.
+## 1. Diagnóstico do Estado Atual
 
----
+### 1.1 Arquitetura Existente
 
-## 1. Estratégia de Monitoramento por Tipo de Dispositivo
+O sistema atual apresenta uma estrutura modular bem organizada, porém com algumas lacunas importantes:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     ARQUITETURA FINAL DE MONITORAMENTO                       │
+│                         ARQUITETURA ATUAL                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                               │
-│  ┌───────────────────────────────────┐  ┌─────────────────────────────────┐ │
-│  │         TACTICAL RMM              │  │           CHECKMK               │ │
-│  │                                   │  │                                 │ │
-│  │  Notebooks / Desktops             │  │  Servidores (métricas + DB)    │ │
-│  │                                   │  │  Impressoras (up/down)          │ │
-│  │  Dados:                           │  │  APs/Wi-Fi (up/down)            │ │
-│  │  - Status online/offline          │  │  Câmeras (up/down)              │ │
-│  │  - Info básica HW (OS, CPU, RAM)  │  │  Switches (up/down)             │ │
-│  │  - Média CPU/RAM/Disco (10 leit.) │  │  Roteadores (up/down)           │ │
-│  │  - Precisa reboot                 │  │  Firewalls (up/down)            │ │
-│  │                                   │  │                                 │ │
-│  │  Sync: 3h, 6h ou 12h              │  │  Sync: 3h, 6h ou 12h            │ │
-│  └───────────────────────────────────┘  └─────────────────────────────────┘ │
-│                                                                               │
-│                              ▼                  ▼                             │
-│                    ┌─────────────────────────────────────────┐               │
-│                    │      BANCO DE DADOS UNIFICADO           │               │
-│                    │  monitored_devices.service_data (JSONB) │               │
-│                    │  monitoring_alerts + service_name       │               │
-│                    └─────────────────────────────────────────┘               │
-│                                       ▼                                       │
-│                    ┌─────────────────────────────────────────┐               │
-│                    │    INTERFACE COM DROPDOWN EXPANSÍVEL    │               │
-│                    │  Nível 1: Resumo (nome, IP, status)     │               │
-│                    │  Nível 2: Detalhes (OS, HW, métricas)   │               │
-│                    └─────────────────────────────────────────┘               │
+│                                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │  CONTRATOS   │───▶│   FATURAS    │───▶│   COBRANÇAS  │                   │
+│  │              │    │              │    │  (Boleto/PIX)│                   │
+│  │ billing_day  │    │ auto_payment │    │              │                   │
+│  │ nfse_enabled │    │ _generated   │    │  banco-inter │                   │
+│  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│         │                   │                   │                            │
+│         ▼                   ▼                   ▼                            │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │   SERVIÇOS   │    │    NFS-e     │    │ NOTIFICAÇÕES │                   │
+│  │              │    │              │    │              │                   │
+│  │ contract_    │    │ asaas-nfse   │    │ email/wpp    │                   │
+│  │   services   │    │ nfse_history │    │              │                   │
+│  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1.2 Pontos Fortes Identificados
+
+| Funcionalidade | Status | Observação |
+|----------------|--------|------------|
+| Geração automática de faturas | Implementado | `generate-monthly-invoices` |
+| Boleto/PIX via Banco Inter | Implementado | mTLS, escopo correto |
+| NFS-e via Asaas | Implementado | com histórico e logs |
+| Notificações Email/WhatsApp | Implementado | templates configuráveis |
+| Webhook pagamentos | Implementado | `webhook-banco-inter` |
+| Polling fallback | Implementado | otimizado (1h delay) |
+| Cobrança em lote | Implementado | `batch-collection-notification` |
+| Histórico de contrato | Implementado | `contract_history` |
+| Serviços por contrato | Implementado | `contract_services` |
+
+### 1.3 Lacunas Críticas Identificadas
+
+| Funcionalidade | Status | Impacto |
+|----------------|--------|---------|
+| Reajuste anual de contratos | Não implementado | Alto |
+| Valores adicionais pontuais (único mês) | Não implementado | Alto |
+| Mensagem personalizada por contrato | Não implementado | Médio |
+| Antecedência configurável por contrato | Parcial (global) | Médio |
+| Histórico de alteração de serviços | Parcial | Médio |
+| Dashboard de sincronização | Não implementado | Baixo |
+| Agendamento de geração automática (cron) | Não implementado | Alto |
+
+---
+
+## 2. Análise Detalhada por Módulo
+
+### 2.1 Módulo de Contratos
+
+**Situação Atual:**
+- Campos básicos: `name`, `client_id`, `monthly_value`, `start_date`, `end_date`
+- Suporte a NFS-e: `nfse_enabled`, `nfse_service_code`, `nfse_descricao_customizada`
+- Dia de faturamento: `billing_day` (1-28)
+- Preferência de pagamento: `payment_preference` (boleto, pix, both)
+
+**Problemas:**
+1. Não há campo para `adjustment_date` (data do próximo reajuste)
+2. Não há campo para `adjustment_index` (índice: IGPM, IPCA, percentual fixo)
+3. Não há campo para `notification_message` (mensagem personalizada)
+4. Não há campo para `days_before_due` (antecedência para geração)
+
+### 2.2 Módulo de Serviços do Contrato
+
+**Situação Atual:**
+- Tabela `contract_services`: `service_id`, `quantity`, `unit_value`, `value`
+- Ao editar, todos os serviços são deletados e reinseridos
+
+**Problemas:**
+1. Não há histórico de quando um serviço entrou ou saiu
+2. Não há suporte a "valores adicionais pontuais" (cobrar extra em um único mês)
+3. Perda de rastreabilidade de alterações
+
+### 2.3 Módulo de Faturas
+
+**Situação Atual:**
+- Geração manual ou via `generate-monthly-invoices`
+- Suporte a parcelamento: `parent_invoice_id`, `installment_number`, `total_installments`
+- Rastreabilidade: `invoice_generation_log`
+
+**Problemas:**
+1. Não há conceito de "competência" na fatura (mês de referência)
+2. Não há suporte a adicionais pontuais
+3. Não há validação de duplicidade robusta
+
+### 2.4 Módulo de NFS-e
+
+**Situação Atual:**
+- Integração com Asaas (preferencial)
+- Suporte a API Nacional (backup)
+- Histórico completo: `nfse_history` com `nfse_event_logs`
+- Substituição e cancelamento implementados
+
+**Pontos Positivos:**
+- Fluxo bem estruturado
+- Logs detalhados com `correlation_id`
+- Pré-visualização antes da emissão
+
+### 2.5 Módulo de Cobranças (Banco Inter)
+
+**Situação Atual:**
+- Boleto e PIX via API v3
+- mTLS com certificados
+- Webhook para confirmação de pagamento
+- Polling como fallback
+
+**Pontos Positivos:**
+- Arquitetura webhook-first (economia de recursos)
+- Fallback apenas para registros > 1 hora
+- Suporte a cancelamento de boleto
+
+### 2.6 Módulo de Notificações
+
+**Situação Atual:**
+- Email via SMTP
+- WhatsApp via Evolution API
+- Templates fixos: `reminder`, `urgent`, `final`
+- Logs em `message_logs` e `invoice_notification_logs`
+
+**Problemas:**
+1. Não há mensagem personalizada por contrato
+2. Templates são hardcoded na edge function
+
+---
+
+## 3. Fluxo Ideal Proposto
+
+### 3.1 Fluxograma Revisado
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        FLUXO DE FATURAMENTO IDEAL                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                     1. CONFIGURAÇÃO DO CONTRATO                      │    │
+│  │                                                                      │    │
+│  │  • Serviços recorrentes (com histórico de alterações)               │    │
+│  │  • Data de reajuste anual + índice (IGPM/IPCA/fixo)                 │    │
+│  │  • Dia de faturamento (billing_day)                                 │    │
+│  │  • Dias de antecedência para geração (days_before_due)              │    │
+│  │  • Preferência de pagamento (boleto/pix/ambos)                      │    │
+│  │  • Mensagem personalizada para cobranças                            │    │
+│  │  • Configurações de NFS-e (código, descrição, CNAE)                 │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    2. VALORES ADICIONAIS PONTUAIS                    │    │
+│  │                                                                      │    │
+│  │  • Adicionar valor extra para um mês específico                     │    │
+│  │  • Descrição do adicional                                           │    │
+│  │  • Aplicado automaticamente na fatura do mês correspondente         │    │
+│  │  • Histórico mantido para auditoria                                 │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      3. REAJUSTE ANUAL                               │    │
+│  │                                                                      │    │
+│  │  • Verificação automática na data de aniversário                    │    │
+│  │  • Busca do índice (IGPM/IPCA via API ou manual)                    │    │
+│  │  • Aplicação proporcional a todos os serviços                       │    │
+│  │  • Registro no histórico do contrato                                │    │
+│  │  • Notificação ao cliente (opcional)                                │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │             4. GERAÇÃO AUTOMÁTICA (X DIAS ANTES)                     │    │
+│  │                                                                      │    │
+│  │  • CRON: Executar diariamente                                       │    │
+│  │  • Verificar contratos cujo (billing_day - days_before) = hoje      │    │
+│  │  • Criar fatura com competência do mês                              │    │
+│  │  • Incluir valores adicionais do mês                                │    │
+│  │  • Gerar Boleto/PIX automaticamente                                 │    │
+│  │  • Emitir NFS-e (se habilitado)                                     │    │
+│  │  • Enviar notificações (email + WhatsApp)                           │    │
+│  │  • Log em invoice_generation_log                                    │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    5. ACOMPANHAMENTO DE PAGAMENTO                    │    │
+│  │                                                                      │    │
+│  │  • Webhook do Banco Inter (tempo real)                              │    │
+│  │  • Polling fallback a cada 6h (registros > 1h)                      │    │
+│  │  • Atualização do status: pending → paid                            │    │
+│  │  • Notificação interna para equipe                                  │    │
+│  │  • Registro de data de pagamento                                    │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                     6. SINCRONIZAÇÃO PERIÓDICA                       │    │
+│  │                                                                      │    │
+│  │  • poll-services: 6h (fallback consolidado)                         │    │
+│  │    - Boletos: verificar codigoSolicitacao                           │    │
+│  │    - NFS-e: verificar status no Asaas                               │    │
+│  │  • Atualização de status overdue (faturas vencidas)                 │    │
+│  │  • Limpeza de registros antigos (>30 dias)                          │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Alterações no Banco de Dados
+## 4. Alterações Propostas no Banco de Dados
 
-### 2.1 Expandir tabela `monitored_devices`
-
-```sql
-ALTER TABLE monitored_devices 
-ADD COLUMN IF NOT EXISTS needs_reboot BOOLEAN DEFAULT false,
-ADD COLUMN IF NOT EXISTS service_data JSONB DEFAULT '{}';
-
-COMMENT ON COLUMN monitored_devices.needs_reboot IS 
-'Indica se o dispositivo precisa de reinicialização (do Tactical RMM)';
-
-COMMENT ON COLUMN monitored_devices.service_data IS 
-'Dados detalhados da fonte externa em formato JSON';
-```
-
-### 2.2 Expandir tabela `monitoring_alerts`
+### 4.1 Tabela `contracts` - Novos Campos
 
 ```sql
-ALTER TABLE monitoring_alerts 
-ADD COLUMN IF NOT EXISTS service_name TEXT,
-ADD COLUMN IF NOT EXISTS check_output TEXT;
+ALTER TABLE contracts
+ADD COLUMN adjustment_date DATE,              -- Data do próximo reajuste
+ADD COLUMN adjustment_index TEXT DEFAULT 'IGPM', -- IGPM, IPCA, INPC, FIXO
+ADD COLUMN adjustment_percentage NUMERIC,     -- Percentual fixo (se index = FIXO)
+ADD COLUMN days_before_due INTEGER DEFAULT 5, -- Antecedência para gerar fatura
+ADD COLUMN notification_message TEXT;         -- Mensagem personalizada para cobranças
 
-COMMENT ON COLUMN monitoring_alerts.service_name IS 
-'Nome do serviço CheckMK (ex: CPU utilization, Disk C:, SQL Server)';
+COMMENT ON COLUMN contracts.adjustment_date IS 
+'Data do próximo reajuste anual (geralmente aniversário do contrato)';
 
-COMMENT ON COLUMN monitoring_alerts.check_output IS 
-'Saída detalhada do check com informações técnicas para diagnóstico';
+COMMENT ON COLUMN contracts.adjustment_index IS 
+'Índice de reajuste: IGPM, IPCA, INPC, FIXO';
+
+COMMENT ON COLUMN contracts.days_before_due IS 
+'Quantos dias antes do vencimento a fatura deve ser gerada';
+
+COMMENT ON COLUMN contracts.notification_message IS 
+'Mensagem personalizada incluída nas cobranças deste contrato';
 ```
 
-### 2.3 Estrutura do campo `service_data`
+### 4.2 Nova Tabela `contract_additional_charges`
 
-**Para computadores (Tactical RMM):**
-```json
-{
-  "os": "Windows 11 Pro 23H2",
-  "os_version": "10.0.22631",
-  "platform": "windows",
-  "cpu_model": "Intel Core i7-12700",
-  "cpu_cores": 12,
-  "ram_total_gb": 32,
-  "boot_time": "2025-01-28T08:30:00Z",
-  "agent_version": "2.7.0",
-  "metrics": {
-    "cpu_avg_percent": 35.2,
-    "ram_avg_percent": 68.5,
-    "disk_avg_percent": 45.0,
-    "last_updated_at": "2025-01-29T12:00:00Z"
+```sql
+CREATE TABLE contract_additional_charges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  amount NUMERIC NOT NULL,
+  reference_month TEXT NOT NULL, -- Formato: YYYY-MM
+  applied BOOLEAN DEFAULT false,
+  applied_invoice_id UUID REFERENCES invoices(id),
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_additional_charges_month ON contract_additional_charges(contract_id, reference_month);
+
+ALTER TABLE contract_additional_charges ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Staff can manage additional charges" ON contract_additional_charges
+  FOR ALL USING (is_staff(auth.uid()));
+
+COMMENT ON TABLE contract_additional_charges IS 
+'Valores adicionais pontuais a serem cobrados em um mês específico';
+```
+
+### 4.3 Nova Tabela `contract_service_history`
+
+```sql
+CREATE TABLE contract_service_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+  service_id UUID REFERENCES services(id),
+  action TEXT NOT NULL, -- 'added', 'removed', 'updated'
+  old_value JSONB,
+  new_value JSONB,
+  user_id UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE contract_service_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Staff can view service history" ON contract_service_history
+  FOR SELECT USING (is_staff(auth.uid()));
+
+CREATE POLICY "Staff can insert service history" ON contract_service_history
+  FOR INSERT WITH CHECK (is_staff(auth.uid()));
+```
+
+### 4.4 Tabela `invoices` - Campo de Competência
+
+```sql
+ALTER TABLE invoices
+ADD COLUMN reference_month TEXT; -- Formato: YYYY-MM
+
+COMMENT ON COLUMN invoices.reference_month IS 
+'Mês de competência da fatura (YYYY-MM)';
+
+-- Índice para evitar duplicidade
+CREATE UNIQUE INDEX idx_invoices_contract_month 
+ON invoices(contract_id, reference_month) 
+WHERE contract_id IS NOT NULL AND status != 'cancelled';
+```
+
+### 4.5 Nova Tabela `contract_adjustments`
+
+```sql
+CREATE TABLE contract_adjustments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+  adjustment_date DATE NOT NULL,
+  index_used TEXT NOT NULL, -- IGPM, IPCA, etc
+  index_value NUMERIC NOT NULL, -- Valor do índice aplicado
+  old_monthly_value NUMERIC NOT NULL,
+  new_monthly_value NUMERIC NOT NULL,
+  applied_by UUID REFERENCES auth.users(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE contract_adjustments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Staff can view adjustments" ON contract_adjustments
+  FOR SELECT USING (is_staff(auth.uid()));
+
+CREATE POLICY "Admins can manage adjustments" ON contract_adjustments
+  FOR ALL USING (has_role(auth.uid(), 'admin') OR has_role(auth.uid(), 'financial'));
+
+COMMENT ON TABLE contract_adjustments IS 
+'Histórico de reajustes anuais aplicados aos contratos';
+```
+
+---
+
+## 5. Novos Módulos/Componentes Recomendados
+
+### 5.1 Estrutura de Módulos
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          MÓDULOS DO SISTEMA                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  GESTÃO DE CONTRATOS                                                         │
+│  ├── ContractForm.tsx (existente - atualizar)                               │
+│  ├── ContractServicesSection.tsx (existente - adicionar histórico)          │
+│  ├── ContractAdjustmentDialog.tsx (NOVO)                                    │
+│  ├── ContractAdditionalChargeDialog.tsx (NOVO)                              │
+│  └── ContractNotificationMessageForm.tsx (NOVO)                             │
+│                                                                              │
+│  FATURAMENTO                                                                 │
+│  ├── BillingPage.tsx (existente)                                            │
+│  ├── BillingInvoicesTab.tsx (existente - adicionar competência)             │
+│  ├── InvoiceForm.tsx (existente - adicionar competência)                    │
+│  └── InvoiceGenerationScheduler.tsx (NOVO - config de CRON)                 │
+│                                                                              │
+│  INTEGRAÇÕES FINANCEIRAS                                                     │
+│  ├── BancoInterConfigForm.tsx (existente)                                   │
+│  ├── AsaasConfigForm.tsx (existente)                                        │
+│  └── SyncStatusDashboard.tsx (NOVO - status das sincronizações)             │
+│                                                                              │
+│  EDGE FUNCTIONS                                                              │
+│  ├── generate-monthly-invoices (existente - atualizar)                      │
+│  ├── apply-contract-adjustment (NOVO)                                       │
+│  ├── check-contract-adjustments (NOVO - CRON diário)                        │
+│  └── poll-services (existente - consolidado)                                │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 Novos Componentes UI
+
+**ContractAdjustmentDialog.tsx**
+- Permite aplicar reajuste anual manualmente
+- Busca índice atual (IGPM/IPCA) de API externa
+- Mostra preview do novo valor
+- Registra no histórico
+
+**ContractAdditionalChargeDialog.tsx**
+- Adicionar cobrança pontual para um mês específico
+- Seletor de mês/ano
+- Campo de descrição e valor
+- Lista de adicionais pendentes/aplicados
+
+**ContractNotificationMessageForm.tsx**
+- Textarea para mensagem personalizada
+- Variáveis disponíveis: `{cliente}`, `{valor}`, `{vencimento}`, `{fatura}`
+- Preview da mensagem renderizada
+
+---
+
+## 6. Atualizações nas Edge Functions
+
+### 6.1 `generate-monthly-invoices` - Melhorias
+
+```typescript
+// Adicionar:
+// 1. Verificação de dias de antecedência por contrato
+// 2. Inclusão de valores adicionais do mês
+// 3. Uso de mensagem personalizada
+// 4. Campo reference_month na fatura
+
+// Pseudocódigo do fluxo melhorado:
+for (const contract of contracts) {
+  const daysBeforeDue = contract.days_before_due || 5;
+  const billingDay = contract.billing_day || 10;
+  
+  // Calcular se é hora de gerar
+  const targetDate = new Date(targetYear, targetMonth, billingDay);
+  const generationDate = subDays(targetDate, daysBeforeDue);
+  
+  if (isToday(generationDate)) {
+    // 1. Calcular valor total (serviços + adicionais)
+    const additionalCharges = await getAdditionalCharges(contract.id, referenceMonth);
+    const totalValue = contract.monthly_value + sumAdditionals(additionalCharges);
+    
+    // 2. Criar fatura com competência
+    const invoice = await createInvoice({
+      ...baseData,
+      amount: totalValue,
+      reference_month: referenceMonth,
+    });
+    
+    // 3. Marcar adicionais como aplicados
+    await markAdditionalsAsApplied(additionalCharges, invoice.id);
+    
+    // 4. Gerar pagamentos
+    await generatePayments(invoice.id, contract.payment_preference);
+    
+    // 5. Emitir NFS-e (se habilitado)
+    if (contract.nfse_enabled) {
+      await emitNfse(invoice, contract);
+    }
+    
+    // 6. Enviar notificações com mensagem personalizada
+    await sendNotifications(invoice, contract.notification_message);
   }
 }
 ```
 
-**Para servidores (CheckMK):**
-```json
-{
-  "services": {
-    "ok": 15,
-    "warn": 2,
-    "crit": 0,
-    "unknown": 0
-  },
-  "last_check_at": "2025-01-29T12:00:00Z"
-}
-```
-
----
-
-## 3. Nova Edge Function: `checkmk-sync`
-
-### 3.1 Criar arquivo `supabase/functions/checkmk-sync/index.ts`
-
-**Funcionalidades:**
-- `test`: Testar conexão com a API do CheckMK
-- `list_folders`: Listar pastas (para mapeamento de clientes)
-- `sync`: Sincronizar hosts e estados
-
-**Autenticação CheckMK:**
-```typescript
-headers: {
-  "Authorization": `Bearer ${username} ${automation_secret}`,
-  "Accept": "application/json"
-}
-```
-
-**Endpoints da API CheckMK:**
-| Endpoint | Descrição |
-|----------|-----------|
-| `/api/1.0/domain-types/folder_config/collections/all` | Listar pastas |
-| `/api/1.0/domain-types/host_config/collections/all` | Listar hosts |
-| `/api/1.0/domain-types/service/collections/all?state!=0` | Serviços com problemas |
-
-**Lógica de detecção de tipo de dispositivo:**
-```typescript
-function detectDeviceType(host): string {
-  const name = host.name.toLowerCase();
-  const labels = host.labels || {};
-  
-  // Por label explícito (preferência)
-  if (labels['cmk/device_type']) return labels['cmk/device_type'];
-  
-  // Por convenção de nome
-  if (name.startsWith('srv') || name.includes('server')) return 'server';
-  if (name.includes('print') || name.includes('imp')) return 'printer';
-  if (name.includes('cam') || name.includes('camera')) return 'camera';
-  if (name.startsWith('ap-') || name.includes('wifi')) return 'access_point';
-  if (name.startsWith('sw-') || name.includes('switch')) return 'switch';
-  if (name.includes('router') || name.includes('rtr')) return 'router';
-  if (name.includes('fw') || name.includes('firewall')) return 'firewall';
-  if (name.includes('ups') || name.includes('nobreak')) return 'ups';
-  
-  return 'other';
-}
-```
-
-**Lógica de sincronização para servidores vs dispositivos de rede:**
-- **Servidores**: Buscar contadores de serviços (OK/WARN/CRIT) e criar alertas detalhados
-- **Dispositivos de rede**: Apenas status UP/DOWN
-
-### 3.2 Atualizar `supabase/config.toml`
-
-```toml
-project_id = "silefpsayliwqtoskkdz"
-
-[functions.bootstrap-admin]
-verify_jwt = false
-
-[functions.checkmk-sync]
-verify_jwt = false
-```
-
----
-
-## 4. Atualizar Edge Function: `tactical-rmm-sync`
-
-### 4.1 Modificações principais
-
-1. **Aumentar intervalo padrão**: 60min para 180min (3h)
-2. **Adicionar busca de detalhes** por agente (apenas online)
-3. **Calcular médias** das últimas 10 leituras de CPU/RAM/Disco
-4. **Salvar em `service_data`** e `needs_reboot`
-5. **Normalizar `device_type`** sempre como `computer`
-
-### 4.2 Novo fluxo de sincronização
-
-```text
-1. GET /agents/?detail=true (lista com detalhes básicos)
-   ↓
-2. Para cada agente ONLINE:
-   GET /agents/{agent_id}/ (detalhes: OS, CPU, RAM)
-   ↓
-3. GET /agents/{agent_id}/checks/ (histórico de checks)
-   ↓
-4. Calcular médias das últimas 10 leituras
-   ↓
-5. Salvar em monitored_devices:
-   - service_data: { os, hardware, metrics }
-   - needs_reboot: true/false
-   - device_type: "computer"
-```
-
-### 4.3 Lógica de cálculo de médias
+### 6.2 Nova Edge Function: `apply-contract-adjustment`
 
 ```typescript
-function calculateAverage(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sum = values.reduce((a, b) => a + b, 0);
-  return Math.round((sum / values.length) * 10) / 10;
-}
+// Entrada: { contract_id, index_value, notes }
+// 1. Buscar contrato atual
+// 2. Calcular novo valor: monthly_value * (1 + index_value/100)
+// 3. Atualizar contract_services proporcionalmente
+// 4. Atualizar contracts.monthly_value
+// 5. Registrar em contract_adjustments
+// 6. Registrar em contract_history
+// 7. Atualizar adjustment_date para próximo ano
+```
 
-// Buscar últimas 10 leituras de CPU
-const cpuChecks = checks.filter(c => c.check_type === 'cpuload');
-const cpuValues = cpuChecks.slice(-10).map(c => c.last_value || 0);
-const cpuAvg = calculateAverage(cpuValues);
+### 6.3 Nova Edge Function: `check-contract-adjustments` (CRON)
+
+```typescript
+// Executar diariamente via pg_cron
+// 1. Buscar contratos com adjustment_date = hoje
+// 2. Para cada contrato:
+//    - Buscar índice (IGPM/IPCA) via API (ex: Banco Central)
+//    - Aplicar reajuste automaticamente
+//    - Notificar administradores
 ```
 
 ---
 
-## 5. Novo Formulário: `CheckMkConfigForm.tsx`
+## 7. Melhorias de UX/UI
 
-### 5.1 Criar arquivo `src/components/settings/integrations/CheckMkConfigForm.tsx`
-
-**Campos de configuração:**
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| `url` | text | URL base do CheckMK (ex: `https://checkmk.empresa.com/mysite`) |
-| `username` | text | Usuário de automação |
-| `secret` | password | Secret de automação |
-| `sync_interval_hours` | radio | 3h, 6h ou 12h |
-| `import_services` | toggle | Importar contadores de serviços para servidores |
-| `alert_levels` | checkboxes | Níveis a importar: WARN, CRIT, UNKNOWN |
-| `is_active` | switch | Ativo/Inativo |
-
-**Layout visual:**
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ ✓ CheckMK                               [Configurado]       │
-│   Monitoramento de servidores e dispositivos de rede        │
-├─────────────────────────────────────────────────────────────┤
-│ URL do CheckMK                                               │
-│ [https://checkmk.empresa.com/mysite________________]        │
-│                                                              │
-│ Credenciais de Automação                                     │
-│ Usuário    [automation____]  Secret [••••••••______]        │
-│                                                              │
-│ Intervalo de Sincronização                                   │
-│ (○) 3 horas  (●) 6 horas  (○) 12 horas                     │
-│                                                              │
-│ Níveis de Alerta a Importar                                  │
-│ [✓] CRIT (crítico)  [✓] WARN (aviso)  [ ] UNKNOWN          │
-│                                                              │
-│ [✓] Importar contadores de serviços para servidores         │
-│                                                              │
-│ [Testar Conexão]                          [Salvar]          │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 6. Atualizar Formulário: `TacticalRmmConfigForm.tsx`
-
-### 6.1 Modificações
-
-1. **Intervalo de sincronização**: Mudar de minutos para horas (3h, 6h, 12h)
-2. **Adicionar toggles**:
-   - "Importar detalhes de hardware (CPU, RAM, OS)"
-   - "Importar métricas de performance (médias)"
-   - "Importar status de reinicialização pendente"
-3. **Atualizar descrição**: "Gerencie computadores remotamente (sync: 3-12h)"
-
----
-
-## 7. Componentes de Visualização com Dropdown Expansível
-
-### 7.1 Criar `src/components/inventory/DeviceExpandableRow.tsx`
-
-**Hierarquia de informações:**
-
-**Nível 1 - Listagem (sempre visível):**
-| Campo | Formato |
-|-------|---------|
-| Nome | Texto |
-| IP Local | Texto (font-mono) |
-| Precisa Reboot | Badge Sim/Não |
-| Status | Badge Online/Offline |
-
-**Nível 2 - Dropdown (on-click):**
-| Seção | Campos |
-|-------|--------|
-| Sistema Operacional | Nome + Versão + Plataforma |
-| Hardware | CPU (modelo + núcleos), RAM total |
-| Métricas (Médias) | CPU %, RAM %, Disco % com barras visuais |
-| Agente | Versão, Último boot, Última atualização |
-
-### 7.2 Criar `src/components/inventory/DeviceDetailsPanel.tsx`
-
-Painel interno do dropdown com layout organizado em seções.
-
-### 7.3 Criar `src/components/inventory/MetricGauge.tsx`
-
-Componente de barra de progresso visual para métricas:
-```text
-┌─────────┐
-│ CPU     │
-│  35%    │
-│ ████░░░ │
-└─────────┘
-```
-
-**Cores por faixa:**
-- 0-50%: Verde (bg-status-success)
-- 51-80%: Amarelo (bg-status-warning)
-- 81-100%: Vermelho (bg-status-danger)
-
-### 7.4 Estrutura visual do dropdown
+### 7.1 Formulário de Contrato Atualizado
 
 ```text
-┌───────────────────────────────────────────────────────────────────────────┐
-│ ▶ 💻 PC-FINANCEIRO    192.168.1.45    ✓ Não    🟢 Online      [Expandir] │
-├───────────────────────────────────────────────────────────────────────────┤
-│ (Expandido)                                                                │
-│ ┌─────────────────────────────────────────────────────────────────────┐   │
-│ │ Sistema Operacional                                                   │   │
-│ │ Windows 11 Pro 23H2 (10.0.22631)                                     │   │
-│ ├─────────────────────────────────────────────────────────────────────┤   │
-│ │ Hardware                                                              │   │
-│ │ CPU: Intel Core i7-12700 (12 núcleos)  •  RAM: 32 GB                 │   │
-│ ├─────────────────────────────────────────────────────────────────────┤   │
-│ │ Métricas (Média últimas leituras)                   Atualizado: 2h   │   │
-│ │ ┌─────────┐ ┌─────────┐ ┌─────────┐                                  │   │
-│ │ │ CPU     │ │ RAM     │ │ Disco   │                                  │   │
-│ │ │  35%    │ │  68%    │ │  45%    │                                  │   │
-│ │ │ ████░░░ │ │ ██████░ │ │ ████░░░ │                                  │   │
-│ │ └─────────┘ └─────────┘ └─────────┘                                  │   │
-│ ├─────────────────────────────────────────────────────────────────────┤   │
-│ │ Agente                                                               │   │
-│ │ Versão: 2.7.0  •  Último boot: 28/01/2025 08:30                     │   │
-│ └─────────────────────────────────────────────────────────────────────┘   │
-└───────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          FORMULÁRIO DE CONTRATO                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ═══════════════════════ DADOS BÁSICOS ═══════════════════════              │
+│                                                                              │
+│  Nome do Contrato *                          Cliente *                       │
+│  [Suporte Mensal Completo___________]       [▼ Empresa ABC___]              │
+│                                                                              │
+│  Modelo de Suporte          Status            Data de Início                 │
+│  [▼ Ilimitado___]           [▼ Ativo___]     [__/__/____]                   │
+│                                                                              │
+│  [✓] Contrato por tempo indeterminado                                       │
+│  [✓] Renovação automática                                                   │
+│                                                                              │
+│  ═══════════════════════ FATURAMENTO ═══════════════════════               │
+│                                                                              │
+│  Dia do Vencimento    Dias de Antecedência    Preferência de Pagamento      │
+│  [10___]              [5___]                   [▼ Boleto + PIX___]          │
+│                                                                              │
+│  ═══════════════════════ REAJUSTE ANUAL ═══════════════════════            │
+│                                                                              │
+│  Data do Próximo Reajuste    Índice de Reajuste    % Fixo (se aplicável)   │
+│  [__/__/____]                 [▼ IGPM___]          [______]                 │
+│                                                                              │
+│  ═══════════════════════ SERVIÇOS ═══════════════════════                  │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────┐            │
+│  │ Serviço              Qtd    Valor Unit.    Subtotal    ⚙️  │            │
+│  ├─────────────────────────────────────────────────────────────┤            │
+│  │ Suporte Remoto        1     R$ 800,00      R$ 800,00    🗑️ │            │
+│  │ Backup em Nuvem       1     R$ 200,00      R$ 200,00    🗑️ │            │
+│  │ Antivírus (10 lic.)  10     R$ 15,00       R$ 150,00    🗑️ │            │
+│  ├─────────────────────────────────────────────────────────────┤            │
+│  │ TOTAL MENSAL                            R$ 1.150,00         │            │
+│  └─────────────────────────────────────────────────────────────┘            │
+│                                                                              │
+│  ═══════════════════════ VALORES ADICIONAIS ═══════════════════════        │
+│                                                                              │
+│  [+ Adicionar Cobrança Pontual]                                             │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────┐            │
+│  │ Mês        Descrição              Valor      Status    ⚙️  │            │
+│  ├─────────────────────────────────────────────────────────────┤            │
+│  │ 02/2026   Instalação servidor     R$ 500    Pendente   🗑️ │            │
+│  │ 01/2026   Consultoria especial    R$ 300    Aplicado   ✓  │            │
+│  └─────────────────────────────────────────────────────────────┘            │
+│                                                                              │
+│  ═══════════════════════ MENSAGEM DE COBRANÇA ═══════════════════════      │
+│                                                                              │
+│  Mensagem personalizada (opcional)                                          │
+│  ┌─────────────────────────────────────────────────────────────┐            │
+│  │ Olá {cliente}!                                               │            │
+│  │                                                              │            │
+│  │ Segue sua fatura #{fatura} no valor de {valor}.             │            │
+│  │ Vencimento: {vencimento}.                                    │            │
+│  │                                                              │            │
+│  │ Qualquer dúvida, estamos à disposição!                      │            │
+│  └─────────────────────────────────────────────────────────────┘            │
+│  ℹ️ Variáveis: {cliente}, {valor}, {vencimento}, {fatura}, {boleto}        │
+│                                                                              │
+│  ═══════════════════════ NFS-e ═══════════════════════                     │
+│                                                                              │
+│  [✓] Emitir NFS-e automaticamente                                          │
+│                                                                              │
+│  Código de Serviço    CNAE               Descrição                          │
+│  [▼ 01.07.01___]      [6209100]          [Prestação de serviços...]        │
+│                                                                              │
+│                                        [Cancelar]  [Salvar Contrato]        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 Dashboard de Status de Sincronização
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     STATUS DE SINCRONIZAÇÕES                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
+│  │  BANCO INTER    │  │     ASAAS       │  │  NOTIFICAÇÕES   │             │
+│  │                 │  │                 │  │                 │             │
+│  │  🟢 Conectado   │  │  🟢 Conectado   │  │  📧 Email: ✓    │             │
+│  │                 │  │                 │  │  📱 WhatsApp: ✓ │             │
+│  │  Boletos: ✓     │  │  NFS-e: ✓       │  │                 │             │
+│  │  PIX: ✓         │  │  Clientes: ✓    │  │                 │             │
+│  │                 │  │                 │  │                 │             │
+│  │  Última sync:   │  │  Última sync:   │  │  Última envio:  │             │
+│  │  há 2 min       │  │  há 5 min       │  │  há 30 min      │             │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
+│                                                                              │
+│  Próxima execução automática: 14:00 (em 45 min)                             │
+│                                                                              │
+│  [🔄 Sincronizar Agora]  [📊 Ver Logs]  [⚙️ Configurar]                    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 8. Atualizar Componentes Existentes
+## 8. Configuração de CRON Jobs
 
-### 8.1 `src/components/clients/ClientAssetsList.tsx`
+### 8.1 Jobs Necessários
 
-- Substituir tabela simples por tabela com linhas expansíveis
-- Usar `DeviceExpandableRow` para dispositivos RMM
-- Manter compatibilidade com ativos manuais (sem expansão)
+```sql
+-- 1. Geração automática de faturas (diário às 08:00)
+SELECT cron.schedule(
+  'generate-invoices-daily',
+  '0 8 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://silefpsayliwqtoskkdz.supabase.co/functions/v1/generate-monthly-invoices',
+    headers := '{"Authorization": "Bearer <ANON_KEY>", "Content-Type": "application/json"}'::jsonb,
+    body := '{}'::jsonb
+  );
+  $$
+);
 
-### 8.2 `src/pages/inventory/InventoryPage.tsx`
+-- 2. Verificação de reajustes (diário às 07:00)
+SELECT cron.schedule(
+  'check-adjustments-daily',
+  '0 7 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://silefpsayliwqtoskkdz.supabase.co/functions/v1/check-contract-adjustments',
+    headers := '{"Authorization": "Bearer <ANON_KEY>", "Content-Type": "application/json"}'::jsonb,
+    body := '{}'::jsonb
+  );
+  $$
+);
 
-- Adicionar nova aba "Dispositivos Monitorados" 
-- Exibir todos os dispositivos de todos os clientes
-- Permitir filtro por cliente
-- Usar mesmo componente expansível
+-- 3. Polling de status (a cada 6 horas)
+SELECT cron.schedule(
+  'poll-services-6h',
+  '0 */6 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://silefpsayliwqtoskkdz.supabase.co/functions/v1/poll-services',
+    headers := '{"Authorization": "Bearer <ANON_KEY>", "Content-Type": "application/json"}'::jsonb,
+    body := '{"services": ["boleto", "nfse"]}'::jsonb
+  );
+  $$
+);
 
-### 8.3 `src/pages/monitoring/MonitoringPage.tsx`
+-- 4. Lembretes de vencimento (diário às 09:00)
+SELECT cron.schedule(
+  'notify-due-invoices-daily',
+  '0 9 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://silefpsayliwqtoskkdz.supabase.co/functions/v1/notify-due-invoices',
+    headers := '{"Authorization": "Bearer <ANON_KEY>", "Content-Type": "application/json"}'::jsonb,
+    body := '{"days_before": 3}'::jsonb
+  );
+  $$
+);
 
-- Adicionar ícones por tipo de dispositivo na tabela
-- Adicionar coluna "Serviços" para servidores (contadores OK/WARN/CRIT)
-- Atualizar função `handleRefresh` para chamar CheckMK ao invés de Uptime Kuma
-- Adicionar suporte ao novo campo `needs_reboot`
-
-**Ícones por tipo de dispositivo:**
-| Tipo | Ícone Lucide | Cor |
-|------|--------------|-----|
-| computer | Laptop | Azul |
-| server | Server | Roxo |
-| printer | Printer | Cinza |
-| access_point | Wifi | Verde |
-| camera | Camera | Laranja |
-| switch | Network | Azul escuro |
-| router | Globe | Verde |
-| firewall | Shield | Vermelho |
-| ups | Battery | Amarelo |
-
-### 8.4 `src/components/monitoring/GroupedAlertsTable.tsx`
-
-- Exibir `service_name` (ex: "CPU utilization", "Disk C:")
-- Exibir `check_output` como mensagem detalhada
-- Exemplo: "Disk C: CRITICAL - 97.3% used (only 12.5 GB free)"
-
-### 8.5 `src/components/settings/IntegrationsTab.tsx`
-
-- Substituir `UptimeKumaConfigForm` por `CheckMkConfigForm`
-- Manter `TacticalRmmConfigForm`
-
-### 8.6 `src/components/settings/ClientMappingsTab.tsx`
-
-- Substituir referências a `uptime_kuma` por `checkmk`
-- Atualizar labels: "CheckMK" ao invés de "Uptime Kuma"
-- Atualizar chamadas de função: `checkmk-sync` ao invés de `uptime-kuma-sync`
-- Atualizar cache keys e storage
+-- 5. Atualização de status overdue (diário à meia-noite)
+SELECT cron.schedule(
+  'update-overdue-status',
+  '0 0 * * *',
+  $$
+  UPDATE invoices 
+  SET status = 'overdue' 
+  WHERE status = 'pending' 
+    AND due_date < CURRENT_DATE;
+  $$
+);
+```
 
 ---
 
-## 9. Arquivos a Remover (após validação)
+## 9. Pontos de Atenção e Riscos
 
-| Arquivo | Motivo |
-|---------|--------|
-| `supabase/functions/uptime-kuma-sync/index.ts` | Substituído pelo CheckMK |
-| `src/components/settings/integrations/UptimeKumaConfigForm.tsx` | Não mais necessário |
+### 9.1 Riscos Identificados
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|-------|---------------|---------|-----------|
+| Duplicidade de faturas | Média | Alto | Índice único (contract_id + reference_month) |
+| Falha na API de índices | Baixa | Médio | Permitir aplicação manual do reajuste |
+| Webhook não entregue | Baixa | Médio | Polling fallback a cada 6h |
+| WhatsApp bloqueado | Média | Médio | Validação prévia do número |
+| Certificado expirado | Baixa | Alto | Alerta 30 dias antes (já implementado) |
+
+### 9.2 Validações Críticas
+
+1. **Antes de gerar fatura**: Verificar se já existe para o mês
+2. **Antes de emitir NFS-e**: Validar dados do cliente (documento, endereço)
+3. **Antes de reajuste**: Confirmar índice com o usuário
+4. **Antes de cancelamento**: Exigir justificativa
 
 ---
 
@@ -415,78 +675,49 @@ Componente de barra de progresso visual para métricas:
 
 ### Arquivos a Criar
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `supabase/functions/checkmk-sync/index.ts` | Edge function de sincronização CheckMK |
-| `src/components/settings/integrations/CheckMkConfigForm.tsx` | Formulário de configuração |
-| `src/components/inventory/DeviceExpandableRow.tsx` | Linha expansível de dispositivo |
-| `src/components/inventory/DeviceDetailsPanel.tsx` | Painel de detalhes no dropdown |
-| `src/components/inventory/MetricGauge.tsx` | Barra de progresso para métricas |
+| Arquivo | Tipo | Descrição |
+|---------|------|-----------|
+| `src/components/contracts/ContractAdjustmentDialog.tsx` | Componente | Dialog para aplicar reajuste |
+| `src/components/contracts/ContractAdditionalChargeDialog.tsx` | Componente | Dialog para valores pontuais |
+| `src/components/contracts/ContractNotificationMessageForm.tsx` | Componente | Form para mensagem personalizada |
+| `src/components/settings/SyncStatusDashboard.tsx` | Componente | Dashboard de sincronizações |
+| `supabase/functions/apply-contract-adjustment/index.ts` | Edge Function | Aplicar reajuste |
+| `supabase/functions/check-contract-adjustments/index.ts` | Edge Function | CRON de verificação |
 
 ### Arquivos a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/tactical-rmm-sync/index.ts` | Adicionar busca de detalhes, cálculo de médias, service_data, needs_reboot |
-| `src/components/settings/integrations/TacticalRmmConfigForm.tsx` | Intervalos em horas, toggles de métricas |
-| `src/components/settings/IntegrationsTab.tsx` | Substituir Uptime Kuma por CheckMK |
-| `src/components/settings/ClientMappingsTab.tsx` | Suporte a CheckMK, remover uptime_kuma |
-| `src/components/clients/ClientAssetsList.tsx` | Usar componente expansível |
-| `src/pages/inventory/InventoryPage.tsx` | Adicionar aba de dispositivos monitorados |
-| `src/pages/monitoring/MonitoringPage.tsx` | Ícones por tipo, coluna serviços, campo reboot |
-| `src/components/monitoring/GroupedAlertsTable.tsx` | Exibir service_name e check_output |
-| `supabase/config.toml` | Adicionar checkmk-sync |
+| `src/components/contracts/ContractForm.tsx` | Adicionar campos de reajuste, antecedência, mensagem |
+| `src/components/contracts/ContractServicesSection.tsx` | Adicionar histórico de alterações |
+| `supabase/functions/generate-monthly-invoices/index.ts` | Incluir adicionais, competência, mensagem personalizada |
+| `supabase/functions/resend-payment-notification/index.ts` | Suporte a mensagem personalizada |
+| `src/components/billing/BillingInvoicesTab.tsx` | Exibir coluna de competência |
 
-### Arquivos a Remover
+### Migrações de Banco
 
-| Arquivo | Motivo |
-|---------|--------|
-| `supabase/functions/uptime-kuma-sync/index.ts` | Substituído pelo CheckMK |
-| `src/components/settings/integrations/UptimeKumaConfigForm.tsx` | Não mais necessário |
+1. Adicionar campos em `contracts`
+2. Criar tabela `contract_additional_charges`
+3. Criar tabela `contract_service_history`
+4. Criar tabela `contract_adjustments`
+5. Adicionar `reference_month` em `invoices`
+6. Criar índice único de duplicidade
 
 ---
 
-## 11. Otimização de Recursos
+## 11. Cronograma de Implementação Sugerido
 
-| Aspecto | Antes | Depois |
-|---------|-------|--------|
-| Uptime Kuma sync | 5-30 min | Removido |
-| Tactical RMM sync | 15-60 min | 180-720 min (3-12h) |
-| CheckMK sync | N/A | 180-720 min (3-12h) |
-| **Execuções/dia** | ~96+ | ~4-8 |
-| **Dados por sync** | Apenas status | Status + Hardware + Médias |
-| **Telemetria real-time** | Importada | Permanece na fonte |
+| Fase | Tarefas | Estimativa | Prioridade |
+|------|---------|------------|------------|
+| 1 | Migrações de banco de dados | 1h | Alta |
+| 2 | Campos de reajuste e antecedência no formulário | 2h | Alta |
+| 3 | Sistema de valores adicionais pontuais | 3h | Alta |
+| 4 | Mensagem personalizada por contrato | 2h | Média |
+| 5 | Atualizar `generate-monthly-invoices` | 3h | Alta |
+| 6 | Edge function de reajuste automático | 3h | Média |
+| 7 | CRON jobs (pg_cron + pg_net) | 1h | Alta |
+| 8 | Dashboard de sincronização | 2h | Baixa |
+| 9 | Testes end-to-end | 2h | Alta |
 
----
+**Total estimado: 19 horas de desenvolvimento**
 
-## 12. Cronograma de Implementação
-
-| Fase | Tarefas | Prioridade |
-|------|---------|------------|
-| 1 | Migração banco (needs_reboot, service_data, service_name, check_output) | Alta |
-| 2 | Edge function `checkmk-sync` | Alta |
-| 3 | Formulário `CheckMkConfigForm` | Alta |
-| 4 | Atualizar `ClientMappingsTab` (CheckMK) | Alta |
-| 5 | Atualizar `IntegrationsTab` (substituir Uptime Kuma) | Alta |
-| 6 | Atualizar `tactical-rmm-sync` (detalhes + médias) | Alta |
-| 7 | Atualizar `TacticalRmmConfigForm` (intervalos + toggles) | Média |
-| 8 | Criar componentes expansíveis (DeviceExpandableRow, etc.) | Média |
-| 9 | Atualizar `ClientAssetsList` com dropdown | Média |
-| 10 | Atualizar `InventoryPage` com aba de dispositivos | Média |
-| 11 | Atualizar `MonitoringPage` (ícones, serviços) | Média |
-| 12 | Atualizar `GroupedAlertsTable` (detalhes do check) | Média |
-| 13 | Remover Uptime Kuma (após 2 semanas de validação) | Baixa |
-| 14 | Atualizar `supabase/config.toml` | Alta |
-
----
-
-## 13. Benefícios Esperados
-
-| Benefício | Impacto |
-|-----------|---------|
-| **Redução de custos** | 90%+ menos execuções de funções |
-| **Monitoramento completo** | Servidores com métricas detalhadas de bancos de dados |
-| **Visualização rica** | Dropdown com informações técnicas sob demanda |
-| **Alertas inteligentes** | Mensagens com contexto técnico (ex: "Disco C: 97% usado") |
-| **Economia de storage** | Apenas médias, não histórico completo |
-| **Manutenção proativa** | Indicador de reboot pendente visível |
