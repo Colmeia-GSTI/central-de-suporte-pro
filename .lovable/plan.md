@@ -1,51 +1,107 @@
 
 
-## Plano: Criar Primeiro Usuário Administrador
+# Plano: Implementar Push Nativo (Navegador) com Web Push
 
-### Contexto do Problema
-O sistema está vazio porque é um projeto remixado. Existe um "problema do ovo e da galinha":
-- A edge function `create-user` só pode ser usada por **admins existentes**
-- O formulário de registro (`/register`) cria usuários com role `technician` por padrão (via trigger `handle_new_user`)
-- Sem um admin, não há como criar outros admins pelo sistema
+## Resumo
 
-### Solução Proposta
+Para que as notificações push funcionem mesmo com a aba fechada, é necessário configurar corretamente o protocolo **Web Push** que requer:
+1. Par de chaves VAPID (pública e privada) para autenticação do servidor
+2. Criptografia adequada das mensagens usando o padrão Web Push
+3. Service Worker registrado para receber e exibir as notificações
 
-#### 1. Criar Edge Function Especial para Bootstrap
-Criar uma função `bootstrap-admin` que:
-- Só funciona quando **NÃO existem usuários admin** no sistema
-- Cria o primeiro administrador de forma segura
-- Se auto-desativa após o primeiro uso (verificação na própria função)
+## O Que Já Existe
 
-**Segurança garantida:**
-- Verifica se já existe algum admin antes de executar
-- Retorna erro 403 se já houver admins cadastrados
-- Valida entrada com mesmos padrões do `create-user`
+- Hook `usePushNotifications` que gerencia subscrições
+- Tabela `push_subscriptions` no banco de dados
+- Service Worker `sw-push.js` para receber e exibir notificações
+- Edge function `send-push-notification` (precisa de ajustes)
 
-#### 2. Criar Página de Setup Inicial
-Uma página `/setup` que:
-- Verifica se o sistema precisa de configuração inicial
-- Exibe formulário para criar o primeiro admin
-- Redireciona para login após criação bem-sucedida
-- Fica inacessível após existir um admin
+## O Que Falta
 
-#### 3. Fluxo do Usuário
-1. Acessar a URL `/setup`
-2. Preencher: Nome completo, Email e Senha (mínimo 8 caracteres)
-3. Clicar em "Criar Administrador"
-4. Sistema cria usuário com role `admin`
-5. Redirecionado para `/login`
-6. Fazer login normalmente
+1. **Secret VAPID_PRIVATE_KEY não está configurado** - sem isso, o servidor não consegue autenticar as mensagens push
+2. A edge function não implementa a criptografia correta do Web Push (precisa usar a biblioteca `web-push`)
 
-### Vantagens desta Abordagem
-- ✅ **Seguro**: Não expõe nenhuma credencial hardcoded
-- ✅ **Auditável**: Logs registram a criação
-- ✅ **Self-service**: Você controla seus próprios dados
-- ✅ **Único uso**: Não pode ser explorado depois
+---
 
-### O que será criado
-| Componente | Descrição |
-|------------|-----------|
-| `supabase/functions/bootstrap-admin/index.ts` | Edge function segura para primeiro admin |
-| `src/pages/Setup.tsx` | Página de configuração inicial |
-| Rota `/setup` no App.tsx | Acesso à página de setup |
+## Etapas de Implementação
+
+### Etapa 1: Gerar e Configurar Chaves VAPID
+
+Você precisará gerar um novo par de chaves VAPID. O sistema já usa uma chave pública hardcoded, então vou:
+- Gerar novas chaves VAPID
+- Atualizar a chave pública no frontend (`usePushNotifications.ts`)
+- Solicitar que você adicione a chave privada como secret
+
+### Etapa 2: Atualizar Edge Function com Web Push
+
+Reescrever a edge function `send-push-notification` para:
+- Usar a biblioteca `web-push` do Deno que implementa corretamente o protocolo
+- Assinar as mensagens com VAPID
+- Criptografar o payload corretamente com as chaves p256dh e auth do subscriber
+
+```text
++------------------+        +-------------------+        +------------------+
+|  Colmeia App     |        |  Edge Function    |        |  Push Service    |
+|  (Frontend)      |        |  send-push-notif  |        |  (FCM/APNS)      |
++--------+---------+        +--------+----------+        +--------+---------+
+         |                           |                            |
+         | 1. Subscribe to push      |                            |
+         |-------------------------->|                            |
+         |                           |                            |
+         | 2. Save subscription      |                            |
+         |   (endpoint, p256dh, auth)|                            |
+         |                           |                            |
+         |                           | 3. Send encrypted message  |
+         |                           |   + VAPID signature        |
+         |                           |--------------------------->|
+         |                           |                            |
+         |                           |                            | 4. Deliver
+         |<--------------------------------------------------------|
+         |                   5. Show notification                 |
+```
+
+### Etapa 3: Adicionar Botão de Teste
+
+Adicionar um botão para testar as notificações push diretamente das preferências, similar ao botão "Testar Som" existente.
+
+### Etapa 4: Integrar com Sistema de Notificações
+
+Garantir que o sistema de notificações (tickets, alertas, SLA) chame a edge function de push quando apropriado.
+
+---
+
+## Arquivos a Modificar
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/hooks/usePushNotifications.ts` | Atualizar chave VAPID pública |
+| `supabase/functions/send-push-notification/index.ts` | Implementar Web Push corretamente |
+| `src/components/settings/profile/NotificationPreferencesForm.tsx` | Adicionar botão de teste push |
+
+## Secret Necessário
+
+Será solicitado que você adicione:
+- **VAPID_PRIVATE_KEY**: Chave privada para assinar mensagens Web Push
+
+---
+
+## Detalhes Técnicos
+
+### Geração de Chaves VAPID
+
+As chaves VAPID são um par de chaves EC (curva P-256):
+- **Pública**: Usada no frontend para identificar o servidor ao se inscrever
+- **Privada**: Usada no backend para assinar as mensagens (prova que o servidor é quem diz ser)
+
+### Fluxo de uma Notificação Push
+
+1. Usuário clica "Ativar Push" → navegador pede permissão
+2. Navegador cria subscription com endpoint único + chaves de criptografia
+3. Subscription é salva no banco (user_id, endpoint, p256dh, auth)
+4. Quando evento ocorre (novo ticket, alerta), edge function:
+   - Busca subscriptions dos usuários alvo
+   - Para cada subscription, criptografa o payload com as chaves
+   - Envia para o endpoint com assinatura VAPID
+5. Push Service entrega ao navegador (mesmo offline/aba fechada)
+6. Service Worker recebe e exibe a notificação
 
