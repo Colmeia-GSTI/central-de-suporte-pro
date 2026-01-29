@@ -3149,9 +3149,16 @@ export type Database = {
         Row: {
           aliquota: number | null
           ambiente: string | null
+          asaas_invoice_id: string | null
+          asaas_payment_id: string | null
+          asaas_status: string | null
           chave_acesso: string | null
           client_id: string | null
-          codigo_verificacao: string | null
+          cnae: string | null
+          codigo_retorno: string | null
+          codigo_tributacao: string | null
+          codigo_verificacao_masked: string | null
+          competencia: string | null
           contract_id: string | null
           created_at: string | null
           danfse_url: string | null
@@ -3159,11 +3166,19 @@ export type Database = {
           data_cancelamento: string | null
           data_emissao: string | null
           descricao_servico: string | null
+          emitido_por: string | null
           id: string | null
           invoice_id: string | null
+          mensagem_retorno: string | null
+          motivo_cancelamento: string | null
+          municipal_service_id: string | null
+          nfse_substituta_id: string | null
+          numero_lote: string | null
           numero_nfse: string | null
           pdf_url: string | null
+          protocolo: string | null
           provider: string | null
+          serie: string | null
           status: string | null
           updated_at: string | null
           valor_iss: number | null
@@ -3173,9 +3188,16 @@ export type Database = {
         Insert: {
           aliquota?: number | null
           ambiente?: string | null
-          chave_acesso?: never
+          asaas_invoice_id?: string | null
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          chave_acesso?: string | null
           client_id?: string | null
-          codigo_verificacao?: never
+          cnae?: string | null
+          codigo_retorno?: string | null
+          codigo_tributacao?: string | null
+          codigo_verificacao_masked?: never
+          competencia?: string | null
           contract_id?: string | null
           created_at?: string | null
           danfse_url?: string | null
@@ -3183,11 +3205,19 @@ export type Database = {
           data_cancelamento?: string | null
           data_emissao?: string | null
           descricao_servico?: string | null
+          emitido_por?: string | null
           id?: string | null
           invoice_id?: string | null
+          mensagem_retorno?: string | null
+          motivo_cancelamento?: string | null
+          municipal_service_id?: string | null
+          nfse_substituta_id?: string | null
+          numero_lote?: string | null
           numero_nfse?: string | null
           pdf_url?: string | null
+          protocolo?: string | null
           provider?: string | null
+          serie?: string | null
           status?: string | null
           updated_at?: string | null
           valor_iss?: number | null
@@ -3197,9 +3227,16 @@ export type Database = {
         Update: {
           aliquota?: number | null
           ambiente?: string | null
-          chave_acesso?: never
+          asaas_invoice_id?: string | null
+          asaas_payment_id?: string | null
+          asaas_status?: string | null
+          chave_acesso?: string | null
           client_id?: string | null
-          codigo_verificacao?: never
+          cnae?: string | null
+          codigo_retorno?: string | null
+          codigo_tributacao?: string | null
+          codigo_verificacao_masked?: never
+          competencia?: string | null
           contract_id?: string | null
           created_at?: string | null
           danfse_url?: string | null
@@ -3207,11 +3244,19 @@ export type Database = {
           data_cancelamento?: string | null
           data_emissao?: string | null
           descricao_servico?: string | null
+          emitido_por?: string | null
           id?: string | null
           invoice_id?: string | null
+          mensagem_retorno?: string | null
+          motivo_cancelamento?: string | null
+          municipal_service_id?: string | null
+          nfse_substituta_id?: string | null
+          numero_lote?: string | null
           numero_nfse?: string | null
           pdf_url?: string | null
+          protocolo?: string | null
           provider?: string | null
+          serie?: string | null
           status?: string | null
           updated_at?: string | null
           valor_iss?: number | null
@@ -3240,6 +3285,20 @@ export type Database = {
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "nfse_history_nfse_substituta_id_fkey"
+            columns: ["nfse_substituta_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_nfse_substituta_id_fkey"
+            columns: ["nfse_substituta_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       software_licenses_safe: {
@@ -3248,7 +3307,7 @@ export type Database = {
           created_at: string | null
           expire_date: string | null
           id: string | null
-          license_key: string | null
+          license_key_masked: string | null
           name: string | null
           notes: string | null
           purchase_date: string | null
@@ -3263,7 +3322,7 @@ export type Database = {
           created_at?: string | null
           expire_date?: string | null
           id?: string | null
-          license_key?: never
+          license_key_masked?: never
           name?: string | null
           notes?: string | null
           purchase_date?: string | null
@@ -3278,7 +3337,7 @@ export type Database = {
           created_at?: string | null
           expire_date?: string | null
           id?: string | null
-          license_key?: never
+          license_key_masked?: never
           name?: string | null
           notes?: string | null
           purchase_date?: string | null
@@ -3301,7 +3360,17 @@ export type Database = {
     }
     Functions: {
       cleanup_old_monitoring_alerts: { Args: never; Returns: undefined }
+      get_calendar_tokens: {
+        Args: { user_uuid: string }
+        Returns: {
+          access_token: string
+          refresh_token: string
+        }[]
+      }
+      get_certificate_password: { Args: { cert_id: string }; Returns: string }
+      get_company_certificate_password: { Args: never; Returns: string }
       get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
+      get_license_key: { Args: { license_id: string }; Returns: string }
       get_technician_ranking: {
         Args: { limit_count?: number; start_date: string }
         Returns: Json
