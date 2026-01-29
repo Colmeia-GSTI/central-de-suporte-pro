@@ -697,16 +697,6 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
             )}
           />
         </div>
-                  />
-                </FormControl>
-                <FormDescription>
-                  Estas observações não aparecem para o cliente
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
 
         {/* NFSE Section */}
         <Separator className="my-6" />

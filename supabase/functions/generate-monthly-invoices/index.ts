@@ -11,13 +11,21 @@ interface Contract {
   name: string;
   monthly_value: number;
   billing_day: number | null;
+  days_before_due: number | null;
   payment_preference: string | null;
   nfse_enabled: boolean | null;
+  notification_message: string | null;
   clients: {
     name: string;
     email: string | null;
     financial_email: string | null;
   } | null;
+}
+
+interface AdditionalCharge {
+  id: string;
+  description: string;
+  amount: number;
 }
 
 Deno.serve(async (req) => {
@@ -47,8 +55,10 @@ Deno.serve(async (req) => {
         name,
         monthly_value,
         billing_day,
+        days_before_due,
         payment_preference,
         nfse_enabled,
+        notification_message,
         clients (
           name,
           email,
@@ -91,17 +101,17 @@ Deno.serve(async (req) => {
 
     for (const contract of contracts as unknown as Contract[]) {
       try {
-        // Check if invoice already exists for this contract and month
+        // Check if invoice already exists for this contract and month using reference_month
         const { data: existingInvoice } = await supabase
           .from("invoices")
           .select("id")
           .eq("contract_id", contract.id)
-          .gte("due_date", `${referenceMonth}-01`)
-          .lt("due_date", `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-01`)
+          .eq("reference_month", referenceMonth)
+          .neq("status", "cancelled")
           .limit(1);
 
         if (existingInvoice && existingInvoice.length > 0) {
-          console.log(`[GEN-INVOICES] Fatura já existe para contrato ${contract.name}`);
+          console.log(`[GEN-INVOICES] Fatura já existe para contrato ${contract.name} (${referenceMonth})`);
           skipped++;
           results.push({
             contract: contract.name,
@@ -117,16 +127,38 @@ Deno.serve(async (req) => {
         const actualBillingDay = Math.min(billingDay, lastDayOfMonth);
         const dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
 
-        // Create the invoice
+        // Fetch additional charges for this contract and month
+        const { data: additionalCharges } = await supabase
+          .from("contract_additional_charges")
+          .select("id, description, amount")
+          .eq("contract_id", contract.id)
+          .eq("reference_month", referenceMonth)
+          .eq("applied", false);
+
+        const charges = (additionalCharges || []) as AdditionalCharge[];
+        const additionalTotal = charges.reduce((sum, c) => sum + c.amount, 0);
+        const totalAmount = contract.monthly_value + additionalTotal;
+
+        // Build invoice notes with contract info and additional charges
+        let invoiceNotes = `Fatura mensal - Contrato: ${contract.name} - Competência: ${referenceMonth}`;
+        if (charges.length > 0) {
+          invoiceNotes += `\n\nValores adicionais:`;
+          for (const charge of charges) {
+            invoiceNotes += `\n- ${charge.description}: R$ ${charge.amount.toFixed(2)}`;
+          }
+        }
+
+        // Create the invoice with reference_month
         const { data: newInvoice, error: invoiceError } = await supabase
           .from("invoices")
           .insert({
             client_id: contract.client_id,
             contract_id: contract.id,
-            amount: contract.monthly_value,
+            amount: totalAmount,
             due_date: dueDate,
+            reference_month: referenceMonth,
             status: "pending",
-            notes: `Fatura mensal - Contrato: ${contract.name} - Competência: ${referenceMonth}`,
+            notes: invoiceNotes,
             auto_payment_generated: false,
           })
           .select("id, invoice_number")
@@ -151,8 +183,21 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        console.log(`[GEN-INVOICES] Fatura #${newInvoice.invoice_number} criada para ${contract.name}`);
+        console.log(`[GEN-INVOICES] Fatura #${newInvoice.invoice_number} criada para ${contract.name} - R$ ${totalAmount.toFixed(2)}`);
         generated++;
+
+        // Mark additional charges as applied
+        if (charges.length > 0) {
+          await supabase
+            .from("contract_additional_charges")
+            .update({ 
+              applied: true, 
+              applied_invoice_id: newInvoice.id 
+            })
+            .in("id", charges.map(c => c.id));
+
+          console.log(`[GEN-INVOICES] ${charges.length} cobranças adicionais vinculadas à fatura`);
+        }
 
         // Log success
         await supabase.from("invoice_generation_log").insert({
@@ -207,6 +252,19 @@ Deno.serve(async (req) => {
               .single();
 
             if (smtpSettings?.is_active) {
+              // Build custom message if available
+              let customSection = "";
+              if (contract.notification_message) {
+                customSection = contract.notification_message
+                  .replace(/{cliente}/g, contract.clients?.name || "Cliente")
+                  .replace(/{valor}/g, `R$ ${totalAmount.toFixed(2)}`)
+                  .replace(/{vencimento}/g, new Date(dueDate).toLocaleDateString("pt-BR"))
+                  .replace(/{fatura}/g, `#${newInvoice.invoice_number}`)
+                  .replace(/{competencia}/g, referenceMonth);
+                
+                customSection = `<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">${customSection}</div>`;
+              }
+
               await supabase.functions.invoke("send-email-smtp", {
                 body: {
                   to: clientEmail,
@@ -226,13 +284,14 @@ Deno.serve(async (req) => {
                       </tr>
                       <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Valor:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">R$ ${contract.monthly_value.toFixed(2)}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">R$ ${totalAmount.toFixed(2)}</td>
                       </tr>
                       <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Vencimento:</strong></td>
                         <td style="padding: 8px; border: 1px solid #ddd;">${new Date(dueDate).toLocaleDateString("pt-BR")}</td>
                       </tr>
                     </table>
+                    ${customSection}
                     <p>Em breve você receberá os dados para pagamento.</p>
                     <hr>
                     <p style="color: #666; font-size: 12px;">
@@ -259,7 +318,7 @@ Deno.serve(async (req) => {
             user_id: user.user_id,
             type: "info",
             title: "Fatura Gerada Automaticamente",
-            message: `Fatura #${newInvoice.invoice_number} gerada para ${contract.clients?.name || contract.name} - R$ ${contract.monthly_value.toFixed(2)}`,
+            message: `Fatura #${newInvoice.invoice_number} gerada para ${contract.clients?.name || contract.name} - R$ ${totalAmount.toFixed(2)}${charges.length > 0 ? ` (inclui ${charges.length} adicional(is))` : ""}`,
             related_type: "invoice",
             related_id: newInvoice.id,
           }));

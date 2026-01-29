@@ -549,6 +549,7 @@ export function BillingInvoicesTab() {
             <TableRow>
               <TableHead>#</TableHead>
               <TableHead>Cliente</TableHead>
+              <TableHead>Competência</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
@@ -561,6 +562,7 @@ export function BillingInvoicesTab() {
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-20" /></TableCell>
@@ -569,7 +571,7 @@ export function BillingInvoicesTab() {
               ))
             ) : invoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={7} className="text-center py-8">
                   <Receipt className="mx-auto h-12 w-12 text-muted-foreground/50" />
                   <p className="mt-2 text-muted-foreground">
                     Nenhuma fatura encontrada
@@ -584,6 +586,15 @@ export function BillingInvoicesTab() {
                   </TableCell>
                   <TableCell className="font-medium">
                     {invoice.clients?.name || "-"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {invoice.reference_month ? (
+                      <span className="font-mono text-sm">
+                        {invoice.reference_month.split("-").reverse().join("/")}
+                      </span>
+                    ) : (
+                      "-"
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
