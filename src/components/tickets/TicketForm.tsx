@@ -190,23 +190,6 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
       });
     },
   });
-    onSuccess: () => {
-      clearDraft();
-      queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      toast({
-        title: "Chamado criado",
-        description: "O chamado foi criado com sucesso",
-      });
-      onSuccess();
-    },
-    onError: (error) => {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
   const onSubmit = (data: TicketFormData) => {
     mutation.mutate(data);
