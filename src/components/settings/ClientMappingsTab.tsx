@@ -149,7 +149,7 @@ export function ClientMappingsTab() {
   // Cache de clientes externos por fonte - inicializa do localStorage
   const [externalClientsCache, setExternalClientsCache] = useState<{
     tactical_rmm: ExternalClient[];
-    uptime_kuma: ExternalClient[];
+    checkmk: ExternalClient[];
   }>(() => loadCacheFromStorage());
 
   const [loadingExternal, setLoadingExternal] = useState({
