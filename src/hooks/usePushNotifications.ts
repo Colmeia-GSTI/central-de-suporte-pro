@@ -37,6 +37,7 @@ export interface PushNotificationState {
   isSubscribed: boolean;
   permission: NotificationPermission | "default";
   isLoading: boolean;
+  isBlocked: boolean;
 }
 
 export function usePushNotifications() {
@@ -48,6 +49,7 @@ export function usePushNotifications() {
     isSubscribed: false,
     permission: "default",
     isLoading: true,
+    isBlocked: false,
   });
 
   // Check if push notifications are supported
@@ -67,6 +69,9 @@ export function usePushNotifications() {
       return;
     }
 
+    const currentPermission = Notification.permission;
+    const isBlocked = currentPermission === "denied";
+
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
@@ -84,7 +89,8 @@ export function usePushNotifications() {
           ...prev,
           isSupported: true,
           isSubscribed: !!data,
-          permission: Notification.permission,
+          permission: currentPermission,
+          isBlocked,
           isLoading: false,
         }));
       } else {
@@ -92,7 +98,8 @@ export function usePushNotifications() {
           ...prev,
           isSupported: true,
           isSubscribed: false,
-          permission: Notification.permission,
+          permission: currentPermission,
+          isBlocked,
           isLoading: false,
         }));
       }
@@ -101,6 +108,7 @@ export function usePushNotifications() {
       setState(prev => ({
         ...prev,
         isSupported: checkSupport(),
+        isBlocked,
         isLoading: false,
       }));
     }
@@ -120,16 +128,36 @@ export function usePushNotifications() {
     setState(prev => ({ ...prev, isLoading: true }));
 
     try {
+      // Check if already blocked
+      if (Notification.permission === "denied") {
+        setState(prev => ({ 
+          ...prev, 
+          permission: "denied", 
+          isBlocked: true, 
+          isLoading: false 
+        }));
+        // Don't show toast - let the UI handle showing instructions
+        return false;
+      }
+
       // Request notification permission
       const permission = await Notification.requestPermission();
       
       if (permission !== "granted") {
-        toast({
-          title: "Permissão negada",
-          description: "Você precisa permitir notificações para receber alertas.",
-          variant: "destructive",
-        });
-        setState(prev => ({ ...prev, permission, isLoading: false }));
+        const isNowBlocked = permission === "denied";
+        setState(prev => ({ 
+          ...prev, 
+          permission, 
+          isBlocked: isNowBlocked, 
+          isLoading: false 
+        }));
+        // Don't show toast if blocked - UI will show instructions
+        if (!isNowBlocked) {
+          toast({
+            title: "Permissão não concedida",
+            description: "Você fechou a solicitação. Tente novamente quando quiser ativar.",
+          });
+        }
         return false;
       }
 

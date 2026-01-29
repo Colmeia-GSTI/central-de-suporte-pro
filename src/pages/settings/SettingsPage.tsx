@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, User, BarChart3, Building2, Layers, KeyRound } from "lucide-react";
+import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, BarChart3, Building2, Layers, KeyRound } from "lucide-react";
 import { UsersTab } from "@/components/settings/UsersTab";
 import { CategoriesTab } from "@/components/settings/CategoriesTab";
 import { SLATab } from "@/components/settings/SLATab";
@@ -10,7 +10,6 @@ import { AuditLogsTab } from "@/components/settings/AuditLogsTab";
 import { ClientMappingsTab } from "@/components/settings/ClientMappingsTab";
 import { NotificationRulesTab } from "@/components/settings/NotificationRulesTab";
 import { MessageLogsTab } from "@/components/settings/MessageLogsTab";
-import { NotificationPreferencesForm } from "@/components/settings/profile/NotificationPreferencesForm";
 import { MessageMetricsDashboard } from "@/components/settings/MessageMetricsDashboard";
 import { DepartmentsTab } from "@/components/settings/DepartmentsTab";
 import { RolePermissionsTab } from "@/components/settings/RolePermissionsTab";
@@ -83,10 +82,6 @@ export default function SettingsPage() {
               <Bell className="h-4 w-4" />
               Regras
             </TabsTrigger>
-            <TabsTrigger value="preferences" className="gap-2">
-              <User className="h-4 w-4" />
-              Meu Perfil
-            </TabsTrigger>
             <TabsTrigger value="message-logs" className="gap-2">
               <MessageSquare className="h-4 w-4" />
               Histórico
@@ -153,12 +148,6 @@ export default function SettingsPage() {
 
           <TabsContent value="notifications">
             <NotificationRulesTab />
-          </TabsContent>
-
-          <TabsContent value="preferences">
-            <div className="max-w-2xl">
-              <NotificationPreferencesForm />
-            </div>
           </TabsContent>
 
           <TabsContent value="message-logs">
