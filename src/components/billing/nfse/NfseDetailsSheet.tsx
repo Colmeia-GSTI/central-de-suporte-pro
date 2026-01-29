@@ -139,6 +139,7 @@ export function NfseDetailsSheet(props: {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [cancelAndDeleteConfirmOpen, setCancelAndDeleteConfirmOpen] = useState(false);
+  const [motivoCancelamento, setMotivoCancelamento] = useState("");
 
   const [valor, setValor] = useState<number>(nfse?.valor_servico ?? 0);
   const [competencia, setCompetencia] = useState<string>(normalizeCompetencia(nfse?.competencia));
@@ -222,15 +223,44 @@ export function NfseDetailsSheet(props: {
   const resendMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
-      const { error } = await supabase
+      
+      // 1. Salvar alterações locais primeiro (se foram editadas)
+      const comp = normalizeCompetencia(competencia);
+      const compAsDate = comp ? `${comp}-01` : null;
+      
+      const { error: updateError } = await supabase
         .from("nfse_history")
-        .update({ status: "pendente", mensagem_retorno: null, updated_at: new Date().toISOString() })
+        .update({
+          valor_servico: valor,
+          descricao_servico: descricao,
+          competencia: compAsDate,
+          status: "processando",
+          mensagem_retorno: null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", nfse.id);
+      
+      if (updateError) throw updateError;
+      
+      // 2. Chamar edge function para reemitir no Asaas
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+        body: {
+          action: "emit",
+          client_id: nfse.client_id,
+          value: valor,
+          service_description: descricao,
+          nfse_history_id: nfse.id,
+          competencia: comp,
+        },
+      });
+      
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao reemitir NFS-e");
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("NFS-e reenviada para processamento", {
-        description: "O status será atualizado automaticamente pelo sistema.",
+        description: `ID: ${data.invoice_id || data.history_id || "Aguardando..."}`,
       });
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
@@ -263,17 +293,31 @@ export function NfseDetailsSheet(props: {
     onError: (e: Error) => toast.error("Erro ao atualizar status", { description: e.message }),
   });
 
-  // Cancel mutation (via Asaas)
+  // Cancel mutation (via Asaas) - now with mandatory reason
   const cancelMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
       if (!nfse.asaas_invoice_id) throw new Error("NFS-e não possui ID no Asaas");
+      if (!motivoCancelamento.trim()) throw new Error("Motivo do cancelamento é obrigatório");
       
+      // 1. Salvar o motivo do cancelamento localmente
+      const { error: updateError } = await supabase
+        .from("nfse_history")
+        .update({
+          motivo_cancelamento: motivoCancelamento.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", nfse.id);
+      
+      if (updateError) throw updateError;
+      
+      // 2. Chamar API para cancelar no Asaas
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: "cancel",
           invoice_id: nfse.asaas_invoice_id,
           nfse_history_id: nfse.id,
+          motivo: motivoCancelamento.trim(),
         },
       });
       
@@ -286,6 +330,7 @@ export function NfseDetailsSheet(props: {
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       setCancelConfirmOpen(false);
+      setMotivoCancelamento("");
       props.onChanged?.();
     },
     onError: (e: Error) => {
@@ -740,8 +785,11 @@ export function NfseDetailsSheet(props: {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel Confirmation */}
-      <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+      {/* Cancel Confirmation with Mandatory Reason */}
+      <Dialog open={cancelConfirmOpen} onOpenChange={(open) => {
+        setCancelConfirmOpen(open);
+        if (!open) setMotivoCancelamento("");
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -753,14 +801,44 @@ export function NfseDetailsSheet(props: {
               O cancelamento será processado e o status atualizado automaticamente.
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="space-y-4">
+            <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30">
+              <AlertTriangle className="h-4 w-4 text-yellow-700" />
+              <AlertDescription className="text-yellow-900 dark:text-yellow-200">
+                O motivo do cancelamento é obrigatório para fins de auditoria e conformidade fiscal.
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-2">
+              <Label htmlFor="motivo-cancelamento">Motivo do Cancelamento *</Label>
+              <Textarea
+                id="motivo-cancelamento"
+                placeholder="Ex: Erro na descrição do serviço, cliente solicitou cancelamento, nota emitida em duplicidade..."
+                value={motivoCancelamento}
+                onChange={(e) => setMotivoCancelamento(e.target.value)}
+                rows={3}
+                className={!motivoCancelamento.trim() && cancelMutation.isPending ? "border-destructive" : ""}
+              />
+              {!motivoCancelamento.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Informe o motivo pelo qual esta nota está sendo cancelada.
+                </p>
+              )}
+            </div>
+          </div>
+          
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelConfirmOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setCancelConfirmOpen(false);
+              setMotivoCancelamento("");
+            }}>
               Voltar
             </Button>
             <Button
               variant="destructive"
               onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
+              disabled={cancelMutation.isPending || !motivoCancelamento.trim()}
             >
               {cancelMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Confirmar Cancelamento
