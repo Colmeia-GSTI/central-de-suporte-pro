@@ -2,3 +2,6 @@ project_id = "silefpsayliwqtoskkdz"
 
 [functions.bootstrap-admin]
 verify_jwt = false
+
+[functions.checkmk-sync]
+verify_jwt = false
