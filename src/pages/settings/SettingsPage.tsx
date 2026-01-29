@@ -1,8 +1,9 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, BarChart3, Building2, Layers, KeyRound } from "lucide-react";
+import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, BarChart3, Building2, Layers, KeyRound, Tag } from "lucide-react";
 import { UsersTab } from "@/components/settings/UsersTab";
 import { CategoriesTab } from "@/components/settings/CategoriesTab";
+import { TagsTab } from "@/components/settings/TagsTab";
 import { SLATab } from "@/components/settings/SLATab";
 import { SystemTab } from "@/components/settings/SystemTab";
 import { IntegrationsTab } from "@/components/settings/IntegrationsTab";
@@ -51,6 +52,10 @@ export default function SettingsPage() {
             <TabsTrigger value="categories" className="gap-2">
               <Tags className="h-4 w-4" />
               Categorias
+            </TabsTrigger>
+            <TabsTrigger value="tags" className="gap-2">
+              <Tag className="h-4 w-4" />
+              Tags
             </TabsTrigger>
             <TabsTrigger value="sla" className="gap-2">
               <Shield className="h-4 w-4" />
@@ -118,6 +123,10 @@ export default function SettingsPage() {
 
           <TabsContent value="categories">
             <CategoriesTab />
+          </TabsContent>
+
+          <TabsContent value="tags">
+            <TagsTab />
           </TabsContent>
 
           <TabsContent value="sla">

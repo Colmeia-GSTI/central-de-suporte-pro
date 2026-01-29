@@ -35,6 +35,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
+import { SubcategoriesSection } from "./SubcategoriesSection";
 import type { Tables } from "@/integrations/supabase/types";
 
 const categorySchema = z.object({
@@ -286,6 +287,9 @@ export function CategoriesTab() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Subcategories Section */}
+        <SubcategoriesSection categories={categories} />
       </CardContent>
     </Card>
   );

@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -25,6 +27,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
+import { TagsInput } from "@/components/tickets/TagsInput";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const ticketSchema = z.object({
@@ -32,6 +35,7 @@ const ticketSchema = z.object({
   description: z.string().optional(),
   client_id: z.string().optional(),
   category_id: z.string().optional(),
+  subcategory_id: z.string().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]),
   origin: z.enum(["portal", "phone", "email", "chat", "whatsapp"]),
 });
@@ -53,6 +57,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -62,6 +67,8 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
       client_id: initialData?.client_id || "",
       priority: initialData?.priority || "medium",
       origin: "portal",
+      category_id: "",
+      subcategory_id: "",
     },
   });
 
@@ -97,6 +104,26 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
     },
   });
 
+  const { data: subcategories = [] } = useQuery({
+    queryKey: ["subcategories-select"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ticket_subcategories")
+        .select("id, category_id, name")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Filter subcategories based on selected category
+  const selectedCategoryId = form.watch("category_id");
+  const filteredSubcategories = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return subcategories.filter((sub) => sub.category_id === selectedCategoryId);
+  }, [subcategories, selectedCategoryId]);
+
   const mutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
       const payload = {
@@ -104,6 +131,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
         description: data.description || null,
         client_id: data.client_id || null,
         category_id: data.category_id || null,
+        subcategory_id: data.subcategory_id || null,
         priority: data.priority as Enums<"ticket_priority">,
         origin: data.origin as Enums<"ticket_origin">,
         created_by: user?.id,
@@ -129,8 +157,39 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
         if (historyError) {
           console.warn("Failed to insert creation history:", historyError);
         }
+
+        // Assign tags to the ticket
+        if (selectedTagIds.length > 0) {
+          const tagAssignments = selectedTagIds.map((tagId) => ({
+            ticket_id: newTicket.id,
+            tag_id: tagId,
+          }));
+          const { error: tagError } = await supabase
+            .from("ticket_tag_assignments")
+            .insert(tagAssignments);
+          if (tagError) {
+            console.warn("Failed to assign tags:", tagError);
+          }
+        }
       }
     },
+    onSuccess: () => {
+      clearDraft();
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast({
+        title: "Chamado criado",
+        description: "O chamado foi criado com sucesso",
+      });
+      onSuccess();
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
@@ -226,7 +285,14 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Categoria</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select 
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    // Reset subcategory when category changes
+                    form.setValue("subcategory_id", "");
+                  }} 
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione uma categoria" />
@@ -236,6 +302,39 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                     {categories.map((category) => (
                       <SelectItem key={category.id} value={category.id}>
                         {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="subcategory_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Subcategoria</FormLabel>
+                <Select 
+                  onValueChange={field.onChange} 
+                  value={field.value}
+                  disabled={filteredSubcategories.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        filteredSubcategories.length === 0 
+                          ? "Selecione uma categoria primeiro" 
+                          : "Selecione uma subcategoria"
+                      } />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {filteredSubcategories.map((sub) => (
+                      <SelectItem key={sub.id} value={sub.id}>
+                        {sub.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -292,6 +391,15 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                 <FormMessage />
               </FormItem>
             )}
+          />
+        </div>
+
+        {/* Tags */}
+        <div className="space-y-2">
+          <Label>Tags</Label>
+          <TagsInput
+            selectedTagIds={selectedTagIds}
+            onChange={setSelectedTagIds}
           />
         </div>
 
