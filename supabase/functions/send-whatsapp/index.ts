@@ -107,6 +107,8 @@ serve(async (req) => {
     // Remove manager/instance path if present
     baseUrl = baseUrl.replace(/\/manager\/instance\/[a-f0-9-]+$/i, "");
     const evolutionUrl = `${baseUrl}/message/sendText/${encodeURIComponent(settings.instance_name)}`;
+    
+    console.log(`[send-whatsapp] Sending to Evolution API: ${evolutionUrl}`);
 
     const response = await fetchWithTimeout(evolutionUrl, {
       method: "POST",
@@ -122,6 +124,12 @@ serve(async (req) => {
 
     const responseData = await response.json();
     
+    // Log response for debugging (without sensitive data)
+    console.log(`[send-whatsapp] Response status: ${response.status}`);
+    if (!response.ok) {
+      console.error(`[send-whatsapp] Error response:`, JSON.stringify(responseData));
+    }
+    
     // Safe logging - only log success/failure and message ID
     const externalId = responseData?.key?.id || responseData?.messageId || null;
 
@@ -135,15 +143,16 @@ serve(async (req) => {
         status: response.ok ? "sent" : "failed",
         related_type: relatedType || null,
         related_id: relatedId || null,
-        error_message: response.ok ? null : "Falha no envio",
+        error_message: response.ok ? null : (responseData?.message || responseData?.error || "Falha no envio"),
         external_message_id: externalId,
         sent_at: response.ok ? new Date().toISOString() : null,
       });
     }
 
     if (!response.ok) {
+      const errorMsg = responseData?.message || responseData?.error || "Erro ao enviar mensagem WhatsApp";
       return new Response(
-        JSON.stringify({ error: "Erro ao enviar mensagem WhatsApp" }),
+        JSON.stringify({ error: errorMsg, status: response.status }),
         { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
