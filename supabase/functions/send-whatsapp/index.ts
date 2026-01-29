@@ -150,7 +150,11 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
-      const errorMsg = responseData?.message || responseData?.error || "Erro ao enviar mensagem WhatsApp";
+      // Evolution API returns nested error structure: { response: { message: [...] } }
+      const nestedMessages = responseData?.response?.message;
+      const errorMsg = Array.isArray(nestedMessages) 
+        ? nestedMessages[0] 
+        : (responseData?.message || responseData?.error || "Erro ao enviar mensagem WhatsApp");
       return new Response(
         JSON.stringify({ error: errorMsg, status: response.status }),
         { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
