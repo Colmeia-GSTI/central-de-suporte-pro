@@ -54,7 +54,8 @@ export function NotificationPreferencesForm() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isSupported: isPushSupported, isSubscribed: isPushSubscribed, subscribe: requestPushPermission, isLoading: pushLoading } = usePushNotifications();
+const { isSupported: isPushSupported, isSubscribed: isPushSubscribed, subscribe: requestPushPermission, unsubscribe: disablePush, isLoading: pushLoading } = usePushNotifications();
+  const [testingPush, setTestingPush] = useState(false);
   
   const [preferences, setPreferences] = useState<NotificationPreferences>(defaultPreferences);
 
@@ -236,7 +237,13 @@ export function NotificationPreferencesForm() {
               title="Push Nativo (Navegador)"
               description="Receba notificações mesmo com a aba fechada"
               checked={isPushSubscribed}
-              onChange={() => {}}
+              onChange={async (checked) => {
+                if (checked) {
+                  await requestPushPermission();
+                } else {
+                  await disablePush();
+                }
+              }}
               iconColor="bg-violet-500/10 text-violet-500"
             >
               {!isPushSubscribed && (
@@ -256,10 +263,55 @@ export function NotificationPreferencesForm() {
                 </Button>
               )}
               {isPushSubscribed && (
-                <Badge variant="outline" className="mt-2 bg-green-500/10 text-green-600 border-green-500/30">
-                  <Bell className="h-3 w-3 mr-1" />
-                  Ativo
-                </Badge>
+                <div className="flex gap-2 mt-2">
+                  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                    <Bell className="h-3 w-3 mr-1" />
+                    Ativo
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={testingPush}
+                    onClick={async () => {
+                      setTestingPush(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("send-push-notification", {
+                          body: {
+                            type: "test",
+                            user_ids: [user?.id],
+                            data: {
+                              title: "🐝 Teste Push - Colmeia",
+                              body: "Notificações push funcionando corretamente!",
+                              url: "/settings",
+                            },
+                          },
+                        });
+                        if (error) throw error;
+                        toast({
+                          title: "Push enviado",
+                          description: data?.sent > 0 
+                            ? "Você deve receber a notificação em segundos." 
+                            : "Nenhum dispositivo inscrito encontrado.",
+                        });
+                      } catch (error: any) {
+                        toast({
+                          title: "Erro ao testar push",
+                          description: error.message,
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setTestingPush(false);
+                      }
+                    }}
+                  >
+                    {testingPush ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <BellRing className="h-4 w-4 mr-2" />
+                    )}
+                    Testar Push
+                  </Button>
+                </div>
               )}
             </ChannelCard>
           )}

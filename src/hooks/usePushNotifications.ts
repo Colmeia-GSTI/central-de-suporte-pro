@@ -3,9 +3,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-// VAPID public key - this should match the private key in the edge function
+// VAPID public key - matches the private key in VAPID_PRIVATE_KEY secret
 // Generated using: npx web-push generate-vapid-keys
-const VAPID_PUBLIC_KEY = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
+const VAPID_PUBLIC_KEY = "BDQ4g_RaLdz1m7aQEEezyJ8OGEdpBMXqY9q3iKE0gHr3Q9mIPhNQ3NqzV8xzuPfRDKxT_G8kHy9sXB7CvKP_RvU";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
