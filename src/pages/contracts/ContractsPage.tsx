@@ -115,7 +115,6 @@ export default function ContractsPage() {
     if (deleteConfirm.contract) {
       deleteMutation.mutate(deleteConfirm.contract.id);
     }
-    }
   };
 
   return (
