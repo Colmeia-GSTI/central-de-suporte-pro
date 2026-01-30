@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard,
@@ -116,6 +117,7 @@ export function AppSidebar() {
   const { profile, signOut, roles } = useAuth();
   const { can } = usePermissions();
   const { data: ticketCount } = useTechnicianTicketCount();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   // Filter menu items based on permissions
   const filterMenuItems = (items: MenuItemType[]): MenuItemType[] => {
@@ -142,11 +144,19 @@ export function AppSidebar() {
     const isActive = location.pathname === item.path;
     const showTicketBadge = item.path === "/tickets" && ticketCount && ticketCount > 0;
     
+    const handleClick = () => {
+      // Close mobile sidebar when clicking a menu item
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+    };
+    
     const menuContent = (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={isActive} className="relative group">
           <Link 
-            to={item.path} 
+            to={item.path}
+            onClick={handleClick}
             className={cn(
               "flex items-center gap-3 transition-all duration-300",
               "hover:bg-sidebar-accent/50",

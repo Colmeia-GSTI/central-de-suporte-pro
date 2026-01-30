@@ -19,8 +19,14 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -285,20 +291,26 @@ export default function TicketsPage() {
             </p>
           </div>
           <PermissionGate module="tickets" action="create">
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
+            <Sheet open={isFormOpen} onOpenChange={setIsFormOpen} modal={false}>
+              <SheetTrigger asChild>
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
                   Novo Chamado
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Novo Chamado</DialogTitle>
-                </DialogHeader>
-                <TicketForm onSuccess={handleCloseForm} onCancel={handleCloseForm} initialData={initialFormData} />
-              </DialogContent>
-            </Dialog>
+              </SheetTrigger>
+              <SheetContent 
+                className="sm:max-w-2xl overflow-y-auto z-[60]" 
+                onPointerDownOutside={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
+              >
+                <SheetHeader>
+                  <SheetTitle>Novo Chamado</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4">
+                  <TicketForm onSuccess={handleCloseForm} onCancel={handleCloseForm} initialData={initialFormData} />
+                </div>
+              </SheetContent>
+            </Sheet>
           </PermissionGate>
         </div>
 
