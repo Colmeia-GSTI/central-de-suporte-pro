@@ -2869,6 +2869,7 @@ export type Database = {
       }
       tickets: {
         Row: {
+          asset_description: string | null
           asset_id: string | null
           assigned_to: string | null
           category_id: string | null
@@ -2896,6 +2897,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          asset_description?: string | null
           asset_id?: string | null
           assigned_to?: string | null
           category_id?: string | null
@@ -2923,6 +2925,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          asset_description?: string | null
           asset_id?: string | null
           assigned_to?: string | null
           category_id?: string | null

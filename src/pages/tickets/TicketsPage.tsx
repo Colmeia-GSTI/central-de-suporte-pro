@@ -33,6 +33,7 @@ import { TicketDetails } from "@/components/tickets/TicketDetails";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
 import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
+import { AssetSelectionDialog } from "@/components/tickets/AssetSelectionDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { SLAIndicator } from "@/components/tickets/SLAIndicator";
 import { useAuth } from "@/hooks/useAuth";
@@ -100,6 +101,10 @@ export default function TicketsPage() {
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isPauseOpen, setIsPauseOpen] = useState(false);
   const [isResolveOpen, setIsResolveOpen] = useState(false);
+  
+  // State for asset selection dialog when starting ticket
+  const [isAssetDialogOpen, setIsAssetDialogOpen] = useState(false);
+  const [pendingStartTicket, setPendingStartTicket] = useState<TicketWithRelations | null>(null);
   
   const { toast } = useToast();
   const { user } = useAuth();
@@ -192,27 +197,43 @@ export default function TicketsPage() {
     setSelectedTicket(ticket);
   };
 
-  // Mutation para iniciar atendimento
+  // Mutation para iniciar atendimento com ativo obrigatório
   const startTicketMutation = useMutation({
-    mutationFn: async (ticketId: string) => {
+    mutationFn: async ({ 
+      ticketId, 
+      assetId, 
+      assetDescription 
+    }: { 
+      ticketId: string; 
+      assetId: string | null; 
+      assetDescription: string | null;
+    }) => {
       const { error } = await supabase
         .from("tickets")
         .update({
           status: "in_progress" as Enums<"ticket_status">,
           assigned_to: user?.id,
           first_response_at: new Date().toISOString(),
+          asset_id: assetId,
+          asset_description: assetDescription,
         })
         .eq("id", ticketId);
       if (error) throw error;
 
-      // Registrar no histórico
+      // Registrar no histórico com informação do ativo
+      const assetInfo = assetId 
+        ? "com ativo vinculado" 
+        : assetDescription 
+          ? `dispositivo: ${assetDescription}` 
+          : "";
+      
       const { error: historyError } = await supabase.from("ticket_history").insert([
         {
           ticket_id: ticketId,
           user_id: user?.id,
           old_status: "open",
           new_status: "in_progress",
-          comment: "Atendimento iniciado",
+          comment: `Atendimento iniciado${assetInfo ? ` (${assetInfo})` : ""}`,
         },
       ]);
 
@@ -220,8 +241,10 @@ export default function TicketsPage() {
       if (historyError) {
         console.warn("Failed to insert ticket_history (start):", historyError);
       }
+      
+      return ticketId;
     },
-    onSuccess: (_, ticketId) => {
+    onSuccess: (ticketId) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       toast({ title: "Atendimento iniciado" });
       
@@ -230,15 +253,32 @@ export default function TicketsPage() {
       if (ticket) {
         setSelectedTicket(ticket);
       }
+      
+      // Reset pending state
+      setPendingStartTicket(null);
+      setIsAssetDialogOpen(false);
     },
     onError: () => {
       toast({ title: "Erro ao iniciar atendimento", variant: "destructive" });
     },
   });
 
-  const handleStartTicket = (e: React.MouseEvent, ticketId: string) => {
+  // Handle click on "Iniciar" button - opens asset selection dialog
+  const handleStartTicket = (e: React.MouseEvent, ticket: TicketWithRelations) => {
     e.stopPropagation();
-    startTicketMutation.mutate(ticketId);
+    setPendingStartTicket(ticket);
+    setIsAssetDialogOpen(true);
+  };
+
+  // Callback from asset selection dialog
+  const handleAssetConfirm = (assetId: string | null, assetDescription: string | null) => {
+    if (pendingStartTicket) {
+      startTicketMutation.mutate({
+        ticketId: pendingStartTicket.id,
+        assetId,
+        assetDescription,
+      });
+    }
   };
 
   const handleNextPage = () => {
@@ -457,7 +497,7 @@ export default function TicketsPage() {
                             variant="default"
                             size="sm"
                             className="gap-1 h-7 text-xs"
-                            onClick={(e) => handleStartTicket(e, ticket.id)}
+                            onClick={(e) => handleStartTicket(e, ticket)}
                             disabled={startTicketMutation.isPending}
                           >
                             <Play className="h-3 w-3" />
@@ -562,6 +602,19 @@ export default function TicketsPage() {
             />
           </>
         )}
+
+        {/* Asset Selection Dialog for starting tickets */}
+        <AssetSelectionDialog
+          open={isAssetDialogOpen}
+          onOpenChange={(open) => {
+            setIsAssetDialogOpen(open);
+            if (!open) setPendingStartTicket(null);
+          }}
+          clientId={pendingStartTicket?.client_id || null}
+          ticketNumber={pendingStartTicket?.ticket_number || 0}
+          onConfirm={handleAssetConfirm}
+          isPending={startTicketMutation.isPending}
+        />
       </div>
     </AppLayout>
   );
