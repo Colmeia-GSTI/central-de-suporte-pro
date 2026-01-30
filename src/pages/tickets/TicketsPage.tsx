@@ -32,6 +32,9 @@ import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag 
 import { useToast } from "@/hooks/use-toast";
 import { TicketForm } from "@/components/tickets/TicketForm";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
+import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
+import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
+import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { SLAIndicator } from "@/components/tickets/SLAIndicator";
 import { useAuth } from "@/hooks/useAuth";
@@ -100,6 +103,12 @@ export default function TicketsPage() {
     client_id?: string;
     priority?: "low" | "medium" | "high" | "critical";
   } | undefined>(undefined);
+  
+  // State for secondary dialogs (moved out of nested Dialog to prevent portal conflicts)
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isPauseOpen, setIsPauseOpen] = useState(false);
+  const [isResolveOpen, setIsResolveOpen] = useState(false);
+  
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -275,22 +284,22 @@ export default function TicketsPage() {
               Gerencie chamados de suporte
             </p>
           </div>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <PermissionGate module="tickets" action="create">
+          <PermissionGate module="tickets" action="create">
+            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
                   Novo Chamado
                 </Button>
               </DialogTrigger>
-            </PermissionGate>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Novo Chamado</DialogTitle>
-              </DialogHeader>
-              <TicketForm onSuccess={handleCloseForm} onCancel={handleCloseForm} initialData={initialFormData} />
-            </DialogContent>
-          </Dialog>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Novo Chamado</DialogTitle>
+                </DialogHeader>
+                <TicketForm onSuccess={handleCloseForm} onCancel={handleCloseForm} initialData={initialFormData} />
+              </DialogContent>
+            </Dialog>
+          </PermissionGate>
         </div>
 
         {/* Filters */}
@@ -523,10 +532,52 @@ export default function TicketsPage() {
               <TicketDetails
                 ticket={selectedTicket}
                 onClose={() => setSelectedTicket(null)}
+                onTransfer={() => setIsTransferOpen(true)}
+                onPause={() => setIsPauseOpen(true)}
+                onResolve={() => setIsResolveOpen(true)}
               />
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Action Dialogs - Rendered outside of the main Dialog to prevent portal conflicts */}
+        {selectedTicket && (
+          <>
+            <TicketTransferDialog
+              open={isTransferOpen}
+              onOpenChange={setIsTransferOpen}
+              ticketId={selectedTicket.id}
+              currentAssignedTo={selectedTicket.assigned_to}
+              currentDepartmentId={selectedTicket.department_id}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["tickets"] });
+              }}
+            />
+
+            <TicketPauseDialog
+              open={isPauseOpen}
+              onOpenChange={setIsPauseOpen}
+              ticketId={selectedTicket.id}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["tickets"] });
+              }}
+            />
+
+            <TicketResolveDialog
+              open={isResolveOpen}
+              onOpenChange={setIsResolveOpen}
+              ticketId={selectedTicket.id}
+              ticketNumber={selectedTicket.ticket_number}
+              currentStatus={selectedTicket.status}
+              categoryId={selectedTicket.category_id}
+              clientId={selectedTicket.client_id}
+              ticketTitle={selectedTicket.title}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["tickets"] });
+              }}
+            />
+          </>
+        )}
       </div>
     </AppLayout>
   );
