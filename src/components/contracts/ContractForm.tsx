@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -145,11 +145,11 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
   });
 
   // Initialize services state when data loads
-  useState(() => {
+  useEffect(() => {
     if (existingServices.length > 0 && contractServices.length === 0) {
       setContractServices(existingServices);
     }
-  });
+  }, [existingServices]);
 
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-select"],
