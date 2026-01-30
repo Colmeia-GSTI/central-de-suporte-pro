@@ -567,29 +567,37 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         </div>
 
         <div className="space-y-2">
-          <Label>Ativo Vinculado</Label>
-          <Select
-            value={formData.asset_id || "__none__"}
-            onValueChange={(value) => {
-              const actualValue = value === "__none__" ? "" : value;
-              setFormData((prev) => ({ ...prev, asset_id: actualValue }));
-              if (!isEditing) {
-                updateMutation.mutate({ asset_id: actualValue });
-              }
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecionar ativo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Nenhum</SelectItem>
-              {assets.map((asset) => (
-                <SelectItem key={asset.id} value={asset.id}>
-                  {asset.name} ({asset.asset_type})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label>Dispositivo Atendido</Label>
+          {/* Show asset_description if set (when "Outro" was selected) */}
+          {(ticket as any).asset_description && !formData.asset_id ? (
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm font-medium">{(ticket as any).asset_description}</p>
+              <p className="text-xs text-muted-foreground mt-1">Descrição personalizada</p>
+            </div>
+          ) : (
+            <Select
+              value={formData.asset_id || "__none__"}
+              onValueChange={(value) => {
+                const actualValue = value === "__none__" ? "" : value;
+                setFormData((prev) => ({ ...prev, asset_id: actualValue }));
+                if (!isEditing) {
+                  updateMutation.mutate({ asset_id: actualValue });
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar ativo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Nenhum</SelectItem>
+                {assets.map((asset) => (
+                  <SelectItem key={asset.id} value={asset.id}>
+                    {asset.name} ({asset.asset_type})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
