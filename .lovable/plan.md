@@ -1,204 +1,205 @@
 
 
-# Plano: Calendário Completo e Responsivo (Estilo Google Calendar)
+# Plano: Otimizacao do Fluxo de Atendimento de Tickets
 
-## Diagnóstico do Problema Atual
+## Analise do Estado Atual
 
-A implementação atual do calendário tem várias limitações:
+### O que ja existe no sistema:
+1. **Timer de Tempo**: Componente `TicketTimeTracker` com cronometro e registro manual
+2. **Iniciar Atendimento**: Botao "Play" que atribui o ticket ao tecnico e muda status para `in_progress`
+3. **Status "Sem Contato"**: Ja existe como `no_contact` no enum de status
+4. **Comentarios**: Sistema completo com marcacao de interno/publico e registro no historico
+5. **Historico**: Timeline completa de todas as acoes no chamado
+6. **Finalizacao**: Dialog `TicketResolveDialog` que registra tempo e solucao
+7. **Notificacoes**: Edge function `send-ticket-notification` que envia WhatsApp/Email no evento `resolved`
+8. **Campo de Avaliacao**: Tabela `tickets` ja tem colunas `satisfaction_rating` e `satisfaction_comment`
+9. **Contato Solicitante**: Campo `requester_contact_id` vincula ticket ao contato que abriu
 
-1. **Problemas em Mobile**:
-   - Layout fixo `grid-cols-7` que não adapta para telas pequenas
-   - Células com `min-h-[80px]` que ocupam muito espaço vertical
-   - Sidebar de eventos em layout lado-a-lado (`lg:grid-cols-[1fr_350px]`) que não funciona bem em mobile
-   - Textos e eventos muito pequenos para toque
+### O que esta faltando:
 
-2. **Funcionalidades Faltando (vs Google Calendar)**:
-   - Sem visualização de Semana (Week View)
-   - Sem visualização de Dia (Day View)
-   - Sem visualização de Agenda/Lista (List View)
-   - Sem arrastar e soltar eventos
-   - Sem redimensionar eventos
-   - Sem suporte a eventos multi-dia
-   - Sem cores por calendário/categoria
-
-3. **Erro React Console**:
-   - O Dialog está recebendo ref incorretamente (warning de Function components)
-
----
-
-## Solucao Proposta
-
-Substituir a implementacao manual por **FullCalendar** - a biblioteca mais completa e usada para calendarios em React, com suporte nativo a todas as funcionalidades do Google Calendar.
-
-### Por que FullCalendar?
-- Responsivo por padrao com deteccao automatica de mobile
-- Visualizacoes: Mes, Semana, Dia, Agenda/Lista
-- Suporte nativo a touch/gestos em mobile
-- Drag & Drop para mover eventos
-- Redimensionar eventos arrastando bordas
-- Eventos multi-dia
-- Integracao com React e TypeScript
-- Amplamente usado e documentado
+| Funcionalidade | Status | Acao Necessaria |
+|----------------|--------|-----------------|
+| Exibir informacoes de contato de quem abriu | Faltando | Adicionar card com telefone/WhatsApp do solicitante |
+| Inicio automatico do timer ao iniciar atendimento | Faltando | Iniciar cronometro automaticamente ao clicar "Iniciar" |
+| Fluxo "Sem Contato" com notificacao visual | Parcial | Melhorar destaque e criar lembrete |
+| Avaliacao do cliente para fechar chamado | Faltando | Criar interface no portal do cliente |
+| Status "Concluido" vs "Fechado" | Parcial | Ajustar fluxo de 2 etapas |
+| Notificacao para cliente avaliar | Faltando | Incluir link de avaliacao na notificacao |
 
 ---
 
 ## Etapas de Implementacao
 
-### Etapa 1: Instalacao de Dependencias
+### Etapa 1: Card de Informacoes do Solicitante
 
-Instalar os pacotes do FullCalendar:
-- `@fullcalendar/react` - Componente React
-- `@fullcalendar/core` - Core do calendario
-- `@fullcalendar/daygrid` - Visualizacao de mes/dia em grid
-- `@fullcalendar/timegrid` - Visualizacao de semana/dia com horarios
-- `@fullcalendar/list` - Visualizacao de agenda/lista
-- `@fullcalendar/interaction` - Drag & Drop, redimensionar, selecao
-
-### Etapa 2: Criar Componente FullCalendar Responsivo
-
-Novo arquivo `src/components/calendar/FullCalendarWrapper.tsx`:
+Criar componente que exibe dados de contato de quem abriu o chamado, visivel na aba Detalhes:
 
 ```text
-Funcionalidades:
-+------------------------------------------+
-|  [Hoje] [<] [>]  Janeiro 2026  [M][S][D][A] |
-+------------------------------------------+
-|                                          |
-|   VISUALIZACAO DO CALENDARIO             |
-|   - Mes: Grid tradicional                |
-|   - Semana: Timeline com horarios        |
-|   - Dia: Timeline detalhado              |
-|   - Agenda: Lista de eventos             |
-|                                          |
-+------------------------------------------+
-
-Comportamento Mobile:
-- Toolbar compactada com botoes menores
-- Visualizacao padrao: Agenda (listWeek)
-- Swipe para navegar entre semanas/meses
-- Eventos com area de toque maior
++----------------------------------------+
+| SOLICITANTE                            |
+| Nome: Joao Silva                       |
+| Cargo: Gerente de TI                   |
+| Telefone: (47) 99999-9999  [Ligar]     |
+| WhatsApp: (47) 99999-9999  [Mensagem]  |
+| Email: joao@empresa.com                |
++----------------------------------------+
 ```
 
-### Etapa 3: Refatorar CalendarPage.tsx
+**Arquivo**: `src/components/tickets/RequesterContactCard.tsx` (novo)
+**Modificar**: `src/components/tickets/TicketDetailsTab.tsx`
 
-1. Remover implementacao manual do grid de dias
-2. Integrar FullCalendarWrapper
-3. Manter logica de dados (query de eventos)
-4. Adaptar formulario de eventos para Sheet em mobile
-5. Adicionar callbacks para:
-   - `eventClick`: Abrir detalhes do evento
-   - `dateClick`: Criar novo evento na data
-   - `eventDrop`: Mover evento (atualizar no banco)
-   - `eventResize`: Alterar duracao do evento
-   - `select`: Selecionar intervalo para novo evento
+### Etapa 2: Timer Automatico ao Iniciar Atendimento
 
-### Etapa 4: Estilizacao e Tema
+Modificar o fluxo para que ao clicar em "Iniciar Chamado":
+1. Atribui o ticket ao tecnico
+2. Muda status para `in_progress`
+3. Inicia automaticamente o cronometro de tempo
+4. Abre a janela de detalhes do ticket
 
-Criar estilos CSS para integrar FullCalendar com o tema do app:
-- Cores consistentes com as variaveis CSS do projeto
-- Suporte a dark mode
-- Bordas e sombras consistentes com os cards
+**Modificar**: 
+- `src/pages/tickets/TicketsPage.tsx` - Abrir detalhes apos iniciar
+- `src/components/tickets/TicketTimeTracker.tsx` - Prop para iniciar automaticamente
 
-### Etapa 5: Funcionalidades Adicionais
+### Etapa 3: Melhorar Fluxo "Sem Contato"
 
-1. **Eventos Multi-dia**: Suporte nativo do FullCalendar
-2. **Categorias com Cores**: Usar `backgroundColor` por tipo de evento
-3. **Sincronizacao Google Calendar**: Ja existe edge function, integrar UI
-4. **Lembretes/Notificacoes**: Integrar com sistema de push existente
+Criar botao dedicado na interface do ticket para marcar como "Sem Contato":
+
+```text
++-------------------------------------------+
+| [Finalizar]  [Pausar]  [Sem Contato]  ... |
++-------------------------------------------+
+```
+
+Ao marcar como "Sem Contato":
+- Muda status para `no_contact`
+- Registra no historico com timestamp
+- Agenda lembrete (se configurado no sistema)
+
+**Modificar**: `src/components/tickets/TicketDetails.tsx`
+
+### Etapa 4: Fluxo de Encerramento em 2 Etapas
+
+**Etapa 4.1: Tecnico Conclui (ja existe parcialmente)**
+- Status muda para `resolved`
+- Tempo e contabilizado
+- Notificacao enviada ao cliente com link para avaliar
+
+**Etapa 4.2: Cliente Avalia e Fecha (novo)**
+- Criar formulario de avaliacao no portal do cliente
+- Cliente ve tickets com status `resolved` e pode avaliar
+- Apos avaliar, status muda para `closed`
+
+### Etapa 5: Interface de Avaliacao no Portal do Cliente
+
+Criar componente de avaliacao com estrelas e comentario:
+
+```text
++----------------------------------------+
+| AVALIAR ATENDIMENTO                    |
+| Chamado #1234 - Problema no email      |
+|                                        |
+| Como voce avalia o atendimento?        |
+| [*] [*] [*] [*] [ ]  4/5 estrelas      |
+|                                        |
+| Comentario (opcional):                 |
+| +------------------------------------+ |
+| |                                    | |
+| +------------------------------------+ |
+|                                        |
+| [Enviar Avaliacao]                     |
++----------------------------------------+
+```
+
+**Novo arquivo**: `src/components/tickets/TicketRatingDialog.tsx`
+**Modificar**: `src/pages/client-portal/ClientPortalPage.tsx`
+
+### Etapa 6: Atualizar Notificacao de Resolucao
+
+Incluir link para avaliacao na mensagem de WhatsApp/Email:
+
+```text
+Seu chamado #1234 foi resolvido!
+Clique aqui para avaliar o atendimento e encerrar o chamado:
+[Link para portal do cliente]
+```
+
+**Modificar**: `supabase/functions/send-ticket-notification/index.ts`
 
 ---
 
-## Mapeamento de Tipos de Evento para Cores
-
-| Tipo | Cor Atual | Nova Cor (FullCalendar) |
-|------|-----------|-------------------------|
-| visit | bg-status-progress | var(--status-progress) |
-| meeting | bg-primary | var(--primary) |
-| on_call | bg-status-warning | var(--status-warning) |
-| unavailable | bg-muted | var(--muted) |
-| personal | bg-accent | var(--accent) |
-| billing_reminder | bg-destructive | var(--destructive) |
-
----
-
-## Arquivos a Serem Modificados
+## Arquivos a Serem Modificados/Criados
 
 | Arquivo | Acao |
 |---------|------|
-| `package.json` | Adicionar dependencias FullCalendar |
-| `src/components/calendar/FullCalendarWrapper.tsx` | CRIAR - Componente wrapper |
-| `src/pages/calendar/CalendarPage.tsx` | REFATORAR - Usar FullCalendar |
-| `src/index.css` | ADICIONAR - Estilos FullCalendar |
-| `src/components/calendar/EventDetailsSheet.tsx` | CRIAR - Sheet para detalhes em mobile |
+| `src/components/tickets/RequesterContactCard.tsx` | CRIAR |
+| `src/components/tickets/TicketRatingDialog.tsx` | CRIAR |
+| `src/components/tickets/TicketDetailsTab.tsx` | MODIFICAR - Adicionar card de contato |
+| `src/components/tickets/TicketDetails.tsx` | MODIFICAR - Adicionar botao "Sem Contato" |
+| `src/components/tickets/TicketTimeTracker.tsx` | MODIFICAR - Prop autoStart |
+| `src/pages/tickets/TicketsPage.tsx` | MODIFICAR - Abrir detalhes apos iniciar |
+| `src/pages/client-portal/ClientPortalPage.tsx` | MODIFICAR - Adicionar fluxo de avaliacao |
+| `supabase/functions/send-ticket-notification/index.ts` | MODIFICAR - Incluir link de avaliacao |
 
 ---
 
 ## Secao Tecnica
 
-### Configuracao do FullCalendar
+### Busca de Dados do Solicitante
 
 ```typescript
-// Configuracao responsiva
-const calendarOptions = {
-  plugins: [dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin],
-  initialView: isMobile ? 'listWeek' : 'dayGridMonth',
-  headerToolbar: isMobile 
-    ? { left: 'prev,next', center: 'title', right: 'listWeek,dayGridDay' }
-    : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
-  editable: true,
-  selectable: true,
-  selectMirror: true,
-  dayMaxEvents: true, // Mostra "+2 mais" quando muitos eventos
-  weekends: true,
-  locale: ptBrLocale,
-  // Callbacks
-  eventClick: handleEventClick,
-  dateClick: handleDateClick,
-  eventDrop: handleEventDrop,
-  eventResize: handleEventResize,
-  select: handleSelect,
-};
+// Adicionar ao select do ticket
+const { data: ticket } = await supabase
+  .from("tickets")
+  .select(`
+    *,
+    requester_contact:client_contacts!requester_contact_id(
+      id, name, email, phone, whatsapp, role
+    )
+  `)
+  .eq("id", ticketId)
+  .single();
 ```
 
-### Tratamento de Resize para Mobile
+### Componente de Rating
 
 ```typescript
-// Mudar visualizacao quando redimensiona
-windowResize: (arg) => {
-  if (arg.view.calendar.el.offsetWidth < 768) {
-    arg.view.calendar.changeView('listWeek');
-  }
+interface TicketRatingDialogProps {
+  ticketId: string;
+  ticketNumber: number;
+  onSuccess: () => void;
 }
+
+// Usa slider ou estrelas para nota de 1-5
+// Salva em tickets.satisfaction_rating e satisfaction_comment
 ```
 
-### Integracao com Dados Existentes
+### Fluxo de Status
 
-Os eventos do banco serao mapeados para o formato FullCalendar:
-```typescript
-events.map(event => ({
-  id: event.id,
-  title: event.title,
-  start: event.start_time,
-  end: event.end_time,
-  allDay: event.all_day,
-  backgroundColor: eventTypeColors[event.event_type],
-  extendedProps: {
-    client: event.clients?.name,
-    location: event.location,
-    type: event.event_type,
-  }
-}))
+```text
+open -> in_progress -> resolved -> closed
+           |               ^
+           v               |
+       no_contact ---------|
+           |
+           v
+        waiting
 ```
+
+### Validacao de Fechamento
+
+Antes de mudar para `closed`, verificar:
+1. `satisfaction_rating` deve estar preenchido
+2. Apenas o cliente (ou admin) pode fechar apos avaliacao
 
 ---
 
 ## Resultado Esperado
 
-Apos a implementacao:
-
-1. **Mobile**: Visualizacao de agenda (lista) como padrao, facil de navegar com toque
-2. **Desktop**: Todas as visualizacoes (Mes, Semana, Dia, Agenda)
-3. **Interatividade**: Arrastar eventos para mover, redimensionar para alterar duracao
-4. **Touch-friendly**: Areas de toque maiores, gestos de swipe
-5. **Consistencia visual**: Integrado com o tema dark/light do app
+1. **Tecnico ve informacoes de contato** ao abrir o chamado
+2. **Timer inicia automaticamente** quando clica em "Iniciar"
+3. **Botao "Sem Contato"** facilita marcar tentativas de contato
+4. **Todos os comentarios e acoes** aparecem no historico
+5. **Ao finalizar**, cliente recebe notificacao com link para avaliar
+6. **Cliente avalia** no portal e o chamado e fechado definitivamente
+7. **Tempo total e contabilizado** automaticamente ao finalizar
 
