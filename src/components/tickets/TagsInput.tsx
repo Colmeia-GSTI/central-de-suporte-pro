@@ -77,7 +77,7 @@ export function TagsInput({ selectedTagIds, onChange, disabled, className }: Tag
         ))}
         
         {!disabled && (
-          <Popover open={isOpen} onOpenChange={setIsOpen}>
+          <Popover open={isOpen} onOpenChange={setIsOpen} modal={false}>
             <PopoverTrigger asChild>
               <Button
                 type="button"
@@ -89,7 +89,11 @@ export function TagsInput({ selectedTagIds, onChange, disabled, className }: Tag
                 Adicionar
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-2" align="start">
+            <PopoverContent 
+              className="w-64 p-2" 
+              align="start"
+              onPointerDownOutside={(e) => e.preventDefault()}
+            >
               <div className="space-y-2">
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />

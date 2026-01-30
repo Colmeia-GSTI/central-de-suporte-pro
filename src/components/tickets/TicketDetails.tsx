@@ -9,9 +9,6 @@ import type { Tables, Enums } from "@/integrations/supabase/types";
 import { TicketDetailsTab } from "./TicketDetailsTab";
 import { TicketCommentsTab } from "./TicketCommentsTab";
 import { TicketHistoryTab } from "./TicketHistoryTab";
-import { TicketTransferDialog } from "./TicketTransferDialog";
-import { TicketPauseDialog } from "./TicketPauseDialog";
-import { TicketResolveDialog } from "./TicketResolveDialog";
 import { SLAIndicator } from "./SLAIndicator";
 
 type TicketWithRelations = Tables<"tickets"> & {
@@ -22,6 +19,10 @@ type TicketWithRelations = Tables<"tickets"> & {
 interface TicketDetailsProps {
   ticket: TicketWithRelations;
   onClose: () => void;
+  // Callbacks for action dialogs (handled by parent to avoid nested Dialog issues)
+  onTransfer?: () => void;
+  onPause?: () => void;
+  onResolve?: () => void;
 }
 
 const statusLabels: Record<Enums<"ticket_status">, string> = {
@@ -54,11 +55,8 @@ const canResolveStatuses: Enums<"ticket_status">[] = [
   "open", "in_progress", "waiting", "paused", "waiting_third_party", "no_contact"
 ];
 
-export function TicketDetails({ ticket, onClose }: TicketDetailsProps) {
+export function TicketDetails({ ticket, onClose, onTransfer, onPause, onResolve }: TicketDetailsProps) {
   const [activeTab, setActiveTab] = useState("details");
-  const [isTransferOpen, setIsTransferOpen] = useState(false);
-  const [isPauseOpen, setIsPauseOpen] = useState(false);
-  const [isResolveOpen, setIsResolveOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const handleUpdate = () => {
@@ -90,37 +88,39 @@ export function TicketDetails({ ticket, onClose }: TicketDetailsProps) {
               }}
             />
           </div>
-        <div className="flex items-center gap-2">
-            {canResolve && (
+          <div className="flex items-center gap-2">
+            {canResolve && onResolve && (
               <Button
                 size="sm"
-                onClick={() => setIsResolveOpen(true)}
+                onClick={onResolve}
                 className="gap-1 bg-green-600 hover:bg-green-700 text-white"
               >
                 <CheckCircle className="h-4 w-4" />
                 Finalizar
               </Button>
             )}
-            {canPause && (
+            {canPause && onPause && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsPauseOpen(true)}
+                onClick={onPause}
                 className="gap-1"
               >
                 <Pause className="h-4 w-4" />
                 Pausar
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsTransferOpen(true)}
-              className="gap-1"
-            >
-              <ArrowRightLeft className="h-4 w-4" />
-              Transferir
-            </Button>
+            {onTransfer && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onTransfer}
+                className="gap-1"
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                Transferir
+              </Button>
+            )}
             <Badge className={statusColors[ticket.status]}>
               {statusLabels[ticket.status]}
             </Badge>
@@ -159,37 +159,6 @@ export function TicketDetails({ ticket, onClose }: TicketDetailsProps) {
           <TicketHistoryTab ticketId={ticket.id} />
         </TabsContent>
       </Tabs>
-
-      {/* Transfer Dialog */}
-      <TicketTransferDialog
-        open={isTransferOpen}
-        onOpenChange={setIsTransferOpen}
-        ticketId={ticket.id}
-        currentAssignedTo={ticket.assigned_to}
-        currentDepartmentId={ticket.department_id}
-        onSuccess={handleUpdate}
-      />
-
-      {/* Pause Dialog */}
-      <TicketPauseDialog
-        open={isPauseOpen}
-        onOpenChange={setIsPauseOpen}
-        ticketId={ticket.id}
-        onSuccess={handleUpdate}
-      />
-
-      {/* Resolve Dialog */}
-      <TicketResolveDialog
-        open={isResolveOpen}
-        onOpenChange={setIsResolveOpen}
-        ticketId={ticket.id}
-        ticketNumber={ticket.ticket_number}
-        currentStatus={ticket.status}
-        categoryId={ticket.category_id}
-        clientId={ticket.client_id}
-        ticketTitle={ticket.title}
-        onSuccess={handleUpdate}
-      />
     </div>
   );
 }
