@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -14,13 +15,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -28,7 +22,6 @@ import {
 } from "@/components/ui/tooltip";
 import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ContractForm } from "@/components/contracts/ContractForm";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,9 +57,8 @@ const supportModelLabels: Record<Enums<"support_model">, string> = {
 };
 
 export default function ContractsPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingContract, setEditingContract] = useState<ContractWithClient | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
     contract: null,
@@ -111,13 +103,8 @@ export default function ContractsPage() {
   });
 
   const handleEdit = (contract: ContractWithClient) => {
-    setEditingContract(contract);
-    setIsFormOpen(true);
-  };
-
-  const handleCloseForm = () => {
-    setIsFormOpen(false);
-    setEditingContract(null);
+    // TODO: Navigate to edit page with contract ID when implemented
+    navigate(`/contracts/new?edit=${contract.id}`);
   };
 
   const handleDeleteClick = (contract: ContractWithClient) => {
@@ -127,6 +114,7 @@ export default function ContractsPage() {
   const handleConfirmDelete = () => {
     if (deleteConfirm.contract) {
       deleteMutation.mutate(deleteConfirm.contract.id);
+    }
     }
   };
 
@@ -142,26 +130,10 @@ export default function ContractsPage() {
             </p>
           </div>
           <PermissionGate module="contracts" action="create">
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditingContract(null)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Novo Contrato
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingContract ? "Editar Contrato" : "Novo Contrato"}
-                  </DialogTitle>
-                </DialogHeader>
-                <ContractForm
-                  contract={editingContract}
-                  onSuccess={handleCloseForm}
-                  onCancel={handleCloseForm}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button onClick={() => navigate("/contracts/new")}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Contrato
+            </Button>
           </PermissionGate>
         </div>
 

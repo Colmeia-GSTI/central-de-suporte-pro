@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -21,13 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -36,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { TicketForm } from "@/components/tickets/TicketForm";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
@@ -97,18 +89,12 @@ const PAGE_SIZE = 20;
 
 export default function TicketsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
   const [cursor, setCursor] = useState<string | null>(null); // Cursor-based pagination
   const [previousCursors, setPreviousCursors] = useState<string[]>([]); // Stack de cursors anteriores
-  const [initialFormData, setInitialFormData] = useState<{
-    title?: string;
-    description?: string;
-    client_id?: string;
-    priority?: "low" | "medium" | "high" | "critical";
-  } | undefined>(undefined);
   
   // State for secondary dialogs (moved out of nested Dialog to prevent portal conflicts)
   const [isTransferOpen, setIsTransferOpen] = useState(false);
@@ -119,26 +105,24 @@ export default function TicketsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  // Handle URL params for opening ticket form with pre-filled data
+  // Handle URL params for opening ticket form with pre-filled data (redirect to new page)
   useEffect(() => {
     if (searchParams.get("action") === "new") {
       const title = searchParams.get("title") || "";
       const description = searchParams.get("description") || "";
       const client_id = searchParams.get("client_id") || "";
-      const priority = searchParams.get("priority") as "low" | "medium" | "high" | "critical" | null;
+      const priority = searchParams.get("priority") || "";
       
-      setInitialFormData({
-        title,
-        description,
-        client_id,
-        priority: priority || "medium",
-      });
-      setIsFormOpen(true);
+      // Redirect to new ticket page with params
+      const params = new URLSearchParams();
+      if (title) params.set("title", title);
+      if (description) params.set("description", description);
+      if (client_id) params.set("client_id", client_id);
+      if (priority) params.set("priority", priority);
       
-      // Clear the URL params after opening
-      setSearchParams({});
+      navigate(`/tickets/new${params.toString() ? `?${params.toString()}` : ""}`);
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, navigate]);
   
   // Debounce search to avoid too many queries
   const debouncedSearch = useDebounce(search, 300);
@@ -200,11 +184,6 @@ export default function TicketsPage() {
   const tickets = data?.tickets || [];
   const hasNextPage = data?.hasNextPage || false;
   const hasPreviousPage = previousCursors.length > 0;
-
-  const handleCloseForm = () => {
-    setIsFormOpen(false);
-    setInitialFormData(undefined);
-  };
 
   const handleViewTicket = (ticket: TicketWithRelations) => {
     setSelectedTicket(ticket);
@@ -291,26 +270,10 @@ export default function TicketsPage() {
             </p>
           </div>
           <PermissionGate module="tickets" action="create">
-            <Sheet open={isFormOpen} onOpenChange={setIsFormOpen} modal={false}>
-              <SheetTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Novo Chamado
-                </Button>
-              </SheetTrigger>
-              <SheetContent 
-                className="sm:max-w-2xl overflow-y-auto z-[60]" 
-                onPointerDownOutside={(e) => e.preventDefault()}
-                onInteractOutside={(e) => e.preventDefault()}
-              >
-                <SheetHeader>
-                  <SheetTitle>Novo Chamado</SheetTitle>
-                </SheetHeader>
-                <div className="mt-4">
-                  <TicketForm onSuccess={handleCloseForm} onCancel={handleCloseForm} initialData={initialFormData} />
-                </div>
-              </SheetContent>
-            </Sheet>
+            <Button onClick={() => navigate("/tickets/new")}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Chamado
+            </Button>
           </PermissionGate>
         </div>
 
