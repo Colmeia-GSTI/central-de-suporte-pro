@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, MessageSquare, History, ArrowRightLeft, Pause, CheckCircle } from "lucide-react";
+import { FileText, MessageSquare, History, ArrowRightLeft, Pause, CheckCircle, PhoneOff } from "lucide-react";
+import { NoContactButton } from "./NoContactButton";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 import { TicketDetailsTab } from "./TicketDetailsTab";
 import { TicketCommentsTab } from "./TicketCommentsTab";
@@ -88,7 +89,7 @@ export function TicketDetails({ ticket, onClose, onTransfer, onPause, onResolve 
               }}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {canResolve && onResolve && (
               <Button
                 size="sm"
@@ -110,6 +111,11 @@ export function TicketDetails({ ticket, onClose, onTransfer, onPause, onResolve 
                 Pausar
               </Button>
             )}
+            <NoContactButton
+              ticketId={ticket.id}
+              ticketNumber={ticket.ticket_number}
+              currentStatus={ticket.status}
+            />
             {onTransfer && (
               <Button
                 variant="outline"

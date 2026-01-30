@@ -48,11 +48,14 @@ serve(async (req) => {
     console.log(`[send-ticket-notification] Ticket #${ticket.ticket_number} - ${ticket.title}`);
     console.log(`[send-ticket-notification] Requester contact:`, ticket.requester_contact);
 
+    // Get portal URL from environment or use default
+    const portalUrl = Deno.env.get("PORTAL_URL") || "https://colmeiahdpro.lovable.app/portal";
+
     const eventMessages = {
       created: `Seu chamado #${ticket.ticket_number} foi aberto com sucesso.`,
       updated: `Seu chamado #${ticket.ticket_number} foi atualizado.`,
       commented: `Novo comentário no chamado #${ticket.ticket_number}.`,
-      resolved: `Seu chamado #${ticket.ticket_number} foi resolvido.`,
+      resolved: `Seu chamado #${ticket.ticket_number} foi resolvido! Por favor, acesse o portal para avaliar o atendimento e encerrar o chamado.`,
     };
 
     const statusLabels: Record<string, string> = {
@@ -123,6 +126,15 @@ serve(async (req) => {
                     </div>
                   ` : ''}
                   
+                  ${event_type === 'resolved' ? `
+                    <div style="background: #dcfce7; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 15px 0; text-align: center;">
+                      <p style="color: #166534; font-weight: 600; margin-bottom: 10px;">⭐ Avalie nosso atendimento</p>
+                      <a href="${portalUrl}" style="display: inline-block; background: #16a34a; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500;">
+                        Avaliar e Encerrar Chamado
+                      </a>
+                    </div>
+                  ` : ''}
+                  
                   <p>Acesse o portal do cliente para mais detalhes.</p>
                 </div>
                 <div class="footer">
@@ -161,12 +173,13 @@ serve(async (req) => {
       console.log(`[send-ticket-notification] Sending WhatsApp to requester: ${requesterContact.name} (${requesterContact.whatsapp})`);
       
       try {
-        const whatsappMessage = `🎫 *Atualização do seu Chamado*\n\n` +
+      const whatsappMessage = `🎫 *Atualização do seu Chamado*\n\n` +
           `📋 *Chamado:* #${ticket.ticket_number}\n` +
           `📝 *Título:* ${ticket.title}\n` +
           `📊 *Status:* ${statusLabels[ticket.status] || ticket.status}\n\n` +
           `📢 ${eventMessages[event_type]}` +
-          (comment ? `\n\n💬 *Comentário:* ${comment}` : '');
+          (comment ? `\n\n💬 *Comentário:* ${comment}` : '') +
+          (event_type === 'resolved' ? `\n\n⭐ *Avalie o atendimento:*\n${portalUrl}` : '');
 
         const { data: waResult, error: waError } = await supabase.functions.invoke("send-whatsapp", {
           body: {

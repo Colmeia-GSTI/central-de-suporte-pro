@@ -26,12 +26,23 @@ import { useToast } from "@/hooks/use-toast";
 import { EntityHistoryTimeline, HistoryEntry } from "@/components/ui/EntityHistoryTimeline";
 import { TagsInput } from "@/components/tickets/TagsInput";
 import { TagBadge } from "@/components/tickets/TagBadge";
+import { RequesterContactCard } from "@/components/tickets/RequesterContactCard";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+
+type RequesterContactType = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  role: string | null;
+};
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
   ticket_categories: Tables<"ticket_categories"> | null;
   ticket_subcategories?: { id: string; name: string } | null;
+  requester_contact?: RequesterContactType | null;
 };
 
 interface TicketDetailsTabProps {
@@ -328,6 +339,8 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Requester Contact Card */}
+      <RequesterContactCard contact={ticket.requester_contact || null} />
       {/* Edit Toggle */}
       <div className="flex justify-end">
         {isEditing ? (
