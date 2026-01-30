@@ -137,7 +137,10 @@ export default function TicketsPage() {
           clients(id, name),
           ticket_categories(id, name),
           ticket_subcategories(id, name),
-          ticket_tag_assignments(ticket_tags(id, name, color))
+          ticket_tag_assignments(ticket_tags(id, name, color)),
+          requester_contact:client_contacts!tickets_requester_contact_id_fkey(
+            id, name, email, phone, whatsapp, role
+          )
         `, { count: "exact" })
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE + 1); // Fetch one extra to check if there's a next page
@@ -218,9 +221,15 @@ export default function TicketsPage() {
         console.warn("Failed to insert ticket_history (start):", historyError);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, ticketId) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       toast({ title: "Atendimento iniciado" });
+      
+      // Find and open the ticket details
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (ticket) {
+        setSelectedTicket(ticket);
+      }
     },
     onError: () => {
       toast({ title: "Erro ao iniciar atendimento", variant: "destructive" });

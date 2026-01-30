@@ -39,10 +39,12 @@ import {
   MessageSquare,
   Clock,
   CheckCircle,
+  Star,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { TicketRatingDialog } from "@/components/tickets/TicketRatingDialog";
 import type { Enums } from "@/integrations/supabase/types";
 
 const statusLabels: Record<string, string> = {
@@ -75,6 +77,7 @@ export default function ClientPortalPage() {
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"my" | "all">("my");
+  const [ratingTicket, setRatingTicket] = useState<{id: string; number: number; title: string} | null>(null);
 
   const isClient = roles.includes("client") || roles.includes("client_master");
   const isClientMaster = roles.includes("client_master");
@@ -246,7 +249,8 @@ export default function ClientPortalPage() {
   };
 
   const openTickets = tickets.filter((t) => !["resolved", "closed"].includes(t.status));
-  const closedTickets = tickets.filter((t) => ["resolved", "closed"].includes(t.status));
+  const resolvedTickets = tickets.filter((t) => t.status === "resolved" && !t.satisfaction_rating);
+  const closedTickets = tickets.filter((t) => t.status === "closed" || (t.status === "resolved" && t.satisfaction_rating));
 
   const selectedTicketData = tickets.find((t) => t.id === selectedTicket);
 
@@ -439,6 +443,14 @@ export default function ClientPortalPage() {
                 <Tabs defaultValue="open">
                   <TabsList className="mb-4">
                     <TabsTrigger value="open">Abertos ({openTickets.length})</TabsTrigger>
+                    <TabsTrigger value="resolved" className="gap-1">
+                      Aguardando Avaliação
+                      {resolvedTickets.length > 0 && (
+                        <Badge variant="destructive" className="ml-1 h-5 px-1.5">
+                          {resolvedTickets.length}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
                     <TabsTrigger value="closed">Fechados ({closedTickets.length})</TabsTrigger>
                   </TabsList>
                   <TabsContent value="open">
@@ -493,6 +505,61 @@ export default function ClientPortalPage() {
                         )}
                       </TableBody>
                     </Table>
+                  </TabsContent>
+                  
+                  {/* Resolved Tickets Awaiting Rating */}
+                  <TabsContent value="resolved">
+                    {resolvedTickets.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50 text-green-500" />
+                        <p>Nenhum chamado aguardando avaliação</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 rounded-lg">
+                          <p className="text-sm text-amber-800 dark:text-amber-200">
+                            <Star className="h-4 w-4 inline mr-1" />
+                            Avalie os chamados abaixo para encerrá-los definitivamente.
+                          </p>
+                        </div>
+                        {resolvedTickets.map((ticket: any) => (
+                          <Card key={ticket.id} className="border-green-200 dark:border-green-800">
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-mono text-sm text-muted-foreground">
+                                      #{ticket.ticket_number}
+                                    </span>
+                                    <Badge className="bg-green-500 text-white">
+                                      Resolvido
+                                    </Badge>
+                                  </div>
+                                  <h4 className="font-medium">{ticket.title}</h4>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    Resolvido em{" "}
+                                    {ticket.resolved_at
+                                      ? format(new Date(ticket.resolved_at), "dd/MM/yyyy", { locale: ptBR })
+                                      : "-"}
+                                  </p>
+                                </div>
+                                <Button
+                                  onClick={() => setRatingTicket({
+                                    id: ticket.id,
+                                    number: ticket.ticket_number,
+                                    title: ticket.title,
+                                  })}
+                                  className="gap-2"
+                                >
+                                  <Star className="h-4 w-4" />
+                                  Avaliar e Encerrar
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
                   </TabsContent>
                   <TabsContent value="closed">
                     <Table>
@@ -625,6 +692,17 @@ export default function ClientPortalPage() {
           </div>
         </div>
       </main>
+
+      {/* Rating Dialog */}
+      {ratingTicket && (
+        <TicketRatingDialog
+          open={!!ratingTicket}
+          onOpenChange={(open) => !open && setRatingTicket(null)}
+          ticketId={ratingTicket.id}
+          ticketNumber={ratingTicket.number}
+          ticketTitle={ratingTicket.title}
+        />
+      )}
     </div>
   );
 }
