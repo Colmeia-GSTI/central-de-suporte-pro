@@ -199,14 +199,14 @@ export function ContractServicesSection({
           Serviços do Contrato
         </div>
         {contractId && serviceHistory.length > 0 && (
-          <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+          <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen} modal={true}>
             <DialogTrigger asChild>
               <Button variant="ghost" size="sm">
                 <History className="h-4 w-4 mr-1" />
                 Histórico
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg" onPointerDownOutside={(e) => e.preventDefault()}>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <History className="h-5 w-5" />

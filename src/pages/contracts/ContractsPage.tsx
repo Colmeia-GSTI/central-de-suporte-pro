@@ -141,28 +141,28 @@ export default function ContractsPage() {
               Gerencie contratos de suporte
             </p>
           </div>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <PermissionGate module="contracts" action="create">
+          <PermissionGate module="contracts" action="create">
+            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => setEditingContract(null)}>
                   <Plus className="mr-2 h-4 w-4" />
                   Novo Contrato
                 </Button>
               </DialogTrigger>
-            </PermissionGate>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingContract ? "Editar Contrato" : "Novo Contrato"}
-                </DialogTitle>
-              </DialogHeader>
-              <ContractForm
-                contract={editingContract}
-                onSuccess={handleCloseForm}
-                onCancel={handleCloseForm}
-              />
-            </DialogContent>
-          </Dialog>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingContract ? "Editar Contrato" : "Novo Contrato"}
+                  </DialogTitle>
+                </DialogHeader>
+                <ContractForm
+                  contract={editingContract}
+                  onSuccess={handleCloseForm}
+                  onCancel={handleCloseForm}
+                />
+              </DialogContent>
+            </Dialog>
+          </PermissionGate>
         </div>
 
         {/* Search */}

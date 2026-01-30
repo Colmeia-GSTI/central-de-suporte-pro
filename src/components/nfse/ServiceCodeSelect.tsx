@@ -16,12 +16,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { ServiceCodeForm, type ServiceCode } from "./ServiceCodeForm";
@@ -217,21 +217,23 @@ export function ServiceCodeSelect({ value, onSelect, disabled }: ServiceCodeSele
         </PopoverContent>
       </Popover>
 
-      {/* Dialog for new service code */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Novo Código de Serviço</DialogTitle>
-            <DialogDescription>
+      {/* Sheet for new service code - avoids nested dialog portal issues */}
+      <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Novo Código de Serviço</SheetTitle>
+            <SheetDescription>
               Cadastre um código tributário conforme LC 116/2003
-            </DialogDescription>
-          </DialogHeader>
-          <ServiceCodeForm
-            onSuccess={handleNewCodeSuccess}
-            onCancel={() => setIsFormOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4">
+            <ServiceCodeForm
+              onSuccess={handleNewCodeSuccess}
+              onCancel={() => setIsFormOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
