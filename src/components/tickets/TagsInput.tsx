@@ -77,7 +77,7 @@ export function TagsInput({ selectedTagIds, onChange, disabled, className }: Tag
         ))}
         
         {!disabled && (
-          <Popover open={isOpen} onOpenChange={setIsOpen} modal={false}>
+          <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
               <Button
                 type="button"
@@ -92,7 +92,7 @@ export function TagsInput({ selectedTagIds, onChange, disabled, className }: Tag
             <PopoverContent 
               className="w-64 p-2" 
               align="start"
-              onPointerDownOutside={(e) => e.preventDefault()}
+              sideOffset={4}
             >
               <div className="space-y-2">
                 <div className="relative">
