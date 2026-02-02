@@ -13,6 +13,7 @@ interface Contract {
   billing_day: number | null;
   days_before_due: number | null;
   payment_preference: string | null;
+  billing_provider: string | null;
   nfse_enabled: boolean | null;
   notification_message: string | null;
   clients: {
@@ -57,6 +58,7 @@ Deno.serve(async (req) => {
         billing_day,
         days_before_due,
         payment_preference,
+        billing_provider,
         nfse_enabled,
         notification_message,
         clients (
@@ -90,14 +92,21 @@ Deno.serve(async (req) => {
     let skipped = 0;
     const results: { contract: string; status: string; invoice_id?: string; error?: string }[] = [];
 
-    // Check if Banco Inter is configured
+    // Check if billing providers are configured
     const { data: bancoInterSettings } = await supabase
       .from("integration_settings")
       .select("is_active")
       .eq("integration_type", "banco_inter")
       .single();
 
+    const { data: asaasSettings } = await supabase
+      .from("integration_settings")
+      .select("is_active")
+      .eq("integration_type", "asaas")
+      .single();
+
     const bancoInterActive = bancoInterSettings?.is_active || false;
+    const asaasActive = asaasSettings?.is_active || false;
 
     for (const contract of contracts as unknown as Contract[]) {
       try {
@@ -148,7 +157,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Create the invoice with reference_month
+        // Create the invoice with reference_month and billing_provider
         const { data: newInvoice, error: invoiceError } = await supabase
           .from("invoices")
           .insert({
@@ -160,6 +169,7 @@ Deno.serve(async (req) => {
             status: "pending",
             notes: invoiceNotes,
             auto_payment_generated: false,
+            billing_provider: contract.billing_provider || null,
           })
           .select("id, invoice_number")
           .single();
@@ -213,22 +223,35 @@ Deno.serve(async (req) => {
           invoice_id: newInvoice.id,
         });
 
-        // Auto-generate payment if Banco Inter is active and preference is set
-        if (bancoInterActive && contract.payment_preference) {
+        // Auto-generate payment based on billing_provider
+        const provider = contract.billing_provider || "banco_inter";
+        const providerActive = provider === "asaas" ? asaasActive : bancoInterActive;
+        
+        if (providerActive && contract.payment_preference) {
           try {
             const paymentTypes = contract.payment_preference === "both" 
               ? ["boleto", "pix"] 
               : [contract.payment_preference];
 
             for (const paymentType of paymentTypes) {
-              console.log(`[GEN-INVOICES] Gerando ${paymentType} para fatura #${newInvoice.invoice_number}`);
+              console.log(`[GEN-INVOICES] Gerando ${paymentType} via ${provider} para fatura #${newInvoice.invoice_number}`);
               
-              await supabase.functions.invoke("banco-inter", {
-                body: {
-                  invoice_id: newInvoice.id,
-                  payment_type: paymentType,
-                },
-              });
+              if (provider === "asaas") {
+                await supabase.functions.invoke("asaas-nfse", {
+                  body: {
+                    action: "create_payment",
+                    invoice_id: newInvoice.id,
+                    billing_type: paymentType === "pix" ? "PIX" : "BOLETO",
+                  },
+                });
+              } else {
+                await supabase.functions.invoke("banco-inter", {
+                  body: {
+                    invoice_id: newInvoice.id,
+                    payment_type: paymentType,
+                  },
+                });
+              }
             }
 
             // Update invoice to mark payment as generated

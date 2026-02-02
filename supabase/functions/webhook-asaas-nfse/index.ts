@@ -297,11 +297,53 @@ async function processPaymentWebhook(
 ) {
   console.log(`[WEBHOOK-ASAAS] Processando payment webhook: ${event}, payment_id: ${payment.id}`);
   
-  // Log the event for audit purposes
-  console.log(`[WEBHOOK-ASAAS] Payment status: ${payment.status}, value: ${payment.value}`);
+  const paymentStatus = payment.status as string;
+  const externalReference = payment.externalReference as string | null;
   
-  // For now, just log payment events - can be extended to update invoices table
-  // if payments are linked to invoices via external_reference
+  console.log(`[WEBHOOK-ASAAS] Payment status: ${paymentStatus}, value: ${payment.value}, externalRef: ${externalReference}`);
+  
+  // Update invoice status based on payment event
+  if (externalReference) {
+    // externalReference should be the invoice_id
+    const newStatus = PAYMENT_STATUS_MAP[paymentStatus];
+    
+    if (newStatus === "pago") {
+      console.log(`[WEBHOOK-ASAAS] Marcando fatura ${externalReference} como paga`);
+      
+      const paymentDate = (payment.paymentDate as string) || new Date().toISOString().split("T")[0];
+      
+      const { error } = await supabase
+        .from("invoices")
+        .update({ 
+          status: "paid", 
+          paid_date: paymentDate,
+          payment_method: payment.billingType as string || null,
+        })
+        .eq("id", externalReference);
+      
+      if (error) {
+        console.error(`[WEBHOOK-ASAAS] Erro ao atualizar fatura:`, error);
+      } else {
+        console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como paga`);
+        
+        // Create notification for staff
+        await createNotification(
+          supabase,
+          "Pagamento Confirmado via Asaas",
+          `Fatura recebeu confirmação de pagamento. Valor: R$ ${(payment.value as number)?.toFixed(2)}`,
+          "success"
+        );
+      }
+    } else if (newStatus === "vencida") {
+      console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como vencida`);
+      
+      await supabase
+        .from("invoices")
+        .update({ status: "overdue" })
+        .eq("id", externalReference)
+        .eq("status", "pending");
+    }
+  }
 }
 
 Deno.serve(async (req) => {

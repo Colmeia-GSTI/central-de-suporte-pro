@@ -50,6 +50,7 @@ const contractSchema = z.object({
   // Billing fields
   billing_day: z.coerce.number().min(1).max(28).default(10),
   days_before_due: z.coerce.number().min(1).max(30).default(5),
+  billing_provider: z.enum(["banco_inter", "asaas"]).default("banco_inter"),
   payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
   // Adjustment fields
   adjustment_date: z.string().optional(),
@@ -102,6 +103,7 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
       // Billing defaults
       billing_day: (contract as any)?.billing_day || 10,
       days_before_due: (contract as any)?.days_before_due || 5,
+      billing_provider: (contract as any)?.billing_provider || "banco_inter",
       payment_preference: (contract as any)?.payment_preference || "boleto",
       // Adjustment defaults
       adjustment_date: (contract as any)?.adjustment_date || "",
@@ -180,6 +182,7 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
         // Billing fields
         billing_day: data.billing_day,
         days_before_due: data.days_before_due,
+        billing_provider: data.billing_provider,
         payment_preference: data.payment_preference,
         // Adjustment fields
         adjustment_date: data.adjustment_date || null,
@@ -486,7 +489,7 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
             Faturamento
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
               name="billing_day"
@@ -512,6 +515,31 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
                     <Input type="number" min="1" max="30" {...field} />
                   </FormControl>
                   <FormDescription>Para geração automática</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="billing_provider"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Provedor de Cobrança</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="banco_inter">Banco Inter</SelectItem>
+                      <SelectItem value="asaas">Asaas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>Provedor para boleto/PIX</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

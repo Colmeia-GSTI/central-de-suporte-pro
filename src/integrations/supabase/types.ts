@@ -970,6 +970,7 @@ export type Database = {
           adjustment_percentage: number | null
           auto_renew: boolean
           billing_day: number | null
+          billing_provider: string | null
           client_id: string
           created_at: string
           days_before_due: number | null
@@ -998,6 +999,7 @@ export type Database = {
           adjustment_percentage?: number | null
           auto_renew?: boolean
           billing_day?: number | null
+          billing_provider?: string | null
           client_id: string
           created_at?: string
           days_before_due?: number | null
@@ -1026,6 +1028,7 @@ export type Database = {
           adjustment_percentage?: number | null
           auto_renew?: boolean
           billing_day?: number | null
+          billing_provider?: string | null
           client_id?: string
           created_at?: string
           days_before_due?: number | null
@@ -1441,7 +1444,10 @@ export type Database = {
       invoices: {
         Row: {
           amount: number
+          asaas_invoice_url: string | null
+          asaas_payment_id: string | null
           auto_payment_generated: boolean | null
+          billing_provider: string | null
           boleto_barcode: string | null
           boleto_url: string | null
           client_id: string
@@ -1466,7 +1472,10 @@ export type Database = {
         }
         Insert: {
           amount: number
+          asaas_invoice_url?: string | null
+          asaas_payment_id?: string | null
           auto_payment_generated?: boolean | null
+          billing_provider?: string | null
           boleto_barcode?: string | null
           boleto_url?: string | null
           client_id: string
@@ -1491,7 +1500,10 @@ export type Database = {
         }
         Update: {
           amount?: number
+          asaas_invoice_url?: string | null
+          asaas_payment_id?: string | null
           auto_payment_generated?: boolean | null
+          billing_provider?: string | null
           boleto_barcode?: string | null
           boleto_url?: string | null
           client_id?: string

@@ -955,6 +955,120 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "create_payment": {
+        const { invoice_id, billing_type } = params;
+
+        log(correlationId, "info", "Criando cobrança via Asaas", { invoice_id, billing_type });
+
+        // 1. Buscar dados da fatura
+        const { data: invoice, error: invoiceError } = await supabase
+          .from("invoices")
+          .select(`
+            id,
+            invoice_number,
+            client_id,
+            amount,
+            due_date,
+            description,
+            clients (
+              id,
+              name,
+              document,
+              email,
+              financial_email,
+              asaas_customer_id
+            )
+          `)
+          .eq("id", invoice_id)
+          .single();
+
+        if (invoiceError || !invoice) {
+          throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
+        }
+
+        // 2. Garantir que o cliente existe no Asaas
+        let customerId = (invoice.clients as any)?.asaas_customer_id;
+        if (!customerId) {
+          log(correlationId, "info", "Criando cliente no Asaas para cobrança");
+          
+          const clientData = invoice.clients as any;
+          const customerData = {
+            name: clientData?.name || "Cliente",
+            email: clientData?.financial_email || clientData?.email || null,
+            cpfCnpj: clientData?.document?.replace(/\D/g, "") || null,
+            externalReference: invoice.client_id,
+            notificationDisabled: false,
+          };
+
+          const customer = await asaasRequest(settings, "/customers", "POST", customerData, correlationId);
+          customerId = customer.id;
+
+          // Atualizar cliente com asaas_customer_id
+          await supabase
+            .from("clients")
+            .update({ asaas_customer_id: customerId })
+            .eq("id", invoice.client_id);
+        }
+
+        // 3. Criar cobrança no Asaas
+        const paymentType = billing_type || "BOLETO";
+        const paymentData = {
+          customer: customerId,
+          billingType: paymentType,
+          value: invoice.amount,
+          dueDate: invoice.due_date,
+          description: invoice.description || `Fatura #${invoice.invoice_number}`,
+          externalReference: invoice.id,
+        };
+
+        log(correlationId, "info", "Criando cobrança no Asaas", { billing_type: paymentType });
+        const payment = await asaasRequest(settings, "/payments", "POST", paymentData, correlationId);
+
+        // 4. Atualizar fatura com dados do pagamento
+        const updateData: Record<string, unknown> = {
+          asaas_payment_id: payment.id,
+          asaas_invoice_url: payment.invoiceUrl,
+          billing_provider: "asaas",
+          auto_payment_generated: true,
+        };
+
+        if (paymentType === "BOLETO" || paymentType === "UNDEFINED") {
+          updateData.boleto_url = payment.bankSlipUrl;
+          updateData.boleto_barcode = payment.identificationField;
+        }
+        if (paymentType === "PIX") {
+          // Buscar código PIX
+          try {
+            const pixInfo = await asaasRequest(settings, `/payments/${payment.id}/pixQrCode`, "GET", undefined, correlationId);
+            if (pixInfo?.payload) {
+              updateData.pix_code = pixInfo.payload;
+            }
+          } catch (pixError) {
+            log(correlationId, "warn", "Erro ao buscar QR Code PIX", { error: String(pixError) });
+          }
+        }
+
+        await supabase
+          .from("invoices")
+          .update(updateData)
+          .eq("id", invoice_id);
+
+        log(correlationId, "info", "Cobrança criada com sucesso", { payment_id: payment.id, billing_type: paymentType });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            payment_id: payment.id,
+            billing_type: paymentType,
+            status: payment.status,
+            boleto_url: payment.bankSlipUrl,
+            invoice_url: payment.invoiceUrl,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         log(correlationId, "warn", `Ação desconhecida: ${action}`);
         return new Response(
