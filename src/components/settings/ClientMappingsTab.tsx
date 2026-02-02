@@ -158,8 +158,12 @@ export function ClientMappingsTab() {
   });
 
   // Clientes externos derivados da fonte selecionada
-  const externalClients = externalClientsCache[selectedSource as keyof typeof externalClientsCache] || [];
-  const isLoadingExternal = loadingExternal[selectedSource as keyof typeof loadingExternal];
+  const externalClients = (selectedSource === "tactical_rmm" || selectedSource === "checkmk") 
+    ? externalClientsCache[selectedSource] || [] 
+    : [];
+  const isLoadingExternal = (selectedSource === "tactical_rmm" || selectedSource === "checkmk")
+    ? loadingExternal[selectedSource] || false
+    : false;
 
   // Memoized set of mapped external IDs for current source
   const mappedExternalIds = useMemo(() => {
