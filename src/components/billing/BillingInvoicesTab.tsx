@@ -32,6 +32,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -56,6 +59,7 @@ import {
   Zap,
   XCircle,
   RefreshCw,
+  Building2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -72,6 +76,7 @@ import type { Tables, Enums } from "@/integrations/supabase/types";
 type InvoiceWithClient = Tables<"invoices"> & {
   clients: { name: string } | null;
   contract_id: string | null;
+  billing_provider: string | null;
 };
 
 type NfseByInvoice = Record<string, { status: string; numero_nfse: string | null }>;
@@ -123,7 +128,7 @@ export function BillingInvoicesTab() {
     queryFn: async () => {
       let query = supabase
         .from("invoices")
-        .select("*, clients(name), contract_id")
+        .select("*, clients(name), contract_id, billing_provider")
         .order("due_date", { ascending: false });
 
       if (statusFilter !== "all") {
@@ -172,18 +177,38 @@ export function BillingInvoicesTab() {
     },
   });
 
-  const handleGeneratePayment = async (invoiceId: string, paymentType: "boleto" | "pix") => {
-    setGeneratingPayment(`${invoiceId}-${paymentType}`);
+  const handleGeneratePayment = async (
+    invoiceId: string, 
+    paymentType: "boleto" | "pix",
+    provider: "banco_inter" | "asaas" = "banco_inter"
+  ) => {
+    setGeneratingPayment(`${invoiceId}-${paymentType}-${provider}`);
     try {
-      const { data, error } = await supabase.functions.invoke("banco-inter", {
-        body: { invoice_id: invoiceId, payment_type: paymentType },
-      });
+      let data, error;
+      
+      if (provider === "asaas") {
+        const result = await supabase.functions.invoke("asaas-nfse", {
+          body: { 
+            action: "create_payment",
+            invoice_id: invoiceId, 
+            billing_type: paymentType === "pix" ? "PIX" : "BOLETO" 
+          },
+        });
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await supabase.functions.invoke("banco-inter", {
+          body: { invoice_id: invoiceId, payment_type: paymentType },
+        });
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 
       if (data.error) {
         if (data.configured === false) {
-          toast.error("Integração Banco Inter não configurada", {
+          toast.error(`Integração ${provider === "asaas" ? "Asaas" : "Banco Inter"} não configurada`, {
             description: "Configure as credenciais em Configurações → Integrações",
           });
         } else {
@@ -195,7 +220,8 @@ export function BillingInvoicesTab() {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       toast.success(
-        paymentType === "boleto" ? "Boleto gerado com sucesso!" : "PIX gerado com sucesso!"
+        paymentType === "boleto" ? "Boleto gerado com sucesso!" : "PIX gerado com sucesso!",
+        { description: `Via ${provider === "asaas" ? "Asaas" : "Banco Inter"}` }
       );
     } catch (error: any) {
       toast.error("Erro ao gerar pagamento", { description: error.message });
@@ -247,27 +273,48 @@ export function BillingInvoicesTab() {
     setProcessingComplete(invoice.id);
     const steps: string[] = [];
     
+    // Determine provider from invoice or default to banco_inter
+    const provider = invoice.billing_provider || "banco_inter";
+    
     try {
       // 1. Gerar boleto se não existe
       if (!invoice.boleto_url) {
-        const { data, error } = await supabase.functions.invoke("banco-inter", {
-          body: { invoice_id: invoice.id, payment_type: "boleto" },
-        });
-        if (error) throw error;
-        if (data.error && data.configured !== false) throw new Error(data.error);
-        if (!data.error) steps.push("Boleto gerado");
+        if (provider === "asaas") {
+          const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+            body: { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" },
+          });
+          if (error) throw error;
+          if (!data.success) throw new Error(data.error || "Erro ao gerar boleto");
+          steps.push("Boleto gerado (Asaas)");
+        } else {
+          const { data, error } = await supabase.functions.invoke("banco-inter", {
+            body: { invoice_id: invoice.id, payment_type: "boleto" },
+          });
+          if (error) throw error;
+          if (data.error && data.configured !== false) throw new Error(data.error);
+          if (!data.error) steps.push("Boleto gerado (Inter)");
+        }
       } else {
         steps.push("Boleto já existente");
       }
       
       // 2. Gerar PIX se não existe
       if (!invoice.pix_code) {
-        const { data, error } = await supabase.functions.invoke("banco-inter", {
-          body: { invoice_id: invoice.id, payment_type: "pix" },
-        });
-        if (error) throw error;
-        if (data.error && data.configured !== false) throw new Error(data.error);
-        if (!data.error) steps.push("PIX gerado");
+        if (provider === "asaas") {
+          const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+            body: { action: "create_payment", invoice_id: invoice.id, billing_type: "PIX" },
+          });
+          if (error) throw error;
+          if (!data.success) throw new Error(data.error || "Erro ao gerar PIX");
+          steps.push("PIX gerado (Asaas)");
+        } else {
+          const { data, error } = await supabase.functions.invoke("banco-inter", {
+            body: { invoice_id: invoice.id, payment_type: "pix" },
+          });
+          if (error) throw error;
+          if (data.error && data.configured !== false) throw new Error(data.error);
+          if (!data.error) steps.push("PIX gerado (Inter)");
+        }
       } else {
         steps.push("PIX já existente");
       }
@@ -678,22 +725,52 @@ export function BillingInvoicesTab() {
                             <DropdownMenuSeparator />
                             
                             {!invoice.boleto_url && (
-                              <DropdownMenuItem
-                                onClick={() => handleGeneratePayment(invoice.id, "boleto")}
-                                disabled={generatingPayment !== null}
-                              >
-                                <Barcode className="mr-2 h-4 w-4" />
-                                Gerar Boleto
-                              </DropdownMenuItem>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <Barcode className="mr-2 h-4 w-4" />
+                                  Gerar Boleto
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem
+                                    onClick={() => handleGeneratePayment(invoice.id, "boleto", "banco_inter")}
+                                    disabled={generatingPayment !== null}
+                                  >
+                                    <Building2 className="mr-2 h-4 w-4" />
+                                    Banco Inter
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleGeneratePayment(invoice.id, "boleto", "asaas")}
+                                    disabled={generatingPayment !== null}
+                                  >
+                                    <Building2 className="mr-2 h-4 w-4" />
+                                    Asaas
+                                  </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
                             )}
                             {!invoice.pix_code && (
-                              <DropdownMenuItem
-                                onClick={() => handleGeneratePayment(invoice.id, "pix")}
-                                disabled={generatingPayment !== null}
-                              >
-                                <QrCode className="mr-2 h-4 w-4" />
-                                Gerar PIX
-                              </DropdownMenuItem>
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                  <QrCode className="mr-2 h-4 w-4" />
+                                  Gerar PIX
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem
+                                    onClick={() => handleGeneratePayment(invoice.id, "pix", "banco_inter")}
+                                    disabled={generatingPayment !== null}
+                                  >
+                                    <Building2 className="mr-2 h-4 w-4" />
+                                    Banco Inter
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleGeneratePayment(invoice.id, "pix", "asaas")}
+                                    disabled={generatingPayment !== null}
+                                  >
+                                    <Building2 className="mr-2 h-4 w-4" />
+                                    Asaas
+                                  </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
                             )}
                             <DropdownMenuItem
                               onClick={() => markAsPaidMutation.mutate(invoice.id)}

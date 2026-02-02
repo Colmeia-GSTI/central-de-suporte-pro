@@ -23,6 +23,7 @@ interface Invoice {
   contracts: {
     name: string;
     payment_preference: string | null;
+    billing_provider: string | null;
   } | null;
 }
 
@@ -58,6 +59,7 @@ Deno.serve(async (req) => {
           boleto_url,
           pix_code,
           auto_payment_generated,
+          billing_provider,
           clients (
             name,
             email,
@@ -65,7 +67,8 @@ Deno.serve(async (req) => {
           ),
           contracts (
             name,
-            payment_preference
+            payment_preference,
+            billing_provider
           )
         `)
         .eq("id", invoice_id)
@@ -94,6 +97,7 @@ Deno.serve(async (req) => {
           boleto_url,
           pix_code,
           auto_payment_generated,
+          billing_provider,
           clients (
             name,
             email,
@@ -101,7 +105,8 @@ Deno.serve(async (req) => {
           ),
           contracts (
             name,
-            payment_preference
+            payment_preference,
+            billing_provider
           )
         `)
         .eq("status", "pending")
@@ -125,25 +130,34 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check if Banco Inter is configured
+    // Check which billing providers are configured
     const { data: bancoInterSettings } = await supabase
       .from("integration_settings")
       .select("is_active, settings")
       .eq("integration_type", "banco_inter")
       .single();
 
-    if (!bancoInterSettings?.is_active) {
+    const { data: asaasSettings } = await supabase
+      .from("integration_settings")
+      .select("is_active")
+      .eq("integration_type", "asaas")
+      .single();
+
+    const bancoInterActive = bancoInterSettings?.is_active || false;
+    const asaasActive = asaasSettings?.is_active || false;
+
+    if (!bancoInterActive && !asaasActive) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: "Integração Banco Inter não configurada ou inativa",
+          error: "Nenhum provedor de pagamento configurado (Banco Inter ou Asaas)",
           configured: false 
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[GEN-PAYMENTS] Processando ${invoicesToProcess.length} fatura(s)`);
+    console.log(`[GEN-PAYMENTS] Processando ${invoicesToProcess.length} fatura(s). Banco Inter: ${bancoInterActive}, Asaas: ${asaasActive}`);
 
     let processed = 0;
     let errors = 0;
@@ -184,15 +198,46 @@ Deno.serve(async (req) => {
 
         const generatedTypes: string[] = [];
 
-        for (const pType of paymentTypes) {
-          console.log(`[GEN-PAYMENTS] Gerando ${pType} para fatura #${invoice.invoice_number}`);
-          
-          const { data: paymentResult, error: paymentError } = await supabase.functions.invoke("banco-inter", {
-            body: {
-              invoice_id: invoice.id,
-              payment_type: pType,
-            },
+        // Determine billing provider: invoice > contract > default (banco_inter)
+        const provider = (invoice as any).billing_provider || invoice.contracts?.billing_provider || "banco_inter";
+        const providerActive = provider === "asaas" ? asaasActive : bancoInterActive;
+
+        if (!providerActive) {
+          console.log(`[GEN-PAYMENTS] Provedor ${provider} não está ativo, pulando fatura #${invoice.invoice_number}`);
+          results.push({
+            invoice_id: invoice.id,
+            invoice_number: invoice.invoice_number,
+            status: "skipped",
+            error: `Provedor ${provider} não configurado`,
           });
+          continue;
+        }
+
+        for (const pType of paymentTypes) {
+          console.log(`[GEN-PAYMENTS] Gerando ${pType} via ${provider} para fatura #${invoice.invoice_number}`);
+          
+          let paymentResult, paymentError;
+          
+          if (provider === "asaas") {
+            const response = await supabase.functions.invoke("asaas-nfse", {
+              body: {
+                action: "create_payment",
+                invoice_id: invoice.id,
+                billing_type: pType === "pix" ? "PIX" : "BOLETO",
+              },
+            });
+            paymentResult = response.data;
+            paymentError = response.error;
+          } else {
+            const response = await supabase.functions.invoke("banco-inter", {
+              body: {
+                invoice_id: invoice.id,
+                payment_type: pType,
+              },
+            });
+            paymentResult = response.data;
+            paymentError = response.error;
+          }
 
           if (paymentError) {
             console.error(`[GEN-PAYMENTS] Erro ao gerar ${pType}:`, paymentError);
