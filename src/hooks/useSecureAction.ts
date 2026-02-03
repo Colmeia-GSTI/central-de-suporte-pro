@@ -8,6 +8,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Module, ModuleAction } from "@/lib/permissions";
+import { logger } from "@/lib/logger";
 
 interface SecureActionOptions {
   module: Module;
@@ -76,7 +77,7 @@ export function useSecureAction<T = void>({
       onUnauthorized?.();
       
       // Log unauthorized attempt
-      console.warn(`[Security] Unauthorized ${action} attempt on ${module} by user ${user.id}`);
+      logger.warn(`Unauthorized ${action} attempt on ${module}`, "Security", { userId: user.id });
       
       return null;
     }
@@ -99,7 +100,7 @@ export function useSecureAction<T = void>({
       });
 
       // Log the actual error for debugging (not exposed to user)
-      console.error(`[Security] Action failed:`, error);
+      logger.error("Action failed", "Security", { error: String(error) });
       
       return null;
     }

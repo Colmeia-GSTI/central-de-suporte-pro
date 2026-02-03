@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,7 +158,7 @@ export function UsersTab() {
       
       // Handle edge function invocation errors
       if (error) {
-        console.error("Edge function error:", error);
+        logger.error("Edge function error", "Users", { error: error.message });
         throw new Error(
           error.message?.includes("non-2xx")
             ? "Erro de comunicação com o servidor. Tente novamente."

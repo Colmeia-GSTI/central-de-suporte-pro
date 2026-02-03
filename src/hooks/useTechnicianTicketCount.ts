@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 
 export function useTechnicianTicketCount() {
   const { user } = useAuth();
@@ -17,7 +18,7 @@ export function useTechnicianTicketCount() {
         .in("status", ["open", "in_progress", "waiting"]);
       
       if (error) {
-        console.error("Error fetching ticket count:", error);
+        logger.error("Error fetching ticket count", "Tickets", { error: error.message });
         return 0;
       }
       
