@@ -103,7 +103,6 @@ export default function ContractsPage() {
   });
 
   const handleEdit = (contract: ContractWithClient) => {
-    // TODO: Navigate to edit page with contract ID when implemented
     navigate(`/contracts/new?edit=${contract.id}`);
   };
 
