@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -239,7 +240,7 @@ export default function TicketsPage() {
 
       // Best-effort: não falha o fluxo caso o histórico não grave
       if (historyError) {
-        console.warn("Failed to insert ticket_history (start):", historyError);
+        logger.warn("Failed to insert ticket_history (start)", "Tickets", { error: historyError.message });
       }
       
       return ticketId;

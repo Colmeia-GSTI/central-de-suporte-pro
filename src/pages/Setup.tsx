@@ -13,6 +13,7 @@ import { ColmeiaLogo } from "@/components/ui/ColmeiaLogo";
 import { HoneycombLoader } from "@/components/ui/HoneycombLoader";
 import { toast } from "sonner";
 import { Shield, User, Mail, Lock, CheckCircle } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 const setupSchema = z.object({
   full_name: z
@@ -56,7 +57,7 @@ export default function Setup() {
           .limit(1);
 
         if (error) {
-          console.error("Error checking system status:", error);
+          logger.error("Error checking system status", "Setup", { error: error.message });
           toast.error("Erro ao verificar status do sistema");
           return;
         }
@@ -67,7 +68,7 @@ export default function Setup() {
           return;
         }
       } catch (err) {
-        console.error("Unexpected error:", err);
+        logger.error("Unexpected error checking system status", "Setup");
       } finally {
         setIsLoading(false);
       }
@@ -89,7 +90,7 @@ export default function Setup() {
       });
 
       if (error) {
-        console.error("Bootstrap error:", error);
+        logger.error("Bootstrap error", "Setup", { error: error.message });
         toast.error(error.message || "Erro ao criar administrador");
         return;
       }
@@ -107,7 +108,7 @@ export default function Setup() {
         navigate("/login", { replace: true });
       }, 2000);
     } catch (err) {
-      console.error("Setup error:", err);
+      logger.error("Setup error", "Setup", { error: String(err) });
       toast.error("Erro inesperado. Tente novamente.");
     } finally {
       setIsSubmitting(false);

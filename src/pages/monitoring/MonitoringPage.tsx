@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 // Removed: useRealtimeMonitoring - now handled by unified realtime hook
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -206,7 +207,7 @@ export default function MonitoringPage() {
       await queryClient.invalidateQueries({ queryKey: ["alerts"] });
       toast.success("Sincronização concluída");
     } catch (error) {
-      console.error("Error refreshing:", error);
+      logger.error("Error refreshing monitoring", "Monitoring", { error: String(error) });
       toast.error("Erro ao sincronizar");
     } finally {
       setIsRefreshing(false);

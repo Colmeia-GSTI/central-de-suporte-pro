@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 
 // VAPID public key - matches the private key in VAPID_PRIVATE_KEY secret
 // Generated using: npx web-push generate-vapid-keys
@@ -104,7 +105,7 @@ export function usePushNotifications() {
         }));
       }
     } catch (error) {
-      console.error("Error checking push subscription:", error);
+      logger.error("Error checking push subscription", "Push", { error: String(error) });
       setState(prev => ({
         ...prev,
         isSupported: checkSupport(),
@@ -201,7 +202,7 @@ export function usePushNotifications() {
 
       return true;
     } catch (error) {
-      console.error("Error subscribing to push:", error);
+      logger.error("Error subscribing to push", "Push", { error: String(error) });
       toast({
         title: "Erro ao ativar notificações",
         description: "Não foi possível configurar as notificações push.",
@@ -247,7 +248,7 @@ export function usePushNotifications() {
 
       return true;
     } catch (error) {
-      console.error("Error unsubscribing from push:", error);
+      logger.error("Error unsubscribing from push", "Push", { error: String(error) });
       toast({
         title: "Erro ao desativar notificações",
         description: "Não foi possível desativar as notificações push.",

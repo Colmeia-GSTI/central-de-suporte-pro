@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { logger } from "@/lib/logger";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,7 @@ export default function ProfilePage() {
         description: "Suas alterações foram salvas com sucesso.",
       });
     } catch (error) {
-      console.error("Error updating profile:", error);
+      logger.error("Error updating profile", "Profile", { error: String(error) });
       toast({
         title: "Erro ao salvar",
         description: "Não foi possível atualizar o perfil.",

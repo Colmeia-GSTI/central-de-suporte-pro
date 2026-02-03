@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { UseFormReturn, FieldValues } from "react-hook-form";
+import { logger } from "@/lib/logger";
 
 interface UseFormPersistenceOptions<T extends FieldValues> {
   form: UseFormReturn<T>;
@@ -47,7 +48,7 @@ export function useFormPersistence<T extends FieldValues>({
         }
       }
     } catch (e) {
-      console.warn("Failed to restore form data", e);
+      logger.warn("Failed to restore form data", "Form");
       store.removeItem(storageKey);
     }
   }, [enabled, storageKey]);
@@ -67,7 +68,7 @@ export function useFormPersistence<T extends FieldValues>({
           excludeFields.forEach((field) => delete toSave[String(field)]);
           store.setItem(storageKey, JSON.stringify(toSave));
         } catch (e) {
-          console.warn("Failed to save form data", e);
+          logger.warn("Failed to save form data", "Form");
         }
       }, debounceMs);
     });

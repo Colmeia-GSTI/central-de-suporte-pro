@@ -3,6 +3,8 @@
  * Ensures sensitive information is never exposed to users
  */
 
+import { logger } from "@/lib/logger";
+
 // Known error patterns that are safe to show
 const SAFE_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /duplicate key/i, message: "Este registro já existe" },
@@ -77,20 +79,20 @@ export function sanitizeApiError(error: unknown): { message: string; code?: stri
   // Check if the error contains sensitive information
   for (const pattern of SENSITIVE_PATTERNS) {
     if (pattern.test(rawMessage)) {
-      console.error("[API Error - Sensitive]", error);
-      return { 
-        message: "Ocorreu um erro no servidor. Por favor, tente novamente.", 
-        code: "SERVER_ERROR" 
+      logger.error("Sensitive API error intercepted", "API", { rawMessage });
+      return {
+        message: "Ocorreu um erro no servidor. Por favor, tente novamente.",
+        code: "SERVER_ERROR"
       };
     }
   }
 
   // If message is very long, it might contain sensitive data
   if (rawMessage.length > 200) {
-    console.error("[API Error - Long]", error);
-    return { 
-      message: "Ocorreu um erro inesperado.", 
-      code: "UNEXPECTED_ERROR" 
+    logger.error("Long API error message intercepted", "API", { length: rawMessage.length });
+    return {
+      message: "Ocorreu um erro inesperado.",
+      code: "UNEXPECTED_ERROR"
     };
   }
 
