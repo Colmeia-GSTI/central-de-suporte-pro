@@ -1,363 +1,276 @@
 
-# Plano: Adequação do Sistema NFS-e para Padrão Nacional 2026
+# Plano: Indicador de Processamento + Verificação Individual de Status NFS-e
 
-## Resumo Executivo
+## Resumo
 
-Ajustar o sistema de emissão de NFS-e para:
-1. **Adicionar campos de retenção de impostos conforme padrão DPS Nacional 2026**
-2. **Implementar série numérica obrigatória** (requisito a partir de 01/01/2026)
-3. **Manter a emissão via Asaas** (que já faz a comunicação com o Portal Nacional)
-4. **Remover opção de provedor manual** (simplificar para apenas Asaas)
-5. **Adicionar campos IBS/CBS** (fase de calibragem da Reforma Tributária)
-6. **Cadastrar código de serviço 1.07** (Suporte técnico em informática)
+Implementar duas melhorias na interface de NFS-e:
+1. **Indicador de tempo estimado** - Exibir tempo decorrido e estimativa de processamento para notas em "processando"
+2. **Botão de verificação individual** - Permitir atualizar o status de uma NFS-e específica no Asaas
 
 ---
 
-## Especificação Técnica - Padrão NFS-e Nacional 2026 (DPS v1.0)
+## Análise do Estado Atual
 
-### Campos Obrigatórios de Tributação
-
-| Campo DPS | Descrição | Grupo XML |
-|-----------|-----------|-----------|
-| `tpRetISS` | Tipo retenção ISS (1=Retido, 2=Não Retido) | `<tribut><issqn>` |
-| `vISSRet` | Valor do ISS retido | `<tribut><issqn>` |
-| `vRetPIS` | Valor retenção PIS | `<tribut><fed>` |
-| `vRetCOFINS` | Valor retenção COFINS | `<tribut><fed>` |
-| `vRetCSLL` | Valor retenção CSLL | `<tribut><fed>` |
-| `vRetIRRF` | Valor retenção IRRF | `<tribut><fed>` |
-| `vRetCP` | Valor retenção INSS/CP | `<tribut><fed>` |
-| `vLiq` | Valor líquido (obrigatório) | `<infDPS>` |
-
-### Novidade 2026: IBS e CBS (Reforma Tributária)
-
-| Campo | Descrição | Status |
-|-------|-----------|--------|
-| `vIBS` | Valor IBS (Imposto sobre Bens e Serviços) | Fase de calibragem (opcional) |
-| `vCBS` | Valor CBS (Contribuição sobre Bens e Serviços) | Fase de calibragem (opcional) |
-
-### Requisito Crítico: Série Numérica
-
-A partir de **01/01/2026**, a série do RPS/DPS deve ser **estritamente numérica**. Séries alfanuméricas (ex: "A", "SN") serão rejeitadas pelo ADN.
-
----
-
-## Estado Atual da Tabela `nfse_history`
-
-**Campos existentes:**
-- `valor_servico`, `valor_iss`, `aliquota` ✓
-- `codigo_tributacao`, `cnae` ✓
-- `serie` (default '900') ✓
-- `asaas_invoice_id`, `asaas_status` ✓
-
-**Campos faltantes (padrão 2026):**
-- `iss_retido` (boolean)
-- `valor_iss_retido` (numeric)
-- `valor_pis`, `valor_cofins`, `valor_csll`, `valor_irrf`, `valor_inss`
-- `valor_liquido` (obrigatório no DPS)
-- `valor_deducoes`, `valor_desconto`
-
----
-
-## Etapas de Implementação
-
-### Etapa 1: Migração do Banco de Dados
-
-Adicionar campos de retenção conforme padrão DPS Nacional 2026:
-
-```sql
--- Campos de retenção ISS (padrão Nacional 2026)
-ALTER TABLE public.nfse_history
-ADD COLUMN IF NOT EXISTS iss_retido BOOLEAN DEFAULT false,
-ADD COLUMN IF NOT EXISTS valor_iss_retido NUMERIC(15,2) DEFAULT 0;
-
--- Tributos federais retidos (padrão Nacional 2026)
-ALTER TABLE public.nfse_history
-ADD COLUMN IF NOT EXISTS valor_pis NUMERIC(15,2) DEFAULT 0,
-ADD COLUMN IF NOT EXISTS valor_cofins NUMERIC(15,2) DEFAULT 0,
-ADD COLUMN IF NOT EXISTS valor_csll NUMERIC(15,2) DEFAULT 0,
-ADD COLUMN IF NOT EXISTS valor_irrf NUMERIC(15,2) DEFAULT 0,
-ADD COLUMN IF NOT EXISTS valor_inss NUMERIC(15,2) DEFAULT 0;
-
--- Valores calculados (obrigatórios)
-ALTER TABLE public.nfse_history
-ADD COLUMN IF NOT EXISTS valor_liquido NUMERIC(15,2),
-ADD COLUMN IF NOT EXISTS valor_deducoes NUMERIC(15,2) DEFAULT 0,
-ADD COLUMN IF NOT EXISTS valor_desconto NUMERIC(15,2) DEFAULT 0;
-
--- Reforma Tributária 2026 (IBS/CBS - fase calibragem)
-ALTER TABLE public.nfse_history
-ADD COLUMN IF NOT EXISTS valor_ibs NUMERIC(15,2) DEFAULT 0,
-ADD COLUMN IF NOT EXISTS valor_cbs NUMERIC(15,2) DEFAULT 0;
-
--- Cadastrar código de serviço 1.07
-INSERT INTO nfse_service_codes (
-  codigo_tributacao, descricao, item_lista, subitem_lista, 
-  cnae_principal, aliquota_sugerida, categoria
-)
-VALUES (
-  '010701',
-  'Suporte técnico em informática, inclusive instalação, configuração e manutenção de programas de computação e bancos de dados.',
-  '1', '07', '6209100', 2.00, 'informatica'
-) ON CONFLICT (codigo_tributacao) DO NOTHING;
-```
-
-### Etapa 2: Atualizar NfseAvulsaDialog
-
-Simplificar e adicionar campos de tributação:
-
-**Alterações:**
-- Remover seleção de provedor (sempre Asaas)
-- Adicionar seção "Tributação" colapsável
-- Adicionar checkbox "ISS Retido pelo Tomador"
-- Adicionar campos de tributos federais (PIS, COFINS, CSLL, IRRF, INSS)
-- Calcular e exibir valor líquido automaticamente
-
-**Interface proposta:**
+### Fluxo de Status NFS-e (Asaas → Portal Nacional)
 
 ```text
-+--------------------------------------------------+
-|  Emitir NFS-e Avulsa                             |
-+--------------------------------------------------+
-|  [Cliente] [Código Serviço] [Competência]        |
-|  [Valor do Serviço] [Descrição]                  |
-|                                                  |
-|  ╔════════════════════════════════════════════╗  |
-|  ║ 💰 Tributação (Padrão Nacional 2026)       ║  |
-|  ╠════════════════════════════════════════════╣  |
-|  ║ Alíquota ISS: [2,00 %] (do código serviço)  ║  |
-|  ║                                            ║  |
-|  ║ [✓] ISS Retido pelo Tomador                ║  |
-|  ║     Valor ISS: R$ 29,11 (calculado)         ║  |
-|  ║                                            ║  |
-|  ║ ▼ Tributos Federais Retidos (opcional)     ║  |
-|  ║   PIS: [R$ 0,00]    COFINS: [R$ 0,00]     ║  |
-|  ║   CSLL: [R$ 0,00]   IRRF: [R$ 0,00]       ║  |
-|  ║   INSS/CP: [R$ 0,00]                       ║  |
-|  ║                                            ║  |
-|  ║ ─────────────────────────────────          ║  |
-|  ║ Total Retenções:   R$ 29,11                ║  |
-|  ║ VALOR LÍQUIDO:     R$ 1.426,23             ║  |
-|  ╚════════════════════════════════════════════╝  |
-+--------------------------------------------------+
+SCHEDULED (enviada) → SYNCHRONIZED → AUTHORIZATION_PENDING → AUTHORIZED
+     ↓                                      ↓
+  "processando"                         "autorizada"
 ```
 
-### Etapa 3: Atualizar EmitNfseDialog
+**Tempos típicos de processamento:**
+- **Ambiente Sandbox**: 1-5 minutos
+- **Ambiente Produção**: 15-60 minutos (depende da prefeitura)
 
-Adicionar campos de retenção no fluxo de emissão via fatura:
+### Componentes Identificados
 
-**Alterações:**
-- Adicionar seção de tributação no step "form"
-- Checkbox "ISS Retido pelo Tomador"
-- Campos opcionais para tributos federais
-- Exibir resumo no step "preview"
+| Arquivo | Função |
+|---------|--------|
+| `BillingNfseTab.tsx` | Tabela de listagem com botão "Verificar status" global |
+| `NfseDetailsSheet.tsx` | Painel lateral de detalhes da NFS-e |
+| `asaas-nfse/index.ts` | Edge function com ação `get_status` existente |
+| `poll-asaas-nfse-status/index.ts` | Polling em lote (fallback) |
 
-### Etapa 4: Atualizar Edge Function `asaas-nfse`
+---
 
-Modificar as ações `emit` e `emit_standalone` para:
+## Implementação
 
-1. Aceitar novos parâmetros de retenção
-2. Enviar tributos para API Asaas
-3. Salvar valores no histórico
+### Etapa 1: Criar Componente de Indicador de Processamento
 
-**Parâmetros adicionais:**
+Novo componente `NfseProcessingIndicator.tsx` que exibe:
+- Tempo decorrido desde a emissão
+- Barra de progresso estimada
+- Status atual do Asaas (SCHEDULED, SYNCHRONIZED, etc.)
 
-```typescript
-const {
-  // ... existentes
-  retain_iss,           // boolean - ISS retido pelo tomador
-  iss_rate,             // alíquota ISS %
-  pis_value,            // valor PIS retido
-  cofins_value,         // valor COFINS retido
-  csll_value,           // valor CSLL retido
-  irrf_value,           // valor IRRF retido
-  inss_value,           // valor INSS/CP retido
-  deductions,           // deduções
-  discount,             // descontos
-} = params;
+**Interface visual:**
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│ ⏳ Aguardando Autorização                               │
+│                                                         │
+│ ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░  35%          │
+│                                                         │
+│ Status: AUTHORIZATION_PENDING                           │
+│ Tempo decorrido: 12 minutos                             │
+│ Estimativa: ~30-60 min (produção)                       │
+│                                                         │
+│ ℹ️ A nota foi enviada e está aguardando autorização     │
+│    da prefeitura. Este processo é automático.           │
+│                                                         │
+│ [🔄 Verificar agora]                                    │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**Payload para API Asaas:**
+### Etapa 2: Criar Ação "check_single_status" no Edge Function
+
+Adicionar nova ação no `asaas-nfse/index.ts` que:
+1. Consulta o status no Asaas
+2. Atualiza o registro local
+3. Baixa PDF/XML se autorizada
+4. Retorna o novo status
+
+### Etapa 3: Adicionar Indicador na Tabela de Listagem
+
+Na tabela de NFS-e, para registros com status "processando":
+- Exibir ícone animado de loading
+- Tooltip com tempo decorrido
+- Badge com status Asaas (se disponível)
+
+### Etapa 4: Adicionar Botão de Verificação Individual
+
+No `NfseDetailsSheet.tsx`:
+- Botão "Verificar status agora" visível quando status = "processando"
+- Spinner durante a verificação
+- Toast com resultado
+
+---
+
+## Especificação Técnica
+
+### Novo Componente: `NfseProcessingIndicator.tsx`
 
 ```typescript
-invoicePayload.taxes = {
-  retainIss: retain_iss || false,
-  iss: iss_rate || 0,
-  pis: pis_value || 0,
-  cofins: cofins_value || 0,
-  csll: csll_value || 0,
-  irrf: irrf_value || 0,
-  inss: inss_value || 0,
+interface NfseProcessingIndicatorProps {
+  nfse: {
+    id: string;
+    asaas_invoice_id: string | null;
+    asaas_status: string | null;
+    created_at: string;
+    data_emissao: string | null;
+    ambiente: string | null;
+  };
+  onRefresh?: () => void;
+  compact?: boolean;
+}
+
+// Estimativas de tempo por ambiente
+const ESTIMATED_TIMES = {
+  sandbox: { min: 1, max: 5 },      // minutos
+  production: { min: 15, max: 60 }, // minutos
 };
 
-if (deductions) invoicePayload.deductions = deductions;
-if (discount) invoicePayload.discount = discount;
+// Mapeamento de status Asaas para descrição
+const ASAAS_STATUS_LABELS = {
+  SCHEDULED: "Agendada para envio",
+  SYNCHRONIZED: "Sincronizada com prefeitura",
+  AUTHORIZATION_PENDING: "Aguardando autorização",
+  AUTHORIZED: "Autorizada",
+  ERROR: "Erro no processamento",
+  CANCELED: "Cancelada",
+  CANCELLATION_PENDING: "Cancelamento pendente",
+};
+
+// Progresso estimado por status
+const STATUS_PROGRESS = {
+  SCHEDULED: 15,
+  SYNCHRONIZED: 40,
+  AUTHORIZATION_PENDING: 70,
+  AUTHORIZED: 100,
+  ERROR: 0,
+  CANCELED: 0,
+};
 ```
 
-### Etapa 5: Atualizar NfseDetailsSheet
+### Nova Ação Edge Function: `check_single_status`
 
-Exibir resumo de retenções no painel de detalhes:
+```typescript
+case "check_single_status": {
+  const { nfse_history_id } = params;
+  
+  // 1. Buscar registro local
+  const { data: record } = await supabase
+    .from("nfse_history")
+    .select("id, asaas_invoice_id, status, client_id")
+    .eq("id", nfse_history_id)
+    .single();
+  
+  if (!record?.asaas_invoice_id) {
+    throw new AsaasApiError("NFS-e não possui ID no Asaas", 400);
+  }
+  
+  // 2. Consultar Asaas
+  const invoice = await asaasRequest(
+    settings, 
+    `/invoices/${record.asaas_invoice_id}`, 
+    "GET"
+  );
+  
+  // 3. Mapear status e atualizar local
+  const newStatus = STATUS_MAP[invoice.status] || "processando";
+  const updateData = {
+    asaas_status: invoice.status,
+    status: newStatus,
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (invoice.status === "AUTHORIZED") {
+    updateData.numero_nfse = invoice.number?.toString();
+    updateData.codigo_verificacao = invoice.validationCode;
+    updateData.data_autorizacao = new Date().toISOString();
+    // ... baixar PDF/XML
+  }
+  
+  await supabase
+    .from("nfse_history")
+    .update(updateData)
+    .eq("id", nfse_history_id);
+  
+  return { success: true, invoice, new_status: newStatus };
+}
+```
 
-```text
-+--------------------------------------------------+
-|  NFS-e #2025606 - CAPASEMU                       |
-+--------------------------------------------------+
-|  ┌──────────────────────────────────────────┐    |
-|  │ Valor do Serviço:       R$ 1.455,34      │    |
-|  │ (-) Deduções:           R$ 0,00          │    |
-|  │ (=) Base de Cálculo:    R$ 1.455,34      │    |
-|  ├──────────────────────────────────────────┤    |
-|  │ ISS Retido (2%):        R$ 29,11    ✓    │    |
-|  │ PIS:                    R$ 0,00          │    |
-|  │ COFINS:                 R$ 0,00          │    |
-|  │ CSLL:                   R$ 0,00          │    |
-|  │ IRRF:                   R$ 0,00          │    |
-|  │ INSS/CP:                R$ 0,00          │    |
-|  ├──────────────────────────────────────────┤    |
-|  │ TOTAL RETENÇÕES:        R$ 29,11         │    |
-|  │ VALOR LÍQUIDO:          R$ 1.426,23      │    |
-|  └──────────────────────────────────────────┘    |
-+--------------------------------------------------+
+### Hook para Verificação de Status
+
+```typescript
+const useCheckNfseStatus = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (nfseHistoryId: string) => {
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+        body: {
+          action: "check_single_status",
+          nfse_history_id: nfseHistoryId,
+        },
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
+      // ...
+    },
+  });
+};
 ```
 
 ---
 
-## Arquivos a Serem Modificados
+## Arquivos a Modificar/Criar
 
 | Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| Migração SQL | CRIAR | Campos de retenção padrão 2026 |
-| `supabase/functions/asaas-nfse/index.ts` | MODIFICAR | Aceitar e enviar tributos |
-| `src/components/billing/nfse/NfseAvulsaDialog.tsx` | MODIFICAR | Seção tributação + remover seleção provedor |
-| `src/components/financial/EmitNfseDialog.tsx` | MODIFICAR | Campos ISS retido e tributos federais |
-| `src/components/billing/nfse/NfseDetailsSheet.tsx` | MODIFICAR | Exibir resumo de retenções |
-| `src/components/billing/nfse/nfseValidation.ts` | MODIFICAR | Validar campos de retenção |
+| `src/components/billing/nfse/NfseProcessingIndicator.tsx` | **CRIAR** | Componente de indicador de processamento |
+| `supabase/functions/asaas-nfse/index.ts` | **MODIFICAR** | Adicionar ação `check_single_status` |
+| `src/components/billing/nfse/NfseDetailsSheet.tsx` | **MODIFICAR** | Adicionar indicador e botão de verificação |
+| `src/components/billing/BillingNfseTab.tsx` | **MODIFICAR** | Adicionar indicador na tabela |
+| `src/components/billing/nfse/nfseFormat.ts` | **MODIFICAR** | Adicionar função de formatação de status Asaas |
 
 ---
 
-## Seção Técnica
+## Interface Final
 
-### Estrutura de Dados (Padrão Nacional 2026)
-
-```typescript
-interface NfseEmitParams {
-  // Identificação
-  client_id: string;
-  invoice_id?: string;
-  contract_id?: string;
-  
-  // Serviço
-  value: number;
-  service_description: string;
-  service_code?: string;           // código tributação (ex: 010701)
-  cnae?: string;                   // CNAE (ex: 6209100)
-  competencia: string;             // yyyy-MM
-  
-  // Tributação ISS
-  iss_rate: number;                // alíquota ISS % (ex: 2.00)
-  retain_iss: boolean;             // ISS retido pelo tomador (tpRetISS)
-  
-  // Tributos Federais (opcionais)
-  pis_value?: number;              // vRetPIS
-  cofins_value?: number;           // vRetCOFINS
-  csll_value?: number;             // vRetCSLL
-  irrf_value?: number;             // vRetIRRF
-  inss_value?: number;             // vRetCP (Contribuição Previdenciária)
-  
-  // Deduções (opcionais)
-  deductions?: number;
-  discount?: number;
-}
-```
-
-### Função de Cálculo de Valor Líquido
-
-```typescript
-function calculateNetValue(params: {
-  valorServico: number;
-  issRetido: boolean;
-  aliquotaIss: number;
-  valorPis: number;
-  valorCofins: number;
-  valorCsll: number;
-  valorIrrf: number;
-  valorInss: number;
-  deducoes: number;
-  desconto: number;
-}): { valorLiquido: number; totalRetencoes: number; valorIssRetido: number } {
-  const valorIssRetido = params.issRetido 
-    ? params.valorServico * (params.aliquotaIss / 100) 
-    : 0;
-  
-  const totalRetencoes = valorIssRetido 
-    + params.valorPis 
-    + params.valorCofins 
-    + params.valorCsll 
-    + params.valorIrrf 
-    + params.valorInss;
-  
-  const valorLiquido = params.valorServico 
-    - params.deducoes 
-    - params.desconto 
-    - totalRetencoes;
-  
-  return {
-    valorLiquido: Math.max(0, valorLiquido),
-    totalRetencoes,
-    valorIssRetido,
-  };
-}
-```
-
-### Mapeamento Asaas → Portal Nacional DPS
-
-O Asaas transmite os dados automaticamente ao Portal Nacional, mapeando para o layout DPS 2026:
-
-| Campo Frontend | Asaas API | DPS Nacional |
-|----------------|-----------|--------------|
-| `retain_iss: true` | `taxes.retainIss: true` | `tpRetISS = 1` |
-| `iss_rate: 2.00` | `taxes.iss: 2.00` | `aliqISS = 2.00` |
-| `pis_value` | `taxes.pis` | `vRetPIS` |
-| `cofins_value` | `taxes.cofins` | `vRetCOFINS` |
-| `csll_value` | `taxes.csll` | `vRetCSLL` |
-| `irrf_value` | `taxes.irrf` | `vRetIRRF` |
-| `inss_value` | `taxes.inss` | `vRetCP` |
-
----
-
-## Fluxo de Emissão (Resumo)
+### Na Tabela de Listagem
 
 ```text
-┌─────────────────┐      ┌───────────────┐      ┌─────────────────┐
-│  Interface UI   │ ──▶  │  Edge Function │ ──▶  │   API Asaas     │
-│  (Dialog)       │      │  asaas-nfse   │      │                 │
-└─────────────────┘      └───────────────┘      └─────────────────┘
-        │                       │                       │
-        │ Campos:               │ Payload:              │ Transmite:
-        │ - ISS Retido ☑        │ taxes: {              │ → Portal Nacional
-        │ - Alíquota: 2%        │   retainIss: true,    │ → DPS XML v1.0
-        │ - PIS: 0              │   iss: 2.00,          │ → ADN (Ambiente
-        │ - COFINS: 0           │   pis: 0, ...         │    de Dados Nacional)
-        │ - etc.                │ }                     │
-        ▼                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  nfse_history (banco de dados)                                  │
-│  - iss_retido: true                                             │
-│  - valor_iss_retido: 29.11                                      │
-│  - valor_pis: 0, valor_cofins: 0, ...                           │
-│  - valor_liquido: 1426.23 (obrigatório)                         │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────┬────────────────┬──────────────┬─────────────┬───────────────────────┐
+│ Número   │ Cliente        │ Valor        │ Status      │ Arquivos              │
+├──────────┼────────────────┼──────────────┼─────────────┼───────────────────────┤
+│ -        │ CAPASEMU       │ R$ 1.455,34  │ 🔄 12min    │ [📜] [📄]             │
+│          │                │              │ Processando │ [🔄 Verificar]        │
+├──────────┼────────────────┼──────────────┼─────────────┼───────────────────────┤
+│ 2025607  │ Empresa ABC    │ R$ 850,00    │ ✓ Autorizada│ [📜] [📄] [📋]       │
+└──────────┴────────────────┴──────────────┴─────────────┴───────────────────────┘
+```
+
+### No Painel de Detalhes
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  NFS-e - (aguardando número)                           │
+│  Cliente: CAPASEMU • Competência: JAN/2025             │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │ ⏳ AGUARDANDO AUTORIZAÇÃO DA PREFEITURA           │  │
+│  │                                                   │  │
+│  │ ██████████████░░░░░░░░░░░░░░░░░░░░░  45%         │  │
+│  │                                                   │  │
+│  │ 📍 Status Asaas: AUTHORIZATION_PENDING           │  │
+│  │ ⏱️ Tempo decorrido: 18 minutos                   │  │
+│  │ 📊 Estimativa: 30-60 min (ambiente produção)     │  │
+│  │                                                   │  │
+│  │ ℹ️ A nota foi transmitida e está na fila de      │  │
+│  │    autorização da prefeitura. O status é         │  │
+│  │    atualizado automaticamente via webhook.       │  │
+│  │                                                   │  │
+│  │        [🔄 Verificar Status Agora]               │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  Valor: R$ 1.455,34    ISS: R$ 29,11                   │
+│  Emissão: 04/02/2026 15:32                             │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Resultado Esperado
 
-1. **Campos de retenção** disponíveis na emissão de NFS-e
-2. **ISS Retido** configurável (para clientes que fazem retenção na fonte)
-3. **Tributos federais** opcionais (PIS, COFINS, CSLL, IRRF, INSS)
-4. **Valor líquido** calculado automaticamente (obrigatório no DPS)
-5. **Série numérica** mantida (padrão '900' - compliance 2026)
-6. **Código 1.07** disponível para seleção
-7. **Interface simplificada** sem seleção de provedor (apenas Asaas)
-8. **Conformidade** com o padrão NFS-e Nacional DPS 2026
-9. **Preparação IBS/CBS** (campos disponíveis para fase de calibragem)
+1. **Feedback visual claro** de que a nota está em processamento
+2. **Tempo decorrido** exibido em tempo real
+3. **Estimativa de tempo** baseada no ambiente (sandbox/produção)
+4. **Botão de verificação individual** para forçar atualização
+5. **Status Asaas detalhado** (SCHEDULED, AUTHORIZATION_PENDING, etc.)
+6. **Atualização automática** quando webhook chegar
