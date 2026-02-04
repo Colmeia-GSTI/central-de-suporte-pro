@@ -38,6 +38,7 @@ import { buildNfseValidation, normalizeCompetencia, type ValidationIssue } from 
 import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asaasStatusLabel, isE0014Error, formatNfseErrorMessage, type NfseStatus } from "./nfseFormat";
 import { NfseEventLogsDialog } from "./NfseEventLogsDialog";
 import { NfseProcessingIndicator } from "./NfseProcessingIndicator";
+import { NfseShareMenu } from "./NfseShareMenu";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
   clients: {
@@ -45,6 +46,7 @@ export type NfseWithRelations = Tables<"nfse_history"> & {
     document: string | null;
     address?: string | null;
     email?: string | null;
+    whatsapp?: string | null;
   } | null;
   contracts: { name: string } | null;
 };
@@ -771,7 +773,23 @@ export function NfseDetailsSheet(props: {
             </div>
           </ScrollArea>
 
-          <SheetFooter className="mt-4">
+          <SheetFooter className="mt-4 flex gap-2">
+            {nfse.pdf_url && (
+              <NfseShareMenu
+                nfse={{
+                  id: nfse.id,
+                  numero_nfse: nfse.numero_nfse,
+                  pdf_url: nfse.pdf_url,
+                  valor_servico: nfse.valor_servico ?? 0,
+                  clients: nfse.clients ? {
+                    name: nfse.clients.name,
+                    email: nfse.clients.email ?? null,
+                    whatsapp: nfse.clients.whatsapp ?? null,
+                  } : null,
+                }}
+                variant="button"
+              />
+            )}
             <Button variant="outline" onClick={() => props.onOpenChange(false)}>
               Fechar
             </Button>
