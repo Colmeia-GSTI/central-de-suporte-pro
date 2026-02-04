@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -186,8 +187,8 @@ export function BancoInterConfigForm() {
 
       if (error) throw error;
       toast.success("Configurações do Banco Inter salvas!");
-    } catch (error: any) {
-      toast.error("Erro ao salvar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -249,9 +250,9 @@ export function BancoInterConfigForm() {
           toast.warning("Conexão OK, mas nenhum escopo de cobrança habilitado");
         }
       }
-    } catch (error: any) {
-      setScopeStatus({ boleto: "error", pix: "error", boletoError: error.message, pixError: error.message });
-      toast.error("Erro: " + error.message);
+    } catch (error: unknown) {
+      setScopeStatus({ boleto: "error", pix: "error", boletoError: getErrorMessage(error), pixError: getErrorMessage(error) });
+      toast.error("Erro: " + getErrorMessage(error));
     } finally {
       setTesting(false);
     }

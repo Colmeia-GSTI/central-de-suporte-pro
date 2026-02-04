@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,8 +88,8 @@ export function SmtpConfigForm() {
 
       if (error) throw error;
       toast.success("Configurações SMTP salvas com sucesso!");
-    } catch (error: any) {
-      toast.error("Erro ao salvar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -153,8 +154,8 @@ export function SmtpConfigForm() {
       } else {
         toast.success("Email de teste enviado com sucesso!");
       }
-    } catch (error: any) {
-      toast.error("Erro ao testar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao testar: " + getErrorMessage(error));
     } finally {
       setTesting(false);
     }

@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -293,10 +294,10 @@ const { isSupported: isPushSupported, isSubscribed: isPushSubscribed, subscribe:
                             ? "Você deve receber a notificação em segundos." 
                             : "Nenhum dispositivo inscrito encontrado.",
                         });
-                      } catch (error: any) {
+                      } catch (error: unknown) {
                         toast({
                           title: "Erro ao testar push",
-                          description: error.message,
+                          description: getErrorMessage(error),
                           variant: "destructive",
                         });
                       } finally {

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import {
@@ -278,7 +279,7 @@ export default function CompanyTab() {
         title: "Dados preenchidos",
         description: "Os dados do CNPJ foram carregados com sucesso",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("CNPJ lookup error", "Settings", { error: String(error) });
       toast({
         title: "Erro na consulta",

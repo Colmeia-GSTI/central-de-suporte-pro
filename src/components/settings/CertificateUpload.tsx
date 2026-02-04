@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,10 +118,10 @@ export function CertificateUpload({
       setPassword("");
       setSelectedFile(null);
       onUploadSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Erro ao carregar certificado", "Certificates", { error: String(error) });
       toast.error("Erro ao carregar certificado", {
-        description: error.message,
+        description: getErrorMessage(error),
       });
     } finally {
       setUploading(false);
@@ -150,8 +151,8 @@ export function CertificateUpload({
 
       toast.success("Certificado removido");
       onUploadSuccess();
-    } catch (error: any) {
-      toast.error("Erro ao remover certificado", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao remover certificado", { description: getErrorMessage(error) });
     } finally {
       setDeleting(false);
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,8 +92,8 @@ export function EvolutionApiConfigForm() {
 
       if (error) throw error;
       toast.success("Configurações Evolution API salvas com sucesso!");
-    } catch (error: any) {
-      toast.error("Erro ao salvar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -120,8 +121,8 @@ export function EvolutionApiConfigForm() {
       } else {
         toast.success("Mensagem de teste enviada com sucesso!");
       }
-    } catch (error: any) {
-      toast.error("Erro ao testar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao testar: " + getErrorMessage(error));
     } finally {
       setTesting(false);
     }
