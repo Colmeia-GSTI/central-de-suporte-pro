@@ -294,7 +294,23 @@ export function NfseDetailsSheet(props: {
       setValidationOpen(false);
       props.onChanged?.();
     },
-    onError: (e: Error) => toast.error("Erro ao reenviar", { description: e.message }),
+    onError: (e: Error) => {
+      const errorMessage = e.message || "";
+      
+      // Detectar erro E0014 - DPS Duplicada
+      if (errorMessage.includes("E0014") || errorMessage.includes("DPS_DUPLICADA") || errorMessage.includes("Vincular Nota")) {
+        toast.error("Esta nota já existe no Portal Nacional", {
+          description: "Use 'Vincular Nota Existente' para sincronizar o registro.",
+          duration: 8000,
+        });
+        setValidationOpen(false);
+        setLinkExternalOpen(true);
+        // Atualizar o registro local para refletir o erro
+        queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
+      } else {
+        toast.error("Erro ao reenviar", { description: e.message });
+      }
+    },
   });
 
   const updateStatusMutation = useMutation({
