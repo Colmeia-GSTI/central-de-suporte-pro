@@ -323,6 +323,7 @@ export function buildNfseValidation(input: {
         document: string | null | undefined;
         email?: string | null | undefined;
         address?: string | null | undefined;
+        zip_code?: string | null | undefined;
       }
     | null
     | undefined;
@@ -363,23 +364,34 @@ export function buildNfseValidation(input: {
     }
     issues.push(...validateDocumento(input.client.document));
 
-    if (!input.client.address) {
-      issues.push({
-        level: "warning",
-        field: "client.address",
-        message: "Endereço do cliente não informado",
-        code: "CLIENTE_ENDERECO",
-      });
-    }
+  if (!input.client.address) {
+    issues.push({
+      level: "error",
+      field: "client.address",
+      message: "Endereço do cliente é obrigatório para emissão de NFS-e",
+      code: "CLIENTE_ENDERECO",
+    });
+  }
 
-    if (!input.client.email) {
-      issues.push({
-        level: "warning",
-        field: "client.email",
-        message: "E-mail do cliente não informado (necessário para envio automático)",
-        code: "CLIENTE_EMAIL",
-      });
-    }
+  // Validar CEP - obrigatório para NFS-e
+  const zip = (input.client.zip_code ?? "").replace(/\D/g, "");
+  if (!zip || zip.length !== 8) {
+    issues.push({
+      level: "error",
+      field: "client.zip_code",
+      message: "CEP do cliente inválido ou não informado (deve ter 8 dígitos)",
+      code: "CLIENTE_CEP",
+    });
+  }
+
+  if (!input.client.email) {
+    issues.push({
+      level: "error",
+      field: "client.email",
+      message: "E-mail do cliente é obrigatório para emissão de NFS-e",
+      code: "CLIENTE_EMAIL",
+    });
+  }
   }
 
   if (!input.company) {

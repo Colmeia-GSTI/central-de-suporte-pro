@@ -105,6 +105,135 @@ function normalizeCompetencia(competencia?: string): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ============ ADDRESS HELPERS ============
+function extractStreetFromAddress(address: string): string {
+  // Remove o número do endereço (ex: "RUA X, 123" -> "RUA X")
+  return address.replace(/,?\s*\d+\s*(-.*)?$/, "").trim() || address;
+}
+
+function extractNumberFromAddress(address: string): string | null {
+  // Extrai número do endereço (ex: "RUA X, 123" -> "123")
+  const match = address.match(/,?\s*(\d+)\s*(?:-|$)/);
+  return match ? match[1] : null;
+}
+
+// ============ CUSTOMER SYNC FOR NFS-e ============
+interface ClientData {
+  id: string;
+  name: string;
+  email: string | null;
+  financial_email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  document: string | null;
+  zip_code: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  asaas_customer_id: string | null;
+}
+
+async function ensureCustomerSync(
+  supabase: SupabaseClient,
+  settings: AsaasSettings,
+  clientId: string,
+  correlationId: string
+): Promise<{ customerId: string; client: ClientData }> {
+  // 1. Buscar cliente COM TODOS os campos necessários
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("id, name, email, financial_email, phone, whatsapp, document, zip_code, address, city, state, asaas_customer_id")
+    .eq("id", clientId)
+    .single();
+
+  if (clientError || !client) {
+    throw new AsaasApiError(ERROR_CODES.CLIENT_NOT_FOUND, 404, "CLIENT_NOT_FOUND");
+  }
+
+  // 2. Validar dados obrigatórios para NFS-e
+  const email = client.email || client.financial_email;
+  const address = client.address;
+  const postalCode = client.zip_code?.replace(/\D/g, "");
+
+  const missingFields: string[] = [];
+  if (!email) missingFields.push("E-mail");
+  if (!address) missingFields.push("Endereço");
+  if (!postalCode || postalCode.length !== 8) missingFields.push("CEP válido (8 dígitos)");
+
+  if (missingFields.length > 0) {
+    throw new AsaasApiError(
+      `Dados obrigatórios do cliente faltando: ${missingFields.join(", ")}. Atualize o cadastro do cliente antes de emitir NFS-e.`,
+      400,
+      "CLIENT_INCOMPLETE_DATA"
+    );
+  }
+
+  // 3. Montar payload completo para Asaas
+  const customerPayload = {
+    name: client.name,
+    email: email,
+    phone: client.phone?.replace(/\D/g, "") || undefined,
+    mobilePhone: client.whatsapp?.replace(/\D/g, "") || undefined,
+    cpfCnpj: client.document?.replace(/\D/g, ""),
+    postalCode: postalCode,
+    address: extractStreetFromAddress(address),
+    addressNumber: extractNumberFromAddress(address) || "S/N",
+    province: client.city || "Não informado",
+    externalReference: client.id,
+    notificationDisabled: false,
+  };
+
+  let customerId: string;
+
+  // 4. Criar ou atualizar cliente no Asaas
+  if (client.asaas_customer_id) {
+    // Cliente existe - ATUALIZAR para garantir dados sincronizados
+    log(correlationId, "info", "Sincronizando dados do cliente no Asaas", { 
+      customer_id: client.asaas_customer_id,
+      email: email,
+      postal_code: postalCode 
+    });
+    try {
+      await asaasRequest(
+        settings, 
+        `/customers/${client.asaas_customer_id}`, 
+        "PUT", 
+        customerPayload, 
+        correlationId
+      );
+    } catch (updateError) {
+      // Se falhar o update, pode ser que o cliente foi deletado no Asaas - tentar criar novo
+      log(correlationId, "warn", "Falha ao atualizar cliente, tentando criar novo", { 
+        error: updateError instanceof Error ? updateError.message : String(updateError)
+      });
+      const newCustomer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+      await supabase
+        .from("clients")
+        .update({ asaas_customer_id: newCustomer.id })
+        .eq("id", clientId);
+      return { customerId: newCustomer.id, client: client as ClientData };
+    }
+    customerId = client.asaas_customer_id;
+  } else {
+    // Cliente não existe - CRIAR com dados completos
+    log(correlationId, "info", "Criando cliente no Asaas com dados completos", {
+      email: email,
+      postal_code: postalCode,
+      address: address
+    });
+    const customer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+    customerId = customer.id;
+    
+    // Salvar ID do Asaas no cliente local
+    await supabase
+      .from("clients")
+      .update({ asaas_customer_id: customerId })
+      .eq("id", clientId);
+  }
+
+  return { customerId, client: client as ClientData };
+}
+
 function generateValidCpf(): string {
   const randomDigit = () => Math.floor(Math.random() * 10);
   const computeDigit = (digits: number[], factor: number) => {
@@ -346,36 +475,9 @@ Deno.serve(async (req) => {
 
         log(correlationId, "info", "Iniciando emissão de NFS-e", { client_id, value, contract_id });
 
-        // 1. Ensure customer exists in Asaas
-        let customerId: string;
-        const { data: client } = await supabase
-          .from("clients")
-          .select("id, name, document, asaas_customer_id")
-          .eq("id", client_id)
-          .single();
-
-        if (!client) {
-          throw new AsaasApiError(ERROR_CODES.CLIENT_NOT_FOUND, 404, "CLIENT_NOT_FOUND");
-        }
-
-        if (client.asaas_customer_id) {
-          customerId = client.asaas_customer_id;
-          log(correlationId, "info", "Cliente já existe no Asaas", { customer_id: customerId });
-        } else {
-          log(correlationId, "info", "Criando cliente no Asaas...");
-          const createResult = await asaasRequest(settings, "/customers", "POST", {
-            name: client.name || "Cliente",
-            cpfCnpj: client.document?.replace(/\D/g, ""),
-            externalReference: client_id,
-            notificationDisabled: true,
-          }, correlationId);
-          customerId = createResult.id;
-
-          await supabase
-            .from("clients")
-            .update({ asaas_customer_id: customerId })
-            .eq("id", client_id);
-        }
+        // 1. Ensure customer exists in Asaas with COMPLETE data (email, address, postalCode)
+        // This prevents "E-mail/Endereço/CEP incompleto" errors from Asaas
+        const { customerId, client } = await ensureCustomerSync(supabase, settings, client_id, correlationId);
 
         // 2. Resolve municipal service ID if only code provided
         let resolvedMunicipalServiceId = municipal_service_id;
@@ -570,33 +672,9 @@ Deno.serve(async (req) => {
 
         log(correlationId, "info", "Iniciando emissão de NFS-e avulsa", { client_id, value });
 
-        // 1. Validate client and ensure Asaas customer exists
-        const { data: client } = await supabase
-          .from("clients")
-          .select("id, name, document, asaas_customer_id")
-          .eq("id", client_id)
-          .single();
-
-        if (!client) {
-          throw new AsaasApiError(ERROR_CODES.CLIENT_NOT_FOUND, 404, "CLIENT_NOT_FOUND");
-        }
-
-        let customerId = client.asaas_customer_id;
-        if (!customerId) {
-          log(correlationId, "info", "Criando cliente no Asaas para NFS-e avulsa");
-          const createResult = await asaasRequest(settings, "/customers", "POST", {
-            name: client.name || "Cliente",
-            cpfCnpj: client.document?.replace(/\D/g, ""),
-            externalReference: client_id,
-            notificationDisabled: true,
-          }, correlationId);
-          customerId = createResult.id;
-
-          await supabase
-            .from("clients")
-            .update({ asaas_customer_id: customerId })
-            .eq("id", client_id);
-        }
+        // 1. Ensure customer exists in Asaas with COMPLETE data (email, address, postalCode)
+        // This prevents "E-mail/Endereço/CEP incompleto" errors from Asaas
+        const { customerId, client } = await ensureCustomerSync(supabase, settings, client_id, correlationId);
 
         // 2. Try to resolve municipal service ID
         let municipalServiceId: string | null = null;
