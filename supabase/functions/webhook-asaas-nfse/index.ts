@@ -35,6 +35,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Parse error code from prefeitura status description
+function parseStatusDescription(statusDescription: string | null): {
+  codigo: string | null;
+  descricao: string;
+} {
+  if (!statusDescription) {
+    return { codigo: null, descricao: "Erro desconhecido" };
+  }
+  const codigoMatch = statusDescription.match(/C[oó]digo:\s*(\w+)/i);
+  const descMatch = statusDescription.match(/Descri[cç][aã]o:\s*(.+?)(?:\r?\n|$)/i);
+  return {
+    codigo: codigoMatch?.[1] || null,
+    descricao: descMatch?.[1]?.trim() || statusDescription,
+  };
+}
+
 const STATUS_MAP: Record<string, string> = {
   SCHEDULED: "processando",
   SYNCHRONIZED: "processando",
@@ -247,17 +263,35 @@ async function processInvoiceWebhook(
   }
 
   if (invoiceStatus === "ERROR" || invoiceStatus === "CANCELLATION_DENIED") {
-    updateData.mensagem_erro = invoice.statusDescription || "Erro no processamento da NFS-e";
+    const errorDescription = (invoice.statusDescription as string) || "Erro no processamento da NFS-e";
+    const parsed = parseStatusDescription(errorDescription);
+    
+    updateData.mensagem_retorno = errorDescription;
+    updateData.codigo_retorno = parsed.codigo || "ERROR";
 
-    // Log error event
+    // Log error event with parsed details
     await logNfseEvent(supabase, nfseRecord.id, "error", "error",
-      `Erro na NFS-e: ${invoice.statusDescription || "Erro no processamento"}`,
-      correlationId, { asaas_status: invoiceStatus, error_description: invoice.statusDescription });
+      `Erro na NFS-e: ${parsed.descricao}`,
+      correlationId, { 
+        asaas_status: invoiceStatus, 
+        error_description: errorDescription,
+        codigo_prefeitura: parsed.codigo,
+      });
+    
+    // Special handling for E0014 (DPS duplicada)
+    if (parsed.codigo === "E0014") {
+      await logNfseEvent(supabase, nfseRecord.id, "dps_duplicada", "warn",
+        "DPS duplicada detectada - nota possivelmente já emitida no Portal Nacional",
+        correlationId, {
+          asaas_invoice_id: invoice.id,
+          sugestao: "Verifique no Portal Nacional se existe nota autorizada para este cliente/valor",
+        });
+    }
 
     await createNotification(
       supabase,
       "Erro na NFS-e via Asaas",
-      `Erro ao processar NFS-e: ${invoice.statusDescription || "Verifique os dados fiscais"}`,
+      `Erro ao processar NFS-e: ${parsed.descricao.slice(0, 100)}`,
       "error"
     );
   }

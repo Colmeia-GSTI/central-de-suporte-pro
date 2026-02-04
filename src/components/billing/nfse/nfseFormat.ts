@@ -115,3 +115,77 @@ export function formatElapsedTime(createdAt: string): string {
   if (diffDays === 1) return "1 dia";
   return `${diffDays} dias`;
 }
+
+// ============ ERROR PARSING AND FORMATTING ============
+
+export interface ParsedNfseError {
+  codigo: string | null;
+  descricao: string;
+  acao: string | null;
+  isE0014: boolean;
+}
+
+// Known prefeitura error codes and their user-friendly messages
+const KNOWN_ERROR_ACTIONS: Record<string, string> = {
+  E0014: "A nota já existe no Portal Nacional. Use 'Vincular Nota Existente' para sincronizar.",
+  E0001: "Verifique os dados do certificado digital.",
+  E0002: "Verifique os dados do prestador e tomador.",
+};
+
+/**
+ * Parse error message from prefeitura/Asaas to extract code and actionable message
+ */
+export function parseNfseError(mensagemRetorno: string | null | undefined): ParsedNfseError {
+  if (!mensagemRetorno) {
+    return { codigo: null, descricao: "Erro desconhecido", acao: null, isE0014: false };
+  }
+
+  // Extract code from format "Código: E0014\r\nDescrição: ..."
+  const codigoMatch = mensagemRetorno.match(/C[oó]digo:\s*(\w+)/i);
+  const descMatch = mensagemRetorno.match(/Descri[cç][aã]o:\s*(.+?)(?:\r?\n|$)/i);
+
+  const codigo = codigoMatch?.[1] || null;
+  const descricao = descMatch?.[1]?.trim() || mensagemRetorno;
+  const acao = codigo ? KNOWN_ERROR_ACTIONS[codigo] || null : null;
+  const isE0014 = codigo === "E0014";
+
+  return { codigo, descricao, acao, isE0014 };
+}
+
+/**
+ * Check if an error message indicates E0014 (DPS duplicada)
+ */
+export function isE0014Error(mensagemRetorno: string | null | undefined): boolean {
+  if (!mensagemRetorno) return false;
+  return mensagemRetorno.includes("E0014") || 
+         mensagemRetorno.toLowerCase().includes("dps duplicada") ||
+         mensagemRetorno.toLowerCase().includes("já existe");
+}
+
+/**
+ * Format error message for display with user-friendly action
+ */
+export function formatNfseErrorMessage(mensagemRetorno: string | null | undefined): {
+  title: string;
+  description: string;
+  action: string | null;
+  showLinkButton: boolean;
+} {
+  const parsed = parseNfseError(mensagemRetorno);
+
+  if (parsed.isE0014) {
+    return {
+      title: "Nota já existe no Portal Nacional",
+      description: "Esta NFS-e foi emitida anteriormente. A série/número DPS já está registrada.",
+      action: "Informe o número da nota para sincronizar o registro.",
+      showLinkButton: true,
+    };
+  }
+
+  return {
+    title: parsed.codigo ? `Erro ${parsed.codigo}` : "Erro na emissão",
+    description: parsed.descricao,
+    action: parsed.acao,
+    showLinkButton: false,
+  };
+}
