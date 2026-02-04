@@ -85,10 +85,10 @@ serve(async (req) => {
     console.log(`Found ${invoices.length} invoices approaching due date`);
 
     // Get integration settings
-    const { data: resendSettings } = await supabase
+    const { data: smtpSettings } = await supabase
       .from("integration_settings")
       .select("settings, is_active")
-      .eq("integration_type", "resend")
+      .eq("integration_type", "smtp")
       .single();
 
     const { data: evolutionSettings } = await supabase
@@ -97,7 +97,7 @@ serve(async (req) => {
       .eq("integration_type", "evolution_api")
       .single();
 
-    const resendActive = resendSettings?.is_active;
+    const smtpActive = smtpSettings?.is_active;
     const whatsappActive = evolutionSettings?.is_active;
 
     const results: Array<{ invoice_id: string; client: string; email: boolean; whatsapp: boolean; notification: boolean }> = [];
@@ -122,7 +122,7 @@ for (const invoice of invoices) {
 
       // Send email notification
       const clientEmail = client.financial_email || client.email;
-      if (resendActive && clientEmail) {
+      if (smtpActive && clientEmail) {
         try {
           const emailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -142,7 +142,7 @@ for (const invoice of invoices) {
             </div>
           `;
 
-          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
+          const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
             body: {
               to: clientEmail,
               subject: `⚠️ Lembrete: Fatura #${invoice.invoice_number} vence em ${daysUntilDue} dia(s)`,

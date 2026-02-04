@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,7 +46,7 @@ async function getIntegrationSettings(supabase: SupabaseClient<any, any, any>) {
   const { data, error } = await supabase
     .from("integration_settings")
     .select("integration_type, settings, is_active")
-    .in("integration_type", ["resend", "evolution_api", "telegram"]);
+    .in("integration_type", ["smtp", "evolution_api", "telegram"]);
 
   if (error) {
     console.error("Error fetching integration settings:", error);
@@ -63,12 +63,16 @@ async function getIntegrationSettings(supabase: SupabaseClient<any, any, any>) {
   return settings;
 }
 
-// Send email via Resend
+// Send email via SMTP
 async function sendEmail(
   settings: {
-    api_key: string;
+    host: string;
+    port: number;
+    username: string;
+    password: string;
     from_email: string;
     from_name: string;
+    use_tls: boolean;
   },
   to: string | string[],
   subject: string,
@@ -76,22 +80,27 @@ async function sendEmail(
   text?: string
 ): Promise<NotificationResult> {
   try {
-    const resend = new Resend(settings.api_key);
-    const recipients = Array.isArray(to) ? to : [to];
-
-    const { error } = await resend.emails.send({
-      from: `${settings.from_name || "Sistema"} <${settings.from_email}>`,
-      to: recipients,
-      subject,
-      html,
-      text: text || html.replace(/<[^>]*>/g, ""),
+    const client = new SMTPClient({
+      connection: {
+        hostname: settings.host,
+        port: settings.port || 587,
+        tls: settings.use_tls !== false,
+        auth: {
+          username: settings.username,
+          password: settings.password,
+        },
+      },
     });
 
-    if (error) {
-      console.error("Resend API error:", error);
-      return { channel: "email", success: false, error: error.message };
-    }
+    await client.send({
+      from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      content: text || html.replace(/<[^>]*>/g, ""),
+      html,
+    });
 
+    await client.close();
     return { channel: "email", success: true };
   } catch (error) {
     console.error("Email send error:", error);
@@ -234,18 +243,22 @@ Deno.serve(async (req) => {
     for (const channel of channels) {
       switch (channel) {
         case "email": {
-          const resend = integrations["resend"];
-          if (!resend?.is_active) {
-            results.push({ channel: "email", success: false, error: "Resend não configurado ou inativo" });
+          const smtp = integrations["smtp"];
+          if (!smtp?.is_active) {
+            results.push({ channel: "email", success: false, error: "SMTP não configurado ou inativo" });
             break;
           }
-          const resendSettings = resend.settings as {
-            api_key: string;
+          const smtpSettings = smtp.settings as {
+            host: string;
+            port: number;
+            username: string;
+            password: string;
             from_email: string;
             from_name: string;
+            use_tls: boolean;
           };
-          if (!resendSettings.api_key || !resendSettings.from_email) {
-            results.push({ channel: "email", success: false, error: "Configuração Resend incompleta" });
+          if (!smtpSettings.host || !smtpSettings.username || !smtpSettings.password) {
+            results.push({ channel: "email", success: false, error: "Configuração SMTP incompleta" });
             break;
           }
           if (!request.email_to || !request.email_subject || !request.email_html) {
@@ -253,7 +266,7 @@ Deno.serve(async (req) => {
             break;
           }
           promises.push(
-            sendEmail(resendSettings, request.email_to, request.email_subject, request.email_html, request.email_text)
+            sendEmail(smtpSettings, request.email_to, request.email_subject, request.email_html, request.email_text)
           );
           break;
         }

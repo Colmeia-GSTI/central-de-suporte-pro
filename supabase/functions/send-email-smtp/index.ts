@@ -1,5 +1,6 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "https://esm.sh/resend@2.0.0";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,12 +18,6 @@ interface EmailRequest {
   subject: string;
   html: string;
   text?: string;
-}
-
-interface ResendSettings {
-  api_key: string;
-  from_email: string;
-  from_name: string;
 }
 
 // Sanitize and validate email addresses
@@ -58,7 +53,7 @@ function sanitizeHtml(html: string): string {
     .replace(/on\w+\s*=/gi, "data-removed=");
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -69,33 +64,41 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Get Resend settings from database
-    const { data: resendSettings, error: settingsError } = await supabase
+    // Get SMTP settings from database
+    const { data: smtpSettings, error: settingsError } = await supabase
       .from("integration_settings")
       .select("settings, is_active")
-      .eq("integration_type", "resend")
+      .eq("integration_type", "smtp")
       .single();
 
-    if (settingsError || !resendSettings) {
-      console.warn("[send-email-resend] Resend configuration not found");
+    if (settingsError || !smtpSettings) {
+      console.warn("[send-email-smtp] SMTP configuration not found");
       return new Response(
-        JSON.stringify({ error: "Configuração Resend não encontrada", configured: false }),
+        JSON.stringify({ error: "Configuração SMTP não encontrada", configured: false }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!resendSettings.is_active) {
+    if (!smtpSettings.is_active) {
       return new Response(
-        JSON.stringify({ error: "Integração Resend desativada", configured: false }),
+        JSON.stringify({ error: "Integração SMTP desativada", configured: false }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const settings = resendSettings.settings as ResendSettings;
+    const settings = smtpSettings.settings as {
+      host: string;
+      port: number;
+      username: string;
+      password: string;
+      from_email: string;
+      from_name: string;
+      use_tls: boolean;
+    };
 
-    if (!settings.api_key || !settings.from_email) {
+    if (!settings.host || !settings.username || !settings.password) {
       return new Response(
-        JSON.stringify({ error: "Configuração Resend incompleta (API Key ou Email)", configured: false }),
+        JSON.stringify({ error: "Configuração SMTP incompleta", configured: false }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -144,51 +147,68 @@ Deno.serve(async (req) => {
     const sanitizedText = text ? String(text).slice(0, MAX_HTML_LENGTH) : sanitizedHtml.replace(/<[^>]*>/g, '');
 
     // Safe logging (no sensitive data)
-    console.log(`[send-email-resend] Sending to ${emailValidation.emails.length} recipient(s)`);
+    const port = settings.port || 587;
+    console.log(`[send-email-smtp] Connecting to ${settings.host}:${port}`);
+    console.log(`[send-email-smtp] Sending to ${emailValidation.emails.length} recipient(s)`);
 
-    // Initialize Resend client
-    const resend = new Resend(settings.api_key);
+    // Port 465 uses implicit TLS (SMTPS), port 587 uses STARTTLS
+    const useImplicitTLS = port === 465;
+    
+    const client = new SMTPClient({
+      connection: {
+        hostname: settings.host,
+        port: port,
+        tls: useImplicitTLS || settings.use_tls !== false,
+        auth: {
+          username: settings.username,
+          password: settings.password,
+        },
+      },
+    });
 
     try {
-      const { data: emailResult, error: sendError } = await resend.emails.send({
-        from: `${settings.from_name || "Sistema"} <${settings.from_email}>`,
+      await client.send({
+        from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
         to: emailValidation.emails,
         subject: sanitizedSubject,
+        content: sanitizedText,
         html: sanitizedHtml,
-        text: sanitizedText,
       });
 
-      if (sendError) {
-        console.error("[send-email-resend] Resend API error:", sendError);
-        return new Response(
-          JSON.stringify({ error: sendError.message || "Erro ao enviar email via Resend" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      await client.close();
 
-      console.log("[send-email-resend] Email sent successfully:", emailResult?.id);
+      console.log("[send-email-smtp] Email sent successfully");
 
       return new Response(
-        JSON.stringify({ success: true, message: "Email enviado com sucesso", id: emailResult?.id }),
+        JSON.stringify({ success: true, message: "Email enviado com sucesso" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } catch (sendError: unknown) {
       const errorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
-      console.error("[send-email-resend] Send error:", errorMsg);
+      console.error("[send-email-smtp] Send error:", errorMsg);
+      if (sendError instanceof Error && sendError.stack) {
+        console.error("[send-email-smtp] Stack:", sendError.stack);
+      }
       throw sendError;
+    } finally {
+      try {
+        await client.close();
+      } catch {
+        // Ignore close errors
+      }
     }
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error("[send-email-resend] Error:", errorMsg);
+    console.error("[send-email-smtp] Error:", errorMsg);
     
     // Return more specific error messages for debugging
-    let userMessage = "Erro ao enviar email. Verifique as configurações Resend.";
-    if (errorMsg.includes("API key")) {
-      userMessage = "API Key do Resend inválida. Verifique a configuração.";
-    } else if (errorMsg.includes("domain")) {
-      userMessage = "Domínio do email remetente não validado no Resend.";
-    } else if (errorMsg.includes("rate")) {
-      userMessage = "Limite de envio atingido. Tente novamente em alguns minutos.";
+    let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
+    if (errorMsg.includes("connect")) {
+      userMessage = "Não foi possível conectar ao servidor SMTP. Verifique host e porta.";
+    } else if (errorMsg.includes("auth") || errorMsg.includes("credentials")) {
+      userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
+    } else if (errorMsg.includes("certificate") || errorMsg.includes("TLS")) {
+      userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
     }
     
     return new Response(

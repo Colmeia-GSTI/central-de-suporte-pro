@@ -135,16 +135,16 @@ Deno.serve(async (req) => {
             console.log(`[CHECK-CERT] Notificação criada para ${company.razao_social} (${alertLevel})`);
           }
 
-          // Send email notification if Resend is configured
+          // Send email notification if SMTP is configured
           if (alertLevel === "expired" || alertLevel === "critical") {
             try {
-              const { data: resendSettings } = await supabase
+              const { data: smtpSettings } = await supabase
                 .from("integration_settings")
                 .select("settings, is_active")
-                .eq("integration_type", "resend")
+                .eq("integration_type", "smtp")
                 .single();
 
-              if (resendSettings?.is_active) {
+              if (smtpSettings?.is_active) {
                 // Get admin emails
                 const { data: adminProfiles } = await supabase
                   .from("profiles")
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
 
                 if (adminProfiles && adminProfiles.length > 0) {
                   for (const profile of adminProfiles) {
-                    await supabase.functions.invoke("send-email-resend", {
+                    await supabase.functions.invoke("send-email-smtp", {
                       body: {
                         to: profile.email,
                         subject: title,

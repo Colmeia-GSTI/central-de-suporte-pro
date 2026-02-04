@@ -31,7 +31,7 @@ interface IntegrationStatus {
 }
 
 const INTEGRATION_META: Record<string, { name: string; icon: React.ReactNode; category: string }> = {
-  resend: { name: "Email (Resend)", icon: <Mail className="h-4 w-4" />, category: "Comunicação" },
+  smtp: { name: "Email SMTP", icon: <Mail className="h-4 w-4" />, category: "Comunicação" },
   google_calendar: { name: "Google Calendar", icon: <Calendar className="h-4 w-4" />, category: "Comunicação" },
   evolution_api: { name: "WhatsApp (Evolution)", icon: <MessageSquare className="h-4 w-4" />, category: "Mensagens" },
   telegram: { name: "Telegram Bot", icon: <Send className="h-4 w-4" />, category: "Mensagens" },
