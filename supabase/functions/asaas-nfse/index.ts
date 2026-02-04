@@ -997,10 +997,20 @@ Deno.serve(async (req) => {
           }
         }
         
-        // Se erro, capturar mensagem
+        // Se erro, capturar mensagem - Asaas usa statusDescription (não errors[])
         if (invoice.status === "ERROR") {
-          updateData.mensagem_retorno = invoice.errors?.map((e: { description: string }) => e.description).join("; ") || "Erro no processamento";
+          // statusDescription contém o retorno detalhado da prefeitura
+          const errorDescription = invoice.statusDescription || 
+            invoice.errors?.map((e: { description: string }) => e.description).join("; ") || 
+            "Erro no processamento";
+          updateData.mensagem_retorno = errorDescription;
           updateData.codigo_retorno = invoice.errors?.[0]?.code || "ERROR";
+          
+          // Log the detailed error from prefeitura
+          log(correlationId, "warn", "Erro retornado pela prefeitura", { 
+            statusDescription: invoice.statusDescription,
+            errors: invoice.errors
+          });
         }
         
         // 5. Atualizar registro local
