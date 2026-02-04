@@ -346,6 +346,23 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             }
           }
           
+          // Generate NFS-e if enabled for this contract
+          if (data.nfse_enabled) {
+            try {
+              await supabase.functions.invoke("asaas-nfse", {
+                body: {
+                  action: "emit_nfse",
+                  invoice_id: invoice.id,
+                  contract_id: contractIdValue,
+                },
+              });
+              console.log("[CONTRACT] NFS-e generation requested for invoice:", invoice.id);
+            } catch (nfseError) {
+              console.error("Error generating NFS-e:", nfseError);
+              // Continue - invoice was created, NFS-e can be generated later
+            }
+          }
+          
           // Send notification if requested
           if (data.send_notification) {
             try {
