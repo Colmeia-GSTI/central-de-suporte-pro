@@ -438,17 +438,24 @@ Deno.serve(async (req) => {
             correlationId, { client_id, value, contract_id, retain_iss, valor_liquido });
         }
 
-        // 4. Build invoice payload
+        // 4. Build invoice payload - Asaas NFS-e API requires specific fields
         const invoicePayload: Record<string, unknown> = {
           customer: customerId,
-          serviceDescription: service_description,
           value: parseFloat(value),
           effectiveDate: effective_date || new Date().toISOString().split("T")[0],
           externalReference: historyId,
+          // Required fields for Asaas NFS-e API
+          serviceDescription: service_description || "Serviços de TI",
+          municipalServiceDescription: service_description || "Serviços de TI",
         };
 
+        // Asaas requires either municipalServiceId OR municipalServiceCode + municipalServiceName
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
+        } else if (municipal_service_code) {
+          // When we don't have the Asaas internal ID, use external code approach
+          invoicePayload.municipalServiceCode = municipal_service_code;
+          invoicePayload.municipalServiceName = service_description || "Serviços de TI";
         }
 
         if (payment_id) {
@@ -654,17 +661,24 @@ Deno.serve(async (req) => {
           `NFS-e avulsa iniciada para ${client.name}. Valor: R$ ${parseFloat(value).toFixed(2)}`,
           correlationId, { client_id, value, type: "standalone" });
 
-        // 4. Build and send invoice request
+        // 4. Build and send invoice request - Asaas NFS-e API requires specific fields
         const invoicePayload: Record<string, unknown> = {
           customer: customerId,
-          serviceDescription: service_description,
           value: parseFloat(value),
           effectiveDate: new Date().toISOString().split("T")[0],
           externalReference: historyRecord.id,
+          // Required fields for Asaas NFS-e API
+          serviceDescription: service_description || "Serviços de TI",
+          municipalServiceDescription: service_description || "Serviços de TI",
         };
 
+        // Asaas requires either municipalServiceId OR municipalServiceCode + municipalServiceName
         if (municipalServiceId) {
           invoicePayload.municipalServiceId = municipalServiceId;
+        } else if (service_code) {
+          // When we don't have the Asaas internal ID, use external code approach
+          invoicePayload.municipalServiceCode = service_code;
+          invoicePayload.municipalServiceName = service_description || "Serviços de TI";
         }
 
         // NFS-e Nacional 2026 - Tributos
