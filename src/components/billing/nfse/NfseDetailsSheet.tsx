@@ -261,8 +261,18 @@ export function NfseDetailsSheet(props: {
           client_id: nfse.client_id,
           value: valor,
           service_description: descricao,
+          municipal_service_code: nfse.codigo_tributacao || "010701",
           nfse_history_id: nfse.id,
           competencia: comp,
+          // Tributos (caso existam no registro)
+          retain_iss: nfse.iss_retido,
+          iss_rate: nfse.aliquota,
+          pis_value: nfse.valor_pis,
+          cofins_value: nfse.valor_cofins,
+          csll_value: nfse.valor_csll,
+          irrf_value: nfse.valor_irrf,
+          inss_value: nfse.valor_inss,
+          valor_liquido: nfse.valor_liquido,
         },
       });
       
