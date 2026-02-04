@@ -178,7 +178,7 @@ export function BillingNfseTab() {
     queryFn: async () => {
       let q = supabase
         .from("nfse_history")
-        .select("*, clients(name, document, email, whatsapp), contracts(name)", { count: "exact" })
+        .select("*, clients(name, document, email, financial_email, whatsapp), contracts(name)", { count: "exact" })
         .order("created_at", { ascending: false });
 
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
