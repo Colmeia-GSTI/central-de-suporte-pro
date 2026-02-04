@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { ServiceCodeForm, type ServiceCode } from "./ServiceCodeForm";
+import { useServiceCodeUsageStats, useSortedServiceCodes, getUsageBadgeInfo } from "@/hooks/useServiceCodeUsageStats";
 
 interface ServiceCodeSelectProps {
   value?: string;
@@ -46,6 +47,8 @@ export function ServiceCodeSelect({ value, onSelect, disabled }: ServiceCodeSele
   const [serviceCodes, setServiceCodes] = useState<ServiceCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  const { usageStats } = useServiceCodeUsageStats();
 
   useEffect(() => {
     loadServiceCodes();
@@ -70,11 +73,19 @@ export function ServiceCodeSelect({ value, onSelect, disabled }: ServiceCodeSele
 
   const selectedCode = serviceCodes.find((c) => c.codigo_tributacao === value);
 
-  const filteredCodes = selectedCategory
-    ? serviceCodes.filter((c) => c.categoria === selectedCategory)
-    : serviceCodes;
+  const categories = useMemo(
+    () => Array.from(new Set(serviceCodes.map((c) => c.categoria).filter(Boolean))) as string[],
+    [serviceCodes]
+  );
 
-  const categories = Array.from(new Set(serviceCodes.map((c) => c.categoria).filter(Boolean)));
+  // Apply category filter first
+  const categoryFiltered = useMemo(() => {
+    if (!selectedCategory) return serviceCodes;
+    return serviceCodes.filter((c) => c.categoria === selectedCategory);
+  }, [serviceCodes, selectedCategory]);
+
+  // Then sort by usage
+  const sortedAndFiltered = useSortedServiceCodes(categoryFiltered, usageStats);
 
   const handleNewCodeSuccess = (newCode: ServiceCode) => {
     setServiceCodes((prev) => [...prev, newCode].sort((a, b) => 
@@ -154,51 +165,65 @@ export function ServiceCodeSelect({ value, onSelect, disabled }: ServiceCodeSele
                 )}
               </CommandEmpty>
               <CommandGroup>
-                {filteredCodes.map((code) => (
-                  <CommandItem
-                    key={code.id}
-                    value={`${code.codigo_tributacao} ${code.descricao}`}
-                    onSelect={() => {
-                      onSelect(code);
-                      setOpen(false);
-                    }}
-                    className="flex flex-col items-start py-3"
-                  >
-                    <div className="flex items-center w-full">
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          value === code.codigo_tributacao ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-semibold text-primary">
-                            {code.codigo_tributacao}
-                          </span>
-                          {code.aliquota_sugerida && (
-                            <Badge variant="secondary" className="text-xs">
-                              {code.aliquota_sugerida}%
-                            </Badge>
+                {sortedAndFiltered.map((code) => {
+                  const { isRecent, isFrequent } = getUsageBadgeInfo(code.codigo_tributacao, usageStats);
+
+                  return (
+                    <CommandItem
+                      key={code.id}
+                      value={`${code.codigo_tributacao} ${code.descricao}`}
+                      onSelect={() => {
+                        onSelect(code);
+                        setOpen(false);
+                      }}
+                      className="flex flex-col items-start py-3"
+                    >
+                      <div className="flex items-center w-full">
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            value === code.codigo_tributacao ? "opacity-100" : "opacity-0"
                           )}
-                          {code.categoria && (
-                            <Badge variant="outline" className="text-xs">
-                              {categoryLabels[code.categoria] || code.categoria}
-                            </Badge>
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono font-semibold text-primary">
+                              {code.codigo_tributacao}
+                            </span>
+                            {code.aliquota_sugerida && (
+                              <Badge variant="secondary" className="text-xs">
+                                {code.aliquota_sugerida}%
+                              </Badge>
+                            )}
+                            {code.categoria && (
+                              <Badge variant="outline" className="text-xs">
+                                {categoryLabels[code.categoria] || code.categoria}
+                              </Badge>
+                            )}
+                            {isRecent && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                Recente
+                              </Badge>
+                            )}
+                            {isFrequent && !isRecent && (
+                              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                Frequente
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                            {code.descricao}
+                          </p>
+                          {code.cnae_principal && (
+                            <span className="text-xs text-muted-foreground">
+                              CNAE: {code.cnae_principal}
+                            </span>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                          {code.descricao}
-                        </p>
-                        {code.cnae_principal && (
-                          <span className="text-xs text-muted-foreground">
-                            CNAE: {code.cnae_principal}
-                          </span>
-                        )}
                       </div>
-                    </div>
-                  </CommandItem>
-                ))}
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             </CommandList>
 

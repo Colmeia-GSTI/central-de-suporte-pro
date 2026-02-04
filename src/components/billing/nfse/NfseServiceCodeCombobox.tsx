@@ -7,6 +7,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useServiceCodeUsageStats, useSortedServiceCodes, getUsageBadgeInfo } from "@/hooks/useServiceCodeUsageStats";
 
 export type NfseServiceCode = {
   id: string;
@@ -45,6 +46,8 @@ export function NfseServiceCodeCombobox(props: {
     },
   });
 
+  const { usageStats } = useServiceCodeUsageStats();
+
   const selected = codes.find((c) => c.codigo_tributacao === props.value) ?? null;
 
   const categories = useMemo(
@@ -52,10 +55,14 @@ export function NfseServiceCodeCombobox(props: {
     [codes]
   );
 
-  const filtered = useMemo(() => {
+  // Apply category filter first
+  const categoryFiltered = useMemo(() => {
     if (!selectedCategory) return codes;
     return codes.filter((c) => c.categoria === selectedCategory);
   }, [codes, selectedCategory]);
+
+  // Then sort by usage
+  const sortedAndFiltered = useSortedServiceCodes(categoryFiltered, usageStats);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -103,8 +110,10 @@ export function NfseServiceCodeCombobox(props: {
           <CommandList>
             <CommandEmpty>{isLoading ? "Carregando..." : "Nenhum código encontrado."}</CommandEmpty>
             <CommandGroup>
-              {filtered.map((code) => {
+              {sortedAndFiltered.map((code) => {
                 const isSelected = selected?.codigo_tributacao === code.codigo_tributacao;
+                const { isRecent, isFrequent } = getUsageBadgeInfo(code.codigo_tributacao, usageStats);
+
                 return (
                   <CommandItem
                     key={code.id}
@@ -133,6 +142,16 @@ export function NfseServiceCodeCombobox(props: {
                           {code.categoria && (
                             <Badge variant="outline" className="text-xs shrink-0">
                               {categoryLabels[code.categoria] || code.categoria}
+                            </Badge>
+                          )}
+                          {isRecent && (
+                            <Badge variant="secondary" className="text-xs shrink-0 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                              Recente
+                            </Badge>
+                          )}
+                          {isFrequent && !isRecent && (
+                            <Badge variant="secondary" className="text-xs shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                              Frequente
                             </Badge>
                           )}
                         </div>
