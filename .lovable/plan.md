@@ -1,33 +1,60 @@
 
-# Plano: Escolha de Provedor de Pagamento (Banco Inter vs Asaas)
+# Plano: Adequação do Sistema NFS-e para Padrão Nacional 2026
 
-## Resumo
+## Resumo Executivo
 
-Implementar a capacidade de escolher entre **Banco Inter** e **Asaas** como provedor de cobrança (Boleto/PIX) em:
-- Contratos (configuração padrão)
-- Faturas (configuração individual)
-- Geração automática de pagamentos
+Ajustar o sistema de emissão de NFS-e para:
+1. **Adicionar campos de retenção de impostos conforme padrão DPS Nacional 2026**
+2. **Implementar série numérica obrigatória** (requisito a partir de 01/01/2026)
+3. **Manter a emissão via Asaas** (que já faz a comunicação com o Portal Nacional)
+4. **Remover opção de provedor manual** (simplificar para apenas Asaas)
+5. **Adicionar campos IBS/CBS** (fase de calibragem da Reforma Tributária)
+6. **Cadastrar código de serviço 1.07** (Suporte técnico em informática)
 
 ---
 
-## Análise do Estado Atual
+## Especificação Técnica - Padrão NFS-e Nacional 2026 (DPS v1.0)
 
-### O que já existe:
+### Campos Obrigatórios de Tributação
 
-| Recurso | Status |
-|---------|--------|
-| **Banco Inter** | Totalmente funcional para Boleto/PIX |
-| **Asaas - NFS-e** | Totalmente funcional |
-| **Asaas - Cobranças** | Infraestrutura existente (só usada para testes) |
-| **Campo `payment_preference`** | Existe em `contracts` (boleto/pix/both) |
-| **Campo `payment_method`** | Existe em `invoices` (armazena método usado) |
+| Campo DPS | Descrição | Grupo XML |
+|-----------|-----------|-----------|
+| `tpRetISS` | Tipo retenção ISS (1=Retido, 2=Não Retido) | `<tribut><issqn>` |
+| `vISSRet` | Valor do ISS retido | `<tribut><issqn>` |
+| `vRetPIS` | Valor retenção PIS | `<tribut><fed>` |
+| `vRetCOFINS` | Valor retenção COFINS | `<tribut><fed>` |
+| `vRetCSLL` | Valor retenção CSLL | `<tribut><fed>` |
+| `vRetIRRF` | Valor retenção IRRF | `<tribut><fed>` |
+| `vRetCP` | Valor retenção INSS/CP | `<tribut><fed>` |
+| `vLiq` | Valor líquido (obrigatório) | `<infDPS>` |
 
-### O que está faltando:
+### Novidade 2026: IBS e CBS (Reforma Tributária)
 
-- Campo `billing_provider` para indicar **qual provedor** usar
-- Ação no Asaas para criar cobranças reais (não apenas testes)
-- Lógica de roteamento nas edge functions
-- UI para seleção do provedor nos formulários
+| Campo | Descrição | Status |
+|-------|-----------|--------|
+| `vIBS` | Valor IBS (Imposto sobre Bens e Serviços) | Fase de calibragem (opcional) |
+| `vCBS` | Valor CBS (Contribuição sobre Bens e Serviços) | Fase de calibragem (opcional) |
+
+### Requisito Crítico: Série Numérica
+
+A partir de **01/01/2026**, a série do RPS/DPS deve ser **estritamente numérica**. Séries alfanuméricas (ex: "A", "SN") serão rejeitadas pelo ADN.
+
+---
+
+## Estado Atual da Tabela `nfse_history`
+
+**Campos existentes:**
+- `valor_servico`, `valor_iss`, `aliquota` ✓
+- `codigo_tributacao`, `cnae` ✓
+- `serie` (default '900') ✓
+- `asaas_invoice_id`, `asaas_status` ✓
+
+**Campos faltantes (padrão 2026):**
+- `iss_retido` (boolean)
+- `valor_iss_retido` (numeric)
+- `valor_pis`, `valor_cofins`, `valor_csll`, `valor_irrf`, `valor_inss`
+- `valor_liquido` (obrigatório no DPS)
+- `valor_deducoes`, `valor_desconto`
 
 ---
 
@@ -35,356 +62,302 @@ Implementar a capacidade de escolher entre **Banco Inter** e **Asaas** como prov
 
 ### Etapa 1: Migração do Banco de Dados
 
-Adicionar campo `billing_provider` nas tabelas `contracts` e `invoices`:
+Adicionar campos de retenção conforme padrão DPS Nacional 2026:
 
 ```sql
--- Adicionar campo billing_provider em contracts
-ALTER TABLE public.contracts 
-ADD COLUMN IF NOT EXISTS billing_provider TEXT DEFAULT 'banco_inter'
-CHECK (billing_provider IN ('banco_inter', 'asaas'));
+-- Campos de retenção ISS (padrão Nacional 2026)
+ALTER TABLE public.nfse_history
+ADD COLUMN IF NOT EXISTS iss_retido BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS valor_iss_retido NUMERIC(15,2) DEFAULT 0;
 
-COMMENT ON COLUMN public.contracts.billing_provider IS 
-  'Provedor de cobrança: banco_inter ou asaas';
+-- Tributos federais retidos (padrão Nacional 2026)
+ALTER TABLE public.nfse_history
+ADD COLUMN IF NOT EXISTS valor_pis NUMERIC(15,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS valor_cofins NUMERIC(15,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS valor_csll NUMERIC(15,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS valor_irrf NUMERIC(15,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS valor_inss NUMERIC(15,2) DEFAULT 0;
 
--- Adicionar campo billing_provider em invoices
-ALTER TABLE public.invoices 
-ADD COLUMN IF NOT EXISTS billing_provider TEXT
-CHECK (billing_provider IN ('banco_inter', 'asaas'));
+-- Valores calculados (obrigatórios)
+ALTER TABLE public.nfse_history
+ADD COLUMN IF NOT EXISTS valor_liquido NUMERIC(15,2),
+ADD COLUMN IF NOT EXISTS valor_deducoes NUMERIC(15,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS valor_desconto NUMERIC(15,2) DEFAULT 0;
 
-COMMENT ON COLUMN public.invoices.billing_provider IS 
-  'Provedor de cobrança usado para esta fatura (herda do contrato se nulo)';
+-- Reforma Tributária 2026 (IBS/CBS - fase calibragem)
+ALTER TABLE public.nfse_history
+ADD COLUMN IF NOT EXISTS valor_ibs NUMERIC(15,2) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS valor_cbs NUMERIC(15,2) DEFAULT 0;
 
--- Adicionar campos para dados do Asaas na fatura
-ALTER TABLE public.invoices 
-ADD COLUMN IF NOT EXISTS asaas_payment_id TEXT,
-ADD COLUMN IF NOT EXISTS asaas_invoice_url TEXT;
+-- Cadastrar código de serviço 1.07
+INSERT INTO nfse_service_codes (
+  codigo_tributacao, descricao, item_lista, subitem_lista, 
+  cnae_principal, aliquota_sugerida, categoria
+)
+VALUES (
+  '010701',
+  'Suporte técnico em informática, inclusive instalação, configuração e manutenção de programas de computação e bancos de dados.',
+  '1', '07', '6209100', 2.00, 'informatica'
+) ON CONFLICT (codigo_tributacao) DO NOTHING;
 ```
 
-### Etapa 2: Atualizar Edge Function `asaas-nfse`
+### Etapa 2: Atualizar NfseAvulsaDialog
 
-Adicionar nova ação `create_payment` para criar cobranças reais:
+Simplificar e adicionar campos de tributação:
 
-```typescript
-case "create_payment": {
-  const { invoice_id, billing_type } = params;
-  
-  // 1. Buscar dados da fatura
-  // 2. Garantir cliente existe no Asaas (asaas_customer_id)
-  // 3. Criar cobrança POST /payments
-  // 4. Atualizar invoices com asaas_payment_id, boleto_url, pix_code
-  // 5. Retornar dados do pagamento
-}
-```
+**Alterações:**
+- Remover seleção de provedor (sempre Asaas)
+- Adicionar seção "Tributação" colapsável
+- Adicionar checkbox "ISS Retido pelo Tomador"
+- Adicionar campos de tributos federais (PIS, COFINS, CSLL, IRRF, INSS)
+- Calcular e exibir valor líquido automaticamente
 
-### Etapa 3: Modificar Fluxo de Geração de Pagamentos
-
-Atualizar `generate-invoice-payments` e `generate-monthly-invoices`:
-
-```typescript
-// Determinar provedor a usar
-const provider = invoice.billing_provider || 
-                 invoice.contracts?.billing_provider || 
-                 "banco_inter";
-
-// Rotear para o provedor correto
-if (provider === "asaas") {
-  await supabase.functions.invoke("asaas-nfse", {
-    body: { 
-      action: "create_payment",
-      invoice_id: invoice.id,
-      billing_type: paymentType === "pix" ? "PIX" : "BOLETO"
-    }
-  });
-} else {
-  await supabase.functions.invoke("banco-inter", {
-    body: { invoice_id: invoice.id, payment_type: paymentType }
-  });
-}
-```
-
-### Etapa 4: Atualizar ContractForm
-
-Adicionar campo de seleção do provedor na seção de Faturamento:
+**Interface proposta:**
 
 ```text
 +--------------------------------------------------+
-|  💳 Faturamento                                   |
+|  Emitir NFS-e Avulsa                             |
 +--------------------------------------------------+
+|  [Cliente] [Código Serviço] [Competência]        |
+|  [Valor do Serviço] [Descrição]                  |
 |                                                  |
-|  [Dia Vencimento] [Dias Antecedência]            |
-|                                                  |
-|  Provedor de Cobrança *                          |
-|  +--------------------------------------------+  |
-|  | ○ Banco Inter    ○ Asaas                  |  |
-|  +--------------------------------------------+  |
-|                                                  |
-|  Preferência de Pagamento                        |
-|  +--------------------------------------------+  |
-|  | Boleto  |  PIX  |  Boleto + PIX           |  |
-|  +--------------------------------------------+  |
-|                                                  |
-+--------------------------------------------------+
-```
-
-### Etapa 5: Atualizar InvoiceForm
-
-Adicionar opção de provedor ao criar fatura avulsa:
-
-```text
-+--------------------------------------------------+
-|  Nova Fatura                                     |
-+--------------------------------------------------+
-|  Cliente *          [Selecionar...]              |
-|  Contrato (opcional) [Vincular...]               |
-|  Valor (R$) *       [0,00]                       |
-|  Vencimento *       [Data]                       |
-|                                                  |
-|  Provedor de Cobrança (opcional)                 |
-|  +--------------------------------------------+  |
-|  | Padrão do contrato | Banco Inter | Asaas  |  |
-|  +--------------------------------------------+  |
-|  (Se não selecionado, usa o padrão do contrato   |
-|   ou Banco Inter se for fatura avulsa)           |
-|                                                  |
-|  Observações        [                         ]  |
+|  ╔════════════════════════════════════════════╗  |
+|  ║ 💰 Tributação (Padrão Nacional 2026)       ║  |
+|  ╠════════════════════════════════════════════╣  |
+|  ║ Alíquota ISS: [2,00 %] (do código serviço)  ║  |
+|  ║                                            ║  |
+|  ║ [✓] ISS Retido pelo Tomador                ║  |
+|  ║     Valor ISS: R$ 29,11 (calculado)         ║  |
+|  ║                                            ║  |
+|  ║ ▼ Tributos Federais Retidos (opcional)     ║  |
+|  ║   PIS: [R$ 0,00]    COFINS: [R$ 0,00]     ║  |
+|  ║   CSLL: [R$ 0,00]   IRRF: [R$ 0,00]       ║  |
+|  ║   INSS/CP: [R$ 0,00]                       ║  |
+|  ║                                            ║  |
+|  ║ ─────────────────────────────────          ║  |
+|  ║ Total Retenções:   R$ 29,11                ║  |
+|  ║ VALOR LÍQUIDO:     R$ 1.426,23             ║  |
+|  ╚════════════════════════════════════════════╝  |
 +--------------------------------------------------+
 ```
 
-### Etapa 6: Atualizar BillingInvoicesTab
+### Etapa 3: Atualizar EmitNfseDialog
 
-Modificar `handleGeneratePayment` para usar o provedor correto:
+Adicionar campos de retenção no fluxo de emissão via fatura:
+
+**Alterações:**
+- Adicionar seção de tributação no step "form"
+- Checkbox "ISS Retido pelo Tomador"
+- Campos opcionais para tributos federais
+- Exibir resumo no step "preview"
+
+### Etapa 4: Atualizar Edge Function `asaas-nfse`
+
+Modificar as ações `emit` e `emit_standalone` para:
+
+1. Aceitar novos parâmetros de retenção
+2. Enviar tributos para API Asaas
+3. Salvar valores no histórico
+
+**Parâmetros adicionais:**
 
 ```typescript
-const handleGeneratePayment = async (
-  invoiceId: string, 
-  paymentType: "boleto" | "pix",
-  provider: "banco_inter" | "asaas"
-) => {
-  if (provider === "asaas") {
-    const { data, error } = await supabase.functions.invoke("asaas-nfse", {
-      body: { 
-        action: "create_payment",
-        invoice_id: invoiceId,
-        billing_type: paymentType === "pix" ? "PIX" : "BOLETO"
-      }
-    });
-    // ... tratamento
-  } else {
-    const { data, error } = await supabase.functions.invoke("banco-inter", {
-      body: { invoice_id: invoiceId, payment_type: paymentType }
-    });
-    // ... tratamento existente
-  }
+const {
+  // ... existentes
+  retain_iss,           // boolean - ISS retido pelo tomador
+  iss_rate,             // alíquota ISS %
+  pis_value,            // valor PIS retido
+  cofins_value,         // valor COFINS retido
+  csll_value,           // valor CSLL retido
+  irrf_value,           // valor IRRF retido
+  inss_value,           // valor INSS/CP retido
+  deductions,           // deduções
+  discount,             // descontos
+} = params;
+```
+
+**Payload para API Asaas:**
+
+```typescript
+invoicePayload.taxes = {
+  retainIss: retain_iss || false,
+  iss: iss_rate || 0,
+  pis: pis_value || 0,
+  cofins: cofins_value || 0,
+  csll: csll_value || 0,
+  irrf: irrf_value || 0,
+  inss: inss_value || 0,
 };
+
+if (deductions) invoicePayload.deductions = deductions;
+if (discount) invoicePayload.discount = discount;
 ```
 
-Atualizar menu de ações da fatura:
+### Etapa 5: Atualizar NfseDetailsSheet
+
+Exibir resumo de retenções no painel de detalhes:
 
 ```text
-+------------------+
-| 💳 Gerar Boleto  |
-|   ├ Banco Inter  |
-|   └ Asaas        |
-| 📱 Gerar PIX     |
-|   ├ Banco Inter  |
-|   └ Asaas        |
-| ⚡ Emitir Tudo   |
-+------------------+
-```
-
-### Etapa 7: Atualizar Emissão Completa
-
-Modificar `handleEmitComplete` para respeitar o provedor:
-
-```typescript
-const provider = invoice.billing_provider || 
-                 selectedContract?.billing_provider || 
-                 "banco_inter";
-
-// Gerar boleto
-if (!invoice.boleto_url) {
-  if (provider === "asaas") {
-    await supabase.functions.invoke("asaas-nfse", {
-      body: { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" }
-    });
-  } else {
-    await supabase.functions.invoke("banco-inter", {
-      body: { invoice_id: invoice.id, payment_type: "boleto" }
-    });
-  }
-}
-// Repetir para PIX...
++--------------------------------------------------+
+|  NFS-e #2025606 - CAPASEMU                       |
++--------------------------------------------------+
+|  ┌──────────────────────────────────────────┐    |
+|  │ Valor do Serviço:       R$ 1.455,34      │    |
+|  │ (-) Deduções:           R$ 0,00          │    |
+|  │ (=) Base de Cálculo:    R$ 1.455,34      │    |
+|  ├──────────────────────────────────────────┤    |
+|  │ ISS Retido (2%):        R$ 29,11    ✓    │    |
+|  │ PIS:                    R$ 0,00          │    |
+|  │ COFINS:                 R$ 0,00          │    |
+|  │ CSLL:                   R$ 0,00          │    |
+|  │ IRRF:                   R$ 0,00          │    |
+|  │ INSS/CP:                R$ 0,00          │    |
+|  ├──────────────────────────────────────────┤    |
+|  │ TOTAL RETENÇÕES:        R$ 29,11         │    |
+|  │ VALOR LÍQUIDO:          R$ 1.426,23      │    |
+|  └──────────────────────────────────────────┘    |
++--------------------------------------------------+
 ```
 
 ---
 
-## Arquivos a Serem Modificados/Criados
+## Arquivos a Serem Modificados
 
 | Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| `supabase/migrations/xxx_add_billing_provider.sql` | CRIAR | Adicionar campos |
-| `supabase/functions/asaas-nfse/index.ts` | MODIFICAR | Nova ação `create_payment` |
-| `supabase/functions/generate-invoice-payments/index.ts` | MODIFICAR | Roteamento por provedor |
-| `supabase/functions/generate-monthly-invoices/index.ts` | MODIFICAR | Roteamento por provedor |
-| `src/components/contracts/ContractForm.tsx` | MODIFICAR | Campo billing_provider |
-| `src/components/financial/InvoiceForm.tsx` | MODIFICAR | Campo billing_provider |
-| `src/components/billing/BillingInvoicesTab.tsx` | MODIFICAR | Seleção de provedor |
-| `supabase/functions/webhook-asaas-nfse/index.ts` | MODIFICAR | Processar pagamentos |
+| Migração SQL | CRIAR | Campos de retenção padrão 2026 |
+| `supabase/functions/asaas-nfse/index.ts` | MODIFICAR | Aceitar e enviar tributos |
+| `src/components/billing/nfse/NfseAvulsaDialog.tsx` | MODIFICAR | Seção tributação + remover seleção provedor |
+| `src/components/financial/EmitNfseDialog.tsx` | MODIFICAR | Campos ISS retido e tributos federais |
+| `src/components/billing/nfse/NfseDetailsSheet.tsx` | MODIFICAR | Exibir resumo de retenções |
+| `src/components/billing/nfse/nfseValidation.ts` | MODIFICAR | Validar campos de retenção |
 
 ---
 
 ## Seção Técnica
 
-### Schema Atualizado
-
-```sql
--- contracts
-billing_provider TEXT DEFAULT 'banco_inter' CHECK (billing_provider IN ('banco_inter', 'asaas'))
-
--- invoices
-billing_provider TEXT CHECK (billing_provider IN ('banco_inter', 'asaas'))
-asaas_payment_id TEXT     -- ID do pagamento no Asaas
-asaas_invoice_url TEXT    -- URL da fatura no Asaas
-```
-
-### Nova Ação no `asaas-nfse`
+### Estrutura de Dados (Padrão Nacional 2026)
 
 ```typescript
-case "create_payment": {
-  const { invoice_id, billing_type } = params;
+interface NfseEmitParams {
+  // Identificação
+  client_id: string;
+  invoice_id?: string;
+  contract_id?: string;
   
-  // Buscar fatura
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("id, client_id, amount, due_date, invoice_number, clients(name, document, asaas_customer_id)")
-    .eq("id", invoice_id)
-    .single();
+  // Serviço
+  value: number;
+  service_description: string;
+  service_code?: string;           // código tributação (ex: 010701)
+  cnae?: string;                   // CNAE (ex: 6209100)
+  competencia: string;             // yyyy-MM
   
-  // Garantir cliente no Asaas
-  let customerId = invoice.clients?.asaas_customer_id;
-  if (!customerId) {
-    // Criar cliente no Asaas
-    const customer = await asaasRequest(settings, "/customers", "POST", {...});
-    customerId = customer.id;
-    await supabase.from("clients").update({ asaas_customer_id: customerId }).eq("id", invoice.client_id);
-  }
+  // Tributação ISS
+  iss_rate: number;                // alíquota ISS % (ex: 2.00)
+  retain_iss: boolean;             // ISS retido pelo tomador (tpRetISS)
   
-  // Criar cobrança
-  const payment = await asaasRequest(settings, "/payments", "POST", {
-    customer: customerId,
-    billingType: billing_type || "BOLETO",
-    value: invoice.amount,
-    dueDate: invoice.due_date,
-    description: `Fatura #${invoice.invoice_number}`,
-    externalReference: invoice.id,
-  });
+  // Tributos Federais (opcionais)
+  pis_value?: number;              // vRetPIS
+  cofins_value?: number;           // vRetCOFINS
+  csll_value?: number;             // vRetCSLL
+  irrf_value?: number;             // vRetIRRF
+  inss_value?: number;             // vRetCP (Contribuição Previdenciária)
   
-  // Atualizar fatura
-  const updateData = {
-    asaas_payment_id: payment.id,
-    asaas_invoice_url: payment.invoiceUrl,
-    billing_provider: "asaas",
+  // Deduções (opcionais)
+  deductions?: number;
+  discount?: number;
+}
+```
+
+### Função de Cálculo de Valor Líquido
+
+```typescript
+function calculateNetValue(params: {
+  valorServico: number;
+  issRetido: boolean;
+  aliquotaIss: number;
+  valorPis: number;
+  valorCofins: number;
+  valorCsll: number;
+  valorIrrf: number;
+  valorInss: number;
+  deducoes: number;
+  desconto: number;
+}): { valorLiquido: number; totalRetencoes: number; valorIssRetido: number } {
+  const valorIssRetido = params.issRetido 
+    ? params.valorServico * (params.aliquotaIss / 100) 
+    : 0;
+  
+  const totalRetencoes = valorIssRetido 
+    + params.valorPis 
+    + params.valorCofins 
+    + params.valorCsll 
+    + params.valorIrrf 
+    + params.valorInss;
+  
+  const valorLiquido = params.valorServico 
+    - params.deducoes 
+    - params.desconto 
+    - totalRetencoes;
+  
+  return {
+    valorLiquido: Math.max(0, valorLiquido),
+    totalRetencoes,
+    valorIssRetido,
   };
-  
-  if (billing_type === "BOLETO" || billing_type === "UNDEFINED") {
-    updateData.boleto_url = payment.bankSlipUrl;
-    updateData.boleto_barcode = payment.identificationField;
-  }
-  if (billing_type === "PIX") {
-    updateData.pix_code = payment.payload; // QR Code PIX copia-e-cola
-  }
-  
-  await supabase.from("invoices").update(updateData).eq("id", invoice_id);
-  
-  return response({ success: true, payment_id: payment.id, ...payment });
 }
 ```
 
-### Formulário de Contrato - Schema Zod
+### Mapeamento Asaas → Portal Nacional DPS
 
-```typescript
-const contractSchema = z.object({
-  // ... campos existentes
-  billing_provider: z.enum(["banco_inter", "asaas"]).default("banco_inter"),
-  payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
-});
-```
+O Asaas transmite os dados automaticamente ao Portal Nacional, mapeando para o layout DPS 2026:
 
-### Webhook para Baixa Automática
-
-O webhook `webhook-asaas-nfse` será atualizado para processar confirmações de pagamento:
-
-```typescript
-if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
-  const externalReference = payment.externalReference; // invoice_id
-  if (externalReference) {
-    await supabase
-      .from("invoices")
-      .update({ 
-        status: "paid", 
-        paid_date: payment.paymentDate,
-        payment_method: payment.billingType 
-      })
-      .eq("id", externalReference);
-  }
-}
-```
+| Campo Frontend | Asaas API | DPS Nacional |
+|----------------|-----------|--------------|
+| `retain_iss: true` | `taxes.retainIss: true` | `tpRetISS = 1` |
+| `iss_rate: 2.00` | `taxes.iss: 2.00` | `aliqISS = 2.00` |
+| `pis_value` | `taxes.pis` | `vRetPIS` |
+| `cofins_value` | `taxes.cofins` | `vRetCOFINS` |
+| `csll_value` | `taxes.csll` | `vRetCSLL` |
+| `irrf_value` | `taxes.irrf` | `vRetIRRF` |
+| `inss_value` | `taxes.inss` | `vRetCP` |
 
 ---
 
-## Fluxo de Decisão
+## Fluxo de Emissão (Resumo)
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Gerar Cobrança                           │
-└─────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-              ┌──────────────────────────────┐
-              │ invoice.billing_provider     │
-              │     está definido?           │
-              └──────────────────────────────┘
-                    │                │
-                   Sim              Não
-                    │                │
-                    ▼                ▼
-            ┌───────────┐   ┌──────────────────────────┐
-            │ Usar esse │   │ contract.billing_provider │
-            │ provedor  │   │     está definido?        │
-            └───────────┘   └──────────────────────────┘
-                                  │              │
-                                 Sim            Não
-                                  │              │
-                                  ▼              ▼
-                          ┌───────────┐   ┌─────────────┐
-                          │ Usar do   │   │ Usar padrão │
-                          │ contrato  │   │ banco_inter │
-                          └───────────┘   └─────────────┘
-                                  │              │
-                                  └──────┬───────┘
-                                         │
-                                         ▼
-                         ┌───────────────────────────────┐
-                         │ Provedor = banco_inter?       │
-                         └───────────────────────────────┘
-                               │                │
-                              Sim              Não (asaas)
-                               │                │
-                               ▼                ▼
-                     ┌───────────────┐  ┌───────────────┐
-                     │ Chamar        │  │ Chamar        │
-                     │ banco-inter   │  │ asaas-nfse    │
-                     │ edge function │  │ create_payment│
-                     └───────────────┘  └───────────────┘
+┌─────────────────┐      ┌───────────────┐      ┌─────────────────┐
+│  Interface UI   │ ──▶  │  Edge Function │ ──▶  │   API Asaas     │
+│  (Dialog)       │      │  asaas-nfse   │      │                 │
+└─────────────────┘      └───────────────┘      └─────────────────┘
+        │                       │                       │
+        │ Campos:               │ Payload:              │ Transmite:
+        │ - ISS Retido ☑        │ taxes: {              │ → Portal Nacional
+        │ - Alíquota: 2%        │   retainIss: true,    │ → DPS XML v1.0
+        │ - PIS: 0              │   iss: 2.00,          │ → ADN (Ambiente
+        │ - COFINS: 0           │   pis: 0, ...         │    de Dados Nacional)
+        │ - etc.                │ }                     │
+        ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  nfse_history (banco de dados)                                  │
+│  - iss_retido: true                                             │
+│  - valor_iss_retido: 29.11                                      │
+│  - valor_pis: 0, valor_cofins: 0, ...                           │
+│  - valor_liquido: 1426.23 (obrigatório)                         │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Resultado Esperado
 
-1. **Contratos** terão campo para definir provedor padrão (Banco Inter ou Asaas)
-2. **Faturas avulsas** poderão sobrescrever o provedor
-3. **Geração automática** respeitará a configuração do contrato/fatura
-4. **Ações manuais** (menu de ações) permitirão escolher o provedor
-5. **Baixa automática** funcionará via webhooks de ambos provedores
-6. **Compatibilidade** mantida com fluxos existentes (padrão Banco Inter)
+1. **Campos de retenção** disponíveis na emissão de NFS-e
+2. **ISS Retido** configurável (para clientes que fazem retenção na fonte)
+3. **Tributos federais** opcionais (PIS, COFINS, CSLL, IRRF, INSS)
+4. **Valor líquido** calculado automaticamente (obrigatório no DPS)
+5. **Série numérica** mantida (padrão '900' - compliance 2026)
+6. **Código 1.07** disponível para seleção
+7. **Interface simplificada** sem seleção de provedor (apenas Asaas)
+8. **Conformidade** com o padrão NFS-e Nacional DPS 2026
+9. **Preparação IBS/CBS** (campos disponíveis para fase de calibragem)
