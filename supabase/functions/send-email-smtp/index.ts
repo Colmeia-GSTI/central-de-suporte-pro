@@ -167,6 +167,8 @@ serve(async (req) => {
     });
 
     let closed = false;
+    let sendErrorMsg = "";
+    
     try {
       await client.send({
         from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
@@ -176,9 +178,6 @@ serve(async (req) => {
         html: sanitizedHtml,
       });
 
-      await client.close();
-      closed = true;
-
       console.log("[send-email-smtp] Email sent successfully");
 
       return new Response(
@@ -186,39 +185,45 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } catch (sendError: unknown) {
-      const errorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
-      console.error("[send-email-smtp] Send error:", errorMsg);
-      if (sendError instanceof Error && sendError.stack) {
-        console.error("[send-email-smtp] Stack:", sendError.stack);
+      sendErrorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
+      console.error("[send-email-smtp] Send error:", sendErrorMsg);
+      
+      // Determine user-friendly message based on error
+      let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
+      
+      if (sendErrorMsg.includes("datamode") || sendErrorMsg.includes("connection not recoverable")) {
+        userMessage = "A conexão SMTP foi interrompida durante o envio. Isso pode indicar que o servidor rejeitou o email ou há um problema de rede.";
+      } else if (sendErrorMsg.includes("554") || sendErrorMsg.includes("policy") || sendErrorMsg.includes("relay") || sendErrorMsg.includes("Rejected")) {
+        userMessage = "O servidor SMTP rejeitou o email. Isso pode ocorrer quando o servidor não permite envio para domínios externos. Verifique as configurações de relay do seu provedor SMTP.";
+      } else if (sendErrorMsg.includes("connect")) {
+        userMessage = "Não foi possível conectar ao servidor SMTP. Verifique host e porta.";
+      } else if (sendErrorMsg.includes("auth") || sendErrorMsg.includes("credentials")) {
+        userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
+      } else if (sendErrorMsg.includes("certificate") || sendErrorMsg.includes("TLS")) {
+        userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
       }
-      throw sendError;
+      
+      return new Response(
+        JSON.stringify({ error: userMessage, details: sendErrorMsg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     } finally {
       if (!closed) {
         try {
           await client.close();
-        } catch {
-          // Ignore close errors
+          closed = true;
+        } catch (closeErr) {
+          // Ignore close errors - connection may already be dead
+          console.warn("[send-email-smtp] Error closing connection (ignored):", closeErr);
         }
       }
     }
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
-    console.error("[send-email-smtp] Error:", errorMsg);
-    
-    // Return more specific error messages for debugging
-    let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
-    if (errorMsg.includes("connect")) {
-      userMessage = "Não foi possível conectar ao servidor SMTP. Verifique host e porta.";
-    } else if (errorMsg.includes("auth") || errorMsg.includes("credentials")) {
-      userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
-    } else if (errorMsg.includes("certificate") || errorMsg.includes("TLS")) {
-      userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
-    } else if (errorMsg.includes("554") || errorMsg.includes("policy") || errorMsg.includes("relay")) {
-      userMessage = "O servidor SMTP rejeitou o email. Isso pode ocorrer quando o servidor não permite envio para domínios externos. Verifique as configurações de relay do seu provedor SMTP.";
-    }
+    console.error("[send-email-smtp] Unexpected error:", errorMsg);
     
     return new Response(
-      JSON.stringify({ error: userMessage, details: errorMsg }),
+      JSON.stringify({ error: "Erro inesperado ao processar requisição de email", details: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
