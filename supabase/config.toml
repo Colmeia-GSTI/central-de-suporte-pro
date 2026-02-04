@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.check-contract-adjustments]
 verify_jwt = false
+
+[functions.send-nfse-notification]
+verify_jwt = false
+
+[functions.send-email-smtp]
+verify_jwt = false
+
+[functions.send-whatsapp]
+verify_jwt = false

@@ -166,6 +166,7 @@ serve(async (req) => {
       },
     });
 
+    let closed = false;
     try {
       await client.send({
         from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
@@ -176,6 +177,7 @@ serve(async (req) => {
       });
 
       await client.close();
+      closed = true;
 
       console.log("[send-email-smtp] Email sent successfully");
 
@@ -191,10 +193,12 @@ serve(async (req) => {
       }
       throw sendError;
     } finally {
-      try {
-        await client.close();
-      } catch {
-        // Ignore close errors
+      if (!closed) {
+        try {
+          await client.close();
+        } catch {
+          // Ignore close errors
+        }
       }
     }
   } catch (error: unknown) {
