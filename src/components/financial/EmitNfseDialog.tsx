@@ -26,6 +26,9 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 
+import { NfseTributacaoSection, type TributacaoData } from "@/components/billing/nfse/NfseTributacaoSection";
+import { calcularRetencoes, formatarReais } from "@/lib/nfse-retencoes";
+
 interface EmitNfseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,6 +42,16 @@ interface AsaasSettings {
 
 type DialogStep = "form" | "preview";
 
+const initialTributacao: TributacaoData = {
+  issRetido: false,
+  aliquotaIss: 0,
+  valorPis: 0,
+  valorCofins: 0,
+  valorCsll: 0,
+  valorIrrf: 0,
+  valorInss: 0,
+};
+
 export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -47,6 +60,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     return new Date(invoice.due_date);
   });
   const [descricao, setDescricao] = useState("");
+  const [tributacao, setTributacao] = useState<TributacaoData>(initialTributacao);
 
   // Check if Asaas integration is active
   const { data: asaasConfig, isLoading: isLoadingAsaas } = useQuery({
@@ -109,10 +123,27 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
 
   const isAsaasConfigured = !!asaasConfig?.api_key;
 
+  // Alíquota do código de serviço do contrato
+  const aliquotaIss = (contract as any)?.nfse_service_codes?.aliquota_sugerida ?? 0;
+
   // Computed final description for preview
   const finalDescription = useMemo(() => {
     return descricao || contract?.nfse_descricao_customizada || contract?.description || `Prestação de serviços - ${contract?.name}`;
   }, [descricao, contract]);
+
+  // Calcular retenções
+  const retencoes = useMemo(() => {
+    return calcularRetencoes({
+      valorServico: invoice.amount,
+      aliquotaIss,
+      issRetido: tributacao.issRetido,
+      valorPis: tributacao.valorPis,
+      valorCofins: tributacao.valorCofins,
+      valorCsll: tributacao.valorCsll,
+      valorIrrf: tributacao.valorIrrf,
+      valorInss: tributacao.valorInss,
+    });
+  }, [invoice.amount, aliquotaIss, tributacao]);
 
   const emitMutation = useMutation({
     mutationFn: async () => {
@@ -135,8 +166,15 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
           municipal_service_code: contract?.nfse_service_code,
           effective_date: competencia + "-01",
           competencia,
-          iss_rate: (contract as any)?.nfse_service_codes?.aliquota_sugerida || null,
-          retain_iss: false,
+          // Tributos Nacional 2026
+          retain_iss: tributacao.issRetido,
+          iss_rate: aliquotaIss,
+          pis_value: tributacao.valorPis,
+          cofins_value: tributacao.valorCofins,
+          csll_value: tributacao.valorCsll,
+          irrf_value: tributacao.valorIrrf,
+          inss_value: tributacao.valorInss,
+          valor_liquido: retencoes.valorLiquido,
         },
       });
 
@@ -174,13 +212,14 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     if (!newOpen) {
       setStep("form");
       setDescricao("");
+      setTributacao(initialTributacao);
     }
     onOpenChange(newOpen);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
@@ -301,6 +340,14 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
                   </p>
                 </div>
 
+                {/* Seção de Tributação */}
+                <NfseTributacaoSection
+                  valorServico={invoice.amount}
+                  aliquotaIss={aliquotaIss}
+                  data={tributacao}
+                  onChange={setTributacao}
+                />
+
                 <Alert>
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
@@ -385,6 +432,54 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
                 </div>
                 <div className="text-sm">
                   {(contract as any)?.nfse_service_codes?.codigo_tributacao || contract.nfse_service_code || "-"} / {(contract as any)?.nfse_service_codes?.cnae_principal || contract.nfse_cnae || "-"}
+                </div>
+              </div>
+            )}
+
+            {/* Resumo de Retenções */}
+            {retencoes.totalRetencoes > 0 && (
+              <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2 text-sm">
+                <div className="font-medium text-amber-800 dark:text-amber-200">Retenções</div>
+                {tributacao.issRetido && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ISS Retido ({aliquotaIss}%)</span>
+                    <span>{formatarReais(retencoes.valorIssRetido)}</span>
+                  </div>
+                )}
+                {tributacao.valorPis > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">PIS</span>
+                    <span>{formatarReais(tributacao.valorPis)}</span>
+                  </div>
+                )}
+                {tributacao.valorCofins > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">COFINS</span>
+                    <span>{formatarReais(tributacao.valorCofins)}</span>
+                  </div>
+                )}
+                {tributacao.valorCsll > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CSLL</span>
+                    <span>{formatarReais(tributacao.valorCsll)}</span>
+                  </div>
+                )}
+                {tributacao.valorIrrf > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">IRRF</span>
+                    <span>{formatarReais(tributacao.valorIrrf)}</span>
+                  </div>
+                )}
+                {tributacao.valorInss > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">INSS/CP</span>
+                    <span>{formatarReais(tributacao.valorInss)}</span>
+                  </div>
+                )}
+                <Separator />
+                <div className="flex justify-between font-medium">
+                  <span>Valor Líquido</span>
+                  <span className="text-primary">{formatarReais(retencoes.valorLiquido)}</span>
                 </div>
               </div>
             )}
