@@ -811,6 +811,151 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "check_single_status": {
+        const { nfse_history_id } = params;
+        
+        log(correlationId, "info", "Verificando status individual de NFS-e", { nfse_history_id });
+        
+        if (!nfse_history_id) {
+          throw new AsaasApiError("ID do registro NFS-e é obrigatório", 400, "MISSING_HISTORY_ID");
+        }
+        
+        // 1. Buscar registro local
+        const { data: record, error: findError } = await supabase
+          .from("nfse_history")
+          .select("id, asaas_invoice_id, status, client_id, ambiente")
+          .eq("id", nfse_history_id)
+          .single();
+        
+        if (findError || !record) {
+          throw new AsaasApiError(ERROR_CODES.RECORD_NOT_FOUND, 404, "RECORD_NOT_FOUND");
+        }
+        
+        if (!record.asaas_invoice_id) {
+          throw new AsaasApiError("NFS-e não possui ID no Asaas", 400, "NO_ASAAS_ID");
+        }
+        
+        // Log event: manual check initiated
+        await logNfseEvent(supabase, nfse_history_id, "status_check", "info",
+          "Verificação manual de status iniciada",
+          correlationId, { asaas_invoice_id: record.asaas_invoice_id });
+        
+        // 2. Consultar Asaas
+        const invoice = await asaasRequest(settings, `/invoices/${record.asaas_invoice_id}`, "GET", undefined, correlationId);
+        
+        log(correlationId, "info", "Status obtido do Asaas", { 
+          asaas_id: invoice.id, 
+          status: invoice.status,
+          number: invoice.number 
+        });
+        
+        // 3. Mapear status Asaas para status interno
+        const STATUS_MAP: Record<string, string> = {
+          SCHEDULED: "processando",
+          SYNCHRONIZED: "processando",
+          AUTHORIZATION_PENDING: "processando",
+          AUTHORIZED: "autorizada",
+          CANCELED: "cancelada",
+          CANCELLATION_PENDING: "processando",
+          CANCELLATION_DENIED: "autorizada",
+          ERROR: "erro",
+        };
+        
+        const newStatus = STATUS_MAP[invoice.status] || "processando";
+        const updateData: Record<string, unknown> = {
+          asaas_status: invoice.status,
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        };
+        
+        // 4. Se autorizada, atualizar campos adicionais e baixar arquivos
+        if (invoice.status === "AUTHORIZED") {
+          updateData.numero_nfse = invoice.number?.toString() || null;
+          updateData.codigo_verificacao = invoice.validationCode || null;
+          updateData.data_autorizacao = new Date().toISOString();
+          
+          // Tentar baixar PDF
+          if (invoice.pdfUrl) {
+            try {
+              const pdfResponse = await fetch(invoice.pdfUrl);
+              if (pdfResponse.ok) {
+                const pdfBlob = await pdfResponse.arrayBuffer();
+                const pdfPath = `${record.client_id}/${nfse_history_id}/nfse.pdf`;
+                await supabase.storage.from("nfse-files").upload(pdfPath, pdfBlob, {
+                  contentType: "application/pdf",
+                  upsert: true,
+                });
+                updateData.pdf_url = `nfse-files/${pdfPath}`;
+                log(correlationId, "info", "PDF baixado e salvo", { path: pdfPath });
+              }
+            } catch (pdfError) {
+              log(correlationId, "warn", "Erro ao baixar PDF", { error: String(pdfError) });
+            }
+          }
+          
+          // Tentar baixar XML
+          if (invoice.xmlUrl) {
+            try {
+              const xmlResponse = await fetch(invoice.xmlUrl);
+              if (xmlResponse.ok) {
+                const xmlBlob = await xmlResponse.arrayBuffer();
+                const xmlPath = `${record.client_id}/${nfse_history_id}/nfse.xml`;
+                await supabase.storage.from("nfse-files").upload(xmlPath, xmlBlob, {
+                  contentType: "application/xml",
+                  upsert: true,
+                });
+                updateData.xml_url = `nfse-files/${xmlPath}`;
+                log(correlationId, "info", "XML baixado e salvo", { path: xmlPath });
+              }
+            } catch (xmlError) {
+              log(correlationId, "warn", "Erro ao baixar XML", { error: String(xmlError) });
+            }
+          }
+        }
+        
+        // Se erro, capturar mensagem
+        if (invoice.status === "ERROR") {
+          updateData.mensagem_retorno = invoice.errors?.map((e: { description: string }) => e.description).join("; ") || "Erro no processamento";
+          updateData.codigo_retorno = invoice.errors?.[0]?.code || "ERROR";
+        }
+        
+        // 5. Atualizar registro local
+        const { error: updateError } = await supabase
+          .from("nfse_history")
+          .update(updateData)
+          .eq("id", nfse_history_id);
+        
+        if (updateError) {
+          log(correlationId, "error", "Erro ao atualizar registro local", { error: updateError.message });
+        }
+        
+        // Log event: status updated
+        await logNfseEvent(supabase, nfse_history_id, "status_updated", "info",
+          `Status atualizado: ${invoice.status}${invoice.number ? ` (Número: ${invoice.number})` : ""}`,
+          correlationId, { 
+            old_status: record.status,
+            new_status: newStatus,
+            asaas_status: invoice.status,
+            number: invoice.number
+          });
+        
+        log(correlationId, "info", "Verificação individual concluída", { 
+          new_status: newStatus, 
+          asaas_status: invoice.status 
+        });
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            invoice,
+            new_status: newStatus,
+            previous_status: record.status,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "cancel": {
         const { invoice_id, nfse_history_id } = params;
         

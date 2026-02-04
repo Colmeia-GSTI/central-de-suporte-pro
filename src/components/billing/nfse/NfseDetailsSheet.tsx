@@ -33,8 +33,9 @@ import {
 
 import type { Tables } from "@/integrations/supabase/types";
 import { buildNfseValidation, normalizeCompetencia, type ValidationIssue } from "./nfseValidation";
-import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, type NfseStatus } from "./nfseFormat";
+import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asaasStatusLabel, type NfseStatus } from "./nfseFormat";
 import { NfseEventLogsDialog } from "./NfseEventLogsDialog";
+import { NfseProcessingIndicator } from "./NfseProcessingIndicator";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
   clients: {
@@ -553,6 +554,22 @@ export function NfseDetailsSheet(props: {
           </div>
 
           <Separator className="my-4" />
+
+          {/* Processing Indicator */}
+          {nfse.status === "processando" && (
+            <NfseProcessingIndicator
+              nfse={{
+                id: nfse.id,
+                asaas_invoice_id: nfse.asaas_invoice_id,
+                asaas_status: nfse.asaas_status,
+                created_at: nfse.created_at,
+                data_emissao: nfse.data_emissao,
+                ambiente: nfse.ambiente,
+                status: nfse.status,
+              }}
+              onRefresh={() => props.onChanged?.()}
+            />
+          )}
 
           <ScrollArea className="h-[52vh] pr-4">
             <div className="space-y-4">
