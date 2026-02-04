@@ -144,6 +144,7 @@ export function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) 
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: ["services-active"] });
       toast({
         title: service ? "Serviço atualizado" : "Serviço criado",
         description: "Operação realizada com sucesso",

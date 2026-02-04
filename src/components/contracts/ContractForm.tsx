@@ -52,6 +52,10 @@ const contractSchema = z.object({
   days_before_due: z.coerce.number().min(1).max(30).default(5),
   billing_provider: z.enum(["banco_inter", "asaas"]).default("banco_inter"),
   payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
+  // Initial invoice generation (only for new contracts)
+  generate_initial_invoice: z.boolean().default(false),
+  generate_payment: z.boolean().default(true),
+  send_notification: z.boolean().default(true),
   // Adjustment fields
   adjustment_date: z.string().optional(),
   adjustment_index: z.enum(["IGPM", "IPCA", "INPC", "FIXO"]).default("IGPM"),
@@ -256,17 +260,19 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         });
       }
 
-      // Save contract services
-      if (contractId && contractServices.length > 0) {
-        // Delete existing services
-        await supabase
-          .from("contract_services")
-          .delete()
-          .eq("contract_id", contractId);
+      // Save contract services (usar contractIdValue para novos contratos)
+      if (contractIdValue && contractServices.length > 0) {
+        // Para edição, deletar serviços existentes
+        if (isUpdate) {
+          await supabase
+            .from("contract_services")
+            .delete()
+            .eq("contract_id", contractIdValue);
+        }
 
         // Insert new services
         const servicesToInsert = contractServices.map((s) => ({
-          contract_id: contractId,
+          contract_id: contractIdValue,
           service_id: s.service_id,
           name: s.service_name,
           quantity: s.quantity,
@@ -278,6 +284,76 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           .from("contract_services")
           .insert(servicesToInsert);
         if (servicesError) throw servicesError;
+      }
+
+      // Generate initial invoice if requested (only for new contracts)
+      if (!isUpdate && data.generate_initial_invoice && contractIdValue) {
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        const referenceMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
+        
+        // Calculate due date
+        const billingDay = data.billing_day || 10;
+        const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
+        const actualBillingDay = Math.min(billingDay, lastDayOfMonth);
+        const dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
+        
+        // Create invoice
+        const invoiceAmount = calculatedTotal > 0 ? calculatedTotal : data.monthly_value;
+        const { data: invoice, error: invoiceError } = await supabase
+          .from("invoices")
+          .insert({
+            client_id: data.client_id,
+            contract_id: contractIdValue,
+            amount: invoiceAmount,
+            due_date: dueDate,
+            reference_month: referenceMonth,
+            status: "pending" as const,
+            billing_provider: data.billing_provider,
+            notes: `Primeira fatura - ${data.name}`,
+          })
+          .select("id, invoice_number")
+          .single();
+        
+        if (!invoiceError && invoice) {
+          // Generate payment via provider if requested
+          if (data.generate_payment) {
+            try {
+              if (data.billing_provider === "asaas") {
+                await supabase.functions.invoke("asaas-nfse", {
+                  body: {
+                    action: "create_payment",
+                    invoice_id: invoice.id,
+                    billing_type: data.payment_preference === "pix" ? "PIX" : "BOLETO",
+                  },
+                });
+              } else {
+                await supabase.functions.invoke("banco-inter", {
+                  body: {
+                    action: "create_boleto",
+                    invoice_id: invoice.id,
+                  },
+                });
+              }
+            } catch (paymentError) {
+              console.error("Error generating payment:", paymentError);
+              // Continue - invoice was created, payment can be generated later
+            }
+          }
+          
+          // Send notification if requested
+          if (data.send_notification) {
+            try {
+              await supabase.functions.invoke("resend-payment-notification", {
+                body: { invoice_id: invoice.id },
+              });
+            } catch (notifError) {
+              console.error("Error sending notification:", notifError);
+              // Continue - invoice was created
+            }
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -574,6 +650,80 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
               )}
             />
           </div>
+
+          {/* Initial Invoice Generation - Only for new contracts */}
+          {!contractData && (
+            <div className="mt-4 p-4 rounded-lg border bg-muted/30 space-y-4">
+              <FormField
+                control={form.control}
+                name="generate_initial_invoice"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1">
+                      <FormLabel className="cursor-pointer font-medium">
+                        Gerar primeira cobrança ao criar contrato
+                      </FormLabel>
+                      <FormDescription>
+                        A fatura será gerada para o mês atual com vencimento no dia {form.watch("billing_day") || 10}
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+
+              {form.watch("generate_initial_invoice") && (
+                <div className="ml-6 space-y-3 border-l-2 border-primary/30 pl-4">
+                  <div className="text-sm text-muted-foreground">
+                    <p><strong>Competência:</strong> {new Date().getFullYear()}-{String(new Date().getMonth() + 1).padStart(2, "0")}</p>
+                    <p><strong>Vencimento:</strong> {new Date().getFullYear()}-{String(new Date().getMonth() + 1).padStart(2, "0")}-{String(form.watch("billing_day") || 10).padStart(2, "0")}</p>
+                    <p><strong>Valor:</strong> {calculatedTotal > 0 ? `R$ ${calculatedTotal.toFixed(2)}` : "Será calculado pelos serviços"}</p>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="generate_payment"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <FormLabel className="cursor-pointer text-sm">
+                          Gerar boleto/PIX automaticamente ({form.watch("billing_provider") === "asaas" ? "Asaas" : "Banco Inter"})
+                        </FormLabel>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="send_notification"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <FormLabel className="cursor-pointer text-sm">
+                          Enviar notificação por email
+                        </FormLabel>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Adjustment Section */}
