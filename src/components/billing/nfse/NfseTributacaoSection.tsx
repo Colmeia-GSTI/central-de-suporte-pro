@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, DollarSign } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { calcularRetencoes, formatarReais } from "@/lib/nfse-retencoes";
@@ -31,9 +32,12 @@ export function NfseTributacaoSection({
 }: NfseTributacaoSectionProps) {
   const [federaisOpen, setFederaisOpen] = useState(false);
 
+  // Usa a aliquota do data se foi alterada, senão usa a sugerida
+  const aliquotaEfetiva = data.aliquotaIss > 0 ? data.aliquotaIss : aliquotaIss;
+
   const result = calcularRetencoes({
     valorServico,
-    aliquotaIss,
+    aliquotaIss: aliquotaEfetiva,
     issRetido: data.issRetido,
     valorPis: data.valorPis,
     valorCofins: data.valorCofins,
@@ -49,6 +53,11 @@ export function NfseTributacaoSection({
     data.valorIrrf > 0 ||
     data.valorInss > 0;
 
+  const handleAliquotaChange = (value: string) => {
+    const numValue = parseFloat(value.replace(",", ".")) || 0;
+    onChange({ ...data, aliquotaIss: Math.min(Math.max(numValue, 0), 5) });
+  };
+
   return (
     <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -56,10 +65,18 @@ export function NfseTributacaoSection({
         Tributação (Padrão Nacional 2026)
       </div>
 
-      {/* Alíquota ISS */}
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Alíquota ISS:</span>
-        <span className="font-medium">{aliquotaIss.toFixed(2)}%</span>
+      {/* Alíquota ISS - Editável */}
+      <div className="flex items-center justify-between">
+        <Label className="text-sm text-muted-foreground">Alíquota ISS:</Label>
+        <div className="flex items-center gap-1">
+          <Input
+            type="text"
+            value={aliquotaEfetiva.toFixed(2).replace(".", ",")}
+            onChange={(e) => handleAliquotaChange(e.target.value)}
+            className="w-20 h-8 text-right text-sm font-medium"
+          />
+          <span className="text-sm font-medium">%</span>
+        </div>
       </div>
 
       {/* ISS Retido */}

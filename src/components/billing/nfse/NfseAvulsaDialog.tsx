@@ -44,15 +44,15 @@ type Certificate = {
   titular: string | null;
 };
 
-const initialTributacao: TributacaoData = {
+const createInitialTributacao = (aliquota: number = 0): TributacaoData => ({
   issRetido: false,
-  aliquotaIss: 0,
+  aliquotaIss: aliquota,
   valorPis: 0,
   valorCofins: 0,
   valorCsll: 0,
   valorIrrf: 0,
   valorInss: 0,
-};
+});
 
 export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
@@ -63,7 +63,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
   const [valor, setValor] = useState<number>(0);
   const [descricao, setDescricao] = useState<string>("");
 
-  const [tributacao, setTributacao] = useState<TributacaoData>(initialTributacao);
+  const [tributacao, setTributacao] = useState<TributacaoData>(createInitialTributacao());
 
   const [gerarFatura, setGerarFatura] = useState(false);
   const [vencimentoDias, setVencimentoDias] = useState<number>(30);
@@ -135,8 +135,8 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
     ? differenceInDays(new Date(primaryCertificate.validade), new Date())
     : null;
 
-  // Alíquota do código de serviço selecionado
-  const aliquotaIss = serviceCode?.aliquota_sugerida ?? 0;
+  // Alíquota: usa a editada se maior que 0, senão a sugerida do código de serviço
+  const aliquotaIss = tributacao.aliquotaIss > 0 ? tributacao.aliquotaIss : (serviceCode?.aliquota_sugerida ?? 0);
 
   const canEmit = asaasAvailable && isCompanyConfigured && !!clientId && !!serviceCode && valor > 0 && descricao.trim().length > 0;
 
@@ -146,9 +146,17 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
     setCompetenciaDate(new Date());
     setValor(0);
     setDescricao("");
-    setTributacao(initialTributacao);
+    setTributacao(createInitialTributacao());
     setGerarFatura(false);
     setVencimentoDias(30);
+  };
+
+  // Atualiza a alíquota quando o código de serviço muda
+  const handleServiceCodeChange = (code: NfseServiceCode | null) => {
+    setServiceCode(code);
+    if (code?.aliquota_sugerida) {
+      setTributacao(prev => ({ ...prev, aliquotaIss: code.aliquota_sugerida ?? 0 }));
+    }
   };
 
   const emitMutation = useMutation({
@@ -330,7 +338,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
             <Label className="text-sm">Código de serviço (LC 116/2003) *</Label>
             <NfseServiceCodeCombobox
               value={serviceCode?.codigo_tributacao}
-              onChange={setServiceCode}
+              onChange={handleServiceCodeChange}
             />
             {serviceCode && (
               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
