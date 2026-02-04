@@ -11,6 +11,35 @@ interface NfseNotificationRequest {
   channels: ("email" | "whatsapp")[];
 }
 
+async function readInvokeError(err: unknown): Promise<string> {
+  const fallback = err instanceof Error ? err.message : "Erro desconhecido";
+  const anyErr = err as { context?: Response };
+
+  if (!anyErr?.context) return fallback;
+
+  try {
+    const contentType = anyErr.context.headers.get("content-type") || "";
+    const text = await anyErr.context.text();
+
+    if (contentType.includes("application/json")) {
+      try {
+        const parsed = JSON.parse(text) as { error?: string; details?: string };
+        return parsed.error || parsed.details || fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    // Sometimes gateways return HTML on 502/500
+    return text
+      .replace(/\s+/g, " ")
+      .slice(0, 300)
+      .trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -176,7 +205,8 @@ serve(async (req) => {
 
           if (emailError) {
             console.error("[send-nfse-notification] Email error:", emailError);
-            results.push({ channel: "email", success: false, error: emailError.message || "Erro ao enviar email" });
+            const detailed = await readInvokeError(emailError);
+            results.push({ channel: "email", success: false, error: detailed || "Erro ao enviar email" });
           } else {
             results.push({ channel: "email", success: true });
 
@@ -263,7 +293,8 @@ Atenciosamente,
         partial: !allSuccess && anySuccess,
         results,
       }),
-      { status: allSuccess ? 200 : anySuccess ? 207 : 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      // Always return a 2xx so the frontend can show the detailed per-channel error message.
+      { status: allSuccess ? 200 : 207, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Erro desconhecido";
