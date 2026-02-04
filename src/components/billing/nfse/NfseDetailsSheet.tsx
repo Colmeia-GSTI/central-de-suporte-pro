@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrencyBRL } from "@/lib/currency";
+import { getErrorMessage } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -456,8 +457,8 @@ export function NfseDetailsSheet(props: {
                 if (!nfse.xml_url) return toast.error("XML não disponível");
                 try {
                   await openUrlOrSigned(nfse.xml_url);
-                } catch (e: any) {
-                  toast.error("Erro ao abrir XML", { description: e.message });
+                } catch (e: unknown) {
+                  toast.error("Erro ao abrir XML", { description: getErrorMessage(e) });
                 }
               }}
               disabled={!nfse.xml_url}
@@ -471,8 +472,8 @@ export function NfseDetailsSheet(props: {
                 if (!nfse.pdf_url) return toast.error("PDF não disponível");
                 try {
                   await openUrlOrSigned(nfse.pdf_url);
-                } catch (e: any) {
-                  toast.error("Erro ao abrir PDF", { description: e.message });
+                } catch (e: unknown) {
+                  toast.error("Erro ao abrir PDF", { description: getErrorMessage(e) });
                 }
               }}
               disabled={!nfse.pdf_url}
@@ -486,8 +487,8 @@ export function NfseDetailsSheet(props: {
                 if (!nfse.danfse_url) return toast.error("DANFSe não disponível");
                 try {
                   await openUrlOrSigned(nfse.danfse_url);
-                } catch (e: any) {
-                  toast.error("Erro ao abrir DANFSe", { description: e.message });
+                } catch (e: unknown) {
+                  toast.error("Erro ao abrir DANFSe", { description: getErrorMessage(e) });
                 }
               }}
               disabled={!nfse.danfse_url}
