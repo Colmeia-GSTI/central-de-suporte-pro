@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -155,7 +156,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
           comment: "Chamado criado",
         });
         if (historyError) {
-          console.warn("Failed to insert creation history:", historyError);
+          logger.warn("Failed to insert creation history", "Tickets", { error: historyError.message });
         }
 
         // Assign tags to the ticket
@@ -168,7 +169,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
             .from("ticket_tag_assignments")
             .insert(tagAssignments);
           if (tagError) {
-            console.warn("Failed to assign tags:", tagError);
+            logger.warn("Failed to assign tags", "Tickets", { error: tagError.message });
           }
         }
       }

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -281,7 +282,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         comment: `Edição: ${changes.join(", ")}`,
       });
       if (historyError) {
-        console.warn("Failed to insert edit history:", historyError);
+        logger.warn("Failed to insert edit history", "Tickets", { error: historyError.message });
       }
     }
 
@@ -319,7 +320,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
       ]);
 
       if (historyError) {
-        console.warn("Failed to insert ticket_history (status):", historyError);
+        logger.warn("Failed to insert ticket_history (status)", "Tickets", { error: historyError.message });
         toast({
           title: "Aviso",
           description: "Status alterado, mas não foi possível registrar no histórico.",
@@ -333,7 +334,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
           ticket_id: ticket.id,
           event_type: "updated",
         },
-      }).catch(console.error);
+      }).catch((err) => logger.error("Failed to send notification", "Tickets", { error: String(err) }));
     }
   };
 
