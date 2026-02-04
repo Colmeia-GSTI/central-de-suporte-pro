@@ -1,78 +1,130 @@
 
-# Ajustar Sistema para Dominio Principal .com
+# Corrigir Icone de Compartilhamento de NFS-e
 
-## Objetivo
+## Diagnostico
 
-Atualizar todos os arquivos para usar o dominio principal `https://suporte.colmeiagsti.com` e manter `https://suporte.colmeiagsti.com.br` como secundario.
+O botao de compartilhamento nao esta funcionando devido a dois problemas identificados nos logs:
+
+### Problema 1: Erro na funcao send-email-smtp
+
+A biblioteca `denomailer` esta gerando erro `BadResource: Bad resource ID` porque:
+- A conexao SMTP e fechada duas vezes (linha 178 e linha 195)
+- O bloco `finally` tenta fechar uma conexao ja fechada
+
+**Log de erro:**
+```
+ERROR event loop error: BadResource: Bad resource ID at TlsConn.close
+ERROR Error while in datamode - connection not recoverable
+```
+
+### Problema 2: Configuracao de JWT
+
+As funcoes `send-nfse-notification` e `send-email-smtp` nao estao configuradas com `verify_jwt = false` no `config.toml`, o que pode causar problemas quando uma edge function invoca outra.
 
 ---
 
 ## Arquivos a Modificar
 
-### 1. index.html
+### 1. supabase/functions/send-email-smtp/index.ts
 
-Atualizar todas as meta tags de SEO e Open Graph:
+Corrigir o gerenciamento de conexao do cliente SMTP para evitar duplo fechamento:
 
-| Tag | De | Para |
-|-----|----|------|
-| canonical | `suporte.colmeiagsti.com.br` | `suporte.colmeiagsti.com` |
-| og:url | `suporte.colmeiagsti.com.br` | `suporte.colmeiagsti.com` |
-| og:image | `suporte.colmeiagsti.com.br/og-image.png` | `suporte.colmeiagsti.com/og-image.png` |
-| twitter:image | `suporte.colmeiagsti.com.br/og-image.png` | `suporte.colmeiagsti.com/og-image.png` |
+**Problema atual (linhas 169-199):**
+```typescript
+try {
+  await client.send({ ... });
+  await client.close();  // Fecha aqui
+  return new Response(...);
+} catch (sendError) {
+  throw sendError;
+} finally {
+  try {
+    await client.close();  // Tenta fechar NOVAMENTE
+  } catch { }
+}
+```
 
----
-
-### 2. public/manifest.json
-
-Atualizar URLs do PWA:
-
-| Campo | De | Para |
-|-------|----|------|
-| start_url | `suporte.colmeiagsti.com.br/` | `suporte.colmeiagsti.com/` |
-| scope | `suporte.colmeiagsti.com.br/` | `suporte.colmeiagsti.com/` |
-| id | `suporte.colmeiagsti.com.br/` | `suporte.colmeiagsti.com/` |
-
----
-
-### 3. Edge Function: send-ticket-notification
-
-Atualizar fallback do PORTAL_URL:
+**Solucao:**
+- Usar variavel de controle para evitar fechamento duplo
+- OU remover o close do try e deixar apenas no finally
 
 ```typescript
-// De:
-const portalUrl = Deno.env.get("PORTAL_URL") || "https://colmeiahdpro.lovable.app/portal";
+let closed = false;
+try {
+  await client.send({ ... });
+  await client.close();
+  closed = true;
+  return new Response(...);
+} catch (sendError) {
+  throw sendError;
+} finally {
+  if (!closed) {
+    try {
+      await client.close();
+    } catch { }
+  }
+}
+```
 
-// Para:
-const portalUrl = Deno.env.get("PORTAL_URL") || "https://suporte.colmeiagsti.com/portal";
+### 2. supabase/config.toml
+
+Adicionar configuracao de `verify_jwt = false` para as funcoes que sao invocadas por outras edge functions:
+
+```toml
+[functions.send-nfse-notification]
+verify_jwt = false
+
+[functions.send-email-smtp]
+verify_jwt = false
+
+[functions.send-whatsapp]
+verify_jwt = false
+```
+
+Isso e necessario porque quando uma edge function invoca outra usando `supabase.functions.invoke`, o token JWT pode nao ser passado corretamente na cadeia de chamadas.
+
+---
+
+## Resumo das Alteracoes
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `supabase/functions/send-email-smtp/index.ts` | Corrigir fechamento duplo da conexao SMTP |
+| `supabase/config.toml` | Adicionar `verify_jwt = false` para as 3 funcoes |
+
+---
+
+## Fluxo Corrigido
+
+```text
+USUARIO CLICA COMPARTILHAR
+        |
+        v
+  NfseShareMenu.tsx
+        |
+        v
+  supabase.functions.invoke("send-nfse-notification")
+        |
+        v
+  send-nfse-notification (verify_jwt=false)
+        |
+   +----+----+
+   |         |
+EMAIL     WHATSAPP
+   |         |
+   v         v
+send-email-smtp   send-whatsapp
+(verify_jwt=false) (verify_jwt=false)
+   |              |
+   v              v
+  SMTP         Evolution API
+   |              |
+   v              v
+     Email/WhatsApp enviado
 ```
 
 ---
 
-## Configuracao Google Cloud Console
+## Apos a Correcao
 
-Dominios a configurar nas credenciais OAuth:
-
-**Authorized JavaScript Origins:**
-- `https://suporte.colmeiagsti.com` (principal)
-- `https://suporte.colmeiagsti.com.br` (secundario)
-
-**Authorized Redirect URIs:**
-- `https://suporte.colmeiagsti.com/settings` (principal)
-- `https://suporte.colmeiagsti.com.br/settings` (secundario)
-
----
-
-## Resumo
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `index.html` | Trocar `.com.br` por `.com` em 4 meta tags |
-| `public/manifest.json` | Trocar `.com.br` por `.com` em 3 campos |
-| `supabase/functions/send-ticket-notification/index.ts` | Atualizar fallback PORTAL_URL |
-| `public/robots.txt` | Ja esta correto com `.com` |
-
----
-
-## Nota
-
-O arquivo `robots.txt` ja usa o dominio `.com` corretamente no sitemap. Os demais arquivos serao atualizados para consistencia.
+Testarei a funcao diretamente para confirmar que esta funcionando antes de finalizar.
