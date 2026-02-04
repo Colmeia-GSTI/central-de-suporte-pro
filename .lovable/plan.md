@@ -1,130 +1,57 @@
 
-# Corrigir Icone de Compartilhamento de NFS-e
 
-## Diagnostico
+# Melhorar Tratamento de Erro SMTP para Rejeicao de Relay
 
-O botao de compartilhamento nao esta funcionando devido a dois problemas identificados nos logs:
+## Contexto
 
-### Problema 1: Erro na funcao send-email-smtp
+O teste de SMTP funciona porque envia para dominios internos (`@colmeiagsti.com.br`), mas o compartilhamento de NFS-e falha porque envia para dominios externos (`@capasemu.com.br`). O servidor UHServer esta bloqueando relay para dominios externos.
 
-A biblioteca `denomailer` esta gerando erro `BadResource: Bad resource ID` porque:
-- A conexao SMTP e fechada duas vezes (linha 178 e linha 195)
-- O bloco `finally` tenta fechar uma conexao ja fechada
+## Objetivo
 
-**Log de erro:**
-```
-ERROR event loop error: BadResource: Bad resource ID at TlsConn.close
-ERROR Error while in datamode - connection not recoverable
-```
-
-### Problema 2: Configuracao de JWT
-
-As funcoes `send-nfse-notification` e `send-email-smtp` nao estao configuradas com `verify_jwt = false` no `config.toml`, o que pode causar problemas quando uma edge function invoca outra.
+Melhorar o tratamento de erro para que o usuario receba uma mensagem clara sobre o problema real, e nao apenas "Erro ao enviar email".
 
 ---
 
-## Arquivos a Modificar
+## Arquivo a Modificar
 
-### 1. supabase/functions/send-email-smtp/index.ts
+### supabase/functions/send-email-smtp/index.ts
 
-Corrigir o gerenciamento de conexao do cliente SMTP para evitar duplo fechamento:
+Adicionar tratamento especifico para o erro 554 de politica de relay:
 
-**Problema atual (linhas 169-199):**
+**Linha 209-216 atual:**
 ```typescript
-try {
-  await client.send({ ... });
-  await client.close();  // Fecha aqui
-  return new Response(...);
-} catch (sendError) {
-  throw sendError;
-} finally {
-  try {
-    await client.close();  // Tenta fechar NOVAMENTE
-  } catch { }
+let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
+if (errorMsg.includes("connect")) {
+  userMessage = "Não foi possível conectar ao servidor SMTP...";
+} else if (errorMsg.includes("auth")...
+```
+
+**Adicionar novo caso para erro 554:**
+```typescript
+} else if (errorMsg.includes("554") || errorMsg.includes("policy")) {
+  userMessage = "O servidor SMTP rejeitou o email. Isso pode ocorrer quando o servidor não permite envio para domínios externos. Verifique as configurações de relay do seu provedor SMTP.";
 }
 ```
-
-**Solucao:**
-- Usar variavel de controle para evitar fechamento duplo
-- OU remover o close do try e deixar apenas no finally
-
-```typescript
-let closed = false;
-try {
-  await client.send({ ... });
-  await client.close();
-  closed = true;
-  return new Response(...);
-} catch (sendError) {
-  throw sendError;
-} finally {
-  if (!closed) {
-    try {
-      await client.close();
-    } catch { }
-  }
-}
-```
-
-### 2. supabase/config.toml
-
-Adicionar configuracao de `verify_jwt = false` para as funcoes que sao invocadas por outras edge functions:
-
-```toml
-[functions.send-nfse-notification]
-verify_jwt = false
-
-[functions.send-email-smtp]
-verify_jwt = false
-
-[functions.send-whatsapp]
-verify_jwt = false
-```
-
-Isso e necessario porque quando uma edge function invoca outra usando `supabase.functions.invoke`, o token JWT pode nao ser passado corretamente na cadeia de chamadas.
 
 ---
 
-## Resumo das Alteracoes
+## Resumo
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `supabase/functions/send-email-smtp/index.ts` | Corrigir fechamento duplo da conexao SMTP |
-| `supabase/config.toml` | Adicionar `verify_jwt = false` para as 3 funcoes |
+| `supabase/functions/send-email-smtp/index.ts` | Adicionar tratamento de erro 554 com mensagem explicativa |
 
 ---
 
-## Fluxo Corrigido
+## Nota Importante
 
-```text
-USUARIO CLICA COMPARTILHAR
-        |
-        v
-  NfseShareMenu.tsx
-        |
-        v
-  supabase.functions.invoke("send-nfse-notification")
-        |
-        v
-  send-nfse-notification (verify_jwt=false)
-        |
-   +----+----+
-   |         |
-EMAIL     WHATSAPP
-   |         |
-   v         v
-send-email-smtp   send-whatsapp
-(verify_jwt=false) (verify_jwt=false)
-   |              |
-   v              v
-  SMTP         Evolution API
-   |              |
-   v              v
-     Email/WhatsApp enviado
-```
+**Este e um problema de configuracao do servidor SMTP, nao do codigo:**
 
----
+- O servidor `smtps.uhserver.com` esta configurado para nao permitir relay externo
+- Para resolver definitivamente, voce precisa:
+  1. Acessar o painel do UHServer
+  2. Habilitar "SMTP Relay" ou "Envio para dominios externos"
+  3. Ou usar um servico de email como Resend/SendGrid que nao tem essa restricao
 
-## Apos a Correcao
+A mudanca no codigo apenas melhora a mensagem de erro para facilitar o diagnostico.
 
-Testarei a funcao diretamente para confirmar que esta funcionando antes de finalizar.
