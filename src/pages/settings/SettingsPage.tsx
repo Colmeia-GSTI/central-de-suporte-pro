@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, BarChart3, Building2, Layers, KeyRound, Tag } from "lucide-react";
+import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, BarChart3, Building2, Layers, KeyRound, Tag, Mail } from "lucide-react";
 import { UsersTab } from "@/components/settings/UsersTab";
 import { CategoriesTab } from "@/components/settings/CategoriesTab";
 import { TagsTab } from "@/components/settings/TagsTab";
@@ -15,6 +15,7 @@ import { MessageMetricsDashboard } from "@/components/settings/MessageMetricsDas
 import { DepartmentsTab } from "@/components/settings/DepartmentsTab";
 import { RolePermissionsTab } from "@/components/settings/RolePermissionsTab";
 import CompanyTab from "@/components/settings/CompanyTab";
+import { EmailTemplatesTab } from "@/components/settings/EmailTemplatesTab";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -77,6 +78,12 @@ export default function SettingsPage() {
               <TabsTrigger value="integrations" className="gap-2">
                 <Plug className="h-4 w-4" />
                 Integrações
+              </TabsTrigger>
+            )}
+            {canManage && (
+              <TabsTrigger value="email-templates" className="gap-2">
+                <Mail className="h-4 w-4" />
+                Templates
               </TabsTrigger>
             )}
             <TabsTrigger value="mappings" className="gap-2">
@@ -148,6 +155,12 @@ export default function SettingsPage() {
           {canManage && (
             <TabsContent value="integrations">
               <IntegrationsTab />
+            </TabsContent>
+          )}
+
+          {canManage && (
+            <TabsContent value="email-templates">
+              <EmailTemplatesTab />
             </TabsContent>
           )}
 

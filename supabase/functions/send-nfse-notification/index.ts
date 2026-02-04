@@ -11,6 +11,19 @@ interface NfseNotificationRequest {
   channels: ("email" | "whatsapp")[];
 }
 
+interface EmailSettings {
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  footer_text: string;
+}
+
+interface EmailTemplate {
+  subject_template: string;
+  html_template: string;
+  is_active: boolean;
+}
+
 async function readInvokeError(err: unknown): Promise<string> {
   const fallback = err instanceof Error ? err.message : "Erro desconhecido";
   const anyErr = err as { context?: Response };
@@ -30,14 +43,66 @@ async function readInvokeError(err: unknown): Promise<string> {
       }
     }
 
-    // Sometimes gateways return HTML on 502/500
-    return text
-      .replace(/\s+/g, " ")
-      .slice(0, 300)
-      .trim() || fallback;
+    return text.replace(/\s+/g, " ").slice(0, 300).trim() || fallback;
   } catch {
     return fallback;
   }
+}
+
+function replaceVariables(template: string, data: Record<string, string>): string {
+  let result = template;
+  
+  // Replace simple variables {{variable}}
+  Object.entries(data).forEach(([key, value]) => {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+    result = result.replace(regex, value || "");
+  });
+  
+  // Handle conditional blocks {{#variable}}...{{/variable}}
+  Object.entries(data).forEach(([key, value]) => {
+    const conditionalRegex = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{/${key}\\}\\}`, "g");
+    if (value) {
+      result = result.replace(conditionalRegex, "$1");
+    } else {
+      result = result.replace(conditionalRegex, "");
+    }
+  });
+  
+  return result;
+}
+
+function wrapInEmailLayout(content: string, settings: EmailSettings): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
+    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
+    .email-header { background: ${settings.primary_color}; padding: 24px; text-align: center; }
+    .email-header img { max-height: 50px; max-width: 200px; }
+    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
+    .email-content h2 { margin-top: 0; color: #111827; }
+    .email-content a { color: ${settings.primary_color}; }
+    .email-content blockquote { border-left: 3px solid ${settings.primary_color}; padding-left: 15px; margin: 15px 0; background: #f9fafb; padding: 12px 15px; }
+    .email-content code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    .email-footer { background: ${settings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      ${settings.logo_url ? `<img src="${settings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">Colmeia</span>`}
+    </div>
+    <div class="email-content">
+      ${content}
+    </div>
+    <div class="email-footer">
+      ${settings.footer_text}
+    </div>
+  </div>
+</body>
+</html>`;
 }
 
 serve(async (req) => {
@@ -53,7 +118,6 @@ serve(async (req) => {
     const body: NfseNotificationRequest = await req.json();
     const { nfse_history_id, channels } = body;
 
-    // Validate input
     if (!nfse_history_id || !channels || channels.length === 0) {
       return new Response(
         JSON.stringify({ error: "nfse_history_id e channels são obrigatórios" }),
@@ -61,28 +125,28 @@ serve(async (req) => {
       );
     }
 
-    // Fetch NFS-e data with client info
-    const { data: nfse, error: nfseError } = await supabase
-      .from("nfse_history")
-      .select(`
-        id,
-        numero_nfse,
-        pdf_url,
-        valor_servico,
-        competencia,
-        client_id,
-        clients (
-          name,
-          email,
-          whatsapp,
-          financial_email
-        )
-      `)
-      .eq("id", nfse_history_id)
-      .maybeSingle();
+    // Fetch email settings and template in parallel
+    const [settingsRes, templateRes, nfseRes] = await Promise.all([
+      supabase.from("email_settings").select("*").limit(1).single(),
+      supabase.from("email_templates").select("*").eq("template_type", "nfse").single(),
+      supabase.from("nfse_history").select(`
+        id, numero_nfse, pdf_url, valor_servico, competencia, client_id,
+        clients (name, email, whatsapp, financial_email)
+      `).eq("id", nfse_history_id).maybeSingle(),
+    ]);
 
-    if (nfseError || !nfse) {
-      console.error("[send-nfse-notification] Error fetching NFS-e:", nfseError);
+    const emailSettings: EmailSettings = settingsRes.data || {
+      logo_url: null,
+      primary_color: "#f59e0b",
+      secondary_color: "#1f2937",
+      footer_text: "Este é um email automático. Em caso de dúvidas, entre em contato.",
+    };
+
+    const emailTemplate: EmailTemplate | null = templateRes.data?.is_active ? templateRes.data : null;
+
+    const nfse = nfseRes.data;
+    if (nfseRes.error || !nfse) {
+      console.error("[send-nfse-notification] Error fetching NFS-e:", nfseRes.error);
       return new Response(
         JSON.stringify({ error: "NFS-e não encontrada" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -96,7 +160,7 @@ serve(async (req) => {
       );
     }
 
-    // Fetch company info for email signature
+    // Fetch company info
     const { data: company } = await supabase
       .from("company_settings")
       .select("razao_social, nome_fantasia, telefone, email")
@@ -105,13 +169,13 @@ serve(async (req) => {
 
     const companyName = company?.nome_fantasia || company?.razao_social || "Empresa";
 
-    // Generate signed URL for PDF (24 hours validity)
+    // Generate signed URL for PDF
     let pdfSignedUrl = nfse.pdf_url;
     if (nfse.pdf_url.startsWith("nfse-files/")) {
       const path = nfse.pdf_url.replace("nfse-files/", "");
       const { data: signedData, error: signError } = await supabase.storage
         .from("nfse-files")
-        .createSignedUrl(path, 86400); // 24 hours
+        .createSignedUrl(path, 86400);
 
       if (signError) {
         console.error("[send-nfse-notification] Error creating signed URL:", signError);
@@ -123,7 +187,6 @@ serve(async (req) => {
       pdfSignedUrl = signedData.signedUrl;
     }
 
-    // Handle clients - could be array or object depending on query
     const clientData = nfse.clients;
     const client = (Array.isArray(clientData) ? clientData[0] : clientData) as { name: string; email: string | null; whatsapp: string | null; financial_email: string | null } | null | undefined;
     const clientName = client?.name || "Cliente";
@@ -138,24 +201,40 @@ serve(async (req) => {
       competenciaFormatted = `${months[parseInt(month, 10) - 1]}/${year}`;
     }
 
+    // Template variables
+    const templateVars: Record<string, string> = {
+      client_name: clientName,
+      nfse_number: String(nfseNumber),
+      valor: valorFormatted,
+      competencia: competenciaFormatted,
+      pdf_url: pdfSignedUrl,
+      company_name: companyName,
+    };
+
     const results: { channel: string; success: boolean; error?: string }[] = [];
 
-    // Send via Email (SMTP)
+    // Send via Email
     if (channels.includes("email")) {
       const emailTo = client?.financial_email || client?.email;
       
       if (!emailTo) {
         results.push({ channel: "email", success: false, error: "Cliente não possui email cadastrado" });
       } else {
-        const emailSubject = `NFS-e #${nfseNumber} - ${clientName} - ${valorFormatted}`;
-        const emailHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #333;">Nota Fiscal de Serviço Eletrônica</h2>
-            
+        let emailSubject: string;
+        let emailHtml: string;
+
+        if (emailTemplate) {
+          // Use custom template
+          emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
+          const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
+          emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+        } else {
+          // Default template
+          emailSubject = `NFS-e #${nfseNumber} - ${clientName} - ${valorFormatted}`;
+          emailHtml = wrapInEmailLayout(`
+            <h2>Nota Fiscal de Serviço Eletrônica</h2>
             <p>Prezado(a) <strong>${clientName}</strong>,</p>
-            
             <p>Segue a Nota Fiscal de Serviço Eletrônica referente aos serviços prestados.</p>
-            
             <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
               <h3 style="margin-top: 0; color: #555;">Dados da NFS-e</h3>
               <table style="width: 100%; border-collapse: collapse;">
@@ -173,34 +252,25 @@ serve(async (req) => {
                 </tr>
               </table>
             </div>
-            
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${pdfSignedUrl}" 
-                 style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primary_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
                 📄 Baixar PDF da NFS-e
               </a>
             </div>
-            
             <p style="color: #666; font-size: 12px; margin-top: 30px;">
               Este link expira em 24 horas. Caso precise do documento após esse período, entre em contato conosco.
             </p>
-            
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            
             <p style="color: #666;">
               Atenciosamente,<br>
               <strong>${companyName}</strong>
             </p>
-          </div>
-        `;
+          `, emailSettings);
+        }
 
         try {
           const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
-            body: {
-              to: emailTo,
-              subject: emailSubject,
-              html: emailHtml,
-            },
+            body: { to: emailTo, subject: emailSubject, html: emailHtml },
           });
 
           if (emailError) {
@@ -209,16 +279,10 @@ serve(async (req) => {
             results.push({ channel: "email", success: false, error: detailed || "Erro ao enviar email" });
           } else {
             results.push({ channel: "email", success: true });
-
-            // Log event
             await supabase.from("nfse_event_logs").insert({
               nfse_history_id,
               event_type: "compartilhamento",
-              event_data: {
-                channel: "email",
-                recipient: emailTo,
-                sent_at: new Date().toISOString(),
-              },
+              event_data: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
           }
         } catch (e: unknown) {
@@ -229,17 +293,16 @@ serve(async (req) => {
       }
     }
 
-    // Send via WhatsApp (Evolution API)
+    // Send via WhatsApp
     if (channels.includes("whatsapp")) {
       const whatsappTo = client?.whatsapp;
 
       if (!whatsappTo) {
         results.push({ channel: "whatsapp", success: false, error: "Cliente não possui WhatsApp cadastrado" });
       } else {
-        const competenciaShort = competenciaFormatted.toLowerCase().replace("/", "/");
         const whatsappMessage = `Olá, ${clientName}!
 
-Segue a NFS-e #${nfseNumber} referente aos serviços prestados em ${competenciaShort}.
+Segue a NFS-e #${nfseNumber} referente aos serviços prestados em ${competenciaFormatted.toLowerCase()}.
 
 💰 *Valor: ${valorFormatted}*
 
@@ -251,12 +314,7 @@ Atenciosamente,
 
         try {
           const { error: whatsappError } = await supabase.functions.invoke("send-whatsapp", {
-            body: {
-              to: whatsappTo,
-              message: whatsappMessage,
-              relatedType: "nfse",
-              relatedId: nfse_history_id,
-            },
+            body: { to: whatsappTo, message: whatsappMessage, relatedType: "nfse", relatedId: nfse_history_id },
           });
 
           if (whatsappError) {
@@ -264,16 +322,10 @@ Atenciosamente,
             results.push({ channel: "whatsapp", success: false, error: whatsappError.message || "Erro ao enviar WhatsApp" });
           } else {
             results.push({ channel: "whatsapp", success: true });
-
-            // Log event
             await supabase.from("nfse_event_logs").insert({
               nfse_history_id,
               event_type: "compartilhamento",
-              event_data: {
-                channel: "whatsapp",
-                recipient: whatsappTo,
-                sent_at: new Date().toISOString(),
-              },
+              event_data: { channel: "whatsapp", recipient: whatsappTo, sent_at: new Date().toISOString() },
             });
           }
         } catch (e: unknown) {
@@ -288,12 +340,7 @@ Atenciosamente,
     const anySuccess = results.some((r) => r.success);
 
     return new Response(
-      JSON.stringify({
-        success: allSuccess,
-        partial: !allSuccess && anySuccess,
-        results,
-      }),
-      // Always return a 2xx so the frontend can show the detailed per-channel error message.
+      JSON.stringify({ success: allSuccess, partial: !allSuccess && anySuccess, results }),
       { status: allSuccess ? 200 : 207, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {

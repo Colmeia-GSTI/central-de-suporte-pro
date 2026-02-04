@@ -5,6 +5,68 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface EmailSettings {
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  footer_text: string;
+}
+
+interface EmailTemplate {
+  subject_template: string;
+  html_template: string;
+  is_active: boolean;
+}
+
+function replaceVariables(template: string, data: Record<string, string>): string {
+  let result = template;
+  Object.entries(data).forEach(([key, value]) => {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+    result = result.replace(regex, value || "");
+  });
+  Object.entries(data).forEach(([key, value]) => {
+    const conditionalRegex = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{/${key}\\}\\}`, "g");
+    if (value) {
+      result = result.replace(conditionalRegex, "$1");
+    } else {
+      result = result.replace(conditionalRegex, "");
+    }
+  });
+  return result;
+}
+
+function wrapInEmailLayout(content: string, settings: EmailSettings): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
+    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
+    .email-header { background: ${settings.primary_color}; padding: 24px; text-align: center; }
+    .email-header img { max-height: 50px; max-width: 200px; }
+    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
+    .email-content h2 { margin-top: 0; color: #111827; }
+    .email-content a { color: ${settings.primary_color}; }
+    .email-footer { background: ${settings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      ${settings.logo_url ? `<img src="${settings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">Colmeia</span>`}
+    </div>
+    <div class="email-content">
+      ${content}
+    </div>
+    <div class="email-footer">
+      ${settings.footer_text}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 interface CompanySettings {
   id: string;
   razao_social: string;
@@ -26,16 +88,25 @@ Deno.serve(async (req) => {
 
     console.log("[CHECK-CERT] Iniciando verificação de certificados digitais");
 
-    // Fetch all companies with certificates
-    const { data: companies, error: fetchError } = await supabase
-      .from("company_settings")
-      .select("id, razao_social, cnpj, certificado_validade, certificado_arquivo_url, email")
-      .not("certificado_validade", "is", null);
+    // Fetch email settings and companies in parallel
+    const [settingsRes, companiesRes] = await Promise.all([
+      supabase.from("email_settings").select("*").limit(1).single(),
+      supabase.from("company_settings").select("id, razao_social, cnpj, certificado_validade, certificado_arquivo_url, email").not("certificado_validade", "is", null),
+    ]);
 
-    if (fetchError) {
-      console.error("[CHECK-CERT] Erro ao buscar empresas:", fetchError);
+    const emailSettings: EmailSettings = settingsRes.data || {
+      logo_url: null,
+      primary_color: "#f59e0b",
+      secondary_color: "#1f2937",
+      footer_text: "Este é um alerta automático do sistema Colmeia.",
+    };
+
+    const companies = companiesRes.data;
+
+    if (companiesRes.error) {
+      console.error("[CHECK-CERT] Erro ao buscar empresas:", companiesRes.error);
       return new Response(
-        JSON.stringify({ success: false, error: fetchError.message }),
+        JSON.stringify({ success: false, error: companiesRes.error.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -53,7 +124,6 @@ Deno.serve(async (req) => {
     const today = new Date();
     const alerts: { company: string; daysRemaining: number; level: string }[] = [];
 
-    // Get admin/financial users for notifications
     const { data: staffUsers } = await supabase
       .from("user_roles")
       .select("user_id")
@@ -69,40 +139,29 @@ Deno.serve(async (req) => {
 
       let alertLevel: string | null = null;
       let notificationType: string = "info";
-      let title: string = "";
-      let message: string = "";
+      let templateType: string = "";
 
-      // Determine alert level based on days remaining
       if (daysRemaining <= 0) {
         alertLevel = "expired";
         notificationType = "error";
-        title = "🚨 Certificado Digital Expirado";
-        message = `O certificado digital da empresa ${company.razao_social} (${company.cnpj}) expirou! A emissão de NFS-e está comprometida.`;
+        templateType = "certificate_expiry_expired";
       } else if (daysRemaining <= 7) {
         alertLevel = "critical";
         notificationType = "error";
-        title = "⚠️ Certificado Expirando em 7 Dias";
-        message = `O certificado digital da empresa ${company.razao_social} expira em ${daysRemaining} dia(s). Renove imediatamente!`;
+        templateType = "certificate_expiry_critical";
       } else if (daysRemaining <= 15) {
         alertLevel = "alert";
         notificationType = "warning";
-        title = "⚠️ Certificado Expirando em 15 Dias";
-        message = `O certificado digital da empresa ${company.razao_social} expira em ${daysRemaining} dias. Providencie a renovação.`;
+        templateType = "certificate_expiry_critical";
       } else if (daysRemaining <= 30) {
         alertLevel = "warning";
         notificationType = "warning";
-        title = "📅 Certificado Expirando em 30 Dias";
-        message = `O certificado digital da empresa ${company.razao_social} expira em ${daysRemaining} dias. Planeje a renovação.`;
+        templateType = "certificate_expiry_warning";
       }
 
       if (alertLevel && staffUserIds.length > 0) {
-        alerts.push({
-          company: company.razao_social,
-          daysRemaining,
-          level: alertLevel,
-        });
+        alerts.push({ company: company.razao_social, daysRemaining, level: alertLevel });
 
-        // Check if we already sent a notification today for this company and level
         const todayStart = new Date(today);
         todayStart.setHours(0, 0, 0, 0);
 
@@ -114,8 +173,46 @@ Deno.serve(async (req) => {
           .gte("created_at", todayStart.toISOString())
           .limit(1);
 
-        // Only create notifications if we haven't already today
         if (!existingNotif || existingNotif.length === 0) {
+          // Fetch template
+          const { data: templateData } = await supabase
+            .from("email_templates")
+            .select("*")
+            .eq("template_type", templateType)
+            .maybeSingle();
+
+          const emailTemplate: EmailTemplate | null = templateData?.is_active ? templateData : null;
+
+          const templateVars: Record<string, string> = {
+            company_name: company.razao_social,
+            cnpj: company.cnpj,
+            days_remaining: String(daysRemaining <= 0 ? 0 : daysRemaining),
+            expiry_date: new Date(company.certificado_validade!).toLocaleDateString("pt-BR"),
+          };
+
+          let title: string;
+          let message: string;
+
+          if (emailTemplate) {
+            title = replaceVariables(emailTemplate.subject_template, templateVars);
+            message = `O certificado digital da empresa ${company.razao_social} ${daysRemaining <= 0 ? "expirou" : `expira em ${daysRemaining} dia(s)`}. CNPJ: ${company.cnpj}`;
+          } else {
+            if (daysRemaining <= 0) {
+              title = "🚨 Certificado Digital Expirado";
+              message = `O certificado digital da empresa ${company.razao_social} (${company.cnpj}) expirou! A emissão de NFS-e está comprometida.`;
+            } else if (daysRemaining <= 7) {
+              title = "⚠️ Certificado Expirando em 7 Dias";
+              message = `O certificado digital da empresa ${company.razao_social} expira em ${daysRemaining} dia(s). Renove imediatamente!`;
+            } else if (daysRemaining <= 15) {
+              title = "⚠️ Certificado Expirando em 15 Dias";
+              message = `O certificado digital da empresa ${company.razao_social} expira em ${daysRemaining} dias. Providencie a renovação.`;
+            } else {
+              title = "📅 Certificado Expirando em 30 Dias";
+              message = `O certificado digital da empresa ${company.razao_social} expira em ${daysRemaining} dias. Planeje a renovação.`;
+            }
+          }
+
+          // Create notifications
           const notifications = staffUserIds.map((userId) => ({
             user_id: userId,
             type: notificationType,
@@ -125,9 +222,7 @@ Deno.serve(async (req) => {
             related_id: company.id,
           }));
 
-          const { error: notifError } = await supabase
-            .from("notifications")
-            .insert(notifications);
+          const { error: notifError } = await supabase.from("notifications").insert(notifications);
 
           if (notifError) {
             console.error(`[CHECK-CERT] Erro ao criar notificação para ${company.razao_social}:`, notifError);
@@ -135,7 +230,7 @@ Deno.serve(async (req) => {
             console.log(`[CHECK-CERT] Notificação criada para ${company.razao_social} (${alertLevel})`);
           }
 
-          // Send email notification if SMTP is configured
+          // Send email for critical alerts
           if (alertLevel === "expired" || alertLevel === "critical") {
             try {
               const { data: smtpSettings } = await supabase
@@ -145,7 +240,6 @@ Deno.serve(async (req) => {
                 .single();
 
               if (smtpSettings?.is_active) {
-                // Get admin emails
                 const { data: adminProfiles } = await supabase
                   .from("profiles")
                   .select("email")
@@ -154,23 +248,28 @@ Deno.serve(async (req) => {
 
                 if (adminProfiles && adminProfiles.length > 0) {
                   for (const profile of adminProfiles) {
+                    let emailSubject: string;
+                    let emailHtml: string;
+
+                    if (emailTemplate) {
+                      emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
+                      const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
+                      emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+                    } else {
+                      emailSubject = title;
+                      const defaultContent = `
+                        <h2>${title}</h2>
+                        <p>${message}</p>
+                        <p><strong>Empresa:</strong> ${company.razao_social}</p>
+                        <p><strong>CNPJ:</strong> ${company.cnpj}</p>
+                        <p><strong>Validade:</strong> ${new Date(company.certificado_validade!).toLocaleDateString("pt-BR")}</p>
+                        <p><strong>Dias Restantes:</strong> ${daysRemaining <= 0 ? "EXPIRADO" : daysRemaining + " dias"}</p>
+                      `;
+                      emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
+                    }
+
                     await supabase.functions.invoke("send-email-smtp", {
-                      body: {
-                        to: profile.email,
-                        subject: title,
-                        html: `
-                          <h2>${title}</h2>
-                          <p>${message}</p>
-                          <p><strong>Empresa:</strong> ${company.razao_social}</p>
-                          <p><strong>CNPJ:</strong> ${company.cnpj}</p>
-                          <p><strong>Validade:</strong> ${new Date(company.certificado_validade!).toLocaleDateString("pt-BR")}</p>
-                          <p><strong>Dias Restantes:</strong> ${daysRemaining <= 0 ? "EXPIRADO" : daysRemaining + " dias"}</p>
-                          <hr>
-                          <p style="color: #666; font-size: 12px;">
-                            Este é um alerta automático do sistema Colmeia.
-                          </p>
-                        `,
-                      },
+                      body: { to: profile.email, subject: emailSubject, html: emailHtml },
                     });
                     console.log(`[CHECK-CERT] Email enviado para ${profile.email}`);
                   }
@@ -179,10 +278,8 @@ Deno.serve(async (req) => {
             } catch (emailError) {
               console.error("[CHECK-CERT] Erro ao enviar email:", emailError);
             }
-          }
 
-          // Send Telegram notification if configured
-          if (alertLevel === "expired" || alertLevel === "critical") {
+            // Send Telegram
             try {
               const { data: telegramSettings } = await supabase
                 .from("integration_settings")
@@ -213,12 +310,7 @@ Deno.serve(async (req) => {
     console.log(`[CHECK-CERT] Verificação concluída. Alertas: ${alerts.length}`);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Verificação de certificados concluída",
-        processed: companies.length,
-        alerts,
-      }),
+      JSON.stringify({ success: true, message: "Verificação de certificados concluída", processed: companies.length, alerts }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

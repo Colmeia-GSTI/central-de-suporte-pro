@@ -1154,6 +1154,75 @@ export type Database = {
         }
         Relationships: []
       }
+      email_settings: {
+        Row: {
+          created_at: string | null
+          footer_text: string | null
+          id: string
+          logo_url: string | null
+          primary_color: string | null
+          secondary_color: string | null
+          show_social_links: boolean | null
+          social_links: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          footer_text?: string | null
+          id?: string
+          logo_url?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          show_social_links?: boolean | null
+          social_links?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          footer_text?: string | null
+          id?: string
+          logo_url?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          show_social_links?: boolean | null
+          social_links?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      email_templates: {
+        Row: {
+          created_at: string | null
+          html_template: string
+          id: string
+          is_active: boolean | null
+          name: string
+          subject_template: string
+          template_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          html_template: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          subject_template: string
+          template_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          html_template?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          subject_template?: string
+          template_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       financial_entries: {
         Row: {
           amount: number
