@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -153,13 +153,22 @@ export function NfseDetailsSheet(props: {
   const canDelete = nfse ? ["pendente", "erro", "rejeitada", "processando", "cancelada"].includes(nfse.status) : false;
   const canAbortProcessing = nfse ? nfse.status === "processando" : false;
 
+  // Sincronizar estados quando a prop nfse mudar
+  useEffect(() => {
+    if (nfse) {
+      setValor(nfse.valor_servico ?? 0);
+      setCompetencia(normalizeCompetencia(nfse.competencia));
+      setDescricao(nfse.descricao_servico ?? "");
+    }
+  }, [nfse?.id, nfse?.valor_servico, nfse?.competencia, nfse?.descricao_servico]);
+
   const { data: clientForValidation } = useQuery({
     queryKey: ["nfse-client-validation", nfse?.client_id],
     queryFn: async () => {
       if (!nfse?.client_id) return null;
       const { data, error } = await supabase
         .from("clients")
-        .select("name, document, address, email")
+        .select("name, document, address, email, zip_code")
         .eq("id", nfse.client_id)
         .maybeSingle();
       if (error) throw error;
