@@ -1,113 +1,146 @@
 
-# Plano: Corrigir Erros de Validação na Reemissão de NFS-e
+# Plano: Formatação Automática de CEP e Padronização de Armazenamento
 
-## Diagnóstico
+## Objetivo
 
-Identificamos **duas causas raiz** para os erros de validação mesmo com dados preenchidos:
-
-### Problema 1: Campo `zip_code` não buscado
-
-A query de validação do cliente no `NfseDetailsSheet.tsx` (linha 162) **não inclui `zip_code`**:
-
-```typescript
-// ATUAL - falta zip_code
-.select("name, document, address, email")
-```
-
-A validação exige CEP com 8 dígitos, mas como o campo não é buscado, sempre falha.
-
-### Problema 2: Estados não sincronizam com prop `nfse`
-
-Os estados de edição são inicializados com `useState`, que só roda na montagem inicial:
-
-```typescript
-const [valor, setValor] = useState<number>(nfse?.valor_servico ?? 0);
-const [competencia, setCompetencia] = useState<string>(normalizeCompetencia(nfse?.competencia));
-const [descricao, setDescricao] = useState<string>(nfse?.descricao_servico ?? "");
-```
-
-Quando o usuário abre o sheet para uma NFS-e diferente (ou a mesma após atualização), os valores **NÃO** são atualizados - permanecem os da sessão anterior.
-
-### Evidências
-
-Dados no banco estão corretos:
-| Campo | Valor |
-|-------|-------|
-| `valor_servico` | 1461.44 |
-| `competencia` | 2026-02-01 |
-| `descricao_servico` | Serviços de TI |
-| `client.zip_code` | 99025030 |
-
-Mas a validação recebe zeros/vazios dos estados desatualizados.
+1. **Adicionar formatação automática** no campo CEP durante digitação: `00000-000`
+2. **Padronizar armazenamento** no banco: sempre salvar apenas 8 dígitos numéricos
 
 ---
 
-## Solução
+## Implementação
 
-### Correção 1: Adicionar `zip_code` na query
+### 1. Criar Função de Formatação de CEP
+
+Adicionar nova função `formatCEP` em `src/lib/utils.ts`, seguindo o mesmo padrão da `formatPhone`:
+
+```typescript
+/**
+ * Format CEP to Brazilian display format: 00000-000
+ * Always shows formatted version, stores only 8 digits
+ */
+export function formatCEP(value: string | null | undefined): string {
+  if (!value) return "";
+  const numbers = value.replace(/\D/g, "");
+  
+  if (numbers.length === 0) return "";
+  if (numbers.length <= 5) return numbers;
+  
+  // Format: 00000-000
+  return `${numbers.slice(0, 5)}-${numbers.slice(5, 8)}`;
+}
+```
+
+---
+
+### 2. Atualizar Campo CEP no ClientForm
+
+Modificar o campo `zip_code` em `src/components/clients/ClientForm.tsx`:
+
+#### 2.1 Importar a nova função
+
+```typescript
+import { cn, formatPhone, formatCEP, getErrorMessage } from "@/lib/utils";
+```
+
+#### 2.2 Formatar valor inicial ao carregar cliente
+
+Linha 92 - Adicionar formatação:
 
 ```typescript
 // DE:
-.select("name, document, address, email")
+zip_code: client?.zip_code || "",
 
 // PARA:
-.select("name, document, address, email, zip_code")
+zip_code: formatCEP(client?.zip_code) || "",
 ```
 
-### Correção 2: Sincronizar estados com useEffect
+#### 2.3 Formatar CEP retornado pela consulta CNPJ
 
-Adicionar um `useEffect` que atualiza os estados quando a prop `nfse` mudar:
+Linha 173 - Já remove caracteres, mas adicionar formatação visual:
 
 ```typescript
-import { useEffect } from "react"; // já importado via useMemo
+// DE:
+form.setValue("zip_code", data.cep?.replace(/\D/g, "") || "");
 
-// Após os useState existentes:
-useEffect(() => {
-  if (nfse) {
-    setValor(nfse.valor_servico ?? 0);
-    setCompetencia(normalizeCompetencia(nfse.competencia));
-    setDescricao(nfse.descricao_servico ?? "");
-  }
-}, [nfse?.id, nfse?.valor_servico, nfse?.competencia, nfse?.descricao_servico]);
+// PARA:
+form.setValue("zip_code", formatCEP(data.cep) || "");
 ```
 
-Isso garante que quando:
-- O usuário abre outra NFS-e
-- A mesma NFS-e é recarregada (após atualização)
+#### 2.4 Adicionar handler de formatação no campo
 
-Os estados de edição refletem os dados atuais.
+Linhas 594-606 - Atualizar renderização:
+
+```tsx
+<FormField
+  control={form.control}
+  name="zip_code"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>CEP</FormLabel>
+      <FormControl>
+        <Input 
+          placeholder="00000-000" 
+          maxLength={9}  // 5 dígitos + hífen + 3 dígitos
+          {...field}
+          onChange={(e) => {
+            const formatted = formatCEP(e.target.value);
+            field.onChange(formatted);
+          }}
+        />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
+```
 
 ---
 
-## Arquivo a Modificar
+### 3. Padronizar Armazenamento (Apenas Números)
+
+Modificar o payload de salvamento na mutation (linhas 276-293):
+
+```typescript
+// DE:
+zip_code: data.zip_code || null,
+
+// PARA:
+zip_code: data.zip_code?.replace(/\D/g, "") || null,
+```
+
+Isso garante que **independente da formatação visual**, o banco sempre salva `99025030` em vez de `99025-030`.
+
+---
+
+## Arquivos a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Adicionar `zip_code` na query (linha 162) e adicionar `useEffect` para sincronizar estados |
+| `src/lib/utils.ts` | Adicionar função `formatCEP` |
+| `src/components/clients/ClientForm.tsx` | Importar `formatCEP`, formatar campo, sanitizar no save |
 
 ---
 
-## Fluxo Corrigido
+## Fluxo Final
 
 ```text
-1. Usuário abre NFS-e pendente do cliente CAPASEMU
-   ↓
-2. Query busca cliente COM zip_code: "99025030" ✓
-   ↓
-3. useEffect sincroniza estados:
-   - valor: 1461.44 ✓
-   - competencia: "2026-02" ✓
-   - descricao: "Serviços de TI" ✓
-   ↓
-4. Validação recebe dados corretos
-   ↓
-5. Sem erros de validação ✓
+┌──────────────────────────────────────────────────────────┐
+│  ENTRADA: Usuário digita "99025030"                      │
+│                 ↓                                        │
+│  FORMATAÇÃO: Exibe "99025-030" no campo                  │
+│                 ↓                                        │
+│  SALVAMENTO: Armazena "99025030" no banco                │
+│                 ↓                                        │
+│  CARREGAMENTO: Busca "99025030", exibe "99025-030"       │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Resultado Esperado
+## Benefícios
 
-1. CEP do cliente será validado corretamente (campo presente na query)
-2. Valor, competência e descrição sempre refletirão os dados atuais da NFS-e
-3. Não haverá mais erros de validação falsos quando os dados estão preenchidos
+1. **UX melhorada**: Usuário vê o CEP formatado corretamente
+2. **Dados consistentes**: Banco sempre armazena apenas números
+3. **Compatibilidade**: APIs (Asaas, Banco Inter) já esperam apenas números
+4. **Validação simplificada**: Validação sempre compara 8 dígitos numéricos
