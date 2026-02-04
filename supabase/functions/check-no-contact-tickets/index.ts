@@ -259,7 +259,7 @@ serve(async (req) => {
         // Email para casos urgentes (48h+)
         if (isOver48h && profile.notify_email && profile.email) {
           try {
-            await supabase.functions.invoke("send-email-smtp", {
+            await supabase.functions.invoke("send-email-resend", {
               body: {
                 to: profile.email,
                 subject: `⚠️ Chamado #${ticket.ticket_number} sem contato há 48h+`,

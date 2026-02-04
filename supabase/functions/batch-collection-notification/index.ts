@@ -79,7 +79,7 @@ serve(async (req) => {
     const { data: smtpSettings } = await supabase
       .from("integration_settings")
       .select("settings, is_active")
-      .eq("integration_type", "smtp")
+      .eq("integration_type", "resend")
       .single();
 
     const { data: whatsappSettings } = await supabase
@@ -118,11 +118,11 @@ serve(async (req) => {
         const email = client.financial_email || client.email;
         if (email) {
           try {
-            const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
+            const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
               body: {
                 to: email,
                 subject: template.subject,
-                body: messageBody,
+                html: `<div style="font-family: Arial, sans-serif; white-space: pre-line;">${messageBody}</div>`,
               },
             });
 

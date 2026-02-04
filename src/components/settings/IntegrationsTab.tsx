@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SmtpConfigForm } from "./integrations/SmtpConfigForm";
+import { ResendConfigForm } from "./integrations/ResendConfigForm";
 import { GoogleCalendarConfigForm } from "./integrations/GoogleCalendarConfigForm";
 import { BancoInterConfigForm } from "./integrations/BancoInterConfigForm";
 import { AsaasConfigForm } from "./integrations/AsaasConfigForm";
@@ -54,7 +54,7 @@ export function IntegrationsTab() {
         </TabsContent>
 
         <TabsContent value="comunicacao" className="space-y-4 mt-4">
-          <SmtpConfigForm />
+          <ResendConfigForm />
           <GoogleCalendarConfigForm />
         </TabsContent>
 
