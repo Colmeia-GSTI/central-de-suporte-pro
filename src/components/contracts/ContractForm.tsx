@@ -114,6 +114,10 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       days_before_due: (contractData as any)?.days_before_due || 5,
       billing_provider: (contractData as any)?.billing_provider || "banco_inter",
       payment_preference: (contractData as any)?.payment_preference || "boleto",
+      // Initial invoice generation (only for new contracts)
+      generate_initial_invoice: false,
+      generate_payment: true,
+      send_notification: true,
       // Adjustment defaults
       adjustment_date: (contractData as any)?.adjustment_date || "",
       adjustment_index: (contractData as any)?.adjustment_index || "IGPM",
