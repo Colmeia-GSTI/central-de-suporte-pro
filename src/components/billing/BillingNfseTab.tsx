@@ -46,32 +46,58 @@ import { NfseEventLogsDialog } from "@/components/billing/nfse/NfseEventLogsDial
 import {
   formatCompetenciaLabel,
   formatDateTime,
+  formatElapsedTime,
   statusLabel,
   type NfseStatus,
+  ASAAS_STATUS_LABELS,
 } from "@/components/billing/nfse/nfseFormat";
+import { NfseProcessingStatusCell } from "@/components/billing/nfse/NfseProcessingIndicator";
 
 const ITEMS_PER_PAGE = 15;
 
-function statusBadge(status: NfseStatus) {
+function statusBadge(status: NfseStatus, nfse?: NfseWithRelations) {
   const base = "text-white";
-  switch (status) {
-    case "autorizada":
-      return <Badge className={`bg-status-success ${base}`}>{statusLabel(status)}</Badge>;
-    case "processando":
-      return <Badge className={`bg-blue-600 ${base}`}>{statusLabel(status)}</Badge>;
-    case "pendente":
-      return <Badge className={`bg-status-warning ${base}`}>{statusLabel(status)}</Badge>;
-    case "rejeitada":
-      return <Badge className={`bg-status-danger ${base}`}>{statusLabel(status)}</Badge>;
-    case "erro":
-      return <Badge className={`bg-red-700 ${base}`}>{statusLabel(status)}</Badge>;
-    case "cancelada":
-      return <Badge variant="secondary">{statusLabel(status)}</Badge>;
-    case "substituida":
-      return <Badge className={`bg-orange-600 ${base}`}>{statusLabel(status)}</Badge>;
-    default:
-      return <Badge variant="outline">{statusLabel(status)}</Badge>;
+  const isProcessing = status === "processando";
+  
+  const badge = (() => {
+    switch (status) {
+      case "autorizada":
+        return <Badge className={`bg-status-success ${base}`}>{statusLabel(status)}</Badge>;
+      case "processando":
+        return <Badge className={`bg-blue-600 ${base}`}>{statusLabel(status)}</Badge>;
+      case "pendente":
+        return <Badge className={`bg-status-warning ${base}`}>{statusLabel(status)}</Badge>;
+      case "rejeitada":
+        return <Badge className={`bg-status-danger ${base}`}>{statusLabel(status)}</Badge>;
+      case "erro":
+        return <Badge className={`bg-red-700 ${base}`}>{statusLabel(status)}</Badge>;
+      case "cancelada":
+        return <Badge variant="secondary">{statusLabel(status)}</Badge>;
+      case "substituida":
+        return <Badge className={`bg-orange-600 ${base}`}>{statusLabel(status)}</Badge>;
+      default:
+        return <Badge variant="outline">{statusLabel(status)}</Badge>;
+    }
+  })();
+  
+  if (isProcessing && nfse) {
+    return (
+      <div className="flex flex-col gap-1">
+        {badge}
+        <NfseProcessingStatusCell nfse={{
+          id: nfse.id,
+          asaas_invoice_id: nfse.asaas_invoice_id,
+          asaas_status: nfse.asaas_status,
+          created_at: nfse.created_at,
+          data_emissao: nfse.data_emissao,
+          ambiente: nfse.ambiente,
+          status: nfse.status,
+        }} />
+      </div>
+    );
   }
+  
+  return badge;
 }
 
 async function openUrlOrSigned(url: string) {
@@ -515,7 +541,7 @@ export function BillingNfseTab() {
                       <TableCell>{n.contracts?.name || "-"}</TableCell>
                       <TableCell>{formatCompetenciaLabel(n.competencia)}</TableCell>
                       <TableCell className="text-right">{formatCurrencyBRL(n.valor_servico)}</TableCell>
-                      <TableCell>{statusBadge(n.status as NfseStatus)}</TableCell>
+                      <TableCell>{statusBadge(n.status as NfseStatus, n)}</TableCell>
                       <TableCell>{formatDateTime(n.data_emissao)}</TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1">

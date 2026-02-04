@@ -11,6 +11,30 @@ export type NfseStatus =
   | "erro"
   | string;
 
+// Mapeamento de status Asaas para descrição
+export const ASAAS_STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: "Agendada para envio",
+  SYNCHRONIZED: "Sincronizada com prefeitura",
+  AUTHORIZATION_PENDING: "Aguardando autorização",
+  AUTHORIZED: "Autorizada",
+  ERROR: "Erro no processamento",
+  CANCELED: "Cancelada",
+  CANCELLATION_PENDING: "Cancelamento pendente",
+  CANCELLATION_DENIED: "Cancelamento negado",
+};
+
+// Progresso estimado por status Asaas
+export const ASAAS_STATUS_PROGRESS: Record<string, number> = {
+  SCHEDULED: 15,
+  SYNCHRONIZED: 40,
+  AUTHORIZATION_PENDING: 70,
+  AUTHORIZED: 100,
+  ERROR: 0,
+  CANCELED: 0,
+  CANCELLATION_PENDING: 85,
+  CANCELLATION_DENIED: 75,
+};
+
 export function normalizeCompetencia(value: string | null | undefined): string {
   if (!value) return "";
   const trimmed = value.trim();
@@ -61,9 +85,33 @@ export function statusLabel(status: NfseStatus): string {
   }
 }
 
+export function asaasStatusLabel(asaasStatus: string | null | undefined): string {
+  if (!asaasStatus) return "-";
+  return ASAAS_STATUS_LABELS[asaasStatus] || asaasStatus;
+}
+
 export function providerLabel(provider: string | null | undefined): string {
   if (!provider) return "-";
   if (provider === "asaas") return "Asaas";
   if (provider === "nacional") return "API Nacional";
   return provider;
+}
+
+export function formatElapsedTime(createdAt: string): string {
+  const now = new Date();
+  const created = new Date(createdAt);
+  const diffMs = now.getTime() - created.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return "Agora";
+  if (diffMins === 1) return "1 min";
+  if (diffMins < 60) return `${diffMins} min`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours === 1) return "1h";
+  if (diffHours < 24) return `${diffHours}h`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "1 dia";
+  return `${diffDays} dias`;
 }
