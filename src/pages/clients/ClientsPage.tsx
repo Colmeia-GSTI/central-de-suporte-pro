@@ -35,6 +35,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPhone } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients"> & {
@@ -59,6 +60,9 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  
+  // Check if user is technician only (no admin/manager/financial roles)
+  const isTechnicianOnly = useIsTechnicianOnly();
   
   const debouncedSearch = useDebounce(search, 300);
 
@@ -251,7 +255,8 @@ export default function ClientsPage() {
                             {client.trade_name}
                           </p>
                         )}
-                        {client.document && !client.trade_name && (
+                        {/* Hide document (CPF/CNPJ) from technicians */}
+                        {!isTechnicianOnly && client.document && !client.trade_name && (
                           <p className="text-sm text-muted-foreground">
                             {client.document}
                           </p>
