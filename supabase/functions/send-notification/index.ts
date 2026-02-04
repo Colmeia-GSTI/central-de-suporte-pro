@@ -2,8 +2,9 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "https://suporte.colmeiagsti.com",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 // Unified notification request interface
@@ -63,6 +64,13 @@ async function getIntegrationSettings(supabase: SupabaseClient<any, any, any>) {
   return settings;
 }
 
+// Validate email address
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email);
+}
+
 // Send email via SMTP
 async function sendEmail(
   settings: {
@@ -80,11 +88,20 @@ async function sendEmail(
   text?: string
 ): Promise<NotificationResult> {
   try {
+    const emails = Array.isArray(to) ? to : [to];
+
+    // Validate all emails before sending
+    for (const email of emails) {
+      if (!validateEmail(email)) {
+        return { channel: "email", success: false, error: `Email inválido: ${email}` };
+      }
+    }
+
     const client = new SMTPClient({
       connection: {
         hostname: settings.host,
         port: settings.port || 587,
-        tls: settings.use_tls !== false,
+        tls: settings.port === 465 || settings.use_tls !== false,
         auth: {
           username: settings.username,
           password: settings.password,
@@ -94,7 +111,7 @@ async function sendEmail(
 
     await client.send({
       from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
-      to: Array.isArray(to) ? to : [to],
+      to: emails,
       subject,
       content: text || html.replace(/<[^>]*>/g, ""),
       html,
@@ -338,10 +355,24 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Wait for all parallel operations
+    // Wait for all parallel operations using Promise.allSettled for better error handling
     if (promises.length > 0) {
-      const promiseResults = await Promise.all(promises);
-      results.push(...promiseResults);
+      const promiseResults = await Promise.allSettled(promises);
+      for (const result of promiseResults) {
+        if (result.status === "fulfilled") {
+          results.push(result.value);
+        } else {
+          // Handle rejected promises
+          console.error("Promise rejected:", result.reason);
+          // Add a failure result for the rejected promise
+          const channel = results[results.length] ? results[results.length].channel : "unknown";
+          results.push({
+            channel,
+            success: false,
+            error: result.reason instanceof Error ? result.reason.message : "Unknown error",
+          });
+        }
+      }
     }
 
     const allSuccess = results.every((r) => r.success);

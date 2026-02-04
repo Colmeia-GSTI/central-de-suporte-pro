@@ -2,8 +2,9 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "https://suporte.colmeiagsti.com",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 interface TicketNotificationRequest {
@@ -47,6 +48,18 @@ serve(async (req) => {
 
     console.log(`[send-ticket-notification] Ticket #${ticket.ticket_number} - ${ticket.title}`);
     console.log(`[send-ticket-notification] Requester contact:`, ticket.requester_contact);
+
+    // Sanitize HTML entities to prevent XSS
+    function escapeHtml(text: string): string {
+      const map: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, (char) => map[char]);
+    }
 
     // Get portal URL from environment or use default
     const portalUrl = Deno.env.get("PORTAL_URL") || "https://suporte.colmeiagsti.com/portal";
@@ -122,7 +135,7 @@ serve(async (req) => {
                   ${comment ? `
                     <div class="comment-box">
                       <p><strong>Comentário:</strong></p>
-                      <p>${comment}</p>
+                      <p>${escapeHtml(comment)}</p>
                     </div>
                   ` : ''}
                   

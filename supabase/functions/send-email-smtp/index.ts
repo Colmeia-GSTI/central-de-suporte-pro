@@ -3,8 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "https://suporte.colmeiagsti.com",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 // Security: Input validation
@@ -44,13 +45,33 @@ function sanitizeEmails(input: string | string[]): { valid: boolean; emails: str
   return { valid: true, emails: sanitized };
 }
 
-// Sanitize HTML content (basic - remove script tags)
+// Sanitize HTML content - remove dangerous elements and attributes
 function sanitizeHtml(html: string): string {
-  return html
-    .slice(0, MAX_HTML_LENGTH)
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/javascript:/gi, "")
-    .replace(/on\w+\s*=/gi, "data-removed=");
+  let sanitized = html.slice(0, MAX_HTML_LENGTH);
+
+  // Remove script tags and content
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+
+  // Remove event handlers (on*)
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, "");
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, "");
+
+  // Remove javascript: protocol
+  sanitized = sanitized.replace(/javascript:/gi, "");
+
+  // Remove data: protocol (can be used for XSS)
+  sanitized = sanitized.replace(/data:text\/html/gi, "");
+
+  // Remove iframe tags
+  sanitized = sanitized.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "");
+
+  // Remove embed and object tags
+  sanitized = sanitized.replace(/<(embed|object)[^>]*>/gi, "");
+
+  // Remove style tags with potentially malicious content
+  sanitized = sanitized.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
+
+  return sanitized;
 }
 
 serve(async (req) => {
@@ -180,6 +201,23 @@ serve(async (req) => {
 
       console.log("[send-email-smtp] Email sent successfully");
 
+      // Log each recipient in message_logs for auditability
+      try {
+        for (const recipient of emailValidation.emails) {
+          await supabase.from("message_logs").insert({
+            channel: "email",
+            recipient: recipient,
+            message: sanitizedHtml.slice(0, 500),
+            status: "sent",
+            error_message: null,
+            sent_at: new Date().toISOString(),
+          });
+        }
+      } catch (logError) {
+        console.warn("[send-email-smtp] Failed to log message:", logError);
+        // Don't fail the email send if logging fails
+      }
+
       return new Response(
         JSON.stringify({ success: true, message: "Email enviado com sucesso" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -187,10 +225,26 @@ serve(async (req) => {
     } catch (sendError: unknown) {
       sendErrorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
       console.error("[send-email-smtp] Send error:", sendErrorMsg);
-      
+
+      // Log failed send attempt for auditability
+      try {
+        for (const recipient of emailValidation.emails) {
+          await supabase.from("message_logs").insert({
+            channel: "email",
+            recipient: recipient,
+            message: sanitizedHtml.slice(0, 500),
+            status: "failed",
+            error_message: sendErrorMsg.slice(0, 500),
+            sent_at: null,
+          });
+        }
+      } catch (logError) {
+        console.warn("[send-email-smtp] Failed to log error message:", logError);
+      }
+
       // Determine user-friendly message based on error
       let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
-      
+
       if (sendErrorMsg.includes("datamode") || sendErrorMsg.includes("connection not recoverable")) {
         userMessage = "A conexão SMTP foi interrompida durante o envio. Isso pode indicar que o servidor rejeitou o email ou há um problema de rede.";
       } else if (sendErrorMsg.includes("554") || sendErrorMsg.includes("policy") || sendErrorMsg.includes("relay") || sendErrorMsg.includes("Rejected")) {
@@ -202,7 +256,7 @@ serve(async (req) => {
       } else if (sendErrorMsg.includes("certificate") || sendErrorMsg.includes("TLS")) {
         userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
       }
-      
+
       return new Response(
         JSON.stringify({ error: userMessage, details: sendErrorMsg }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
