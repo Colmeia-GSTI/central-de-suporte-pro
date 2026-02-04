@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Mark roles as loaded even if empty (user might not have roles)
       setRolesLoaded(true);
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      logger.error("Error fetching user data", "Auth", { error: String(error) });
       logger.authError(error as Error);
       // Still mark as loaded to prevent infinite loading
       setRolesLoaded(true);

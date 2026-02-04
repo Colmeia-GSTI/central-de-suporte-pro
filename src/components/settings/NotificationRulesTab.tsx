@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -144,8 +145,8 @@ export function NotificationRulesTab() {
       setSelectedUser("");
       toast.success("Regra de notificação criada");
     },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao criar regra");
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error) || "Erro ao criar regra");
     },
   });
 
@@ -196,8 +197,8 @@ export function NotificationRulesTab() {
       setEscalationClientId(null);
       toast.success("Configuração de escalonamento criada");
     },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao criar configuração");
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error) || "Erro ao criar configuração");
     },
   });
 

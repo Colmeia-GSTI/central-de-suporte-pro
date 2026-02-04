@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -144,7 +145,7 @@ export function TicketResolveDialog({
           });
         
         if (articleError) {
-          console.error("Erro ao criar artigo:", articleError);
+          logger.error("Erro ao criar artigo", "Tickets", { error: articleError.message });
           // Don't fail the resolution if article creation fails
           toast.warning("Chamado resolvido, mas houve erro ao criar o artigo");
         }
@@ -162,7 +163,7 @@ export function TicketResolveDialog({
       onSuccess?.();
     },
     onError: (error) => {
-      console.error("Erro ao finalizar chamado:", error);
+      logger.error("Erro ao finalizar chamado", "Tickets", { error: String(error) });
       toast.error("Erro ao finalizar chamado");
     },
   });

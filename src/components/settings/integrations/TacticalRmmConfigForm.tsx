@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,8 +97,8 @@ export function TacticalRmmConfigForm() {
 
       if (error) throw error;
       toast.success("Configurações do Tactical RMM salvas!");
-    } catch (error: any) {
-      toast.error("Erro ao salvar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -122,8 +123,8 @@ export function TacticalRmmConfigForm() {
       } else {
         toast.success("Conexão com Tactical RMM válida!");
       }
-    } catch (error: any) {
-      toast.error("Erro: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro: " + getErrorMessage(error));
     } finally {
       setTesting(false);
     }

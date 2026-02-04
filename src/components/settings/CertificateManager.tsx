@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import { format, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -175,7 +176,7 @@ export function CertificateManager({ companyId }: CertificateManagerProps) {
       toast.success("Certificado definido como principal");
     },
     onError: (error) => {
-      console.error("Error setting primary:", error);
+      logger.error("Error setting primary", "Certificates", { error: String(error) });
       toast.error("Erro ao definir certificado principal");
     },
   });
@@ -204,7 +205,7 @@ export function CertificateManager({ companyId }: CertificateManagerProps) {
       setCertificateToDelete(null);
     },
     onError: (error) => {
-      console.error("Error deleting certificate:", error);
+      logger.error("Error deleting certificate", "Certificates", { error: String(error) });
       toast.error("Erro ao remover certificado");
     },
   });
@@ -282,7 +283,7 @@ export function CertificateManager({ companyId }: CertificateManagerProps) {
         toast.warning(`Este certificado expira em ${data.daysRemaining} dias`);
       }
     } catch (error) {
-      console.error("Validation error:", error);
+      logger.error("Validation error", "Certificates", { error: String(error) });
       toast.error("Erro ao validar certificado");
     } finally {
       setValidating(false);
@@ -303,7 +304,7 @@ export function CertificateManager({ companyId }: CertificateManagerProps) {
       );
 
       if (encryptError || !encryptResult?.encrypted_password) {
-        console.error("Failed to encrypt password:", encryptError);
+        logger.error("Failed to encrypt password", "Certificates", { error: String(encryptError) });
         toast.error("Erro ao proteger a senha do certificado");
         return;
       }
@@ -367,7 +368,7 @@ export function CertificateManager({ companyId }: CertificateManagerProps) {
         fileInputRef.current.value = "";
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      logger.error("Upload error", "Certificates", { error: String(error) });
       toast.error("Erro ao salvar certificado");
     } finally {
       setUploading(false);

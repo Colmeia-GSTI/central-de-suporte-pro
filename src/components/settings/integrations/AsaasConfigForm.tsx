@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,7 +91,7 @@ export function AsaasConfigForm() {
         });
       }
     } catch (error) {
-      console.error("Erro ao carregar configurações Asaas:", error);
+      logger.error("Erro ao carregar configurações Asaas", "Integrations", { error: String(error) });
     }
   }
 
@@ -137,7 +138,7 @@ export function AsaasConfigForm() {
 
       toast.success("Configurações do Asaas salvas com sucesso!");
     } catch (error) {
-      console.error("Erro ao salvar configurações:", error);
+      logger.error("Erro ao salvar configurações", "Integrations", { error: String(error) });
       toast.error("Erro ao salvar configurações");
     } finally {
       setLoading(false);
@@ -179,7 +180,7 @@ export function AsaasConfigForm() {
         toast.error(data?.error || "Falha ao testar conexão");
       }
     } catch (error: unknown) {
-      console.error("Erro ao testar conexão:", error);
+      logger.error("Erro ao testar conexão", "Integrations", { error: String(error) });
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       setTestResult({
         success: false,
@@ -220,7 +221,7 @@ export function AsaasConfigForm() {
         toast.error(data?.error || "Falha ao criar cliente de teste");
       }
     } catch (error: unknown) {
-      console.error("Erro ao criar cliente de teste:", error);
+      logger.error("Erro ao criar cliente de teste", "Integrations", { error: String(error) });
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       toast.error(errorMessage);
     } finally {
@@ -258,7 +259,7 @@ export function AsaasConfigForm() {
         toast.error(data?.error || "Falha ao criar cobrança de teste");
       }
     } catch (error: unknown) {
-      console.error("Erro ao criar cobrança de teste:", error);
+      logger.error("Erro ao criar cobrança de teste", "Integrations", { error: String(error) });
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       toast.error(errorMessage);
     } finally {
@@ -292,7 +293,7 @@ export function AsaasConfigForm() {
         toast.error(data?.error || "Falha ao confirmar pagamento");
       }
     } catch (error: unknown) {
-      console.error("Erro ao confirmar pagamento:", error);
+      logger.error("Erro ao confirmar pagamento", "Integrations", { error: String(error) });
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       toast.error(errorMessage);
     } finally {
@@ -331,7 +332,7 @@ export function AsaasConfigForm() {
         toast.error(data?.error || "Falha ao emitir NFS-e de teste");
       }
     } catch (error: unknown) {
-      console.error("Erro ao emitir NFS-e de teste:", error);
+      logger.error("Erro ao emitir NFS-e de teste", "Integrations", { error: String(error) });
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       toast.error(errorMessage);
     } finally {

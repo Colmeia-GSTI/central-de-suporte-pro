@@ -39,6 +39,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { formatCurrencyBRL } from "@/lib/currency";
+import { getErrorMessage } from "@/lib/utils";
 import { NfseAvulsaDialog } from "@/components/billing/nfse/NfseAvulsaDialog";
 import { NfseDetailsSheet, type NfseWithRelations } from "@/components/billing/nfse/NfseDetailsSheet";
 import { NfseEventLogsDialog } from "@/components/billing/nfse/NfseEventLogsDialog";
@@ -261,8 +262,8 @@ export function BillingNfseTab() {
       }
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-    } catch (e: any) {
-      toast.error("Erro ao verificar status", { description: e.message });
+    } catch (e: unknown) {
+      toast.error("Erro ao verificar status", { description: getErrorMessage(e) });
     } finally {
       setCheckingStatus(false);
     }
@@ -550,8 +551,8 @@ export function BillingNfseTab() {
                               if (!n.xml_url) return;
                               try {
                                 await openUrlOrSigned(n.xml_url);
-                              } catch (e: any) {
-                                toast.error("Erro ao abrir XML", { description: e.message });
+                              } catch (e: unknown) {
+                                toast.error("Erro ao abrir XML", { description: getErrorMessage(e) });
                               }
                             }}
                           >
@@ -567,8 +568,8 @@ export function BillingNfseTab() {
                               if (!n.pdf_url) return;
                               try {
                                 await openUrlOrSigned(n.pdf_url);
-                              } catch (e: any) {
-                                toast.error("Erro ao abrir PDF", { description: e.message });
+                              } catch (e: unknown) {
+                                toast.error("Erro ao abrir PDF", { description: getErrorMessage(e) });
                               }
                             }}
                           >

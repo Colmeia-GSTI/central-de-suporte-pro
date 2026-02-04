@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Save, Edit3, Eye, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
-import { cn } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 interface ClientDocumentationProps {
   clientId: string;
@@ -204,8 +204,8 @@ export function ClientDocumentation({ clientId, initialContent }: ClientDocument
       toast({ title: "Documentação salva" });
       setHasChanges(false);
     },
-    onError: (error: any) => {
-      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    onError: (error: unknown) => {
+      toast({ title: "Erro ao salvar", description: getErrorMessage(error), variant: "destructive" });
     },
   });
 

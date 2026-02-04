@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import {
@@ -155,7 +157,7 @@ export default function CompanyTab() {
         }
       }
     } catch (error) {
-      console.error("Erro ao carregar configurações:", error);
+      logger.error("Erro ao carregar configurações", "Settings", { error: String(error) });
       toast({
         title: "Erro",
         description: "Não foi possível carregar as configurações da empresa.",
@@ -198,7 +200,7 @@ export default function CompanyTab() {
 
       clearDraft();
     } catch (error) {
-      console.error("Erro ao salvar:", error);
+      logger.error("Erro ao salvar", "Settings", { error: String(error) });
       toast({
         title: "Erro",
         description: "Não foi possível salvar as configurações.",
@@ -277,8 +279,8 @@ export default function CompanyTab() {
         title: "Dados preenchidos",
         description: "Os dados do CNPJ foram carregados com sucesso",
       });
-    } catch (error: any) {
-      console.error("CNPJ lookup error:", error);
+    } catch (error: unknown) {
+      logger.error("CNPJ lookup error", "Settings", { error: String(error) });
       toast({
         title: "Erro na consulta",
         description: "Não foi possível consultar o CNPJ. Tente novamente.",

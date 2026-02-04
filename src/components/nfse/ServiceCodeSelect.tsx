@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { ServiceCodeForm, type ServiceCode } from "./ServiceCodeForm";
 
 interface ServiceCodeSelectProps {
@@ -61,7 +62,7 @@ export function ServiceCodeSelect({ value, onSelect, disabled }: ServiceCodeSele
       if (error) throw error;
       setServiceCodes(data || []);
     } catch (error) {
-      console.error("Erro ao carregar códigos de serviço:", error);
+      logger.error("Erro ao carregar códigos de serviço", "NFSe", { error: String(error) });
     } finally {
       setLoading(false);
     }

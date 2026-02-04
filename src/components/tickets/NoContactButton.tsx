@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import {
   Dialog,
   DialogContent,
@@ -58,7 +59,7 @@ export function NoContactButton({
         });
 
       if (historyError) {
-        console.warn("Failed to insert history:", historyError);
+        logger.warn("Failed to insert history", "Tickets", { error: historyError.message });
       }
 
       // Add public comment to notify client
@@ -74,7 +75,7 @@ export function NoContactButton({
         });
 
       if (commentError) {
-        console.warn("Failed to insert comment:", commentError);
+        logger.warn("Failed to insert comment", "Tickets", { error: commentError.message });
       }
 
       // Send notification to client
@@ -84,7 +85,7 @@ export function NoContactButton({
           event_type: "updated",
           comment: `Tentativa de contato sem sucesso. Por favor, entre em contato conosco.`,
         },
-      }).catch(console.error);
+      }).catch((err) => logger.error("Failed to send notification", "Tickets", { error: String(err) }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });

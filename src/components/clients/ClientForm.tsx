@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Loader2, Phone, MessageCircle, CheckCircle2, XCircle } from "lucide-react";
-import { cn, formatPhone } from "@/lib/utils";
+import { cn, formatPhone, getErrorMessage } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
@@ -175,8 +176,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         title: "Dados preenchidos",
         description: "Os dados do CNPJ foram carregados com sucesso",
       });
-    } catch (error: any) {
-      console.error("CNPJ lookup error:", error);
+    } catch (error: unknown) {
+      logger.error("CNPJ lookup error", "Clients", { error: getErrorMessage(error) });
       toast({
         title: "Erro na consulta",
         description: "Não foi possível consultar o CNPJ. Tente novamente.",
@@ -242,14 +243,15 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
           variant: "destructive",
         });
       }
-    } catch (error: any) {
-      console.error("WhatsApp validation error:", error);
+    } catch (error: unknown) {
+      const errorMsg = getErrorMessage(error);
+      logger.error("WhatsApp validation error", "Clients", { error: errorMsg });
       setWhatsAppStatus('error');
       setWhatsAppMessage("Erro ao validar");
       form.setValue("whatsapp_validated", false);
       toast({
         title: "Erro ao validar WhatsApp",
-        description: error.message || "Tente novamente mais tarde",
+        description: errorMsg || "Tente novamente mais tarde",
         variant: "destructive",
       });
     } finally {

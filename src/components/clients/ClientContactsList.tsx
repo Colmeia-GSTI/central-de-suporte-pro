@@ -37,7 +37,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { formatPhone } from "@/lib/utils";
+import { formatPhone, getErrorMessage } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 
 const contactSchema = z.object({
@@ -119,8 +119,8 @@ export function ClientContactsList({ clientId }: ClientContactsListProps) {
       toast({ title: editingContact ? "Contato atualizado" : "Contato adicionado" });
       handleCloseForm();
     },
-    onError: (error: any) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    onError: (error: unknown) => {
+      toast({ title: "Erro", description: getErrorMessage(error), variant: "destructive" });
     },
   });
 

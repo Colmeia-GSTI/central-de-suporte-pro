@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import {
   Dialog,
   DialogContent,
@@ -65,7 +66,7 @@ export function TicketRatingDialog({
         });
 
       if (historyError) {
-        console.warn("Failed to insert history:", historyError);
+        logger.warn("Failed to insert history", "Tickets", { error: historyError.message });
       }
 
       // Award points to technician if good rating

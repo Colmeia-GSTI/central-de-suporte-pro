@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -145,8 +146,8 @@ export function ClientTechniciansList({ clientId }: ClientTechniciansListProps) 
       setIsDialogOpen(false);
       setSelectedTechnicianId("");
     },
-    onError: (error: any) => {
-      toast({ title: "Erro ao vincular técnico", description: error.message, variant: "destructive" });
+    onError: (error: unknown) => {
+      toast({ title: "Erro ao vincular técnico", description: getErrorMessage(error), variant: "destructive" });
     },
   });
 

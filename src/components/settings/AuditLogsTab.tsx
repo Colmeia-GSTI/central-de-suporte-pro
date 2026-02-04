@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +81,7 @@ export function AuditLogsTab() {
       if (error) throw error;
       setLogs(data || []);
     } catch (error) {
-      console.error("Error loading audit logs:", error);
+      logger.error("Error loading audit logs", "Settings", { error: String(error) });
     } finally {
       setLoading(false);
     }

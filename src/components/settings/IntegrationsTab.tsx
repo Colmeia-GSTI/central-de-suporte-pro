@@ -8,7 +8,8 @@ import { TacticalRmmConfigForm } from "./integrations/TacticalRmmConfigForm";
 import { EvolutionApiConfigForm } from "./integrations/EvolutionApiConfigForm";
 import { TelegramConfigForm } from "./integrations/TelegramConfigForm";
 import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigForm";
-import { Mail, Calendar, Building2, Activity, MessageSquare, Settings2 } from "lucide-react";
+import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
+import { Mail, Building2, Activity, MessageSquare, Settings2, LayoutDashboard } from "lucide-react";
 
 export function IntegrationsTab() {
   return (
@@ -20,8 +21,12 @@ export function IntegrationsTab() {
         </p>
       </div>
 
-      <Tabs defaultValue="comunicacao" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="status" className="w-full">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="status" className="flex items-center gap-2">
+            <LayoutDashboard className="h-4 w-4" />
+            Status
+          </TabsTrigger>
           <TabsTrigger value="comunicacao" className="flex items-center gap-2">
             <Mail className="h-4 w-4" />
             Email
@@ -43,6 +48,10 @@ export function IntegrationsTab() {
             Automação
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="status" className="space-y-4 mt-4">
+          <IntegrationStatusPanel />
+        </TabsContent>
 
         <TabsContent value="comunicacao" className="space-y-4 mt-4">
           <SmtpConfigForm />

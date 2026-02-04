@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { Link2, Loader2, Plus, Trash2, RefreshCw, Monitor, Play, Zap, Save, HardDrive } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage } from "@/lib/utils";
 
 interface Client {
   id: string;
@@ -301,8 +302,8 @@ export function ClientMappingsTab() {
       setExternalClientsCache(prev => ({ ...prev, [source]: data.clients || [] }));
       saveCacheToStorage(sourceKey, data.clients || []);
       toast.success(`${data.clients?.length || 0} clientes carregados`);
-    } catch (error: any) {
-      toast.error("Erro: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro: " + getErrorMessage(error));
     } finally {
       setLoadingExternal(prev => ({ ...prev, [source]: false }));
     }
@@ -353,8 +354,8 @@ export function ClientMappingsTab() {
 
       // Reload device counts
       loadData();
-    } catch (error: any) {
-      toast.error("Erro na sincronização: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro na sincronização: " + getErrorMessage(error));
     } finally {
       setSyncing(false);
     }
@@ -407,8 +408,8 @@ export function ClientMappingsTab() {
       }
       
       loadData();
-    } catch (error: any) {
-      toast.error("Erro ao salvar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -455,8 +456,8 @@ export function ClientMappingsTab() {
       setBulkMode(false);
       setBulkMappings({});
       loadData();
-    } catch (error: any) {
-      toast.error("Erro ao salvar: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {
       setSavingBulk(false);
     }
@@ -472,8 +473,8 @@ export function ClientMappingsTab() {
       if (error) throw error;
       toast.success("Mapeamento removido");
       loadData();
-    } catch (error: any) {
-      toast.error("Erro ao remover: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Erro ao remover: " + getErrorMessage(error));
     }
   };
 
