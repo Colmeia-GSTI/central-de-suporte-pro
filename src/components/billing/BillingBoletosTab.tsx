@@ -31,6 +31,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -138,14 +139,14 @@ export function BillingBoletosTab() {
         checking: false,
         error: data?.error,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIntegrationStatus({
         configured: false,
         active: false,
         hasBoletoScope: false,
         hasPixScope: false,
         checking: false,
-        error: err.message,
+        error: getErrorMessage(err),
       });
     }
   };
@@ -184,8 +185,8 @@ export function BillingBoletosTab() {
       });
       queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-    } catch (error: any) {
-      toast.error("Erro no polling", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro no polling", { description: getErrorMessage(error) });
     } finally {
       setIsPolling(false);
     }
@@ -213,8 +214,8 @@ export function BillingBoletosTab() {
       queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       setCancelDialog({ open: false, invoice: null, isLoading: false });
-    } catch (error: any) {
-      toast.error("Erro ao cancelar boleto", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao cancelar boleto", { description: getErrorMessage(error) });
       setCancelDialog((prev) => ({ ...prev, isLoading: false }));
     }
   };
@@ -230,8 +231,8 @@ export function BillingBoletosTab() {
       toast.success("Lembretes enviados", {
         description: data.message || `${data.summary?.total || 0} fatura(s) notificadas`,
       });
-    } catch (error: any) {
-      toast.error("Erro ao enviar lembretes", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao enviar lembretes", { description: getErrorMessage(error) });
     } finally {
       setIsNotifying(false);
     }

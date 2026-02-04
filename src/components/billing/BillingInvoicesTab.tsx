@@ -64,6 +64,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/utils";
 import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
 import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialog";
@@ -80,6 +81,13 @@ type InvoiceWithClient = Tables<"invoices"> & {
 };
 
 type NfseByInvoice = Record<string, { status: string; numero_nfse: string | null }>;
+
+interface NotificationResult {
+  success: boolean;
+  channel: "email" | "whatsapp";
+  error?: string;
+  errorCode?: string;
+}
 
 const statusLabels: Record<Enums<"invoice_status">, string> = {
   pending: "Pendente",
@@ -223,8 +231,8 @@ export function BillingInvoicesTab() {
         paymentType === "boleto" ? "Boleto gerado com sucesso!" : "PIX gerado com sucesso!",
         { description: `Via ${provider === "asaas" ? "Asaas" : "Banco Inter"}` }
       );
-    } catch (error: any) {
-      toast.error("Erro ao gerar pagamento", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao gerar pagamento", { description: getErrorMessage(error) });
     } finally {
       setGeneratingPayment(null);
     }
@@ -245,7 +253,7 @@ export function BillingInvoicesTab() {
           description: data.message,
         });
       } else {
-        const failedResults = data.results?.filter((r: any) => !r.success) || [];
+        const failedResults = (data.results as NotificationResult[] | undefined)?.filter((r) => !r.success) || [];
         for (const result of failedResults) {
           const channelLabel = result.channel === "email" ? "Email" : "WhatsApp";
           if (result.errorCode === "WHATSAPP_INTEGRATION_DISABLED") {
@@ -261,8 +269,8 @@ export function BillingInvoicesTab() {
           }
         }
       }
-    } catch (error: any) {
-      toast.error("Erro ao reenviar cobrança", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao reenviar cobrança", { description: getErrorMessage(error) });
     } finally {
       setSendingNotification(null);
     }
@@ -357,7 +365,8 @@ export function BillingInvoicesTab() {
       if (notifData.success) {
         steps.push("Notificações enviadas");
       } else {
-        const failedChannels = notifData.results?.filter((r: any) => !r.success).map((r: any) => r.channel) || [];
+        const results = notifData.results as NotificationResult[] | undefined;
+        const failedChannels = results?.filter((r) => !r.success).map((r) => r.channel) || [];
         if (failedChannels.length > 0) {
           steps.push(`Notificações: ${failedChannels.length} falha(s)`);
         }
@@ -369,9 +378,9 @@ export function BillingInvoicesTab() {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Erro no processamento completo", {
-        description: `${steps.length > 0 ? `Completado: ${steps.join(", ")}. ` : ""}Erro: ${error.message}`,
+        description: `${steps.length > 0 ? `Completado: ${steps.join(", ")}. ` : ""}Erro: ${getErrorMessage(error)}`,
       });
     } finally {
       setProcessingComplete(null);
@@ -418,8 +427,8 @@ export function BillingInvoicesTab() {
       } else {
         toast.error(data.error || "Erro ao gerar faturas");
       }
-    } catch (error: any) {
-      toast.error("Erro ao gerar faturas mensais", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao gerar faturas mensais", { description: getErrorMessage(error) });
     } finally {
       setIsGeneratingMonthly(false);
     }
@@ -441,8 +450,8 @@ export function BillingInvoicesTab() {
       } else {
         toast.error(data.error || "Erro ao enviar notificações");
       }
-    } catch (error: any) {
-      toast.error("Erro ao enviar notificações em lote", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Erro ao enviar notificações em lote", { description: getErrorMessage(error) });
     } finally {
       setIsBatchNotifying(false);
     }
