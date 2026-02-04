@@ -24,6 +24,7 @@ interface NfseShareMenuProps {
     clients: {
       name: string;
       email: string | null;
+      financial_email: string | null;
       whatsapp: string | null;
     } | null;
   };
@@ -35,7 +36,9 @@ export function NfseShareMenu({ nfse, variant = "icon" }: NfseShareMenuProps) {
   const [open, setOpen] = useState(false);
 
   const hasPdf = !!nfse.pdf_url;
-  const hasEmail = !!nfse.clients?.email;
+  // Prioriza financial_email se existir, senão usa email
+  const emailForSending = nfse.clients?.financial_email || nfse.clients?.email;
+  const hasEmail = !!emailForSending;
   const hasWhatsapp = !!nfse.clients?.whatsapp;
 
   const handleSend = async (channel: "email" | "whatsapp") => {
@@ -68,8 +71,9 @@ export function NfseShareMenu({ nfse, variant = "icon" }: NfseShareMenuProps) {
       const channelResult = result.results?.find((r) => r.channel === channel);
 
       if (channelResult?.success) {
+        const emailDisplay = channel === "email" ? emailForSending : nfse.clients?.whatsapp;
         toast.success(`NFS-e enviada por ${channel === "email" ? "Email" : "WhatsApp"}`, {
-          description: `Nota #${nfse.numero_nfse || "N/A"} enviada para ${nfse.clients?.name}`,
+          description: `Nota #${nfse.numero_nfse || "N/A"} enviada para ${emailDisplay}`,
         });
       } else {
         toast.error(`Erro ao enviar por ${channel === "email" ? "Email" : "WhatsApp"}`, {

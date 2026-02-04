@@ -21,6 +21,22 @@ interface SmtpSettings {
   use_tls: boolean;
 }
 
+// Validation functions
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePort = (port: number): boolean => {
+  return port >= 1 && port <= 65535;
+};
+
+const validateHost = (host: string): boolean => {
+  // Basic hostname validation - allow alphanumeric, dots, hyphens
+  const hostRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+  return hostRegex.test(host) && host.length <= 255;
+};
+
 const defaultSettings: SmtpSettings = {
   host: "",
   port: 587,
@@ -55,7 +71,41 @@ export function SmtpConfigForm() {
     }
   };
 
+  const validateSettings = (): string | null => {
+    if (!settings.host?.trim()) {
+      return "Servidor SMTP é obrigatório";
+    }
+    if (!validateHost(settings.host)) {
+      return "Nome do servidor inválido";
+    }
+    if (!validatePort(settings.port)) {
+      return "Porta deve estar entre 1 e 65535";
+    }
+    if (!settings.username?.trim()) {
+      return "Usuário é obrigatório";
+    }
+    if (!settings.password?.trim()) {
+      return "Senha é obrigatória";
+    }
+    if (!settings.from_email?.trim()) {
+      return "Email de remetente é obrigatório";
+    }
+    if (!validateEmail(settings.from_email)) {
+      return "Email de remetente inválido";
+    }
+    if (!settings.from_name?.trim()) {
+      return "Nome do remetente é obrigatório";
+    }
+    return null;
+  };
+
   const handleSave = async () => {
+    const validationError = validateSettings();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     setLoading(true);
     try {
       // Check if record exists
@@ -96,13 +146,14 @@ export function SmtpConfigForm() {
   };
 
   const handleTest = async () => {
-    if (!testEmail) {
-      toast.error("Informe um email para teste");
+    if (!testEmail || !validateEmail(testEmail)) {
+      toast.error("Email de teste inválido");
       return;
     }
 
-    if (!settings.host || !settings.username || !settings.password) {
-      toast.error("Preencha as configurações SMTP antes de testar");
+    const validationError = validateSettings();
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 

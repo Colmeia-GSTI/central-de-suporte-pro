@@ -46,6 +46,7 @@ export type NfseWithRelations = Tables<"nfse_history"> & {
     document: string | null;
     address?: string | null;
     email?: string | null;
+    financial_email?: string | null;
     whatsapp?: string | null;
   } | null;
   contracts: { name: string } | null;
