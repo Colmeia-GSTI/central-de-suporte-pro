@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "https://suporte.colmeiagsti.com",
@@ -72,6 +71,204 @@ function sanitizeHtml(html: string): string {
   sanitized = sanitized.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
 
   return sanitized;
+}
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+function extractEmailAddress(fromHeader: string): string {
+  const match = fromHeader.match(/<([^>]+)>/);
+  return (match?.[1] || fromHeader).trim();
+}
+
+function toCrlf(input: string): string {
+  return input.replace(/\r?\n/g, "\r\n");
+}
+
+function dotStuff(input: string): string {
+  // RFC 5321 dot transparency
+  return input
+    .split("\n")
+    .map((line) => (line.startsWith(".") ? "." + line : line))
+    .join("\n");
+}
+
+type SmtpConn = Deno.Conn;
+
+async function readLine(conn: SmtpConn, buf: Uint8Array, state: { carry: Uint8Array }): Promise<string | null> {
+  // Simple line reader with carry buffer.
+  const idxInCarry = () => {
+    for (let i = 0; i < state.carry.length; i++) {
+      if (state.carry[i] === 10) return i; // \n
+    }
+    return -1;
+  };
+
+  while (true) {
+    const nlIndex = idxInCarry();
+    if (nlIndex !== -1) {
+      const lineBytes = state.carry.slice(0, nlIndex + 1);
+      state.carry = state.carry.slice(nlIndex + 1);
+      return decoder.decode(lineBytes).replace(/\r?\n$/, "");
+    }
+
+    const n = await conn.read(buf);
+    if (n === null) return null;
+    const chunk = buf.slice(0, n);
+    const merged = new Uint8Array(state.carry.length + chunk.length);
+    merged.set(state.carry, 0);
+    merged.set(chunk, state.carry.length);
+    state.carry = merged;
+  }
+}
+
+async function readResponse(conn: SmtpConn, buf: Uint8Array, state: { carry: Uint8Array }): Promise<{ code: number; lines: string[] }> {
+  const lines: string[] = [];
+  const first = await readLine(conn, buf, state);
+  if (!first) throw new Error("SMTP: conexão encerrada");
+  lines.push(first);
+
+  const code = Number.parseInt(first.slice(0, 3), 10);
+  if (!Number.isFinite(code)) throw new Error(`SMTP: resposta inválida: ${first}`);
+
+  // Multiline: 250-... until 250 <space>
+  const isMulti = first.length >= 4 && first[3] === "-";
+  if (!isMulti) return { code, lines };
+
+  while (true) {
+    const line = await readLine(conn, buf, state);
+    if (!line) throw new Error("SMTP: conexão encerrada");
+    lines.push(line);
+    if (line.startsWith(`${code} `)) break;
+  }
+
+  return { code, lines };
+}
+
+async function writeCmd(conn: SmtpConn, cmd: string): Promise<void> {
+  await conn.write(encoder.encode(cmd + "\r\n"));
+}
+
+async function smtpSend(params: {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  useTls: boolean;
+  fromHeader: string;
+  to: string[];
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<void> {
+  const buf = new Uint8Array(4096);
+  const state = { carry: new Uint8Array(0) };
+  let conn: SmtpConn | null = null;
+
+  const cleanup = () => {
+    try {
+      conn?.close();
+    } catch {
+      // ignore
+    }
+  };
+
+  try {
+    const implicitTls = params.port === 465;
+    conn = implicitTls
+      ? await Deno.connectTls({ hostname: params.host, port: params.port })
+      : await Deno.connect({ hostname: params.host, port: params.port });
+
+    // 220 greeting
+    let res = await readResponse(conn, buf, state);
+    if (res.code !== 220) throw new Error(res.lines.join("\n"));
+
+    const ehloName = "localhost";
+    await writeCmd(conn, `EHLO ${ehloName}`);
+    res = await readResponse(conn, buf, state);
+    if (res.code !== 250) throw new Error(res.lines.join("\n"));
+
+    // STARTTLS if needed
+    if (!implicitTls && params.useTls) {
+      const supportsStartTls = res.lines.some((l) => l.toUpperCase().includes("STARTTLS"));
+      if (supportsStartTls) {
+        await writeCmd(conn, "STARTTLS");
+        const tlsRes = await readResponse(conn, buf, state);
+        if (tlsRes.code !== 220) throw new Error(tlsRes.lines.join("\n"));
+        // startTls requires a TcpConn; at this point the connection is from Deno.connect()
+        conn = await Deno.startTls(conn as Deno.TcpConn, { hostname: params.host });
+        state.carry = new Uint8Array(0);
+
+        await writeCmd(conn, `EHLO ${ehloName}`);
+        res = await readResponse(conn, buf, state);
+        if (res.code !== 250) throw new Error(res.lines.join("\n"));
+      }
+    }
+
+    // AUTH LOGIN
+    await writeCmd(conn, "AUTH LOGIN");
+    res = await readResponse(conn, buf, state);
+    if (res.code !== 334) throw new Error(res.lines.join("\n"));
+    await writeCmd(conn, btoa(params.username));
+    res = await readResponse(conn, buf, state);
+    if (res.code !== 334) throw new Error(res.lines.join("\n"));
+    await writeCmd(conn, btoa(params.password));
+    res = await readResponse(conn, buf, state);
+    if (res.code !== 235) throw new Error(res.lines.join("\n"));
+
+    const mailFrom = extractEmailAddress(params.fromHeader) || params.username;
+    await writeCmd(conn, `MAIL FROM:<${mailFrom}>`);
+    res = await readResponse(conn, buf, state);
+    if (res.code >= 400) throw new Error(res.lines.join("\n"));
+
+    for (const recipient of params.to) {
+      await writeCmd(conn, `RCPT TO:<${recipient}>`);
+      res = await readResponse(conn, buf, state);
+      if (res.code >= 400) throw new Error(res.lines.join("\n"));
+    }
+
+    await writeCmd(conn, "DATA");
+    res = await readResponse(conn, buf, state);
+    if (res.code !== 354) throw new Error(res.lines.join("\n"));
+
+    const boundary = `ALT_${crypto.randomUUID()}`;
+    const headers = [
+      `Subject: ${params.subject}`,
+      `From: ${params.fromHeader}`,
+      `To: ${params.to.join(", ")}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary=${boundary}`,
+      "",
+    ].join("\r\n");
+
+    const textPart = [
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=\"utf-8\"`,
+      "",
+      toCrlf(dotStuff(params.text)),
+      "",
+    ].join("\r\n");
+
+    const htmlPart = [
+      `--${boundary}`,
+      `Content-Type: text/html; charset=\"utf-8\"`,
+      "",
+      toCrlf(dotStuff(params.html)),
+      "",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+
+    const data = headers + textPart + htmlPart;
+    await conn.write(encoder.encode(data + "\r\n.\r\n"));
+    res = await readResponse(conn, buf, state);
+    if (res.code >= 400) throw new Error(res.lines.join("\n"));
+
+    await writeCmd(conn, "QUIT");
+    // Ignore QUIT response
+  } finally {
+    cleanup();
+  }
 }
 
 serve(async (req) => {
@@ -172,30 +369,21 @@ serve(async (req) => {
     console.log(`[send-email-smtp] Connecting to ${settings.host}:${port}`);
     console.log(`[send-email-smtp] Sending to ${emailValidation.emails.length} recipient(s)`);
 
-    // Port 465 uses implicit TLS (SMTPS), port 587 uses STARTTLS
-    const useImplicitTLS = port === 465;
-    
-    const client = new SMTPClient({
-      connection: {
-        hostname: settings.host,
-        port: port,
-        tls: useImplicitTLS || settings.use_tls !== false,
-        auth: {
-          username: settings.username,
-          password: settings.password,
-        },
-      },
-    });
-
-    let closed = false;
     let sendErrorMsg = "";
-    
+
     try {
-      await client.send({
-        from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
+      const fromValue = `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`;
+
+      await smtpSend({
+        host: settings.host,
+        port,
+        username: settings.username,
+        password: settings.password,
+        useTls: settings.use_tls !== false,
+        fromHeader: fromValue,
         to: emailValidation.emails,
         subject: sanitizedSubject,
-        content: sanitizedText,
+        text: sanitizedText,
         html: sanitizedHtml,
       });
 
@@ -261,16 +449,6 @@ serve(async (req) => {
         JSON.stringify({ error: userMessage, details: sendErrorMsg }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    } finally {
-      if (!closed) {
-        try {
-          await client.close();
-          closed = true;
-        } catch (closeErr) {
-          // Ignore close errors - connection may already be dead
-          console.warn("[send-email-smtp] Error closing connection (ignored):", closeErr);
-        }
-      }
     }
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
