@@ -218,7 +218,7 @@ serve(async (req) => {
             // Send email/whatsapp
             if (clientEmail) {
               try {
-                await supabase.functions.invoke("send-email-smtp", {
+                await supabase.functions.invoke("send-email-resend", {
                   body: {
                     to: clientEmail,
                     subject: `Boleto Fatura #${invoice.invoice_number} Disponível`,

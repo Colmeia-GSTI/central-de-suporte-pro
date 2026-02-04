@@ -80,14 +80,14 @@ serve(async (req) => {
     // Send Email notification if client has email
     if (ticket.client?.email) {
       try {
-        const { data: smtpSettings } = await supabase
+        const { data: resendSettings } = await supabase
           .from("integration_settings")
           .select("settings, is_active")
-          .eq("integration_type", "smtp")
+          .eq("integration_type", "resend")
           .eq("is_active", true)
           .maybeSingle();
 
-        if (smtpSettings?.is_active) {
+        if (resendSettings?.is_active) {
           const html = `
             <!DOCTYPE html>
             <html>
@@ -145,7 +145,7 @@ serve(async (req) => {
             </html>
           `;
 
-          const { data: emailResult, error: emailError } = await supabase.functions.invoke("send-email-smtp", {
+          const { data: emailResult, error: emailError } = await supabase.functions.invoke("send-email-resend", {
             body: {
               to: ticket.client.email,
               subject: `[Chamado #${ticket.ticket_number}] ${eventMessages[event_type]}`,
