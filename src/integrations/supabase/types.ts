@@ -50,6 +50,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "alert_escalation_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
         ]
       }
       assets: {
@@ -110,6 +117,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
           {
@@ -254,6 +268,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "calendar_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "calendar_events_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
@@ -385,6 +406,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_external_mappings: {
@@ -423,6 +451,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_external_mappings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_history: {
@@ -459,6 +494,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
         ]
@@ -508,6 +550,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "client_notification_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_technicians: {
@@ -541,6 +590,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_technicians_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
         ]
@@ -1060,6 +1116,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contracts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "contracts_nfse_service_code_id_fkey"
             columns: ["nfse_service_code_id"]
             isOneToOne: false
@@ -1269,6 +1332,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
           {
@@ -1604,6 +1674,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "invoices_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
@@ -1683,6 +1760,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_articles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
         ]
@@ -1903,6 +1987,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monitored_devices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
         ]
@@ -2177,6 +2268,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
           {
@@ -2512,6 +2610,13 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sla_configs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
         ]
       }
       software_licenses: {
@@ -2566,6 +2671,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "software_licenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
             referencedColumns: ["id"]
           },
         ]
@@ -3092,6 +3204,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tickets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tickets_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
@@ -3265,6 +3384,60 @@ export type Database = {
       }
     }
     Views: {
+      clients_contact_only: {
+        Row: {
+          address: string | null
+          city: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          is_active: boolean | null
+          name: string | null
+          notes: string | null
+          phone: string | null
+          state: string | null
+          trade_name: string | null
+          updated_at: string | null
+          whatsapp: string | null
+          whatsapp_validated: boolean | null
+          zip_code: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+          trade_name?: string | null
+          updated_at?: string | null
+          whatsapp?: string | null
+          whatsapp_validated?: boolean | null
+          zip_code?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+          trade_name?: string | null
+          updated_at?: string | null
+          whatsapp?: string | null
+          whatsapp_validated?: boolean | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
       nfse_history_safe: {
         Row: {
           aliquota: number | null
@@ -3392,6 +3565,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "nfse_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "nfse_history_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
@@ -3475,11 +3655,22 @@ export type Database = {
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "software_licenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Functions: {
       cleanup_old_monitoring_alerts: { Args: never; Returns: undefined }
+      client_owns_record: {
+        Args: { _client_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_calendar_tokens: {
         Args: { user_uuid: string }
         Returns: {
@@ -3513,7 +3704,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      is_technician_only: { Args: { _user_id: string }; Returns: boolean }
       verify_tv_dashboard_token: {
         Args: { token_param: string }
         Returns: {

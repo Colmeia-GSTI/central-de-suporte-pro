@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -26,6 +26,7 @@ import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
 import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { formatPhone } from "@/lib/utils";
+import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients"> & {
@@ -39,12 +40,16 @@ export default function ClientDetailPage() {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") || "info";
   const [activeTab, setActiveTab] = useState(initialTab);
+  
+  // Check if user is technician only (no admin/manager/financial roles)
+  const isTechnicianOnly = useIsTechnicianOnly();
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", id],
     queryFn: async () => {
       if (!id) throw new Error("Client ID not provided");
       
+      // Technicians get limited fields via RLS, but we select all and let backend filter
       const { data, error } = await supabase
         .from("clients")
         .select("id, name, trade_name, document, email, financial_email, phone, whatsapp, whatsapp_validated, address, city, state, zip_code, documentation, notes, is_active, created_at, updated_at")
@@ -161,7 +166,8 @@ export default function ClientDetailPage() {
                         <p className="font-medium">{client.trade_name}</p>
                       </div>
                     )}
-                    {client.document && (
+                    {/* Hide document (CPF/CNPJ) from technicians */}
+                    {!isTechnicianOnly && client.document && (
                       <div>
                         <p className="text-sm text-muted-foreground">CNPJ/CPF</p>
                         <p className="font-medium">{client.document}</p>

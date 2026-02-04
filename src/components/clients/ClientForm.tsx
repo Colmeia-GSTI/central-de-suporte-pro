@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const [isValidatingWhatsApp, setIsValidatingWhatsApp] = useState(false);
   const [whatsAppStatus, setWhatsAppStatus] = useState<'idle' | 'valid' | 'invalid' | 'error'>('idle');
   const [whatsAppMessage, setWhatsAppMessage] = useState<string>("");
+  
+  // Check if user is technician only (no admin/manager/financial roles)
+  const isTechnicianOnly = useIsTechnicianOnly();
 
   const form = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),
@@ -385,42 +389,44 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       )}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          {/* CNPJ as first field with search button */}
-          <FormField
-            control={form.control}
-            name="document"
-            render={({ field }) => (
-              <FormItem className="col-span-2">
-                <FormLabel>CNPJ/CPF</FormLabel>
-                <div className="flex gap-2">
-                  <FormControl>
-                    <Input 
-                      placeholder="00.000.000/0000-00" 
-                      {...field}
-                      onChange={(e) => handleDocumentChange(e, field.onChange)}
-                    />
-                  </FormControl>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={searchCNPJ}
-                    disabled={isSearching}
-                  >
-                    {isSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                    <span className="ml-2 hidden sm:inline">Consultar</span>
-                  </Button>
-                </div>
-                <FormDescription>
-                  Digite o CNPJ e clique em Consultar para preencher automaticamente
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* CNPJ field - hidden for technicians */}
+          {!isTechnicianOnly && (
+            <FormField
+              control={form.control}
+              name="document"
+              render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>CNPJ/CPF</FormLabel>
+                  <div className="flex gap-2">
+                    <FormControl>
+                      <Input 
+                        placeholder="00.000.000/0000-00" 
+                        {...field}
+                        onChange={(e) => handleDocumentChange(e, field.onChange)}
+                      />
+                    </FormControl>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={searchCNPJ}
+                      disabled={isSearching}
+                    >
+                      {isSearching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4" />
+                      )}
+                      <span className="ml-2 hidden sm:inline">Consultar</span>
+                    </Button>
+                  </div>
+                  <FormDescription>
+                    Digite o CNPJ e clique em Consultar para preencher automaticamente
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           <FormField
             control={form.control}
@@ -576,20 +582,23 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="financial_email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email Financeiro</FormLabel>
-                <FormControl>
-                  <Input type="email" placeholder="financeiro@empresa.com" {...field} />
-                </FormControl>
-                <FormDescription>Para envio de boletos e cobranças</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Financial email - hidden for technicians */}
+          {!isTechnicianOnly && (
+            <FormField
+              control={form.control}
+              name="financial_email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email Financeiro</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="financeiro@empresa.com" {...field} />
+                  </FormControl>
+                  <FormDescription>Para envio de boletos e cobranças</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           <FormField
             control={form.control}
