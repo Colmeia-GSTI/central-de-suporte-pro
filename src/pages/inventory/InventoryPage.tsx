@@ -37,7 +37,21 @@ type AssetWithClient = Tables<"assets"> & {
   clients: { name: string } | null;
 };
 
-type LicenseWithClient = Tables<"software_licenses"> & {
+// Use safe view type - license_key is masked
+type LicenseWithClientSafe = {
+  id: string;
+  client_id: string;
+  name: string;
+  vendor: string | null;
+  total_licenses: number;
+  used_licenses: number;
+  purchase_date: string | null;
+  expire_date: string | null;
+  purchase_value: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  license_key_masked: string | null;
   clients: { name: string } | null;
 };
 
@@ -72,12 +86,12 @@ export default function InventoryPage() {
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
   const [isLicenseFormOpen, setIsLicenseFormOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetWithClient | null>(null);
-  const [editingLicense, setEditingLicense] = useState<LicenseWithClient | null>(null);
+  const [editingLicense, setEditingLicense] = useState<LicenseWithClientSafe | null>(null);
   const [deleteAssetConfirm, setDeleteAssetConfirm] = useState<{ open: boolean; asset: AssetWithClient | null }>({
     open: false,
     asset: null,
   });
-  const [deleteLicenseConfirm, setDeleteLicenseConfirm] = useState<{ open: boolean; license: LicenseWithClient | null }>({
+  const [deleteLicenseConfirm, setDeleteLicenseConfirm] = useState<{ open: boolean; license: LicenseWithClientSafe | null }>({
     open: false,
     license: null,
   });
@@ -102,21 +116,50 @@ export default function InventoryPage() {
     },
   });
 
+  // Use safe view to mask license keys - protects sensitive data
   const { data: licenses = [], isLoading: loadingLicenses } = useQuery({
     queryKey: ["licenses", search],
     queryFn: async () => {
-      let query = supabase
-        .from("software_licenses")
-        .select("*, clients(name)")
+      // Query the safe view which masks license_key
+      const { data: licensesData, error: licensesError } = await supabase
+        .from("software_licenses_safe")
+        .select("*")
         .order("name");
 
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,vendor.ilike.%${search}%`);
+      if (licensesError) throw licensesError;
+      
+      // Get client names for these licenses
+      const clientIds = [...new Set(licensesData.map(l => l.client_id).filter(Boolean))];
+      
+      let clientsMap: Record<string, { name: string }> = {};
+      if (clientIds.length > 0) {
+        const { data: clientsData } = await supabase
+          .from("clients")
+          .select("id, name")
+          .in("id", clientIds);
+        
+        if (clientsData) {
+          clientsMap = Object.fromEntries(
+            clientsData.map(c => [c.id, { name: c.name }])
+          );
+        }
       }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as LicenseWithClient[];
+      
+      // Combine licenses with client names
+      let results: LicenseWithClientSafe[] = licensesData.map(l => ({
+        ...l,
+        clients: clientsMap[l.client_id] || null,
+      }));
+      
+      if (search) {
+        const searchLower = search.toLowerCase();
+        results = results.filter(l => 
+          l.name.toLowerCase().includes(searchLower) ||
+          (l.vendor && l.vendor.toLowerCase().includes(searchLower))
+        );
+      }
+      
+      return results;
     },
   });
 
