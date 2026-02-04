@@ -546,18 +546,24 @@ Deno.serve(async (req) => {
           value: parseFloat(value),
           effectiveDate: effective_date || new Date().toISOString().split("T")[0],
           externalReference: historyId,
+          // REQUIRED: Nome do tomador de serviço (cliente)
+          name: client.name,
           // Required fields for Asaas NFS-e API
           serviceDescription: service_description || "Serviços de TI",
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires either municipalServiceId OR municipalServiceCode + municipalServiceName
+        // Asaas requires municipalServiceId OR (municipalServiceCode + municipalServiceName) OR municipalServiceExternalId
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
         } else if (municipal_service_code) {
-          // When we don't have the Asaas internal ID, use external code approach
-          invoicePayload.municipalServiceCode = municipal_service_code;
+          // Use the LC 116 code as externalId (formato: "01.01" ou "0101")
+          invoicePayload.municipalServiceExternalId = municipal_service_code;
           invoicePayload.municipalServiceName = service_description || "Serviços de TI";
+        } else {
+          // Fallback: usar código padrão de serviços de informática
+          invoicePayload.municipalServiceExternalId = "0107";
+          invoicePayload.municipalServiceName = service_description || "Suporte técnico em informática";
         }
 
         if (payment_id) {
