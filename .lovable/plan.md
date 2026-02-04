@@ -1,276 +1,356 @@
 
-# Plano: Indicador de Processamento + Verificação Individual de Status NFS-e
+# Plano: Corrigir Erros de Dados Incompletos do Cliente na Emissão de NFS-e
 
-## Resumo
+## Diagnóstico da Causa Raiz
 
-Implementar duas melhorias na interface de NFS-e:
-1. **Indicador de tempo estimado** - Exibir tempo decorrido e estimativa de processamento para notas em "processando"
-2. **Botão de verificação individual** - Permitir atualizar o status de uma NFS-e específica no Asaas
+### O Problema Identificado
 
----
+A NFS-e falhou com os erros:
+- "E-mail do cliente incompleto"
+- "Endereço do cliente incompleto"  
+- "CEP do cliente é inválido"
 
-## Análise do Estado Atual
+**Causa raiz**: O cliente `cus_000159715230` foi criado no Asaas anteriormente **SEM** os dados completos (email, endereço, CEP). Quando a NFS-e foi emitida, o Asaas usou esses dados incompletos e rejeitou a nota.
 
-### Fluxo de Status NFS-e (Asaas → Portal Nacional)
-
-```text
-SCHEDULED (enviada) → SYNCHRONIZED → AUTHORIZATION_PENDING → AUTHORIZED
-     ↓                                      ↓
-  "processando"                         "autorizada"
-```
-
-**Tempos típicos de processamento:**
-- **Ambiente Sandbox**: 1-5 minutos
-- **Ambiente Produção**: 15-60 minutos (depende da prefeitura)
-
-### Componentes Identificados
-
-| Arquivo | Função |
-|---------|--------|
-| `BillingNfseTab.tsx` | Tabela de listagem com botão "Verificar status" global |
-| `NfseDetailsSheet.tsx` | Painel lateral de detalhes da NFS-e |
-| `asaas-nfse/index.ts` | Edge function com ação `get_status` existente |
-| `poll-asaas-nfse-status/index.ts` | Polling em lote (fallback) |
-
----
-
-## Implementação
-
-### Etapa 1: Criar Componente de Indicador de Processamento
-
-Novo componente `NfseProcessingIndicator.tsx` que exibe:
-- Tempo decorrido desde a emissão
-- Barra de progresso estimada
-- Status atual do Asaas (SCHEDULED, SYNCHRONIZED, etc.)
-
-**Interface visual:**
+### Fluxo do Problema
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│ ⏳ Aguardando Autorização                               │
-│                                                         │
-│ ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░  35%          │
-│                                                         │
-│ Status: AUTHORIZATION_PENDING                           │
-│ Tempo decorrido: 12 minutos                             │
-│ Estimativa: ~30-60 min (produção)                       │
-│                                                         │
-│ ℹ️ A nota foi enviada e está aguardando autorização     │
-│    da prefeitura. Este processo é automático.           │
-│                                                         │
-│ [🔄 Verificar agora]                                    │
-└─────────────────────────────────────────────────────────┘
+1. Cliente cadastrado no sistema local COM dados completos:
+   ✓ Email: financeiro@capasemu.com.br
+   ✓ Endereço: RUA SETE DE AGOSTO, 431 - ANDAR SETIMO
+   ✓ CEP: 99025030
+
+2. Cliente criado no Asaas ANTERIORMENTE com dados INCOMPLETOS:
+   ✗ Email: não enviado
+   ✗ Endereço: não enviado
+   ✗ CEP: não enviado
+
+3. NFS-e emitida usando cliente existente no Asaas:
+   → Asaas usa dados incompletos → ERRO
 ```
 
-### Etapa 2: Criar Ação "check_single_status" no Edge Function
+### Locais com Criação Incompleta (Código Atual)
 
-Adicionar nova ação no `asaas-nfse/index.ts` que:
-1. Consulta o status no Asaas
-2. Atualiza o registro local
-3. Baixa PDF/XML se autorizada
-4. Retorna o novo status
-
-### Etapa 3: Adicionar Indicador na Tabela de Listagem
-
-Na tabela de NFS-e, para registros com status "processando":
-- Exibir ícone animado de loading
-- Tooltip com tempo decorrido
-- Badge com status Asaas (se disponível)
-
-### Etapa 4: Adicionar Botão de Verificação Individual
-
-No `NfseDetailsSheet.tsx`:
-- Botão "Verificar status agora" visível quando status = "processando"
-- Spinner durante a verificação
-- Toast com resultado
+| Arquivo | Linha | Problema |
+|---------|-------|----------|
+| `asaas-nfse/index.ts` | 366-371 | Ação `emit` - cria cliente só com name/cpfCnpj |
+| `asaas-nfse/index.ts` | 587-592 | Ação `emit_standalone` - cria cliente só com name/cpfCnpj |
+| `nfseValidation.ts` | 366-382 | Email/endereço são apenas **warnings**, não erros |
 
 ---
 
-## Especificação Técnica
+## Solução em 3 Partes
 
-### Novo Componente: `NfseProcessingIndicator.tsx`
+### Parte 1: Atualizar Cliente no Asaas Antes de Emitir NFS-e
 
-```typescript
-interface NfseProcessingIndicatorProps {
-  nfse: {
-    id: string;
-    asaas_invoice_id: string | null;
-    asaas_status: string | null;
-    created_at: string;
-    data_emissao: string | null;
-    ambiente: string | null;
-  };
-  onRefresh?: () => void;
-  compact?: boolean;
-}
+**Estratégia**: Sempre sincronizar dados do cliente local com o Asaas antes de emitir NFS-e
 
-// Estimativas de tempo por ambiente
-const ESTIMATED_TIMES = {
-  sandbox: { min: 1, max: 5 },      // minutos
-  production: { min: 15, max: 60 }, // minutos
-};
-
-// Mapeamento de status Asaas para descrição
-const ASAAS_STATUS_LABELS = {
-  SCHEDULED: "Agendada para envio",
-  SYNCHRONIZED: "Sincronizada com prefeitura",
-  AUTHORIZATION_PENDING: "Aguardando autorização",
-  AUTHORIZED: "Autorizada",
-  ERROR: "Erro no processamento",
-  CANCELED: "Cancelada",
-  CANCELLATION_PENDING: "Cancelamento pendente",
-};
-
-// Progresso estimado por status
-const STATUS_PROGRESS = {
-  SCHEDULED: 15,
-  SYNCHRONIZED: 40,
-  AUTHORIZATION_PENDING: 70,
-  AUTHORIZED: 100,
-  ERROR: 0,
-  CANCELED: 0,
-};
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  FLUXO CORRIGIDO                                            │
+├─────────────────────────────────────────────────────────────┤
+│  1. Buscar cliente local COM todos os campos                │
+│  2. Se cliente existe no Asaas → ATUALIZAR (PUT)            │
+│  3. Se cliente não existe → CRIAR COMPLETO (POST)           │
+│  4. Emitir NFS-e com cliente atualizado                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Nova Ação Edge Function: `check_single_status`
+### Parte 2: Bloquear Emissão com Dados Incompletos
+
+**Estratégia**: Transformar warnings em erros bloqueantes no frontend
+
+| Campo | Antes | Depois |
+|-------|-------|--------|
+| Email | warning | **error** (para NFS-e) |
+| Endereço | warning | **error** (para NFS-e) |
+| CEP | não validado | **error** (obrigatório) |
+
+### Parte 3: Criar Função de Sincronização de Cliente
+
+Nova função auxiliar que garante dados completos antes de qualquer operação com NFS-e.
+
+---
+
+## Alterações Técnicas
+
+### 1. Edge Function: `asaas-nfse/index.ts`
+
+#### 1.1 Nova função auxiliar `ensureCustomerSync`
 
 ```typescript
-case "check_single_status": {
-  const { nfse_history_id } = params;
-  
-  // 1. Buscar registro local
-  const { data: record } = await supabase
-    .from("nfse_history")
-    .select("id, asaas_invoice_id, status, client_id")
-    .eq("id", nfse_history_id)
+async function ensureCustomerSync(
+  supabase: SupabaseClient,
+  settings: AsaasSettings,
+  clientId: string,
+  correlationId: string
+): Promise<{ customerId: string; client: ClientData }> {
+  // 1. Buscar cliente COM TODOS os campos necessários
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id, name, email, financial_email, phone, whatsapp, document, zip_code, address, city, state, asaas_customer_id")
+    .eq("id", clientId)
     .single();
-  
-  if (!record?.asaas_invoice_id) {
-    throw new AsaasApiError("NFS-e não possui ID no Asaas", 400);
+
+  if (!client) {
+    throw new AsaasApiError("Cliente não encontrado", 404, "CLIENT_NOT_FOUND");
   }
-  
-  // 2. Consultar Asaas
-  const invoice = await asaasRequest(
-    settings, 
-    `/invoices/${record.asaas_invoice_id}`, 
-    "GET"
-  );
-  
-  // 3. Mapear status e atualizar local
-  const newStatus = STATUS_MAP[invoice.status] || "processando";
-  const updateData = {
-    asaas_status: invoice.status,
-    status: newStatus,
-    updated_at: new Date().toISOString(),
+
+  // 2. Validar dados obrigatórios para NFS-e
+  const email = client.email || client.financial_email;
+  const address = client.address;
+  const postalCode = client.zip_code?.replace(/\D/g, "");
+
+  const missingFields: string[] = [];
+  if (!email) missingFields.push("E-mail");
+  if (!address) missingFields.push("Endereço");
+  if (!postalCode || postalCode.length !== 8) missingFields.push("CEP válido");
+
+  if (missingFields.length > 0) {
+    throw new AsaasApiError(
+      `Dados obrigatórios do cliente faltando: ${missingFields.join(", ")}. Atualize o cadastro do cliente.`,
+      400,
+      "CLIENT_INCOMPLETE_DATA"
+    );
+  }
+
+  // 3. Montar payload completo
+  const customerPayload = {
+    name: client.name,
+    email: email,
+    phone: client.phone?.replace(/\D/g, ""),
+    mobilePhone: client.whatsapp?.replace(/\D/g, ""),
+    cpfCnpj: client.document?.replace(/\D/g, ""),
+    postalCode: postalCode,
+    address: extractStreetFromAddress(address),
+    addressNumber: extractNumberFromAddress(address) || "S/N",
+    province: client.city || "Não informado",
+    externalReference: client.id,
+    notificationDisabled: false,
   };
-  
-  if (invoice.status === "AUTHORIZED") {
-    updateData.numero_nfse = invoice.number?.toString();
-    updateData.codigo_verificacao = invoice.validationCode;
-    updateData.data_autorizacao = new Date().toISOString();
-    // ... baixar PDF/XML
+
+  let customerId: string;
+
+  // 4. Criar ou atualizar cliente no Asaas
+  if (client.asaas_customer_id) {
+    // Cliente existe - ATUALIZAR para garantir dados atualizados
+    log(correlationId, "info", "Atualizando cliente no Asaas", { customer_id: client.asaas_customer_id });
+    await asaasRequest(
+      settings, 
+      `/customers/${client.asaas_customer_id}`, 
+      "PUT", 
+      customerPayload, 
+      correlationId
+    );
+    customerId = client.asaas_customer_id;
+  } else {
+    // Cliente não existe - CRIAR completo
+    log(correlationId, "info", "Criando cliente no Asaas com dados completos");
+    const customer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+    customerId = customer.id;
+    
+    // Salvar ID do Asaas no cliente local
+    await supabase
+      .from("clients")
+      .update({ asaas_customer_id: customerId })
+      .eq("id", clientId);
   }
-  
-  await supabase
-    .from("nfse_history")
-    .update(updateData)
-    .eq("id", nfse_history_id);
-  
-  return { success: true, invoice, new_status: newStatus };
+
+  return { customerId, client };
+}
+
+// Funções auxiliares para extrair número do endereço
+function extractStreetFromAddress(address: string): string {
+  // Remove o número do endereço (ex: "RUA X, 123" -> "RUA X")
+  return address.replace(/,?\s*\d+.*$/, "").trim() || address;
+}
+
+function extractNumberFromAddress(address: string): string | null {
+  // Extrai número do endereço (ex: "RUA X, 123" -> "123")
+  const match = address.match(/,?\s*(\d+)/);
+  return match ? match[1] : null;
 }
 ```
 
-### Hook para Verificação de Status
+#### 1.2 Modificar ação `emit` (linhas ~350-380)
+
+Substituir criação parcial por chamada à nova função:
 
 ```typescript
-const useCheckNfseStatus = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (nfseHistoryId: string) => {
-      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
-        body: {
-          action: "check_single_status",
-          nfse_history_id: nfseHistoryId,
-        },
-      });
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
-      // ...
-    },
-  });
-};
+// ANTES (problemático):
+if (client.asaas_customer_id) {
+  customerId = client.asaas_customer_id;
+} else {
+  const createResult = await asaasRequest(settings, "/customers", "POST", {
+    name: client.name || "Cliente",
+    cpfCnpj: client.document?.replace(/\D/g, ""),
+    // FALTAM: email, address, postalCode
+  }, correlationId);
+  customerId = createResult.id;
+}
+
+// DEPOIS (corrigido):
+const { customerId, client: syncedClient } = await ensureCustomerSync(
+  supabase, settings, client_id, correlationId
+);
+```
+
+#### 1.3 Modificar ação `emit_standalone` (linhas ~584-600)
+
+Mesma correção:
+
+```typescript
+// ANTES (problemático):
+if (!customerId) {
+  const createResult = await asaasRequest(settings, "/customers", "POST", {
+    name: client.name || "Cliente",
+    cpfCnpj: client.document?.replace(/\D/g, ""),
+    // FALTAM: email, address, postalCode
+  }, correlationId);
+  customerId = createResult.id;
+}
+
+// DEPOIS (corrigido):
+const { customerId: syncedCustomerId } = await ensureCustomerSync(
+  supabase, settings, client_id, correlationId
+);
+customerId = syncedCustomerId;
 ```
 
 ---
 
-## Arquivos a Modificar/Criar
+### 2. Validação Frontend: `src/components/billing/nfse/nfseValidation.ts`
+
+Transformar campos em erros bloqueantes para emissão de NFS-e:
+
+```typescript
+// ANTES (warning apenas):
+if (!input.client.address) {
+  issues.push({
+    level: "warning",  // Permitia continuar
+    field: "client.address",
+    message: "Endereço do cliente não informado",
+    code: "CLIENTE_ENDERECO",
+  });
+}
+
+// DEPOIS (erro bloqueante):
+if (!input.client.address) {
+  issues.push({
+    level: "error",  // Bloqueia emissão
+    field: "client.address",
+    message: "Endereço do cliente é obrigatório para emissão de NFS-e",
+    code: "CLIENTE_ENDERECO",
+  });
+}
+```
+
+Adicionar validação de CEP:
+
+```typescript
+// NOVO - Validar CEP
+const zip = (input.client.zip_code ?? "").replace(/\D/g, "");
+if (!zip || zip.length !== 8) {
+  issues.push({
+    level: "error",
+    field: "client.zip_code",
+    message: "CEP do cliente inválido ou não informado (deve ter 8 dígitos)",
+    code: "CLIENTE_CEP",
+  });
+}
+```
+
+---
+
+### 3. Interface de Seleção de Cliente: `NfseAvulsaDialog.tsx`
+
+Mostrar alerta quando cliente selecionado tem dados incompletos:
+
+```typescript
+// Adicionar query para dados completos do cliente
+const { data: selectedClient } = useQuery({
+  queryKey: ["client-nfse-validation", clientId],
+  queryFn: async () => {
+    if (!clientId) return null;
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name, email, financial_email, address, zip_code, city")
+      .eq("id", clientId)
+      .single();
+    return data;
+  },
+  enabled: !!clientId,
+});
+
+// Verificar completude
+const clientValidation = useMemo(() => {
+  if (!selectedClient) return null;
+  const missing: string[] = [];
+  if (!selectedClient.email && !selectedClient.financial_email) missing.push("E-mail");
+  if (!selectedClient.address) missing.push("Endereço");
+  if (!selectedClient.zip_code?.replace(/\D/g, "") || 
+      selectedClient.zip_code.replace(/\D/g, "").length !== 8) missing.push("CEP");
+  return missing.length > 0 ? missing : null;
+}, [selectedClient]);
+```
+
+Exibir alerta:
+
+```tsx
+{clientValidation && (
+  <Alert variant="destructive" className="py-2">
+    <ShieldAlert className="h-4 w-4" />
+    <AlertDescription className="text-sm">
+      <strong>Cadastro incompleto:</strong> O cliente precisa de {clientValidation.join(", ")}.
+      <Button variant="link" size="sm" className="h-auto p-0 ml-1">
+        Editar cliente
+      </Button>
+    </AlertDescription>
+  </Alert>
+)}
+```
+
+---
+
+## Arquivos a Modificar
 
 | Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| `src/components/billing/nfse/NfseProcessingIndicator.tsx` | **CRIAR** | Componente de indicador de processamento |
-| `supabase/functions/asaas-nfse/index.ts` | **MODIFICAR** | Adicionar ação `check_single_status` |
-| `src/components/billing/nfse/NfseDetailsSheet.tsx` | **MODIFICAR** | Adicionar indicador e botão de verificação |
-| `src/components/billing/BillingNfseTab.tsx` | **MODIFICAR** | Adicionar indicador na tabela |
-| `src/components/billing/nfse/nfseFormat.ts` | **MODIFICAR** | Adicionar função de formatação de status Asaas |
+| `supabase/functions/asaas-nfse/index.ts` | **MODIFICAR** | Adicionar `ensureCustomerSync`, corrigir `emit` e `emit_standalone` |
+| `src/components/billing/nfse/nfseValidation.ts` | **MODIFICAR** | Email/endereço/CEP como erros bloqueantes |
+| `src/components/billing/nfse/NfseAvulsaDialog.tsx` | **MODIFICAR** | Alerta de dados incompletos + bloquear botão |
+| `src/lib/nfse-validation.ts` | **MODIFICAR** | Adicionar validação de CEP, transformar warnings em errors |
 
 ---
 
-## Interface Final
-
-### Na Tabela de Listagem
+## Fluxo Corrigido
 
 ```text
-┌──────────┬────────────────┬──────────────┬─────────────┬───────────────────────┐
-│ Número   │ Cliente        │ Valor        │ Status      │ Arquivos              │
-├──────────┼────────────────┼──────────────┼─────────────┼───────────────────────┤
-│ -        │ CAPASEMU       │ R$ 1.455,34  │ 🔄 12min    │ [📜] [📄]             │
-│          │                │              │ Processando │ [🔄 Verificar]        │
-├──────────┼────────────────┼──────────────┼─────────────┼───────────────────────┤
-│ 2025607  │ Empresa ABC    │ R$ 850,00    │ ✓ Autorizada│ [📜] [📄] [📋]       │
-└──────────┴────────────────┴──────────────┴─────────────┴───────────────────────┘
-```
-
-### No Painel de Detalhes
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│  NFS-e - (aguardando número)                           │
-│  Cliente: CAPASEMU • Competência: JAN/2025             │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ ⏳ AGUARDANDO AUTORIZAÇÃO DA PREFEITURA           │  │
-│  │                                                   │  │
-│  │ ██████████████░░░░░░░░░░░░░░░░░░░░░  45%         │  │
-│  │                                                   │  │
-│  │ 📍 Status Asaas: AUTHORIZATION_PENDING           │  │
-│  │ ⏱️ Tempo decorrido: 18 minutos                   │  │
-│  │ 📊 Estimativa: 30-60 min (ambiente produção)     │  │
-│  │                                                   │  │
-│  │ ℹ️ A nota foi transmitida e está na fila de      │  │
-│  │    autorização da prefeitura. O status é         │  │
-│  │    atualizado automaticamente via webhook.       │  │
-│  │                                                   │  │
-│  │        [🔄 Verificar Status Agora]               │  │
-│  └───────────────────────────────────────────────────┘  │
-│                                                         │
-│  Valor: R$ 1.455,34    ISS: R$ 29,11                   │
-│  Emissão: 04/02/2026 15:32                             │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  EMISSÃO DE NFS-e (CORRIGIDO)                                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. Usuário seleciona cliente                                       │
+│     ↓                                                               │
+│  2. Frontend valida dados obrigatórios (email, endereço, CEP)       │
+│     ├─ Se incompleto → BLOQUEIA com mensagem de erro                │
+│     └─ Se completo → continua                                       │
+│     ↓                                                               │
+│  3. Ao submeter, Edge Function chama ensureCustomerSync()           │
+│     ├─ Cliente existe no Asaas? → PUT para atualizar dados          │
+│     └─ Cliente não existe? → POST com dados completos               │
+│     ↓                                                               │
+│  4. NFS-e emitida com cliente completo                              │
+│     → SUCESSO                                                       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Resultado Esperado
 
-1. **Feedback visual claro** de que a nota está em processamento
-2. **Tempo decorrido** exibido em tempo real
-3. **Estimativa de tempo** baseada no ambiente (sandbox/produção)
-4. **Botão de verificação individual** para forçar atualização
-5. **Status Asaas detalhado** (SCHEDULED, AUTHORIZATION_PENDING, etc.)
-6. **Atualização automática** quando webhook chegar
+1. **Validação preventiva**: Erros exibidos ANTES de tentar emitir
+2. **Sincronização automática**: Cliente sempre atualizado no Asaas antes da emissão
+3. **Mensagens claras**: Usuário sabe exatamente quais campos estão faltando
+4. **Sem erros de dados incompletos**: Problema nunca mais ocorrerá para nenhum cliente
