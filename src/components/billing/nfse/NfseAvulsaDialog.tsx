@@ -1,8 +1,8 @@
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, addDays, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { FileText, Loader2, Receipt, ShieldAlert, CalendarIcon } from "lucide-react";
+import { FileText, Loader2, Receipt, ShieldAlert, CalendarIcon, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -118,13 +118,25 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, document")
+        .select("id, name, document, email, financial_email, address, zip_code")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
-      return (data ?? []) as ClientOption[];
+      return (data ?? []) as (ClientOption & { email: string | null; financial_email: string | null; address: string | null; zip_code: string | null })[];
     },
   });
+
+  // Validar dados do cliente selecionado para NFS-e
+  const selectedClient = clients.find(c => c.id === clientId);
+  const clientMissingFields = React.useMemo(() => {
+    if (!selectedClient) return null;
+    const missing: string[] = [];
+    if (!selectedClient.email && !selectedClient.financial_email) missing.push("E-mail");
+    if (!selectedClient.address) missing.push("Endereço");
+    const zip = (selectedClient.zip_code ?? "").replace(/\D/g, "");
+    if (!zip || zip.length !== 8) missing.push("CEP (8 dígitos)");
+    return missing.length > 0 ? missing : null;
+  }, [selectedClient]);
 
   // Competência formatada para API (yyyy-MM)
   const competencia = format(competenciaDate, "yyyy-MM");
@@ -138,7 +150,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
   // Alíquota: usa a editada se maior que 0, senão a sugerida do código de serviço
   const aliquotaIss = tributacao.aliquotaIss > 0 ? tributacao.aliquotaIss : (serviceCode?.aliquota_sugerida ?? 0);
 
-  const canEmit = asaasAvailable && isCompanyConfigured && !!clientId && !!serviceCode && valor > 0 && descricao.trim().length > 0;
+  const canEmit = asaasAvailable && isCompanyConfigured && !!clientId && !clientMissingFields && !!serviceCode && valor > 0 && descricao.trim().length > 0;
 
   const reset = () => {
     setClientId("");
@@ -331,6 +343,17 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Alerta de dados incompletos do cliente */}
+            {clientMissingFields && (
+              <Alert variant="destructive" className="py-2 mt-2">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  <strong>Cadastro incompleto:</strong> O cliente precisa de {clientMissingFields.join(", ")} para emissão de NFS-e.
+                  Atualize o cadastro do cliente antes de emitir.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           {/* Código de serviço */}

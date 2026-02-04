@@ -38,6 +38,7 @@ interface ClientData {
   state: string | null;
   zip_code: string | null;
   email: string | null;
+  financial_email?: string | null;
 }
 
 interface CompanyData {
@@ -233,16 +234,28 @@ export function validateNfseData(
     }
 
     if (!client.address) {
-      warnings.push({
+      errors.push({
         field: "client.address",
-        message: "Endereço do cliente não informado",
+        message: "Endereço do cliente é obrigatório para emissão de NFS-e",
+        code: "CLIENTE_ENDERECO",
+      });
+    }
+
+    // Validar CEP - obrigatório para NFS-e
+    const zip = (client.zip_code ?? "").replace(/\D/g, "");
+    if (!zip || zip.length !== 8) {
+      errors.push({
+        field: "client.zip_code",
+        message: "CEP do cliente inválido ou não informado (deve ter 8 dígitos)",
+        code: "CLIENTE_CEP",
       });
     }
 
     if (!client.email) {
-      warnings.push({
+      errors.push({
         field: "client.email",
-        message: "E-mail do cliente não informado (necessário para envio automático)",
+        message: "E-mail do cliente é obrigatório para emissão de NFS-e",
+        code: "CLIENTE_EMAIL",
       });
     }
   }
