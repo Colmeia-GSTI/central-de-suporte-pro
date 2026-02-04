@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 
 const formSchema = z.object({
@@ -126,7 +127,7 @@ export function ServiceCodeForm({ onSuccess, onCancel }: ServiceCodeFormProps) {
       toast.success("Código de serviço cadastrado com sucesso!");
       onSuccess(newCode);
     } catch (error) {
-      console.error("Erro ao cadastrar código:", error);
+      logger.error("Erro ao cadastrar código", "NFSe", { error: String(error) });
       toast.error("Erro ao cadastrar código de serviço");
     } finally {
       setIsSubmitting(false);

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,7 +118,7 @@ export function CertificateUpload({
       setSelectedFile(null);
       onUploadSuccess();
     } catch (error: any) {
-      console.error("Erro ao carregar certificado:", error);
+      logger.error("Erro ao carregar certificado", "Certificates", { error: String(error) });
       toast.error("Erro ao carregar certificado", {
         description: error.message,
       });

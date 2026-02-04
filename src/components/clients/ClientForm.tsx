@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -176,7 +177,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         description: "Os dados do CNPJ foram carregados com sucesso",
       });
     } catch (error: any) {
-      console.error("CNPJ lookup error:", error);
+      logger.error("CNPJ lookup error", "Clients", { error: String(error) });
       toast({
         title: "Erro na consulta",
         description: "Não foi possível consultar o CNPJ. Tente novamente.",
@@ -243,7 +244,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         });
       }
     } catch (error: any) {
-      console.error("WhatsApp validation error:", error);
+      logger.error("WhatsApp validation error", "Clients", { error: String(error) });
       setWhatsAppStatus('error');
       setWhatsAppMessage("Erro ao validar");
       form.setValue("whatsapp_validated", false);

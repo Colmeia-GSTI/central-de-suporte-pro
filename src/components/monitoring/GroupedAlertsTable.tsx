@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { logger } from "@/lib/logger";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -97,7 +98,7 @@ export function GroupedAlertsTable({
         }
       }
     } catch (e) {
-      console.error("Error loading expandedGroups from localStorage:", e);
+      logger.error("Error loading expandedGroups from localStorage", "Monitoring", { error: String(e) });
     }
     return new Set();
   });
