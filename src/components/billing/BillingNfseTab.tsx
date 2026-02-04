@@ -276,7 +276,7 @@ export function BillingNfseTab() {
   const handleCheckStatus = async () => {
     setCheckingStatus(true);
     try {
-      const { data, error } = await supabase.functions.invoke("poll-nfse-status");
+      const { data, error } = await supabase.functions.invoke("poll-asaas-nfse-status");
       if (error) throw error;
       const result = data as { updated?: number; processed?: number; message?: string };
       if ((result.updated ?? 0) > 0) {
