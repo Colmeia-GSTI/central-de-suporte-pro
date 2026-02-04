@@ -1,65 +1,95 @@
-# Correção de Bugs no Formulário de Contrato + Geração de Cobrança Inicial
 
-## ✅ Status: IMPLEMENTADO
+# Correção: Serviços não aparecem no dropdown do contrato
 
-**Data de implementação:** 2026-02-04
+## Diagnóstico
 
----
+Após investigação detalhada, identifiquei que:
 
-## Problemas Identificados e Resolvidos
+1. **Os serviços ESTÃO sendo carregados corretamente do banco de dados** - A requisição para `/services?is_active=eq.true` retornou status 200 com 2 serviços:
+   - "Gestão de TI - Remoto" (R$ 650,00)
+   - "Serviços de T.I." (R$ 0,00)
 
-### 1. ✅ Serviços de Novos Contratos Não Eram Salvos (Bug Crítico)
-**Problema:** O código usava `contractId` (undefined para novos contratos) em vez de `contractIdValue` (ID do contrato recém-criado).
+2. **O problema é um erro de React que está quebrando a página** - O erro "Failed to execute 'removeChild' on 'Node'" está impedindo a renderização correta do formulário.
 
-**Solução:** Modificado para usar `contractIdValue` corretamente e só deletar serviços existentes em modo de edição.
-
-### 2. ✅ Cache de Serviços Não Era Invalidado
-**Problema:** Ao criar um serviço em `/billing?tab=services`, ele não aparecia no dropdown do formulário de contrato.
-
-**Solução:** Adicionado `queryClient.invalidateQueries({ queryKey: ["services-active"] })` no `ServiceForm`.
-
-### 3. ✅ Nova Opção de Gerar Cobrança Inicial
-**Funcionalidade:** Ao criar um contrato, agora é possível:
-- Marcar checkbox "Gerar primeira cobrança ao criar contrato"
-- Optar por gerar boleto/PIX automaticamente via Banco Inter ou Asaas
-- Enviar notificação por email
+3. **Causa raiz identificada**: Os campos `generate_initial_invoice`, `generate_payment` e `send_notification` foram adicionados ao schema Zod mas **não foram incluídos nos defaultValues** do formulário. Isso faz com que os componentes `Checkbox` alternem entre estado "uncontrolled" e "controlled", causando:
+   - Warning: "Checkbox is changing from uncontrolled to controlled"
+   - Crash do React ao tentar remover nós DOM inexistentes
 
 ---
 
-## Arquivos Modificados
+## Solução
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/components/contracts/ContractForm.tsx` | Bug fix + nova feature de cobrança inicial |
-| `src/components/services/ServiceForm.tsx` | Invalidação de cache `services-active` |
+### Arquivo a modificar: `src/components/contracts/ContractForm.tsx`
 
----
+Adicionar os campos faltantes nos defaultValues do useForm:
 
-## Interface Implementada
-
-Na seção de Faturamento do formulário de contrato (apenas para novos contratos):
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ☑ Gerar primeira cobrança ao criar contrato               │
-│                                                             │
-│     Competência: 2026-02                                   │
-│     Vencimento: 2026-02-10                                 │
-│     Valor: R$ 650,00                                       │
-│                                                             │
-│     ☑ Gerar boleto/PIX automaticamente (Banco Inter)      │
-│     ☑ Enviar notificação por email                        │
-└─────────────────────────────────────────────────────────────┘
+```typescript
+defaultValues: {
+  // ... campos existentes ...
+  
+  // ADICIONAR - Initial invoice generation defaults
+  generate_initial_invoice: false,
+  generate_payment: true,
+  send_notification: true,
+  
+  // ... resto dos campos ...
+}
 ```
 
 ---
 
-## Fluxo Implementado
+## Detalhes Técnicos
 
+### Antes (bugado)
+```typescript
+defaultValues: {
+  name: contractData?.name || "",
+  client_id: contractData?.client_id || "",
+  // ... outros campos ...
+  payment_preference: (contractData as any)?.payment_preference || "boleto",
+  // FALTAM: generate_initial_invoice, generate_payment, send_notification
+  adjustment_date: (contractData as any)?.adjustment_date || "",
+  // ...
+}
 ```
-Criar Contrato → Salvar Serviços → Gerar Fatura (se marcado)
-                                         ↓
-                               Gerar Cobrança via Provider
-                                         ↓
-                               Enviar Email (se habilitado)
+
+### Depois (corrigido)
+```typescript
+defaultValues: {
+  name: contractData?.name || "",
+  client_id: contractData?.client_id || "",
+  // ... outros campos ...
+  payment_preference: (contractData as any)?.payment_preference || "boleto",
+  // Initial invoice generation (only for new contracts)
+  generate_initial_invoice: false,
+  generate_payment: true,
+  send_notification: true,
+  // Adjustment defaults
+  adjustment_date: (contractData as any)?.adjustment_date || "",
+  // ...
+}
 ```
+
+---
+
+## Por que isso resolve o problema
+
+| Componente | Antes | Depois |
+|------------|-------|--------|
+| `<Checkbox checked={field.value}>` | `field.value` era `undefined` (uncontrolled) | `field.value` é `false` ou `true` (controlled) |
+| Estado React | Inconsistente → crash | Estável → funciona |
+| Dropdown de serviços | Não renderiza devido ao crash | Renderiza normalmente |
+
+---
+
+## Impacto
+
+- **Nenhuma alteração no banco de dados**
+- **Nenhuma alteração em edge functions**
+- **Apenas 1 arquivo modificado**: `ContractForm.tsx` (3 linhas adicionadas)
+
+Esta correção irá:
+1. Eliminar o warning "Checkbox is changing from uncontrolled to controlled"
+2. Eliminar o erro "Failed to execute 'removeChild' on 'Node'"
+3. Permitir que o formulário de contrato renderize completamente
+4. O dropdown de serviços voltará a funcionar normalmente
