@@ -6,6 +6,68 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface EmailSettings {
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  footer_text: string;
+}
+
+interface EmailTemplate {
+  subject_template: string;
+  html_template: string;
+  is_active: boolean;
+}
+
+function replaceVariables(template: string, data: Record<string, string>): string {
+  let result = template;
+  Object.entries(data).forEach(([key, value]) => {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
+    result = result.replace(regex, value || "");
+  });
+  Object.entries(data).forEach(([key, value]) => {
+    const conditionalRegex = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{/${key}\\}\\}`, "g");
+    if (value) {
+      result = result.replace(conditionalRegex, "$1");
+    } else {
+      result = result.replace(conditionalRegex, "");
+    }
+  });
+  return result;
+}
+
+function wrapInEmailLayout(content: string, settings: EmailSettings): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
+    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
+    .email-header { background: ${settings.primary_color}; padding: 24px; text-align: center; }
+    .email-header img { max-height: 50px; max-width: 200px; }
+    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
+    .email-content h2 { margin-top: 0; color: #111827; }
+    .email-content a { color: ${settings.primary_color}; }
+    .email-footer { background: ${settings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      ${settings.logo_url ? `<img src="${settings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">Colmeia</span>`}
+    </div>
+    <div class="email-content">
+      ${content}
+    </div>
+    <div class="email-footer">
+      ${settings.footer_text}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 interface ResendRequest {
   invoice_id: string;
   channels: ("email" | "whatsapp")[];
@@ -31,50 +93,43 @@ serve(async (req) => {
       );
     }
 
-    // Get invoice with client info
-    const { data: invoice, error: invoiceError } = await supabase
-      .from("invoices")
-      .select(`
-        id,
-        invoice_number,
-        amount,
-        due_date,
-        boleto_barcode,
-        boleto_url,
-        pix_code,
-        payment_method,
+    // Fetch settings, template, and invoice in parallel
+    const [settingsRes, templateRes, invoiceRes] = await Promise.all([
+      supabase.from("email_settings").select("*").limit(1).single(),
+      supabase.from("email_templates").select("*").eq("template_type", "invoice_payment").maybeSingle(),
+      supabase.from("invoices").select(`
+        id, invoice_number, amount, due_date, boleto_barcode, boleto_url, pix_code, payment_method,
         clients(id, name, email, whatsapp, financial_email)
-      `)
-      .eq("id", invoice_id)
-      .single();
+      `).eq("id", invoice_id).single(),
+    ]);
 
-    if (invoiceError || !invoice) {
+    const emailSettings: EmailSettings = settingsRes.data || {
+      logo_url: null,
+      primary_color: "#f59e0b",
+      secondary_color: "#1f2937",
+      footer_text: "Este email foi enviado automaticamente. Em caso de dúvidas, entre em contato conosco.",
+    };
+
+    const emailTemplate: EmailTemplate | null = templateRes.data?.is_active ? templateRes.data : null;
+
+    if (invoiceRes.error || !invoiceRes.data) {
       return new Response(
         JSON.stringify({ error: "Fatura não encontrada" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const invoice = invoiceRes.data;
     const clientData = invoice.clients as unknown as { id: string; name: string; email?: string; whatsapp?: string; financial_email?: string } | null;
+    
     if (!clientData) {
       return new Response(
         JSON.stringify({ error: "Cliente não encontrado para esta fatura" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
     const client = clientData;
-
-    const formatCurrency = (v: number) => 
-      new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-
-    const formatDate = (d: string) => {
-      const date = new Date(d);
-      return date.toLocaleDateString("pt-BR");
-    };
-
-    const results: { channel: string; success: boolean; error?: string; errorCode?: string }[] = [];
-
-    // Prepare payment info
     const hasBoleto = !!invoice.boleto_barcode;
     const hasPix = !!invoice.pix_code;
 
@@ -85,83 +140,83 @@ serve(async (req) => {
       );
     }
 
+    const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+    const formatDate = (d: string) => new Date(d).toLocaleDateString("pt-BR");
+
+    // Template variables
+    const templateVars: Record<string, string> = {
+      client_name: client.name,
+      invoice_number: String(invoice.invoice_number),
+      amount: formatCurrency(invoice.amount),
+      due_date: formatDate(invoice.due_date),
+      boleto_url: invoice.boleto_url || "",
+      boleto_barcode: invoice.boleto_barcode || "",
+      pix_code: invoice.pix_code || "",
+    };
+
+    const results: { channel: string; success: boolean; error?: string; errorCode?: string }[] = [];
+
     // Send Email
     if (channels.includes("email")) {
       const emailTo = client.financial_email || client.email;
       if (!emailTo) {
         results.push({ channel: "email", success: false, error: "Cliente sem email cadastrado" });
       } else {
-        const emailHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-              <h1 style="color: white; margin: 0;">🐝 Colmeia TI</h1>
+        let emailSubject: string;
+        let emailHtml: string;
+
+        if (emailTemplate) {
+          emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
+          const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
+          emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+        } else {
+          emailSubject = `Cobrança - Fatura #${invoice.invoice_number} - ${formatCurrency(invoice.amount)}`;
+          const defaultContent = `
+            <h2>Cobrança - Fatura #${invoice.invoice_number}</h2>
+            <p>Olá <strong>${client.name}</strong>,</p>
+            <p>Segue abaixo os dados para pagamento da fatura:</p>
+            <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280;">Fatura:</td>
+                  <td style="padding: 8px 0; font-weight: bold; text-align: right;">#${invoice.invoice_number}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280;">Valor:</td>
+                  <td style="padding: 8px 0; font-weight: bold; text-align: right; color: #059669;">${formatCurrency(invoice.amount)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #6b7280;">Vencimento:</td>
+                  <td style="padding: 8px 0; font-weight: bold; text-align: right;">${formatDate(invoice.due_date)}</td>
+                </tr>
+              </table>
             </div>
-            
-            <div style="padding: 30px; background: #ffffff; border: 1px solid #e5e7eb;">
-              <h2 style="color: #374151; margin-top: 0;">Cobrança - Fatura #${invoice.invoice_number}</h2>
-              
-              <p>Olá <strong>${client.name}</strong>,</p>
-              
-              <p>Segue abaixo os dados para pagamento da fatura:</p>
-              
-              <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <table style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Fatura:</td>
-                    <td style="padding: 8px 0; font-weight: bold; text-align: right;">#${invoice.invoice_number}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Valor:</td>
-                    <td style="padding: 8px 0; font-weight: bold; text-align: right; color: #059669;">${formatCurrency(invoice.amount)}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #6b7280;">Vencimento:</td>
-                    <td style="padding: 8px 0; font-weight: bold; text-align: right;">${formatDate(invoice.due_date)}</td>
-                  </tr>
-                </table>
+            ${hasBoleto ? `
+              <div style="margin: 20px 0;">
+                <h3>📋 Boleto Bancário</h3>
+                ${invoice.boleto_url ? `<p><a href="${invoice.boleto_url}" style="display: inline-block; padding: 12px 24px; background: ${emailSettings.primary_color}; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Boleto PDF</a></p>` : ""}
+                <p style="margin-top: 15px;"><strong>Linha Digitável:</strong></p>
+                <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; border-radius: 4px;">${invoice.boleto_barcode}</code>
               </div>
-              
-              ${hasBoleto ? `
-                <div style="margin: 20px 0;">
-                  <h3 style="color: #374151;">📋 Boleto Bancário</h3>
-                  ${invoice.boleto_url ? `
-                    <p><a href="${invoice.boleto_url}" style="display: inline-block; padding: 12px 24px; background: #f59e0b; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">📄 Visualizar Boleto PDF</a></p>
-                  ` : ""}
-                  <p style="margin-top: 15px;"><strong>Linha Digitável:</strong></p>
-                  <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; border-radius: 4px; border: 1px solid #e5e7eb;">${invoice.boleto_barcode}</code>
-                </div>
-              ` : ""}
-              
-              ${hasPix ? `
-                <div style="margin: 20px 0;">
-                  <h3 style="color: #374151;">📱 PIX Copia e Cola</h3>
-                  <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 11px; word-break: break-all; border-radius: 4px; border: 1px solid #e5e7eb;">${invoice.pix_code}</code>
-                  <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Copie o código acima e cole no app do seu banco na opção "PIX Copia e Cola".</p>
-                </div>
-              ` : ""}
-              
-              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-              
-              <p style="font-size: 12px; color: #9ca3af; text-align: center;">
-                Este email foi enviado automaticamente pelo sistema Colmeia TI.<br>
-                Em caso de dúvidas, entre em contato conosco.
-              </p>
-            </div>
-          </div>
-        `;
+            ` : ""}
+            ${hasPix ? `
+              <div style="margin: 20px 0;">
+                <h3>📱 PIX Copia e Cola</h3>
+                <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 11px; word-break: break-all; border-radius: 4px;">${invoice.pix_code}</code>
+                <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Copie o código acima e cole no app do seu banco na opção "PIX Copia e Cola".</p>
+              </div>
+            ` : ""}
+          `;
+          emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
+        }
 
         try {
           const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
-            body: {
-              to: emailTo,
-              subject: `Cobrança - Fatura #${invoice.invoice_number} - ${formatCurrency(invoice.amount)}`,
-              html: emailHtml,
-            },
+            body: { to: emailTo, subject: emailSubject, html: emailHtml },
           });
 
           if (emailError) throw emailError;
 
-          // Log the message
           await supabase.from("message_logs").insert({
             channel: "email",
             recipient: emailTo,
@@ -175,47 +230,32 @@ serve(async (req) => {
 
           results.push({ channel: "email", success: true });
           console.log(`[RESEND] Email enviado para ${emailTo}`);
-        } catch (emailError: any) {
+        } catch (emailError: unknown) {
           console.error("[RESEND] Erro ao enviar email:", emailError);
-          results.push({ channel: "email", success: false, error: emailError.message });
+          const errMsg = emailError instanceof Error ? emailError.message : "Erro desconhecido";
+          results.push({ channel: "email", success: false, error: errMsg });
         }
       }
     }
 
     // Send WhatsApp
     if (channels.includes("whatsapp")) {
-      // First, check if WhatsApp integration is active
       const { data: evolutionSettings } = await supabase
         .from("integration_settings")
         .select("is_active, settings")
         .eq("integration_type", "evolution_api")
         .single();
 
-      const isWhatsAppIntegrationActive = evolutionSettings?.is_active;
+      const isWhatsAppActive = evolutionSettings?.is_active;
       const evolutionConfig = evolutionSettings?.settings as { api_url?: string; api_key?: string; instance_name?: string } | null;
       const isWhatsAppConfigured = evolutionConfig?.api_url && evolutionConfig?.api_key && evolutionConfig?.instance_name;
 
-      if (!evolutionSettings || !isWhatsAppIntegrationActive) {
-        results.push({ 
-          channel: "whatsapp", 
-          success: false, 
-          error: "Integração WhatsApp desativada",
-          errorCode: "WHATSAPP_INTEGRATION_DISABLED"
-        });
+      if (!evolutionSettings || !isWhatsAppActive) {
+        results.push({ channel: "whatsapp", success: false, error: "Integração WhatsApp desativada", errorCode: "WHATSAPP_INTEGRATION_DISABLED" });
       } else if (!isWhatsAppConfigured) {
-        results.push({ 
-          channel: "whatsapp", 
-          success: false, 
-          error: "Integração WhatsApp não configurada completamente",
-          errorCode: "WHATSAPP_NOT_CONFIGURED"
-        });
+        results.push({ channel: "whatsapp", success: false, error: "Integração WhatsApp não configurada completamente", errorCode: "WHATSAPP_NOT_CONFIGURED" });
       } else if (!client.whatsapp) {
-        results.push({ 
-          channel: "whatsapp", 
-          success: false, 
-          error: `Cliente "${client.name}" não possui WhatsApp cadastrado`,
-          errorCode: "CLIENT_NO_WHATSAPP"
-        });
+        results.push({ channel: "whatsapp", success: false, error: `Cliente "${client.name}" não possui WhatsApp cadastrado`, errorCode: "CLIENT_NO_WHATSAPP" });
       } else {
         let whatsappMessage = `🐝 *Colmeia TI - Cobrança*\n\n`;
         whatsappMessage += `Olá *${client.name}*!\n\n`;
@@ -224,46 +264,29 @@ serve(async (req) => {
         whatsappMessage += `📅 Vencimento: *${formatDate(invoice.due_date)}*\n\n`;
 
         if (hasBoleto) {
-          whatsappMessage += `━━━━━━━━━━━━━━━━━━━━\n`;
-          whatsappMessage += `*📋 BOLETO*\n`;
-          if (invoice.boleto_url) {
-            whatsappMessage += `🔗 Link: ${invoice.boleto_url}\n\n`;
-          }
+          whatsappMessage += `━━━━━━━━━━━━━━━━━━━━\n*📋 BOLETO*\n`;
+          if (invoice.boleto_url) whatsappMessage += `🔗 Link: ${invoice.boleto_url}\n\n`;
           whatsappMessage += `*Linha Digitável:*\n\`\`\`${invoice.boleto_barcode}\`\`\`\n\n`;
         }
 
         if (hasPix) {
-          whatsappMessage += `━━━━━━━━━━━━━━━━━━━━\n`;
-          whatsappMessage += `*📱 PIX COPIA E COLA*\n\n`;
+          whatsappMessage += `━━━━━━━━━━━━━━━━━━━━\n*📱 PIX COPIA E COLA*\n\n`;
           whatsappMessage += `\`\`\`${invoice.pix_code}\`\`\`\n\n`;
           whatsappMessage += `_Copie o código acima e cole no app do seu banco._\n`;
         }
 
         try {
           const { error: whatsappError } = await supabase.functions.invoke("send-whatsapp", {
-            body: {
-              to: client.whatsapp,
-              message: whatsappMessage,
-              relatedType: "invoice",
-              relatedId: invoice_id,
-            },
+            body: { to: client.whatsapp, message: whatsappMessage, relatedType: "invoice", relatedId: invoice_id },
           });
 
           if (whatsappError) throw whatsappError;
-
           results.push({ channel: "whatsapp", success: true });
           console.log(`[RESEND] WhatsApp enviado para ${client.whatsapp.slice(0, 4)}****`);
-        } catch (whatsappError: any) {
+        } catch (whatsappError: unknown) {
           console.error("[RESEND] Erro ao enviar WhatsApp:", whatsappError);
-          const errorMsg = whatsappError.message?.includes("timeout") 
-            ? "Timeout na conexão com WhatsApp - verifique se a integração está conectada"
-            : whatsappError.message;
-          results.push({ 
-            channel: "whatsapp", 
-            success: false, 
-            error: errorMsg,
-            errorCode: "WHATSAPP_SEND_ERROR"
-          });
+          const errMsg = whatsappError instanceof Error ? whatsappError.message : "Erro desconhecido";
+          results.push({ channel: "whatsapp", success: false, error: errMsg, errorCode: "WHATSAPP_SEND_ERROR" });
         }
       }
     }
@@ -275,21 +298,15 @@ serve(async (req) => {
       JSON.stringify({
         success: anySuccess,
         results,
-        message: allSuccess
-          ? "Notificações enviadas com sucesso"
-          : anySuccess
-          ? "Algumas notificações falharam"
-          : "Falha ao enviar notificações",
+        message: allSuccess ? "Notificações enviadas com sucesso" : anySuccess ? "Algumas notificações falharam" : "Falha ao enviar notificações",
       }),
-      {
-        status: anySuccess ? 200 : 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: anySuccess ? 200 : 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[RESEND] Erro:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
