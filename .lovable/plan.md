@@ -1,317 +1,341 @@
 
-# Sistema de Templates de Email Personalizaveis
+# Plano de Seguranca Granular para Tabela Clients
 
-## Visao Geral
+## Resumo Executivo
 
-Criar um sistema completo para personalizar os emails enviados pelo sistema, permitindo:
-- Adicionar logo da empresa
-- Editar textos e cores dos templates
-- Configurar assinatura padrao
-- Visualizar preview antes de salvar
+Implementar controle de acesso granular para a tabela `clients`, onde:
+- **Clientes** podem visualizar/editar apenas seus proprios dados
+- **Tecnicos** veem apenas informacoes de contato (sem dados fiscais/financeiros)
+- **Financeiro/Admin** tem acesso completo a todos os campos
 
 ---
 
-## Tipos de Email Identificados no Sistema
+## Situacao Atual
 
-| Tipo | Funcao | Descricao |
-|------|--------|-----------|
-| **nfse** | send-nfse-notification | Compartilhamento de NFS-e |
-| **ticket** | send-ticket-notification | Notificacoes de chamados (criado, atualizado, comentado, resolvido) |
-| **invoice_reminder** | notify-due-invoices | Lembrete de fatura proxima do vencimento |
-| **invoice_payment** | resend-payment-notification | Cobranca com dados de pagamento (boleto/PIX) |
-| **invoice_collection** | batch-collection-notification | Cobranca em lote (reminder, urgent, final) |
-| **certificate_expiry** | check-certificate-expiry | Alerta de certificado digital expirando |
-| **alert** | send-alert-notification | Alertas de monitoramento |
+### Politicas RLS Existentes
+| Politica | Comando | Regra |
+|----------|---------|-------|
+| Staff can manage clients | ALL | `is_staff(auth.uid())` |
+| Staff can view clients | SELECT | `is_staff(auth.uid())` |
+
+### Problemas Identificados
+1. **Tecnicos veem dados sensiveis**: CPF/CNPJ, `asaas_customer_id`, `financial_email`
+2. **Clientes nao tem acesso**: Nenhuma politica permite que clientes vejam/editem seus dados
+3. **Sem separacao de campos**: Todos os staff veem todos os campos
 
 ---
 
 ## Arquitetura da Solucao
 
-### 1. Nova Tabela: email_templates
+### Camada 1: VIEW Segura para Tecnicos
 
-Armazenar templates personalizaveis para cada tipo de email.
+Criar uma VIEW que expoe apenas campos de contato, ocultando dados fiscais.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  VIEW: clients_contact_only                                  │
+├─────────────────────────────────────────────────────────────┤
+│  EXPOE:                    OCULTA:                          │
+│  - id                      - document (CPF/CNPJ)            │
+│  - name                    - asaas_customer_id              │
+│  - trade_name              - financial_email                │
+│  - email                   - documentation                  │
+│  - phone                                                    │
+│  - whatsapp                                                 │
+│  - address, city, state,                                    │
+│    zip_code                                                 │
+│  - is_active                                                │
+│  - notes                                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Camada 2: Politicas RLS Granulares
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ACESSO A TABELA clients (todos os campos)                  │
+├─────────────────────────────────────────────────────────────┤
+│  SELECT: admin, manager, financial                          │
+│  INSERT: admin, manager, financial, technician              │
+│  UPDATE: admin, manager, financial                          │
+│  DELETE: admin                                              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  ACESSO VIA VIEW clients_contact_only                       │
+├─────────────────────────────────────────────────────────────┤
+│  SELECT: technician (via VIEW)                              │
+│  Campos visiveis: contato apenas                            │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  ACESSO DE CLIENTES (via client_contacts)                   │
+├─────────────────────────────────────────────────────────────┤
+│  SELECT: Proprio cliente vinculado                          │
+│  UPDATE: Campos basicos (email, phone, whatsapp, address)   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Implementacao Detalhada
+
+### Passo 1: Funcoes Helper no Banco
+
+Criar funcoes SECURITY DEFINER para verificar roles especificas:
 
 ```sql
-CREATE TABLE email_templates (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_type TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  subject_template TEXT NOT NULL,
-  html_template TEXT NOT NULL,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+-- Verificar se usuario e admin ou financeiro
+CREATE OR REPLACE FUNCTION public.is_financial_admin(_user_id uuid)
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role IN ('admin', 'financial', 'manager')
+  )
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+-- Verificar se usuario e apenas tecnico
+CREATE OR REPLACE FUNCTION public.is_technician_only(_user_id uuid)
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id AND role = 'technician'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id AND role IN ('admin', 'financial', 'manager')
+  )
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+-- Verificar se cliente tem vinculo com determinado client_id
+CREATE OR REPLACE FUNCTION public.client_owns_record(_user_id uuid, _client_id uuid)
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.client_contacts
+    WHERE user_id = _user_id AND client_id = _client_id
+  )
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+```
+
+### Passo 2: VIEW para Tecnicos
+
+```sql
+CREATE VIEW public.clients_contact_only
+WITH (security_invoker = on) AS
+SELECT 
+  id,
+  name,
+  trade_name,
+  email,
+  phone,
+  whatsapp,
+  whatsapp_validated,
+  address,
+  city,
+  state,
+  zip_code,
+  notes,
+  is_active,
+  created_at,
+  updated_at
+FROM public.clients;
+
+-- RLS na VIEW para tecnicos
+-- (tecnicos usam a VIEW, admin/financeiro usam tabela direta)
+```
+
+### Passo 3: Atualizar Politicas RLS da Tabela clients
+
+```sql
+-- Remover politicas antigas
+DROP POLICY IF EXISTS "Staff can manage clients" ON public.clients;
+DROP POLICY IF EXISTS "Staff can view clients" ON public.clients;
+
+-- NOVA: Admin/Manager/Financial podem ver todos os campos
+CREATE POLICY "Financial staff can view all clients"
+ON public.clients FOR SELECT
+USING (is_financial_admin(auth.uid()));
+
+-- NOVA: Tecnicos podem ver apenas via VIEW (nega acesso direto)
+-- (Tecnicos usam clients_contact_only, nao a tabela direta)
+
+-- NOVA: Clientes podem ver seus proprios dados
+CREATE POLICY "Clients can view own data"
+ON public.clients FOR SELECT
+USING (
+  (has_role(auth.uid(), 'client') OR has_role(auth.uid(), 'client_master'))
+  AND client_owns_record(auth.uid(), id)
+);
+
+-- NOVA: Staff pode inserir clientes
+CREATE POLICY "Staff can insert clients"
+ON public.clients FOR INSERT
+WITH CHECK (is_staff(auth.uid()));
+
+-- NOVA: Admin/Manager/Financial podem atualizar
+CREATE POLICY "Financial staff can update clients"
+ON public.clients FOR UPDATE
+USING (is_financial_admin(auth.uid()));
+
+-- NOVA: Clientes podem atualizar campos basicos dos seus dados
+CREATE POLICY "Clients can update own basic data"
+ON public.clients FOR UPDATE
+USING (
+  (has_role(auth.uid(), 'client') OR has_role(auth.uid(), 'client_master'))
+  AND client_owns_record(auth.uid(), id)
+);
+
+-- NOVA: Apenas admin pode deletar
+CREATE POLICY "Only admin can delete clients"
+ON public.clients FOR DELETE
+USING (has_role(auth.uid(), 'admin'));
+```
+
+### Passo 4: Politica para VIEW (Tecnicos)
+
+```sql
+-- Tecnicos acessam dados via VIEW
+CREATE POLICY "Technicians can view contact info"
+ON public.clients FOR SELECT
+USING (
+  is_technician_only(auth.uid())
 );
 ```
 
-**Tipos disponiveis:**
-- nfse
-- ticket_created
-- ticket_updated
-- ticket_commented
-- ticket_resolved
-- invoice_reminder
-- invoice_payment
-- invoice_collection_reminder
-- invoice_collection_urgent
-- invoice_collection_final
-- certificate_expiry_warning
-- certificate_expiry_critical
-- certificate_expiry_expired
+### Passo 5: Modificacoes no Frontend
 
-### 2. Nova Tabela: email_settings
+#### Arquivo: `src/pages/clients/ClientDetailPage.tsx`
 
-Configuracoes globais de email (logo, cores, assinatura).
-
-```sql
-CREATE TABLE email_settings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  logo_url TEXT,
-  primary_color TEXT DEFAULT '#f59e0b',
-  secondary_color TEXT DEFAULT '#1f2937',
-  footer_text TEXT DEFAULT 'Este e um email automatico. Em caso de duvidas, entre em contato.',
-  show_social_links BOOLEAN DEFAULT false,
-  social_links JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### 3. Bucket de Storage: email-assets
-
-Para armazenar a logo e outros arquivos usados nos emails.
-
----
-
-## Componentes do Frontend
-
-### 1. Nova Aba em Configuracoes: "Templates de Email"
-
-Local: `src/components/settings/EmailTemplatesTab.tsx`
-
-**Funcionalidades:**
-- Lista de todos os templates disponiveis
-- Editor visual com preview em tempo real
-- Upload de logo da empresa
-- Configuracoes de cores (primary, secondary)
-- Editor de assinatura/rodape
-
-### 2. Componentes Auxiliares
-
-| Componente | Funcao |
-|------------|--------|
-| `EmailTemplateEditor.tsx` | Editor de template individual com variaveis |
-| `EmailPreview.tsx` | Preview do email renderizado |
-| `EmailSettingsForm.tsx` | Formulario de configuracoes globais |
-| `LogoUploader.tsx` | Upload e crop da logo |
-
-### 3. Variaveis de Template
-
-Cada template tera variaveis especificas que podem ser usadas:
-
-**NFS-e:**
-- `{{client_name}}`, `{{nfse_number}}`, `{{valor}}`, `{{competencia}}`, `{{pdf_url}}`
-
-**Ticket:**
-- `{{client_name}}`, `{{ticket_number}}`, `{{title}}`, `{{status}}`, `{{priority}}`, `{{comment}}`, `{{portal_url}}`
-
-**Invoice:**
-- `{{client_name}}`, `{{invoice_number}}`, `{{amount}}`, `{{due_date}}`, `{{days_until_due}}`, `{{boleto_url}}`, `{{boleto_barcode}}`, `{{pix_code}}`
-
-**Certificate:**
-- `{{company_name}}`, `{{cnpj}}`, `{{days_remaining}}`, `{{expiry_date}}`
-
----
-
-## Modificacoes nas Edge Functions
-
-Cada edge function que envia email sera modificada para:
-
-1. Buscar o template ativo do banco
-2. Buscar configuracoes globais (logo, cores)
-3. Substituir variaveis no template
-4. Usar layout base padronizado
-
-### Template Base Compartilhado
-
-Todas as funcoes usarao um layout base:
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    .header { background: {{primary_color}}; padding: 20px; text-align: center; }
-    .logo { max-height: 60px; }
-    .content { padding: 30px; background: #fff; }
-    .footer { background: {{secondary_color}}; color: #9ca3af; padding: 15px; text-align: center; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    {{#logo}}<img src="{{logo_url}}" class="logo" alt="Logo">{{/logo}}
-  </div>
-  <div class="content">
-    {{content}}
-  </div>
-  <div class="footer">
-    {{footer_text}}
-  </div>
-</body>
-</html>
-```
-
----
-
-## Arquivos a Criar
-
-### Frontend
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/components/settings/EmailTemplatesTab.tsx` | Aba principal de templates |
-| `src/components/settings/email-templates/EmailTemplateEditor.tsx` | Editor de template |
-| `src/components/settings/email-templates/EmailPreview.tsx` | Preview do email |
-| `src/components/settings/email-templates/EmailSettingsForm.tsx` | Config globais |
-| `src/components/settings/email-templates/TemplateVariablesHelp.tsx` | Ajuda com variaveis |
-
-### Backend
-
-| Arquivo | Descricao |
-|---------|-----------|
-| Migracao SQL | Criar tabelas email_templates e email_settings |
-| Storage bucket | Criar bucket email-assets |
-
-### Edge Functions a Modificar
-
-| Funcao | Modificacao |
-|--------|-------------|
-| send-nfse-notification | Usar template personalizado |
-| send-ticket-notification | Usar template personalizado |
-| notify-due-invoices | Usar template personalizado |
-| resend-payment-notification | Usar template personalizado |
-| batch-collection-notification | Usar templates personalizados |
-| check-certificate-expiry | Usar template personalizado |
-
----
-
-## Integracao com SettingsPage
-
-Adicionar nova aba "Templates" na pagina de configuracoes, apos "Integrações":
+Adicionar logica para verificar role e ocultar campos sensiveis para tecnicos:
 
 ```tsx
-<TabsTrigger value="email-templates" className="gap-2">
-  <Mail className="h-4 w-4" />
-  Templates
-</TabsTrigger>
+// Verificar se usuario e apenas tecnico
+const isTechnicianOnly = roles.includes('technician') && 
+  !roles.includes('admin') && 
+  !roles.includes('manager') && 
+  !roles.includes('financial');
+
+// Ocultar campos sensiveis na UI
+{!isTechnicianOnly && (
+  <>
+    <div>CPF/CNPJ: {client.document}</div>
+    <div>Email Financeiro: {client.financial_email}</div>
+  </>
+)}
 ```
+
+#### Arquivo: `src/components/clients/ClientForm.tsx`
+
+Ocultar campos financeiros para tecnicos no formulario de edicao.
 
 ---
 
-## Interface do Usuario
+## Impacto nas Edge Functions
 
-### Listagem de Templates
+**Nenhum impacto**: Todas as edge functions usam `SUPABASE_SERVICE_ROLE_KEY` que bypassa RLS.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  📧 Templates de Email                                       │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  🎫 Notificacao de Chamado - Criado    [Editar]    │   │
-│  │  🎫 Notificacao de Chamado - Resolvido [Editar]    │   │
-│  │  📄 Compartilhamento de NFS-e          [Editar]    │   │
-│  │  💰 Lembrete de Fatura                 [Editar]    │   │
-│  │  💰 Cobranca - Boleto/PIX              [Editar]    │   │
-│  │  ⚠️ Certificado Expirando              [Editar]    │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Editor de Template
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Editando: Notificacao de Chamado - Criado                  │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Assunto:                                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ [Chamado #{{ticket_number}}] {{title}}              │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────┬───────────────────────────────┐   │
-│  │  Editor HTML        │  Preview                      │   │
-│  │                     │                               │   │
-│  │  <p>Ola {{client}}, │  ┌─────────────────────────┐ │   │
-│  │  Seu chamado foi... │  │ [LOGO]                  │ │   │
-│  │                     │  │ Ola Cliente Exemplo,    │ │   │
-│  │                     │  │ Seu chamado foi aberto  │ │   │
-│  │                     │  └─────────────────────────┘ │   │
-│  └─────────────────────┴───────────────────────────────┘   │
-│                                                             │
-│  Variaveis disponiveis: {{client_name}}, {{ticket_number}}, │
-│  {{title}}, {{status}}, {{priority}}, {{portal_url}}        │
-│                                                             │
-│                            [Cancelar] [Salvar Template]     │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Configuracoes Globais
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ⚙️ Configuracoes Globais de Email                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Logo da Empresa:                                           │
-│  ┌─────────────┐                                            │
-│  │   [LOGO]    │  [Upload] [Remover]                        │
-│  └─────────────┘                                            │
-│                                                             │
-│  Cor Primaria:    [#f59e0b] 🎨                              │
-│  Cor Secundaria:  [#1f2937] 🎨                              │
-│                                                             │
-│  Texto do Rodape:                                           │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Este e um email automatico do sistema Colmeia.      │   │
-│  │ Em caso de duvidas, entre em contato.               │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│                                           [Salvar]          │
-└─────────────────────────────────────────────────────────────┘
-```
+| Funcao | Status |
+|--------|--------|
+| banco-inter | OK - usa service role |
+| asaas-nfse | OK - usa service role |
+| resend-payment-notification | OK - usa service role |
+| notify-due-invoices | OK - usa service role |
+| batch-collection-notification | OK - usa service role |
 
 ---
 
-## Resumo das Mudancas
+## Arquivos a Modificar
 
-| Tipo | Quantidade |
-|------|------------|
-| Novas tabelas SQL | 2 |
-| Novo bucket storage | 1 |
-| Novos componentes frontend | 5 |
-| Edge functions modificadas | 6 |
-| Arquivo SettingsPage modificado | 1 |
+| Arquivo | Tipo | Descricao |
+|---------|------|-----------|
+| Migracao SQL | Criar | Funcoes helper + VIEW + Politicas RLS |
+| `src/pages/clients/ClientDetailPage.tsx` | Modificar | Ocultar campos para tecnicos |
+| `src/pages/clients/ClientsPage.tsx` | Modificar | Usar VIEW para tecnicos |
+| `src/components/clients/ClientForm.tsx` | Modificar | Ocultar campos financeiros |
+
+---
+
+## Matriz de Acesso Final
+
+| Campo | Admin | Manager | Financial | Technician | Client |
+|-------|-------|---------|-----------|------------|--------|
+| id | RW | RW | RW | R | R |
+| name | RW | RW | RW | R | R |
+| trade_name | RW | RW | RW | R | R |
+| email | RW | RW | RW | R | RW |
+| phone | RW | RW | RW | R | RW |
+| whatsapp | RW | RW | RW | R | RW |
+| address | RW | RW | RW | R | RW |
+| city/state/zip | RW | RW | RW | R | RW |
+| **document** | RW | RW | RW | - | R |
+| **financial_email** | RW | RW | RW | - | RW |
+| **asaas_customer_id** | RW | RW | RW | - | - |
+| **documentation** | RW | RW | RW | - | R |
+| notes | RW | RW | RW | R | R |
+
+**Legenda**: R = Leitura, W = Escrita, RW = Leitura/Escrita, - = Sem acesso
 
 ---
 
 ## Secao Tecnica
 
-### Detalhes de Implementacao
+### SQL Completo da Migracao
 
-**Migracao SQL:**
-- Criar tabela `email_templates` com RLS para admin/manager
-- Criar tabela `email_settings` (singleton) com RLS
-- Inserir templates padrao para cada tipo
-- Criar bucket `email-assets` publico
+```sql
+-- 1. Funcoes Helper
+CREATE OR REPLACE FUNCTION public.is_financial_admin(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ ... $$;
 
-**Edge Functions:**
-- Criar funcao helper `getEmailTemplate(type)` reutilizavel
-- Criar funcao helper `renderEmailTemplate(template, variables, settings)`
-- Modificar cada funcao para usar o sistema de templates
+CREATE OR REPLACE FUNCTION public.is_technician_only(_user_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ ... $$;
 
-**Frontend:**
-- Usar Monaco Editor ou Textarea para edicao de HTML
-- Preview atualizado em tempo real com debounce
-- Upload de logo via Supabase Storage
-- Color picker para selecao de cores
+CREATE OR REPLACE FUNCTION public.client_owns_record(_user_id uuid, _client_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$ ... $$;
+
+-- 2. VIEW para tecnicos
+CREATE VIEW public.clients_contact_only WITH (security_invoker = on) AS
+SELECT id, name, trade_name, email, phone, whatsapp, address, city, state, zip_code, notes, is_active, created_at, updated_at
+FROM public.clients;
+
+-- 3. Atualizar RLS
+DROP POLICY IF EXISTS "Staff can manage clients" ON public.clients;
+DROP POLICY IF EXISTS "Staff can view clients" ON public.clients;
+
+CREATE POLICY "Financial staff can view all clients" ON public.clients FOR SELECT USING (is_financial_admin(auth.uid()));
+CREATE POLICY "Technicians can view contact info" ON public.clients FOR SELECT USING (is_technician_only(auth.uid()));
+CREATE POLICY "Clients can view own data" ON public.clients FOR SELECT USING (...);
+CREATE POLICY "Staff can insert clients" ON public.clients FOR INSERT WITH CHECK (is_staff(auth.uid()));
+CREATE POLICY "Financial staff can update clients" ON public.clients FOR UPDATE USING (is_financial_admin(auth.uid()));
+CREATE POLICY "Clients can update own basic data" ON public.clients FOR UPDATE USING (...);
+CREATE POLICY "Only admin can delete clients" ON public.clients FOR DELETE USING (has_role(auth.uid(), 'admin'));
+
+-- 4. Trigger para limitar campos que cliente pode atualizar
+CREATE OR REPLACE FUNCTION public.restrict_client_update()
+RETURNS trigger AS $$
+BEGIN
+  IF has_role(auth.uid(), 'client') OR has_role(auth.uid(), 'client_master') THEN
+    -- Preservar campos que cliente nao pode alterar
+    NEW.document := OLD.document;
+    NEW.asaas_customer_id := OLD.asaas_customer_id;
+    NEW.name := OLD.name;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER tr_restrict_client_update
+BEFORE UPDATE ON public.clients
+FOR EACH ROW EXECUTE FUNCTION restrict_client_update();
+```
+
+### Consideracoes de Performance
+
+- Funcoes `SECURITY DEFINER` sao otimizadas com `STABLE`
+- VIEW usa `security_invoker = on` para herdar RLS do usuario
+- Indices existentes continuam validos
