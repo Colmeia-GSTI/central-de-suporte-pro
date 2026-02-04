@@ -169,33 +169,49 @@ export function AppSidebar() {
     const menuContent = (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={isActive} className="relative group">
-          <Link 
+          <Link
             to={item.path}
             onClick={handleClick}
             className={cn(
               "flex items-center gap-3 transition-all duration-300",
-              "hover:bg-sidebar-accent/50",
-              isActive && "bg-sidebar-accent"
+              "hover:bg-sidebar-accent/50 hover:shadow-sm",
+              "active:scale-[0.98] cursor-pointer",
+              isActive && "bg-sidebar-accent shadow-sm"
             )}
+            title={item.tooltip || item.title}
+            aria-current={isActive ? "page" : undefined}
           >
-            {isActive && <span className="active-indicator animate-scale-in" />}
+            {isActive && (
+              <>
+                <span className="active-indicator animate-scale-in" />
+                <span className="absolute left-0 h-full w-1 bg-sidebar-primary rounded-r-md" />
+              </>
+            )}
             <item.icon className={cn(
-              "h-4 w-4 transition-all duration-300",
-              "group-hover:text-sidebar-primary",
+              "h-4 w-4 transition-all duration-300 flex-shrink-0",
+              "group-hover:text-sidebar-primary group-hover:scale-110",
               isActive && "text-sidebar-primary"
             )} />
-            <span className={cn("transition-colors duration-300 flex-1", isActive && "font-medium")}>
+            <span className={cn(
+              "transition-colors duration-300 flex-1 text-sm",
+              isActive && "font-semibold"
+            )}>
               {item.title}
             </span>
             {item.badge && (
-              <Badge variant="outline" className="ml-auto text-[10px] h-5">
+              <Badge
+                variant="outline"
+                className="ml-auto text-[10px] h-5 shrink-0"
+                title={item.badge}
+              >
                 {item.badge}
               </Badge>
             )}
             {showTicketBadge && (
-              <Badge 
-                variant="secondary" 
-                className="ml-auto bg-primary text-primary-foreground text-xs h-5 min-w-5 flex items-center justify-center"
+              <Badge
+                variant="secondary"
+                className="ml-auto bg-primary text-primary-foreground text-xs h-5 w-5 flex items-center justify-center shrink-0 font-bold"
+                title={`${ticketCount} chamados atribuídos`}
               >
                 {ticketCount > 99 ? "99+" : ticketCount}
               </Badge>
@@ -307,30 +323,58 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
+      <SidebarFooter className="p-4 border-t border-sidebar-border bg-sidebar-accent/20">
         {profile && (
-          <Link to="/profile" className={cn("flex items-center gap-3 mb-3 p-2 rounded-xl transition-all duration-300 hover:bg-sidebar-accent group")}>
-            <div className="relative">
-              <div className={cn("absolute -inset-0.5 rounded-full opacity-75 blur-sm bg-gradient-to-r", getRoleColor())} />
+          <Link
+            to="/profile"
+            className={cn(
+              "flex items-center gap-3 mb-3 p-3 rounded-lg transition-all duration-300",
+              "hover:bg-sidebar-accent hover:shadow-sm active:scale-[0.98]",
+              "group cursor-pointer"
+            )}
+            title={`Ir para perfil de ${profile.full_name}`}
+          >
+            <div className="relative flex-shrink-0">
+              <div className={cn(
+                "absolute -inset-0.5 rounded-full opacity-75 blur-sm bg-gradient-to-r",
+                getRoleColor()
+              )} />
               <Avatar className="h-10 w-10 relative border-2 border-sidebar-background">
-                <AvatarImage src={profile.avatar_url || undefined} />
+                <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name} />
                 <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs font-semibold">
                   {getInitials(profile.full_name)}
                 </AvatarFallback>
               </Avatar>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate group-hover:text-sidebar-primary transition-colors">{profile.full_name}</p>
-              <Badge variant="secondary" className={cn("text-[10px] px-1.5 py-0 h-4 mt-0.5 bg-gradient-to-r text-white border-0", getRoleColor())}>
+              <p className="text-sm font-medium text-sidebar-foreground truncate group-hover:text-sidebar-primary transition-colors">
+                {profile.full_name}
+              </p>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "text-[10px] px-2 py-0 h-4 mt-0.5 bg-gradient-to-r text-white border-0",
+                  getRoleColor()
+                )}
+                title={`Função: ${getRoleBadge()}`}
+              >
                 {getRoleBadge()}
               </Badge>
             </div>
           </Link>
         )}
-        
+
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={signOut} className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-300">
+            <SidebarMenuButton
+              onClick={signOut}
+              className={cn(
+                "text-destructive hover:text-destructive",
+                "hover:bg-destructive/10 transition-all duration-300",
+                "active:scale-[0.98]"
+              )}
+              title="Sair do sistema"
+            >
               <LogOut className="h-4 w-4" />
               <span>Sair</span>
             </SidebarMenuButton>

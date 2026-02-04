@@ -20,6 +20,7 @@ const NewTicketPage = lazy(() => import("@/pages/tickets/NewTicketPage"));
 const ClientDetailPage = lazy(() => import("@/pages/clients/ClientDetailPage"));
 const ContractsPage = lazy(() => import("@/pages/contracts/ContractsPage"));
 const NewContractPage = lazy(() => import("@/pages/contracts/NewContractPage"));
+const EditContractPage = lazy(() => import("@/pages/contracts/EditContractPage"));
 const InventoryPage = lazy(() => import("@/pages/inventory/InventoryPage"));
 const MonitoringPage = lazy(() => import("@/pages/monitoring/MonitoringPage"));
 const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
@@ -78,6 +79,7 @@ export function AnimatedRoutes() {
       <Route path="/clients/:id" element={<ProtectedRoute requireStaff><LazyPage><ClientDetailPage /></LazyPage></ProtectedRoute>} />
       <Route path="/contracts" element={<ProtectedRoute requireStaff><LazyPage><ContractsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/contracts/new" element={<ProtectedRoute requireStaff><LazyPage><NewContractPage /></LazyPage></ProtectedRoute>} />
+      <Route path="/contracts/edit/:id" element={<ProtectedRoute requireStaff><LazyPage><EditContractPage /></LazyPage></ProtectedRoute>} />
       <Route path="/inventory" element={<ProtectedRoute requireStaff><LazyPage><InventoryPage /></LazyPage></ProtectedRoute>} />
       <Route path="/monitoring" element={<ProtectedRoute requireStaff><LazyPage><MonitoringPage /></LazyPage></ProtectedRoute>} />
       <Route path="/calendar" element={<ProtectedRoute requireStaff><LazyPage><CalendarPage /></LazyPage></ProtectedRoute>} />

@@ -73,15 +73,20 @@ type ContractWithClient = Tables<"contracts"> & {
 
 interface ContractFormProps {
   contract?: ContractWithClient | null;
+  initialData?: any;
   onSuccess: () => void;
   onCancel: () => void;
+  isEditing?: boolean;
 }
 
-export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProps) {
+export function ContractForm({ contract, initialData, onSuccess, onCancel }: ContractFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  
+
+  // Use contract, initialData, or null for fallback
+  const contractData = contract || initialData;
+
   // State for contract services
   const [contractServices, setContractServices] = useState<ContractService[]>([]);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
@@ -89,41 +94,42 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
   const form = useForm<ContractFormData>({
     resolver: zodResolver(contractSchema),
     defaultValues: {
-      name: contract?.name || "",
-      client_id: contract?.client_id || "",
-      monthly_value: contract?.monthly_value || 0,
-      start_date: contract?.start_date || new Date().toISOString().split("T")[0],
-      end_date: contract?.end_date || "",
-      indefinite_term: !contract?.end_date,
-      support_model: contract?.support_model || "ticket",
-      hours_included: contract?.hours_included || undefined,
-      status: contract?.status || "active",
-      auto_renew: contract?.auto_renew || false,
-      internal_notes: (contract as any)?.internal_notes || "",
+      name: contractData?.name || "",
+      client_id: contractData?.client_id || "",
+      monthly_value: contractData?.monthly_value || 0,
+      start_date: contractData?.start_date || new Date().toISOString().split("T")[0],
+      end_date: contractData?.end_date || "",
+      indefinite_term: !contractData?.end_date,
+      support_model: contractData?.support_model || "ticket",
+      hours_included: contractData?.hours_included || undefined,
+      status: contractData?.status || "active",
+      auto_renew: contractData?.auto_renew || false,
+      internal_notes: (contractData as any)?.internal_notes || "",
       // Billing defaults
-      billing_day: (contract as any)?.billing_day || 10,
-      days_before_due: (contract as any)?.days_before_due || 5,
-      billing_provider: (contract as any)?.billing_provider || "banco_inter",
-      payment_preference: (contract as any)?.payment_preference || "boleto",
+      billing_day: (contractData as any)?.billing_day || 10,
+      days_before_due: (contractData as any)?.days_before_due || 5,
+      billing_provider: (contractData as any)?.billing_provider || "banco_inter",
+      payment_preference: (contractData as any)?.payment_preference || "boleto",
       // Adjustment defaults
-      adjustment_date: (contract as any)?.adjustment_date || "",
-      adjustment_index: (contract as any)?.adjustment_index || "IGPM",
-      adjustment_percentage: (contract as any)?.adjustment_percentage || undefined,
+      adjustment_date: (contractData as any)?.adjustment_date || "",
+      adjustment_index: (contractData as any)?.adjustment_index || "IGPM",
+      adjustment_percentage: (contractData as any)?.adjustment_percentage || undefined,
       // Notification
-      notification_message: (contract as any)?.notification_message || "",
+      notification_message: (contractData as any)?.notification_message || "",
       // NFSE defaults
-      nfse_enabled: (contract as any)?.nfse_enabled ?? true,
-      nfse_service_code: (contract as any)?.nfse_service_code || "010701",
-      nfse_descricao_customizada: (contract as any)?.nfse_descricao_customizada || "",
-      nfse_cnae: (contract as any)?.nfse_cnae || "",
+      nfse_enabled: (contractData as any)?.nfse_enabled ?? true,
+      nfse_service_code: (contractData as any)?.nfse_service_code || "010701",
+      nfse_descricao_customizada: (contractData as any)?.nfse_descricao_customizada || "",
+      nfse_cnae: (contractData as any)?.nfse_cnae || "",
     },
   });
 
   // Load existing contract services
+  const contractId = contractData?.id;
   const { data: existingServices = [] } = useQuery({
-    queryKey: ["contract-services", contract?.id],
+    queryKey: ["contract-services", contractId],
     queryFn: async () => {
-      if (!contract?.id) return [];
+      if (!contractId) return [];
       const { data, error } = await supabase
         .from("contract_services")
         .select(`
@@ -133,7 +139,7 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
           unit_value,
           services(name)
         `)
-        .eq("contract_id", contract.id);
+        .eq("contract_id", contractId);
       if (error) throw error;
       return data.map((s: any) => ({
         service_id: s.service_id,
@@ -143,7 +149,7 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
         subtotal: (s.quantity || 1) * (s.unit_value || 0),
       })) as ContractService[];
     },
-    enabled: !!contract?.id,
+    enabled: !!contractId,
   });
 
   // Initialize services state when data loads
@@ -197,25 +203,25 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
         nfse_cnae: data.nfse_cnae || null,
       };
 
-      let contractId = contract?.id;
-      const isUpdate = !!contract;
+      let contractIdValue = contractData?.id;
+      const isUpdate = !!contractData;
 
       // Detectar mudanças para histórico
       const changes: Record<string, { old: any; new: any }> = {};
       if (isUpdate) {
-        if (data.name !== contract.name) changes.name = { old: contract.name, new: data.name };
-        if (data.status !== contract.status) changes.status = { old: contract.status, new: data.status };
-        if ((calculatedTotal > 0 ? calculatedTotal : data.monthly_value) !== contract.monthly_value) {
-          changes.monthly_value = { old: contract.monthly_value, new: calculatedTotal > 0 ? calculatedTotal : data.monthly_value };
+        if (data.name !== contractData.name) changes.name = { old: contractData.name, new: data.name };
+        if (data.status !== contractData.status) changes.status = { old: contractData.status, new: data.status };
+        if ((calculatedTotal > 0 ? calculatedTotal : data.monthly_value) !== contractData.monthly_value) {
+          changes.monthly_value = { old: contractData.monthly_value, new: calculatedTotal > 0 ? calculatedTotal : data.monthly_value };
         }
-        if (data.support_model !== contract.support_model) changes.support_model = { old: contract.support_model, new: data.support_model };
+        if (data.support_model !== contractData.support_model) changes.support_model = { old: contractData.support_model, new: data.support_model };
       }
 
       if (isUpdate) {
         const { error } = await supabase
           .from("contracts")
           .update(payload)
-          .eq("id", contract.id);
+          .eq("id", contractData.id);
         if (error) throw error;
 
         // Registrar no histórico se houve mudanças
@@ -225,7 +231,7 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
             .join(", ");
 
           await supabase.from("contract_history").insert({
-            contract_id: contract.id,
+            contract_id: contractData.id,
             user_id: user?.id,
             action: "updated",
             changes,
@@ -239,11 +245,11 @@ export function ContractForm({ contract, onSuccess, onCancel }: ContractFormProp
           .select("id")
           .single();
         if (error) throw error;
-        contractId = newContract.id;
+        contractIdValue = newContract.id;
 
         // Registrar criação no histórico
         await supabase.from("contract_history").insert({
-          contract_id: contractId,
+          contract_id: contractIdValue,
           user_id: user?.id,
           action: "created",
           comment: "Contrato criado",

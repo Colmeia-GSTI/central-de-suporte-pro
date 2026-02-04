@@ -106,16 +106,19 @@ export function QuickActionsFAB() {
                 size="icon"
                 className={cn(
                   "h-12 w-12 rounded-full shadow-lg transition-all duration-300",
-                  "bg-gradient-to-r hover:scale-110",
+                  "bg-gradient-to-r hover:scale-110 active:scale-95",
+                  "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary",
                   action.color,
-                  isOpen 
-                    ? "opacity-100 translate-y-0" 
+                  isOpen
+                    ? "opacity-100 translate-y-0"
                     : "opacity-0 translate-y-4 pointer-events-none"
                 )}
                 style={{
                   transitionDelay: isOpen ? action.delay : "0ms",
                 }}
                 onClick={() => handleAction(action.path)}
+                aria-label={action.label}
+                title={action.label}
               >
                 <action.icon className="h-5 w-5 text-white" />
               </Button>
@@ -133,10 +136,15 @@ export function QuickActionsFAB() {
               size="icon"
               className={cn(
                 "h-14 w-14 rounded-full shadow-xl transition-all duration-300",
-                "btn-premium",
+                "btn-premium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary",
+                "active:scale-95",
                 isOpen && "rotate-45"
               )}
               onClick={() => setIsOpen(!isOpen)}
+              aria-label={isOpen ? "Fechar menu de ações rápidas" : "Abrir menu de ações rápidas"}
+              aria-expanded={isOpen}
+              aria-controls="fab-menu"
+              title={isOpen ? "Fechar ações" : "Abrir ações rápidas"}
             >
               {isOpen ? (
                 <X className="h-6 w-6" />
