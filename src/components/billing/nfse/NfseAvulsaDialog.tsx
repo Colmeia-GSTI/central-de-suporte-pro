@@ -366,15 +366,13 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
             />
           </div>
 
-          {/* Seção de Tributação */}
-          {serviceCode && valor > 0 && (
-            <NfseTributacaoSection
-              valorServico={valor}
-              aliquotaIss={aliquotaIss}
-              data={tributacao}
-              onChange={setTributacao}
-            />
-          )}
+          {/* Seção de Tributação - sempre visível */}
+          <NfseTributacaoSection
+            valorServico={valor}
+            aliquotaIss={aliquotaIss}
+            data={tributacao}
+            onChange={setTributacao}
+          />
 
           {/* Fatura - compacto */}
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
