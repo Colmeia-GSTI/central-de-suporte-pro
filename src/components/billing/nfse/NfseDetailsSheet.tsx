@@ -23,6 +23,7 @@ import {
   FileCode,
   FileText,
   History,
+  Link2,
   Loader2,
   RefreshCw,
   ShieldAlert,
@@ -32,8 +33,9 @@ import {
 } from "lucide-react";
 
 import type { Tables } from "@/integrations/supabase/types";
+import { Input } from "@/components/ui/input";
 import { buildNfseValidation, normalizeCompetencia, type ValidationIssue } from "./nfseValidation";
-import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asaasStatusLabel, type NfseStatus } from "./nfseFormat";
+import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asaasStatusLabel, isE0014Error, formatNfseErrorMessage, type NfseStatus } from "./nfseFormat";
 import { NfseEventLogsDialog } from "./NfseEventLogsDialog";
 import { NfseProcessingIndicator } from "./NfseProcessingIndicator";
 
@@ -141,7 +143,9 @@ export function NfseDetailsSheet(props: {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [cancelAndDeleteConfirmOpen, setCancelAndDeleteConfirmOpen] = useState(false);
+  const [linkExternalOpen, setLinkExternalOpen] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [numeroExterno, setNumeroExterno] = useState("");
 
   const [valor, setValor] = useState<number>(nfse?.valor_servico ?? 0);
   const [competencia, setCompetencia] = useState<string>(normalizeCompetencia(nfse?.competencia));
@@ -152,6 +156,7 @@ export function NfseDetailsSheet(props: {
   const canCancel = nfse ? nfse.status === "autorizada" && !!nfse.asaas_invoice_id : false;
   const canDelete = nfse ? ["pendente", "erro", "rejeitada", "processando", "cancelada"].includes(nfse.status) : false;
   const canAbortProcessing = nfse ? nfse.status === "processando" : false;
+  const isE0014 = nfse ? isE0014Error(nfse.mensagem_retorno) : false;
 
   // Sincronizar estados quando a prop nfse mudar
   useEffect(() => {
@@ -437,6 +442,39 @@ export function NfseDetailsSheet(props: {
     },
   });
 
+  // Link External mutation
+  const linkExternalMutation = useMutation({
+    mutationFn: async () => {
+      if (!nfse) throw new Error("NFS-e não selecionada");
+      if (!numeroExterno.trim()) throw new Error("Número da NFS-e é obrigatório");
+      
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+        body: {
+          action: "link_external",
+          nfse_history_id: nfse.id,
+          numero_nfse: numeroExterno.trim(),
+        },
+      });
+      
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao vincular nota");
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Nota vinculada com sucesso", {
+        description: `Nota #${numeroExterno} vinculada ao registro.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      setLinkExternalOpen(false);
+      setNumeroExterno("");
+      props.onChanged?.();
+    },
+    onError: (e: Error) => {
+      toast.error("Erro ao vincular nota", { description: e.message });
+    },
+  });
+
   if (!nfse) return null;
 
   const s = nfse.status as NfseStatus;
@@ -642,7 +680,44 @@ export function NfseDetailsSheet(props: {
                 </div>
               </div>
 
-              {nfse.mensagem_retorno && (
+              {/* E0014 - DPS Duplicada - Alerta especial com ação */}
+              {nfse.status === "erro" && isE0014 && (
+                <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/30">
+                  <Link2 className="h-4 w-4 text-amber-700" />
+                  <AlertDescription>
+                    <p className="font-medium text-amber-900 dark:text-amber-200">
+                      Nota já existe no Portal Nacional
+                    </p>
+                    <p className="text-sm mt-1 text-amber-800 dark:text-amber-300">
+                      Esta NFS-e foi emitida anteriormente com a mesma Série/Número DPS.
+                      Informe o número da nota para sincronizar o registro.
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Input
+                        placeholder="Número NFS-e (ex: 77)"
+                        value={numeroExterno}
+                        onChange={(e) => setNumeroExterno(e.target.value)}
+                        className="max-w-[150px]"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => linkExternalMutation.mutate()}
+                        disabled={!numeroExterno.trim() || linkExternalMutation.isPending}
+                      >
+                        {linkExternalMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <Link2 className="h-4 w-4 mr-1" />
+                        )}
+                        Vincular
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Mensagem de retorno normal (para outros erros) */}
+              {nfse.mensagem_retorno && !isE0014 && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
@@ -650,6 +725,18 @@ export function NfseDetailsSheet(props: {
                     <pre className="mt-1 whitespace-pre-wrap text-xs">{nfse.mensagem_retorno}</pre>
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {/* Exibir mensagem técnica se for E0014 (para referência) */}
+              {nfse.mensagem_retorno && isE0014 && (
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer hover:text-foreground">
+                    Ver mensagem técnica
+                  </summary>
+                  <pre className="mt-1 whitespace-pre-wrap p-2 bg-muted/50 rounded text-xs">
+                    {nfse.mensagem_retorno}
+                  </pre>
+                </details>
               )}
 
               {nfse.chave_acesso && (
@@ -941,6 +1028,66 @@ export function NfseDetailsSheet(props: {
             >
               {cancelAndDeleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Cancelar e Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link External NFS-e Dialog */}
+      <Dialog open={linkExternalOpen} onOpenChange={(open) => {
+        setLinkExternalOpen(open);
+        if (!open) setNumeroExterno("");
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5 text-amber-600" />
+              Vincular Nota Existente
+            </DialogTitle>
+            <DialogDescription>
+              Se esta nota já foi emitida no Portal Nacional, informe o número para sincronizar o registro.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/30">
+              <AlertTriangle className="h-4 w-4 text-amber-700" />
+              <AlertDescription className="text-amber-900 dark:text-amber-200">
+                Use esta opção apenas se você verificou no Portal Nacional que a nota existe e está autorizada.
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-2">
+              <Label htmlFor="numero-externo">Número da NFS-e *</Label>
+              <Input
+                id="numero-externo"
+                placeholder="Ex: 77"
+                value={numeroExterno}
+                onChange={(e) => setNumeroExterno(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Informe o número da nota autorizada no Portal Nacional.
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setLinkExternalOpen(false);
+              setNumeroExterno("");
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => linkExternalMutation.mutate()}
+              disabled={!numeroExterno.trim() || linkExternalMutation.isPending}
+            >
+              {linkExternalMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Link2 className="h-4 w-4 mr-2" />
+              )}
+              Vincular Nota
             </Button>
           </DialogFooter>
         </DialogContent>

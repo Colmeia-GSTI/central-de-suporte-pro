@@ -60,7 +60,73 @@ const ERROR_CODES = {
   DELETE_NOT_ALLOWED: "Exclusão não permitida",
   RECORD_NOT_FOUND: "Registro não encontrado",
   ASAAS_API_ERROR: "Erro da API Asaas",
+  DPS_DUPLICADA: "DPS duplicada - NFS-e já existe no Portal Nacional",
 } as const;
+
+// ============ KNOWN PREFEITURA ERRORS ============
+interface KnownError {
+  code: string;
+  title: string;
+  message: string;
+  action: string;
+}
+
+const KNOWN_PREFEITURA_ERRORS: Record<string, KnownError> = {
+  E0014: {
+    code: "DPS_DUPLICADA",
+    title: "Nota Fiscal já existe",
+    message: "Esta NFS-e já foi emitida anteriormente no Portal Nacional com a mesma Série/Número DPS.",
+    action: "VERIFY_EXTERNAL",
+  },
+  E0001: {
+    code: "CERT_INVALIDO",
+    title: "Certificado digital inválido",
+    message: "Verifique os dados do certificado digital.",
+    action: "CHECK_CERTIFICATE",
+  },
+  E0002: {
+    code: "DADOS_INCOMPLETOS",
+    title: "Dados incompletos",
+    message: "Verifique os dados do prestador ou tomador.",
+    action: "CHECK_DATA",
+  },
+};
+
+// Parse error code from prefeitura status description
+function parseStatusDescription(statusDescription: string | null): {
+  codigo: string | null;
+  descricao: string;
+  acao: string | null;
+  knownError: KnownError | null;
+} {
+  if (!statusDescription) {
+    return { codigo: null, descricao: "Erro desconhecido", acao: null, knownError: null };
+  }
+  
+  // Extract code from format "Código: E0014\r\nDescrição: ..."
+  const codigoMatch = statusDescription.match(/C[oó]digo:\s*(\w+)/i);
+  const descMatch = statusDescription.match(/Descri[cç][aã]o:\s*(.+?)(?:\r?\n|$)/i);
+  
+  const codigo = codigoMatch?.[1] || null;
+  const descricao = descMatch?.[1]?.trim() || statusDescription;
+  
+  // Check if it's a known error
+  const knownError = codigo ? KNOWN_PREFEITURA_ERRORS[codigo] || null : null;
+  
+  // Map known actions
+  const acoesConhecidas: Record<string, string> = {
+    E0014: "Verifique se a nota já existe no Portal Nacional e use 'Vincular Nota Existente'",
+    E0001: "Verifique os dados do certificado digital",
+    E0002: "Verifique os dados do prestador e tomador de serviço",
+  };
+  
+  return {
+    codigo,
+    descricao,
+    acao: codigo ? acoesConhecidas[codigo] || null : null,
+    knownError,
+  };
+}
 
 interface AsaasSettings {
   api_key: string;
@@ -474,6 +540,112 @@ Deno.serve(async (req) => {
         } = params;
 
         log(correlationId, "info", "Iniciando emissão de NFS-e", { client_id, value, contract_id });
+
+        // ============ PRE-EMISSION VALIDATION FOR RE-EMISSION ============
+        // If nfse_history_id provided, check if it already has an asaas_invoice_id
+        // This prevents E0014 (DPS duplicada) errors when re-emitting
+        if (nfse_history_id) {
+          const { data: existing, error: existingError } = await supabase
+            .from("nfse_history")
+            .select("asaas_invoice_id, asaas_status, status, numero_nfse")
+            .eq("id", nfse_history_id)
+            .single();
+          
+          if (!existingError && existing?.asaas_invoice_id) {
+            log(correlationId, "info", "Registro já possui asaas_invoice_id, verificando status no Asaas", {
+              asaas_invoice_id: existing.asaas_invoice_id,
+              local_status: existing.status,
+            });
+            
+            try {
+              // Query current status in Asaas before attempting re-emission
+              const existingInvoice = await asaasRequest(
+                settings, 
+                `/invoices/${existing.asaas_invoice_id}`, 
+                "GET", 
+                undefined, 
+                correlationId
+              );
+              
+              // If already authorized, update local record and return success
+              if (existingInvoice.status === "AUTHORIZED") {
+                log(correlationId, "info", "NFS-e já autorizada no Asaas, atualizando registro local", {
+                  number: existingInvoice.number,
+                });
+                
+                await supabase
+                  .from("nfse_history")
+                  .update({
+                    status: "autorizada",
+                    asaas_status: "AUTHORIZED",
+                    numero_nfse: existingInvoice.number?.toString() || null,
+                    codigo_verificacao: existingInvoice.validationCode || null,
+                    data_autorizacao: new Date().toISOString(),
+                    mensagem_retorno: "Nota já autorizada anteriormente",
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", nfse_history_id);
+                
+                await logNfseEvent(supabase, nfse_history_id, "already_authorized", "info",
+                  `NFS-e já estava autorizada. Número: ${existingInvoice.number}`,
+                  correlationId, { asaas_id: existingInvoice.id, number: existingInvoice.number });
+                
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    already_authorized: true,
+                    invoice_id: existingInvoice.id,
+                    number: existingInvoice.number,
+                    history_id: nfse_history_id,
+                    correlation_id: correlationId,
+                    message: "NFS-e já autorizada anteriormente",
+                  }),
+                  { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+              
+              // If error with E0014 (DPS duplicada), block re-emission
+              if (existingInvoice.status === "ERROR") {
+                const parsed = parseStatusDescription(existingInvoice.statusDescription);
+                
+                if (parsed.codigo === "E0014") {
+                  log(correlationId, "warn", "E0014 detectado - DPS duplicada, não reemitir", {
+                    statusDescription: existingInvoice.statusDescription,
+                  });
+                  
+                  await logNfseEvent(supabase, nfse_history_id, "dps_duplicada", "warn",
+                    "DPS duplicada detectada - nota possivelmente já emitida no Portal Nacional",
+                    correlationId, {
+                      asaas_invoice_id: existingInvoice.id,
+                      status_description: existingInvoice.statusDescription,
+                      sugestao: "Use 'Vincular Nota Existente' para sincronizar",
+                    });
+                  
+                  throw new AsaasApiError(
+                    "E0014: Esta nota já foi emitida no Portal Nacional. Use 'Vincular Nota Existente' para sincronizar.",
+                    409,
+                    "DPS_DUPLICADA",
+                    { 
+                      prefeitura_code: "E0014",
+                      action_required: "link_external",
+                      statusDescription: existingInvoice.statusDescription,
+                    }
+                  );
+                }
+              }
+              
+            } catch (checkError) {
+              // If it's our custom DPS_DUPLICADA error, re-throw
+              if (checkError instanceof AsaasApiError && checkError.code === "DPS_DUPLICADA") {
+                throw checkError;
+              }
+              // Otherwise log and continue with re-emission attempt
+              log(correlationId, "warn", "Erro ao verificar status existente, tentando reemitir", {
+                error: checkError instanceof Error ? checkError.message : String(checkError),
+              });
+            }
+          }
+        }
 
         // 1. Ensure customer exists in Asaas with COMPLETE data (email, address, postalCode)
         // This prevents "E-mail/Endereço/CEP incompleto" errors from Asaas
@@ -1077,6 +1249,68 @@ Deno.serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true, correlation_id: correlationId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "link_external": {
+        // New action: Link an externally emitted NFS-e to a local record
+        const { nfse_history_id, numero_nfse, data_autorizacao, codigo_verificacao } = params;
+        
+        log(correlationId, "info", "Vinculando nota externa", { nfse_history_id, numero_nfse });
+        
+        if (!nfse_history_id) {
+          throw new AsaasApiError("ID do registro é obrigatório", 400, "MISSING_HISTORY_ID");
+        }
+        
+        if (!numero_nfse) {
+          throw new AsaasApiError("Número da NFS-e é obrigatório", 400, "MISSING_NFSE_NUMBER");
+        }
+        
+        // Fetch record to verify it exists
+        const { data: record, error: findError } = await supabase
+          .from("nfse_history")
+          .select("id, status, client_id")
+          .eq("id", nfse_history_id)
+          .single();
+        
+        if (findError || !record) {
+          throw new AsaasApiError(ERROR_CODES.RECORD_NOT_FOUND, 404, "RECORD_NOT_FOUND");
+        }
+        
+        // Update record to authorized status with external number
+        const { error: updateError } = await supabase
+          .from("nfse_history")
+          .update({
+            status: "autorizada",
+            numero_nfse: numero_nfse.toString(),
+            data_autorizacao: data_autorizacao || new Date().toISOString(),
+            codigo_verificacao: codigo_verificacao || null,
+            mensagem_retorno: "Nota vinculada manualmente a emissão externa no Portal Nacional",
+            codigo_retorno: "LINKED_EXTERNAL",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", nfse_history_id);
+        
+        if (updateError) {
+          throw new AsaasApiError("Erro ao atualizar registro", 500, "UPDATE_FAILED", { db_error: updateError.message });
+        }
+        
+        // Log event
+        await logNfseEvent(supabase, nfse_history_id, "linked_external", "info",
+          `Nota vinculada manualmente ao número ${numero_nfse} do Portal Nacional`,
+          correlationId, { numero_nfse, data_autorizacao });
+        
+        log(correlationId, "info", "Nota externa vinculada com sucesso", { numero_nfse });
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            linked: true,
+            numero_nfse,
+            history_id: nfse_history_id,
+            correlation_id: correlationId,
+          }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
