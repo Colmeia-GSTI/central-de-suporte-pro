@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import {
   Dialog,
   DialogContent,
@@ -117,7 +118,7 @@ export function TicketPauseDialog({
       ]);
 
       if (historyError) {
-        console.warn("Failed to insert ticket_history (pause):", historyError);
+        logger.warn("Failed to insert ticket_history (pause)", "Tickets", { error: historyError.message });
       }
     },
     onSuccess: () => {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -89,7 +90,7 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
         comment: internal ? "Comentário interno adicionado" : "Comentário adicionado",
       });
       if (historyError) {
-        console.warn("Failed to insert comment history:", historyError);
+        logger.warn("Failed to insert comment history", "Tickets", { error: historyError.message });
       }
 
       // Disparar notificação para cliente (apenas para comentários não internos)
@@ -100,7 +101,7 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
             event_type: "commented",
             comment: content.substring(0, 200), // Limitar tamanho
           },
-        }).catch(console.error);
+        }).catch((err) => logger.error("Failed to send notification", "Tickets", { error: String(err) }));
       }
     },
     onSuccess: () => {
