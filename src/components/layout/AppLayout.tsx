@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -26,6 +27,8 @@ type Theme = "light" | "dark" | "system";
 
 export function AppLayout({ children, title }: AppLayoutProps) {
   const [theme, setTheme] = useState<Theme>("system");
+  const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
 
   // Realtime subscriptions now handled globally by useUnifiedRealtime
 
@@ -80,6 +83,20 @@ export function AppLayout({ children, title }: AppLayoutProps) {
     }
   };
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      // Determine if searching for ticket number or client
+      const isTicketNumber = /^#?\d+$/.test(searchQuery.trim());
+      if (isTicketNumber) {
+        navigate(`/tickets?search=${encodeURIComponent(searchQuery.trim())}`);
+      } else {
+        navigate(`/clients?search=${encodeURIComponent(searchQuery.trim())}`);
+      }
+      setSearchQuery("");
+    }
+  };
+
   return (
     <SidebarProvider>
       <GlobalProgress />
@@ -104,11 +121,15 @@ export function AppLayout({ children, title }: AppLayoutProps) {
             </div>
             
             {/* Search with glass effect */}
-            <div className="flex-1 max-w-md">
+            <form onSubmit={handleSearch} className="flex-1 max-w-md">
               <div className="relative group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                <Input 
-                  placeholder="Buscar chamados, clientes..." 
+                <Input
+                  type="search"
+                  placeholder="Buscar chamados (#123), clientes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  title="Digite o número do chamado com # ou nome do cliente"
                   className={cn(
                     "pl-9 bg-muted/30 border-border/50",
                     "focus:bg-muted/50 focus:border-primary/50",
@@ -117,7 +138,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
                   )}
                 />
               </div>
-            </div>
+            </form>
 
             {/* Actions */}
             <div className="flex items-center gap-2">

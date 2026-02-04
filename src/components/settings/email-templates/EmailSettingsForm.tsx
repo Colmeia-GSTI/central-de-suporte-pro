@@ -88,8 +88,7 @@ export function EmailSettingsForm() {
       queryClient.invalidateQueries({ queryKey: ["email-settings"] });
       toast.success("Configurações salvas com sucesso!");
     },
-    onError: (error) => {
-      console.error("Error saving settings:", error);
+    onError: () => {
       toast.error("Erro ao salvar configurações");
     },
   });
@@ -125,8 +124,7 @@ export function EmailSettingsForm() {
 
       await updateMutation.mutateAsync({ logo_url: urlData.publicUrl });
       toast.success("Logo atualizada com sucesso!");
-    } catch (error) {
-      console.error("Error uploading logo:", error);
+    } catch {
       toast.error("Erro ao fazer upload da logo");
     } finally {
       setUploading(false);
@@ -144,8 +142,7 @@ export function EmailSettingsForm() {
       await supabase.storage.from("email-assets").remove([fileName]);
       await updateMutation.mutateAsync({ logo_url: null });
       toast.success("Logo removida com sucesso!");
-    } catch (error) {
-      console.error("Error removing logo:", error);
+    } catch {
       toast.error("Erro ao remover logo");
     }
   };

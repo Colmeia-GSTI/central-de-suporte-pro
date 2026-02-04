@@ -101,8 +101,7 @@ export function EmailTemplateEditor({ template, onBack }: EmailTemplateEditorPro
       queryClient.invalidateQueries({ queryKey: ["email-templates"] });
       toast.success("Template salvo com sucesso!");
     },
-    onError: (error) => {
-      console.error("Error saving template:", error);
+    onError: () => {
       toast.error("Erro ao salvar template");
     },
   });
