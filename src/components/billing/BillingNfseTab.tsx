@@ -280,10 +280,14 @@ export function BillingNfseTab() {
       if (error) throw error;
       const result = data as { updated?: number; processed?: number; message?: string };
       if ((result.updated ?? 0) > 0) {
-        toast.success("Status atualizado", { description: `${result.updated} nota(s) atualizada(s)` });
+        toast.success("Status atualizado", { 
+          description: `${result.updated} nota(s) atualizada(s)`,
+          duration: 3000,
+        });
       } else {
         toast.info("Verificação concluída", {
           description: result.message || `${result.processed ?? 0} nota(s) verificadas`,
+          duration: 2000,
         });
       }
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
