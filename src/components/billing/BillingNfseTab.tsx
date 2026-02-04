@@ -42,6 +42,7 @@ import { formatCurrencyBRL } from "@/lib/currency";
 import { getErrorMessage } from "@/lib/utils";
 import { NfseAvulsaDialog } from "@/components/billing/nfse/NfseAvulsaDialog";
 import { NfseDetailsSheet, type NfseWithRelations } from "@/components/billing/nfse/NfseDetailsSheet";
+import { NfseShareMenu } from "@/components/billing/nfse/NfseShareMenu";
 import { NfseEventLogsDialog } from "@/components/billing/nfse/NfseEventLogsDialog";
 import {
   formatCompetenciaLabel,
@@ -177,7 +178,7 @@ export function BillingNfseTab() {
     queryFn: async () => {
       let q = supabase
         .from("nfse_history")
-        .select("*, clients(name, document), contracts(name)", { count: "exact" })
+        .select("*, clients(name, document, email, whatsapp), contracts(name)", { count: "exact" })
         .order("created_at", { ascending: false });
 
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
@@ -605,6 +606,19 @@ export function BillingNfseTab() {
                           >
                             <FileText className="h-4 w-4" />
                           </Button>
+                          <NfseShareMenu
+                            nfse={{
+                              id: n.id,
+                              numero_nfse: n.numero_nfse,
+                              pdf_url: n.pdf_url,
+                              valor_servico: n.valor_servico ?? 0,
+                              clients: n.clients ? {
+                                name: n.clients.name,
+                                email: (n.clients as { email?: string | null }).email ?? null,
+                                whatsapp: (n.clients as { whatsapp?: string | null }).whatsapp ?? null,
+                              } : null,
+                            }}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
