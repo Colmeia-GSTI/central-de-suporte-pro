@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,6 +14,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import {
   Select,
@@ -24,7 +26,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
-import type { Tables } from "@/integrations/supabase/types";
+import { useAuth } from "@/hooks/useAuth";
+import { Eye, EyeOff, Loader2, Lock, ShieldCheck } from "lucide-react";
 
 const licenseSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -41,8 +44,23 @@ const licenseSchema = z.object({
 
 type LicenseFormData = z.infer<typeof licenseSchema>;
 
+// Type for safe view (masked key)
+interface LicenseSafe {
+  id: string;
+  client_id: string;
+  name: string;
+  vendor: string | null;
+  total_licenses: number;
+  used_licenses: number;
+  purchase_date: string | null;
+  expire_date: string | null;
+  purchase_value: number | null;
+  notes: string | null;
+  license_key_masked: string | null;
+}
+
 interface LicenseFormProps {
-  license?: Tables<"software_licenses"> | null;
+  license?: LicenseSafe | null;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -50,6 +68,13 @@ interface LicenseFormProps {
 export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { roles } = useAuth();
+  const isAdmin = roles.includes("admin");
+  
+  const [showKey, setShowKey] = useState(false);
+  const [loadingKey, setLoadingKey] = useState(false);
+  const [realKey, setRealKey] = useState<string | null>(null);
+  const [keyChanged, setKeyChanged] = useState(false);
 
   const form = useForm<LicenseFormData>({
     resolver: zodResolver(licenseSchema),
@@ -57,7 +82,7 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
       name: license?.name || "",
       client_id: license?.client_id || "",
       vendor: license?.vendor || "",
-      license_key: license?.license_key || "",
+      license_key: "", // Never pre-fill with real key for security
       total_licenses: license?.total_licenses || 1,
       used_licenses: license?.used_licenses || 0,
       purchase_date: license?.purchase_date || "",
@@ -88,13 +113,43 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
     },
   });
 
+  // Fetch real license key (admin only)
+  const revealKey = async () => {
+    if (!license || !isAdmin) return;
+    
+    setLoadingKey(true);
+    try {
+      const { data, error } = await supabase.rpc("get_license_key", {
+        license_id: license.id,
+      });
+      
+      if (error) throw error;
+      
+      setRealKey(data);
+      setShowKey(true);
+      form.setValue("license_key", data || "");
+      
+      toast({
+        title: "Chave revelada",
+        description: "Acesso registrado em auditoria.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao revelar chave",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingKey(false);
+    }
+  };
+
   const mutation = useMutation({
     mutationFn: async (data: LicenseFormData) => {
-      const payload = {
+      const payload: Record<string, any> = {
         name: data.name,
         client_id: data.client_id,
         vendor: data.vendor || null,
-        license_key: data.license_key || null,
         total_licenses: data.total_licenses,
         used_licenses: data.used_licenses,
         purchase_date: data.purchase_date || null,
@@ -102,6 +157,17 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
         purchase_value: data.purchase_value || null,
         notes: data.notes || null,
       };
+
+      // Only include license_key if:
+      // 1. It's a new license and key is provided
+      // 2. It's an edit and the key was explicitly changed
+      if (!license) {
+        // New license - include key if provided
+        payload.license_key = data.license_key || null;
+      } else if (keyChanged && data.license_key) {
+        // Edit - only update key if explicitly changed
+        payload.license_key = data.license_key;
+      }
 
       if (license) {
         const { error } = await supabase.from("software_licenses").update(payload).eq("id", license.id);
@@ -125,6 +191,11 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
   const handleCancel = () => {
     clearDraft();
     onCancel();
+  };
+
+  const handleKeyChange = (value: string) => {
+    setKeyChanged(true);
+    form.setValue("license_key", value);
   };
 
   return (
@@ -190,10 +261,71 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
             name="license_key"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Chave de Licença</FormLabel>
-                <FormControl>
-                  <Input placeholder="XXXXX-XXXXX-XXXXX" {...field} />
-                </FormControl>
+                <FormLabel className="flex items-center gap-2">
+                  <Lock className="h-3 w-3" />
+                  Chave de Licença
+                  {license && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      (protegida)
+                    </span>
+                  )}
+                </FormLabel>
+                <div className="flex gap-2">
+                  <FormControl>
+                    <div className="relative flex-1">
+                      <Input
+                        type={showKey ? "text" : "password"}
+                        placeholder={license ? (license.license_key_masked || "Não definida") : "XXXXX-XXXXX-XXXXX"}
+                        {...field}
+                        onChange={(e) => handleKeyChange(e.target.value)}
+                        className="pr-10"
+                        disabled={license && !isAdmin && !realKey}
+                      />
+                      {field.value && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowKey(!showKey)}
+                        >
+                          {showKey ? (
+                            <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </FormControl>
+                  {license && isAdmin && !realKey && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={revealKey}
+                      disabled={loadingKey}
+                      className="shrink-0"
+                    >
+                      {loadingKey ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-4 w-4 mr-1" />
+                          Revelar
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {license && (
+                  <FormDescription className="text-xs">
+                    {isAdmin 
+                      ? "Clique em 'Revelar' para ver a chave completa. O acesso será registrado."
+                      : "Apenas administradores podem visualizar chaves de licença."
+                    }
+                  </FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
