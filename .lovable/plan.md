@@ -1,194 +1,146 @@
 
-# Migrar Sistema de Email de SMTP para Resend
+# Adicionar Compartilhamento de NFS-e por Email e WhatsApp
 
 ## Objetivo
 
-Substituir completamente a infraestrutura de email SMTP por Resend API, simplificando a configuracao e melhorando a confiabilidade do envio de emails transacionais.
+Adicionar icone de PDF na tabela de NFS-e e opcoes de envio direto por Email (SMTP) e WhatsApp (Evolution API), mantendo o sistema SMTP ja configurado.
 
 ---
 
 ## Analise do Sistema Atual
 
-### Componentes que usam SMTP
+### Infraestrutura disponivel
 
-| Componente | Uso |
-|------------|-----|
-| `send-email-smtp` (Edge Function) | Funcao principal de envio via denomailer |
-| `send-notification` (Edge Function) | Orquestrador multi-canal (email/whatsapp/telegram) |
-| `resend-payment-notification` | Reenvio de faturas |
-| `batch-collection-notification` | Cobranca em lote |
-| `send-ticket-notification` | Notificacoes de chamados |
-| `poll-boleto-status` | Aviso de boleto disponivel |
-| `check-no-contact-tickets` | Alertas SLA para tecnicos |
-| `notify-due-invoices` | Faturas a vencer |
-| `check-certificate-expiry` | Certificados expirando |
-| `SmtpConfigForm.tsx` | Tela de configuracao |
-| `IntegrationsTab.tsx` | Aba de integracoes |
-| `IntegrationStatusPanel.tsx` | Painel de status |
-
-### Secrets Atuais
-
-Nao existe `RESEND_API_KEY` configurado. Sera necessario solicitar ao usuario.
+| Componente | Status | Local |
+|------------|--------|-------|
+| Botao PDF na tabela | Implementado | `BillingNfseTab.tsx:591-607` |
+| Botao XML na tabela | Implementado | `BillingNfseTab.tsx:574-590` |
+| Edge function Email | Pronta | `send-email-smtp` |
+| Edge function WhatsApp | Pronta | `send-whatsapp` |
+| Storage de arquivos | Bucket `nfse-files` | Supabase Storage |
+| Campos cliente | email, phone, whatsapp | Tabela `clients` |
+| Campos NFS-e | pdf_url, xml_url, client_id | Tabela `nfse_history` |
 
 ---
 
-## Arquitetura Proposta
+## Solucao Proposta
 
-```text
-ANTES:
-SmtpConfigForm -> integration_settings (smtp) -> send-email-smtp -> denomailer -> Servidor SMTP
+### 1. Nova Edge Function: `send-nfse-notification`
 
-DEPOIS:
-ResendConfigForm -> integration_settings (resend) -> send-email-resend -> Resend API
-```
+Criar uma edge function dedicada para envio de NFS-e via Email (SMTP) e WhatsApp.
 
----
-
-## Etapas de Implementacao
-
-### 1. Nova Edge Function: `send-email-resend`
-
-Criar uma edge function simplificada usando a API Resend.
-
-**Arquivo:** `supabase/functions/send-email-resend/index.ts`
+**Arquivo:** `supabase/functions/send-nfse-notification/index.ts`
 
 **Funcionalidades:**
-- Buscar configuracoes de `integration_settings` (tipo `resend`)
-- Enviar email via `npm:resend@2.0.0`
-- Validacao de inputs (email, subject, html)
-- Logging para debug
+- Receber `nfse_history_id` e `channels` (email e/ou whatsapp)
+- Buscar dados da NFS-e com join em `clients`
+- Gerar URL assinada do PDF (valida por 24h)
+- Para Email: chamar `send-email-smtp` com template profissional
+- Para WhatsApp: chamar `send-whatsapp` com mensagem formatada
+- Registrar log em `nfse_event_logs`
 
-**Estrutura da Configuracao:**
+**Request:**
 ```typescript
-interface ResendSettings {
-  api_key: string;
-  from_email: string;
-  from_name: string;
+{
+  nfse_history_id: string;
+  channels: ("email" | "whatsapp")[];
 }
 ```
 
-**Exemplo de Uso:**
-```typescript
-import { Resend } from "npm:resend@2.0.0";
+**Template de Email:**
+```text
+Assunto: NFS-e #77 - [Cliente] - R$ 1.461,44
 
-const resend = new Resend(settings.api_key);
+Prezado(a) [Nome do Cliente],
 
-await resend.emails.send({
-  from: `${settings.from_name} <${settings.from_email}>`,
-  to: recipients,
-  subject: sanitizedSubject,
-  html: sanitizedHtml,
-});
+Segue a Nota Fiscal de Servico Eletronica referente aos servicos prestados.
+
+Dados da NFS-e:
+- Numero: 77
+- Competencia: Fevereiro/2026
+- Valor: R$ 1.461,44
+
+[Baixar PDF]
+
+Atenciosamente,
+[Nome da Empresa]
 ```
 
-### 2. Nova Tela de Configuracao: `ResendConfigForm`
+**Mensagem WhatsApp:**
+```text
+Ola, [Nome]!
 
-Criar componente de configuracao simplificado para Resend.
+Segue a NFS-e #77 referente aos servicos prestados em fev/2026.
 
-**Arquivo:** `src/components/settings/integrations/ResendConfigForm.tsx`
+Valor: R$ 1.461,44
 
-**Campos:**
-- API Key (tipo password)
-- Email Remetente (ex: `noreply@seudominio.com`)
-- Nome Remetente (ex: `Colmeia TI`)
-- Switch Ativo/Inativo
-- Botao de Teste
-- Campo para email de teste
+Baixar PDF:
+[URL]
+
+Atenciosamente, [Empresa]
+```
+
+### 2. Novo Componente: `NfseShareMenu`
+
+Menu dropdown para compartilhamento de NFS-e.
+
+**Arquivo:** `src/components/billing/nfse/NfseShareMenu.tsx`
+
+**Props:**
+```typescript
+interface NfseShareMenuProps {
+  nfse: {
+    id: string;
+    numero_nfse: string | null;
+    pdf_url: string | null;
+    valor_servico: number;
+    clients: {
+      name: string;
+      email: string | null;
+      whatsapp: string | null;
+    } | null;
+  };
+}
+```
+
+**Funcionalidades:**
+- Dropdown com opcoes: Enviar por Email, Enviar por WhatsApp, Copiar Link
+- Validacao: verifica se cliente tem email/whatsapp cadastrado
+- Toast de erro se campo nao preenchido
+- Loading state durante envio
+- Desabilitado quando nao tem PDF
+
+**Layout visual:**
+```text
+[Share2 icon v]
+  |-- Mail      Enviar por Email
+  |-- MessageCircle  Enviar por WhatsApp
+  |-- Copy      Copiar Link do PDF
+```
+
+### 3. Atualizar Tabela de NFS-e
+
+**Arquivo:** `src/components/billing/BillingNfseTab.tsx`
+
+Adicionar `NfseShareMenu` na coluna de Arquivos, apos os botoes existentes.
+
+**Layout atualizado (linha ~607):**
+```text
+[Historico] [XML] [PDF] [Compartilhar v]
+```
+
+O join com clients ja existe na query, basta usar os dados.
+
+### 4. Atualizar Detalhes da NFS-e
+
+**Arquivo:** `src/components/billing/nfse/NfseDetailsSheet.tsx`
+
+Adicionar botoes de envio no footer do sheet (linha ~774).
 
 **Layout:**
 ```text
-+----------------------------------------------+
-| [Logo] Resend - Email Transacional           |
-|        Envio de emails via API               |
-+----------------------------------------------+
-| API Key: [_________________________]         |
-| Email Remetente: [noreply@exemplo.com]       |
-| Nome Remetente: [Sistema Colmeia]            |
-|                                              |
-| [Testar] [Salvar]                            |
-+----------------------------------------------+
+[Enviar Email] [Enviar WhatsApp] [Fechar]
 ```
-
-### 3. Atualizar IntegrationsTab
-
-Substituir `SmtpConfigForm` por `ResendConfigForm` na aba de comunicacao.
-
-**Arquivo:** `src/components/settings/integrations/IntegrationsTab.tsx`
-
-**Alteracao:**
-```diff
-- import { SmtpConfigForm } from "./integrations/SmtpConfigForm";
-+ import { ResendConfigForm } from "./integrations/ResendConfigForm";
-
-<TabsContent value="comunicacao" className="space-y-4 mt-4">
--   <SmtpConfigForm />
-+   <ResendConfigForm />
-    <GoogleCalendarConfigForm />
-</TabsContent>
-```
-
-### 4. Atualizar IntegrationStatusPanel
-
-Mudar referencia de `smtp` para `resend` no painel de status.
-
-**Arquivo:** `src/components/settings/integrations/IntegrationStatusPanel.tsx`
-
-**Alteracao:**
-```diff
-const INTEGRATION_META = {
--   smtp: { name: "Email SMTP", icon: <Mail />, category: "Comunicacao" },
-+   resend: { name: "Email (Resend)", icon: <Mail />, category: "Comunicacao" },
-    // ... demais integracoes
-};
-```
-
-### 5. Atualizar Edge Functions que Enviam Email
-
-Modificar todas as edge functions para usar `send-email-resend` ao inves de `send-email-smtp`.
-
-**Arquivos a modificar:**
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `send-notification/index.ts` | Trocar logica SMTP por chamada a send-email-resend |
-| `resend-payment-notification/index.ts` | `invoke("send-email-smtp")` -> `invoke("send-email-resend")` |
-| `batch-collection-notification/index.ts` | Mesma alteracao |
-| `send-ticket-notification/index.ts` | Mesma alteracao |
-| `poll-boleto-status/index.ts` | Mesma alteracao |
-| `check-no-contact-tickets/index.ts` | Mesma alteracao |
-| `notify-due-invoices/index.ts` | Verificar e atualizar |
-| `check-certificate-expiry/index.ts` | Verificar e atualizar |
-
-**Padrao de alteracao em cada funcao:**
-```diff
-- const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
-+ const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
-    body: {
-      to: emailTo,
-      subject: "...",
-      html: emailHtml,
-    },
-  });
-```
-
-### 6. Simplificar `send-notification`
-
-A funcao `send-notification` tem logica SMTP embutida. Atualizar para usar Resend.
-
-**Alteracoes:**
-- Remover import de `SMTPClient` (denomailer)
-- Alterar busca de configuracoes de `smtp` para `resend`
-- Usar chamada interna ou SDK Resend diretamente
-
-### 7. Remover Arquivos Obsoletos
-
-Apos migracao bem-sucedida, remover:
-
-| Arquivo | Acao |
-|---------|------|
-| `supabase/functions/send-email-smtp/` | Deletar pasta |
-| `src/components/settings/integrations/SmtpConfigForm.tsx` | Deletar arquivo |
-| Registro `smtp` em `integration_settings` | Manter para historico ou deletar |
 
 ---
 
@@ -196,98 +148,107 @@ Apos migracao bem-sucedida, remover:
 
 | Arquivo | Descricao |
 |---------|-----------|
-| `supabase/functions/send-email-resend/index.ts` | Nova edge function |
-| `src/components/settings/integrations/ResendConfigForm.tsx` | Novo formulario |
+| `supabase/functions/send-nfse-notification/index.ts` | Edge function para envio de NFS-e |
+| `src/components/billing/nfse/NfseShareMenu.tsx` | Componente dropdown de compartilhamento |
 
 ## Arquivos a Modificar
 
 | Arquivo | Descricao |
 |---------|-----------|
-| `src/components/settings/IntegrationsTab.tsx` | Trocar SmtpConfigForm por ResendConfigForm |
-| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Atualizar meta de smtp para resend |
-| `supabase/functions/send-notification/index.ts` | Remover SMTP, usar Resend |
-| `supabase/functions/resend-payment-notification/index.ts` | Atualizar invoke |
-| `supabase/functions/batch-collection-notification/index.ts` | Atualizar invoke |
-| `supabase/functions/send-ticket-notification/index.ts` | Atualizar invoke |
-| `supabase/functions/poll-boleto-status/index.ts` | Atualizar invoke |
-| `supabase/functions/check-no-contact-tickets/index.ts` | Atualizar invoke |
-
-## Arquivos a Deletar
-
-| Arquivo | Motivo |
-|---------|--------|
-| `supabase/functions/send-email-smtp/index.ts` | Substituido por Resend |
-| `src/components/settings/integrations/SmtpConfigForm.tsx` | Substituido por ResendConfigForm |
+| `src/components/billing/BillingNfseTab.tsx` | Adicionar NfseShareMenu na tabela |
+| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Adicionar botoes de envio no footer |
 
 ---
 
-## Configuracao do Resend
+## Fluxo de Compartilhamento
 
-### Pre-requisitos para o Usuario
+```text
+USUARIO CLICA COMPARTILHAR
+        |
+        v
+    TEM PDF?
+        |
+   +----+----+
+   |         |
+  NAO       SIM
+   |         |
+   v         v
+ Toast    Exibe Menu
+ erro     [Email] [WhatsApp]
+             |
+             v
+    SELECIONA CANAL
+             |
+       +-----+-----+
+       |           |
+    EMAIL       WHATSAPP
+       |           |
+       v           v
+ TEM EMAIL?   TEM WHATSAPP?
+       |           |
+   +---+---+   +---+---+
+   |       |   |       |
+  NAO     SIM NAO     SIM
+   |       |   |       |
+   v       v   v       v
+ Toast  Envia Toast  Envia
+ erro   SMTP  erro   Evolution
+             |           |
+             v           v
+          Log em nfse_event_logs
+             |
+             v
+       Toast sucesso
+```
 
-1. Criar conta em https://resend.com
-2. Validar dominio em https://resend.com/domains
-3. Gerar API Key em https://resend.com/api-keys
-4. Configurar no sistema
+---
 
-### Estrutura em `integration_settings`
+## Detalhes Tecnicos
 
-```json
+### URL Assinada para PDF
+
+Para emails, a URL do PDF precisa ter validade maior (24h):
+
+```typescript
+const { data } = await supabase.storage
+  .from("nfse-files")
+  .createSignedUrl(path, 86400); // 24 horas
+```
+
+### Validacao Pre-Envio
+
+Verificar antes de enviar:
+- NFS-e tem `pdf_url` preenchido
+- Cliente tem `email` cadastrado (para canal email)
+- Cliente tem `whatsapp` cadastrado (para canal whatsapp)
+
+### Log de Eventos
+
+Registrar em `nfse_event_logs`:
+```typescript
 {
-  "integration_type": "resend",
-  "is_active": true,
-  "settings": {
-    "api_key": "re_xxxxxxxxxxxx",
-    "from_email": "noreply@seudominio.com",
-    "from_name": "Colmeia TI"
+  nfse_history_id: id,
+  event_type: "compartilhamento",
+  event_data: {
+    channel: "email" | "whatsapp",
+    recipient: "email@..." | "5511...",
+    sent_at: new Date()
   }
 }
 ```
 
 ---
 
-## Beneficios da Migracao
+## Sobre Armazenamento
 
-1. **Simplicidade**: Apenas API Key, sem configurar servidor SMTP
-2. **Confiabilidade**: API gerenciada com alta disponibilidade
-3. **Rastreabilidade**: Dashboard Resend para monitorar entregas
-4. **Menos Campos**: De 7 campos (host, porta, usuario, senha, TLS, from_email, from_name) para 3 (api_key, from_email, from_name)
-5. **Sem Problemas de TLS/SSL**: API REST simples
+O sistema ja utiliza Supabase Storage (bucket `nfse-files`), que e compativel com S3 e suficiente para as necessidades. Nao e necessario migrar para S3 externo.
 
 ---
 
-## Fluxo de Migracao
+## Beneficios
 
-```text
-1. CRIAR send-email-resend
-         |
-         v
-2. CRIAR ResendConfigForm
-         |
-         v
-3. ATUALIZAR IntegrationsTab
-   (trocar SMTP por Resend)
-         |
-         v
-4. ATUALIZAR send-notification
-   (remover SMTP, usar Resend)
-         |
-         v
-5. ATUALIZAR demais edge functions
-   (invoke send-email-resend)
-         |
-         v
-6. TESTAR envio de emails
-         |
-         v
-7. DELETAR arquivos SMTP
-```
-
----
-
-## Consideracoes de Seguranca
-
-- API Key armazenada em `integration_settings` (banco de dados)
-- Acesso restrito a usuarios com permissao de configuracao
-- Logs de auditoria para alteracoes de configuracao
-- Validacao de inputs (email, HTML sanitizado)
+1. **Produtividade**: Envio direto de NFS-e sem sair do sistema
+2. **Rastreabilidade**: Logs de envio em `nfse_event_logs`
+3. **Aproveitamento**: Reutiliza SMTP e Evolution API ja configurados
+4. **Flexibilidade**: Suporta ambos os canais (Email e WhatsApp)
+5. **Consistencia**: Mesmo padrao visual de outros envios do sistema
