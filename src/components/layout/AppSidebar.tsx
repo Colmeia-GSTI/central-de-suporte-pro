@@ -36,6 +36,8 @@ import {
   AlertTriangle,
   ShieldCheck,
   Briefcase,
+  Wrench,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -73,6 +75,7 @@ const operationsMenuItems: MenuItemType[] = [
 // FINANCEIRO - Gestão financeira
 const financialMenuItems: MenuItemType[] = [
   { title: "Faturamento", icon: Receipt, path: "/billing", tooltip: "Faturas, boletos e NFS-e" },
+  { title: "Serviços", icon: Wrench, path: "/billing?tab=services", tooltip: "Catálogo de serviços e preços" },
   { title: "Inadimplência", icon: AlertTriangle, path: "/billing/delinquency", tooltip: "Relatório de inadimplência" },
   { title: "Relatórios", icon: BarChart3, path: "/reports", tooltip: "Relatórios e análises" },
 ];
@@ -101,6 +104,7 @@ const pathToModule: Record<string, Module> = {
   "/gamification": "gamification",
   "/knowledge": "knowledge",
   "/billing": "financial",
+  "/billing?tab=services": "services",
   "/billing/delinquency": "financial",
   "/reports": "reports",
   "/settings": "settings",
@@ -126,10 +130,16 @@ export function AppSidebar() {
       if (specialRoutes[item.path]) {
         return roles.some(role => specialRoutes[item.path].includes(role as AppRole));
       }
-      
-      // Check permission module
+
+      // Check permission module (supports paths with query strings)
       const module = pathToModule[item.path];
-      if (!module) return true;
+      if (!module) {
+        // Fallback: check base path without query string
+        const basePath = item.path.split("?")[0];
+        const baseModule = pathToModule[basePath];
+        if (baseModule) return can(baseModule, "view");
+        return true;
+      }
       return can(module, "view");
     });
   };
@@ -141,7 +151,12 @@ export function AppSidebar() {
   const filteredAdminItems = filterMenuItems(adminMenuItems);
 
   const MenuItem = ({ item }: { item: MenuItemType }) => {
-    const isActive = location.pathname === item.path;
+    // Check if path includes query string
+    const itemPathBase = item.path.split("?")[0];
+    const itemQuery = item.path.includes("?") ? item.path.split("?")[1] : null;
+    const isActive = itemQuery
+      ? location.pathname === itemPathBase && location.search.includes(itemQuery)
+      : location.pathname === item.path;
     const showTicketBadge = item.path === "/tickets" && ticketCount && ticketCount > 0;
     
     const handleClick = () => {
