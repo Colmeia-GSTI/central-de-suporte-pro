@@ -175,6 +175,7 @@ export function NfseDetailsSheet(props: {
       return data;
     },
     enabled: !!nfse?.client_id,
+    staleTime: 0, // Sempre buscar dados frescos para validação
   });
 
   const { data: companyForValidation } = useQuery({
