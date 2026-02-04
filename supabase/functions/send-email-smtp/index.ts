@@ -213,6 +213,8 @@ serve(async (req) => {
       userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
     } else if (errorMsg.includes("certificate") || errorMsg.includes("TLS")) {
       userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
+    } else if (errorMsg.includes("554") || errorMsg.includes("policy") || errorMsg.includes("relay")) {
+      userMessage = "O servidor SMTP rejeitou o email. Isso pode ocorrer quando o servidor não permite envio para domínios externos. Verifique as configurações de relay do seu provedor SMTP.";
     }
     
     return new Response(
