@@ -333,10 +333,10 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                   },
                 });
               } else {
-                await supabase.functions.invoke("banco-inter", {
+              await supabase.functions.invoke("banco-inter", {
                   body: {
-                    action: "create_boleto",
                     invoice_id: invoice.id,
+                    payment_type: data.payment_preference === "pix" ? "pix" : "boleto",
                   },
                 });
               }
@@ -350,7 +350,10 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           if (data.send_notification) {
             try {
               await supabase.functions.invoke("resend-payment-notification", {
-                body: { invoice_id: invoice.id },
+                body: { 
+                  invoice_id: invoice.id,
+                  channels: ["email"],
+                },
               });
             } catch (notifError) {
               console.error("Error sending notification:", notifError);
