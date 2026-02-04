@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Loader2, Phone, MessageCircle, CheckCircle2, XCircle } from "lucide-react";
-import { cn, formatPhone, getErrorMessage } from "@/lib/utils";
+import { cn, formatPhone, formatCEP, getErrorMessage } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
@@ -89,7 +89,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       address: client?.address || "",
       city: client?.city || "",
       state: client?.state || "",
-      zip_code: client?.zip_code || "",
+      zip_code: formatCEP(client?.zip_code) || "",
       notes: client?.notes || "",
       is_active: client?.is_active ?? true,
     },
@@ -170,7 +170,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       form.setValue("address", `${data.logradouro || ""}, ${data.numero || ""}${data.complemento ? ` - ${data.complemento}` : ""}`);
       form.setValue("city", data.municipio || "");
       form.setValue("state", data.uf || "");
-      form.setValue("zip_code", data.cep?.replace(/\D/g, "") || "");
+      form.setValue("zip_code", formatCEP(data.cep) || "");
 
       toast({
         title: "Dados preenchidos",
@@ -287,7 +287,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         address: data.address || null,
         city: data.city || null,
         state: data.state || null,
-        zip_code: data.zip_code || null,
+        zip_code: data.zip_code?.replace(/\D/g, "") || null,
         notes: data.notes || null,
         is_active: data.is_active,
       };
@@ -598,7 +598,15 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
               <FormItem>
                 <FormLabel>CEP</FormLabel>
                 <FormControl>
-                  <Input placeholder="00000-000" {...field} />
+                  <Input 
+                    placeholder="00000-000" 
+                    maxLength={9}
+                    {...field}
+                    onChange={(e) => {
+                      const formatted = formatCEP(e.target.value);
+                      field.onChange(formatted);
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
