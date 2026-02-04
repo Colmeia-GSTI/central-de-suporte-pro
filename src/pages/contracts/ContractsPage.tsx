@@ -20,10 +20,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt } from "lucide-react";
+import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ContractAdjustmentDialog } from "@/components/contracts/ContractAdjustmentDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -60,6 +61,10 @@ export default function ContractsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; contract: ContractWithClient | null }>({
+    open: false,
+    contract: null,
+  });
+  const [adjustmentDialog, setAdjustmentDialog] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
     contract: null,
   });
@@ -250,6 +255,23 @@ export default function ContractsPage() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <PermissionGate module="contracts" action="edit">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setAdjustmentDialog({ open: true, contract })}
+                                  disabled={contract.status !== "active"}
+                                >
+                                  <TrendingUp className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Aplicar reajuste anual</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -288,6 +310,20 @@ export default function ContractsPage() {
         onConfirm={handleConfirmDelete}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* Contract Adjustment Dialog */}
+      {adjustmentDialog.contract && (
+        <ContractAdjustmentDialog
+          open={adjustmentDialog.open}
+          onOpenChange={(open) => setAdjustmentDialog({ ...adjustmentDialog, open })}
+          contract={{
+            id: adjustmentDialog.contract.id,
+            name: adjustmentDialog.contract.name,
+            monthly_value: adjustmentDialog.contract.monthly_value,
+            adjustment_index: adjustmentDialog.contract.adjustment_index,
+          }}
+        />
+      )}
     </AppLayout>
   );
 }
