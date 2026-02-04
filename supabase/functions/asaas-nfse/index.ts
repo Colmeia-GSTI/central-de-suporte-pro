@@ -335,6 +335,13 @@ Deno.serve(async (req) => {
           invoice_id,
           contract_id,
           competencia,
+          // NFS-e Nacional 2026 - Tributos Federais
+          pis_value,
+          cofins_value,
+          csll_value,
+          irrf_value,
+          inss_value,
+          valor_liquido,
         } = params;
 
         log(correlationId, "info", "Iniciando emissão de NFS-e", { client_id, value, contract_id });
@@ -389,7 +396,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 3. Create nfse_history record if not provided
+        // 3. Create nfse_history record if not provided (with NFS-e Nacional 2026 fields)
         let historyId = nfse_history_id;
         if (!historyId) {
           const { data: historyRecord, error: historyError } = await supabase
@@ -405,6 +412,15 @@ Deno.serve(async (req) => {
               status: "processando",
               ambiente: settings.environment === "production" ? "producao" : "homologacao",
               aliquota: iss_rate || null,
+              // NFS-e Nacional 2026 - Retenções
+              iss_retido: retain_iss || false,
+              valor_iss_retido: retain_iss ? parseFloat(value) * ((iss_rate || 0) / 100) : 0,
+              valor_pis: pis_value || 0,
+              valor_cofins: cofins_value || 0,
+              valor_csll: csll_value || 0,
+              valor_irrf: irrf_value || 0,
+              valor_inss: inss_value || 0,
+              valor_liquido: valor_liquido || parseFloat(value),
             })
             .select("id")
             .single();
@@ -418,8 +434,8 @@ Deno.serve(async (req) => {
           
           // Log event: created
           await logNfseEvent(supabase, historyId, "created", "info",
-            `NFS-e iniciada para ${client.name}. Valor: R$ ${parseFloat(value).toFixed(2)}`,
-            correlationId, { client_id, value, contract_id });
+            `NFS-e iniciada para ${client.name}. Valor: R$ ${parseFloat(value).toFixed(2)}${retain_iss ? ` (ISS Retido)` : ""}`,
+            correlationId, { client_id, value, contract_id, retain_iss, valor_liquido });
         }
 
         // 4. Build invoice payload
@@ -439,10 +455,16 @@ Deno.serve(async (req) => {
           invoicePayload.payment = payment_id;
         }
 
-        if (typeof retain_iss === "boolean" || iss_rate) {
+        // NFS-e Nacional 2026 - Tributos
+        if (typeof retain_iss === "boolean" || iss_rate || pis_value || cofins_value || csll_value || irrf_value || inss_value) {
           invoicePayload.taxes = {
             retainIss: retain_iss || false,
             iss: iss_rate || 0,
+            pis: pis_value || 0,
+            cofins: cofins_value || 0,
+            csll: csll_value || 0,
+            irrf: irrf_value || 0,
+            inss: inss_value || 0,
           };
         }
 
@@ -528,6 +550,15 @@ Deno.serve(async (req) => {
           aliquota,
           competencia,
           invoice_id,
+          // NFS-e Nacional 2026 - Tributos Federais
+          retain_iss,
+          iss_rate,
+          pis_value,
+          cofins_value,
+          csll_value,
+          irrf_value,
+          inss_value,
+          valor_liquido,
         } = params;
 
         log(correlationId, "info", "Iniciando emissão de NFS-e avulsa", { client_id, value });
@@ -577,7 +608,11 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 3. Create nfse_history record
+        // 3. Create nfse_history record (with NFS-e Nacional 2026 fields)
+        const issRetidoValue = retain_iss || false;
+        const aliquotaIss = iss_rate || aliquota || 0;
+        const valorIssRetido = issRetidoValue ? parseFloat(value) * (aliquotaIss / 100) : 0;
+        
         const { data: historyRecord, error: historyError } = await supabase
           .from("nfse_history")
           .insert({
@@ -589,11 +624,20 @@ Deno.serve(async (req) => {
             descricao_servico: service_description,
             codigo_tributacao: service_code,
             cnae: cnae || null,
-            aliquota: aliquota || null,
+            aliquota: aliquotaIss || null,
             provider: "asaas",
             status: "processando",
             ambiente: settings.environment === "production" ? "producao" : "homologacao",
             municipal_service_id: municipalServiceId,
+            // NFS-e Nacional 2026 - Retenções
+            iss_retido: issRetidoValue,
+            valor_iss_retido: valorIssRetido,
+            valor_pis: pis_value || 0,
+            valor_cofins: cofins_value || 0,
+            valor_csll: csll_value || 0,
+            valor_irrf: irrf_value || 0,
+            valor_inss: inss_value || 0,
+            valor_liquido: valor_liquido || parseFloat(value),
           })
           .select("id")
           .single();
@@ -623,10 +667,16 @@ Deno.serve(async (req) => {
           invoicePayload.municipalServiceId = municipalServiceId;
         }
 
-        if (aliquota) {
+        // NFS-e Nacional 2026 - Tributos
+        if (aliquotaIss || issRetidoValue || pis_value || cofins_value || csll_value || irrf_value || inss_value) {
           invoicePayload.taxes = {
-            retainIss: false,
-            iss: aliquota,
+            retainIss: issRetidoValue,
+            iss: aliquotaIss,
+            pis: pis_value || 0,
+            cofins: cofins_value || 0,
+            csll: csll_value || 0,
+            irrf: irrf_value || 0,
+            inss: inss_value || 0,
           };
         }
 

@@ -1,0 +1,177 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight, DollarSign } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { calcularRetencoes, formatarReais } from "@/lib/nfse-retencoes";
+
+export interface TributacaoData {
+  issRetido: boolean;
+  aliquotaIss: number;
+  valorPis: number;
+  valorCofins: number;
+  valorCsll: number;
+  valorIrrf: number;
+  valorInss: number;
+}
+
+interface NfseTributacaoSectionProps {
+  valorServico: number;
+  aliquotaIss: number;
+  data: TributacaoData;
+  onChange: (data: TributacaoData) => void;
+}
+
+export function NfseTributacaoSection({
+  valorServico,
+  aliquotaIss,
+  data,
+  onChange,
+}: NfseTributacaoSectionProps) {
+  const [federaisOpen, setFederaisOpen] = useState(false);
+
+  const result = calcularRetencoes({
+    valorServico,
+    aliquotaIss,
+    issRetido: data.issRetido,
+    valorPis: data.valorPis,
+    valorCofins: data.valorCofins,
+    valorCsll: data.valorCsll,
+    valorIrrf: data.valorIrrf,
+    valorInss: data.valorInss,
+  });
+
+  const hasFederalRetentions =
+    data.valorPis > 0 ||
+    data.valorCofins > 0 ||
+    data.valorCsll > 0 ||
+    data.valorIrrf > 0 ||
+    data.valorInss > 0;
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <DollarSign className="h-4 w-4" />
+        Tributação (Padrão Nacional 2026)
+      </div>
+
+      {/* Alíquota ISS */}
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">Alíquota ISS:</span>
+        <span className="font-medium">{aliquotaIss.toFixed(2)}%</span>
+      </div>
+
+      {/* ISS Retido */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label className="text-sm">ISS Retido pelo Tomador</Label>
+          <p className="text-xs text-muted-foreground">
+            Quando o cliente retém o ISS na fonte
+          </p>
+        </div>
+        <Switch
+          checked={data.issRetido}
+          onCheckedChange={(checked) =>
+            onChange({ ...data, issRetido: checked })
+          }
+        />
+      </div>
+
+      {data.issRetido && (
+        <div className="flex items-center justify-between text-sm bg-amber-50 dark:bg-amber-950/30 rounded-md px-3 py-2">
+          <span className="text-amber-800 dark:text-amber-200">
+            Valor ISS a Reter:
+          </span>
+          <span className="font-medium text-amber-900 dark:text-amber-100">
+            {formatarReais(result.valorIssRetido)}
+          </span>
+        </div>
+      )}
+
+      {/* Tributos Federais (Collapsible) */}
+      <Collapsible open={federaisOpen} onOpenChange={setFederaisOpen}>
+        <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full">
+          {federaisOpen ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+          <span>Tributos Federais Retidos (opcional)</span>
+          {hasFederalRetentions && (
+            <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+              {formatarReais(
+                data.valorPis +
+                  data.valorCofins +
+                  data.valorCsll +
+                  data.valorIrrf +
+                  data.valorInss
+              )}
+            </span>
+          )}
+        </CollapsibleTrigger>
+
+        <CollapsibleContent className="pt-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">PIS</Label>
+              <CurrencyInput
+                value={data.valorPis}
+                onChange={(v) => onChange({ ...data, valorPis: v })}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">COFINS</Label>
+              <CurrencyInput
+                value={data.valorCofins}
+                onChange={(v) => onChange({ ...data, valorCofins: v })}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">CSLL</Label>
+              <CurrencyInput
+                value={data.valorCsll}
+                onChange={(v) => onChange({ ...data, valorCsll: v })}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">IRRF</Label>
+              <CurrencyInput
+                value={data.valorIrrf}
+                onChange={(v) => onChange({ ...data, valorIrrf: v })}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label className="text-xs">INSS/CP</Label>
+              <CurrencyInput
+                value={data.valorInss}
+                onChange={(v) => onChange({ ...data, valorInss: v })}
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Resumo */}
+      <div className="border-t pt-3 space-y-2">
+        {result.totalRetencoes > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Total Retenções:</span>
+            <span className="font-medium text-destructive">
+              - {formatarReais(result.totalRetencoes)}
+            </span>
+          </div>
+        )}
+        <div className="flex items-center justify-between text-base font-semibold">
+          <span>Valor Líquido:</span>
+          <span className="text-primary">{formatarReais(result.valorLiquido)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}

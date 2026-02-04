@@ -20,8 +20,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
 import { NfseServiceCodeCombobox, type NfseServiceCode } from "./NfseServiceCodeCombobox";
-
-type ProviderChoice = "auto" | "asaas" | "nacional";
+import { NfseTributacaoSection, type TributacaoData } from "./NfseTributacaoSection";
+import { calcularRetencoes } from "@/lib/nfse-retencoes";
 
 type ClientOption = { id: string; name: string; document: string | null };
 
@@ -44,15 +44,26 @@ type Certificate = {
   titular: string | null;
 };
 
+const initialTributacao: TributacaoData = {
+  issRetido: false,
+  aliquotaIss: 0,
+  valorPis: 0,
+  valorCofins: 0,
+  valorCsll: 0,
+  valorIrrf: 0,
+  valorInss: 0,
+};
+
 export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
 
-  const [provider, setProvider] = useState<ProviderChoice>("auto");
   const [clientId, setClientId] = useState<string>("");
   const [serviceCode, setServiceCode] = useState<NfseServiceCode | null>(null);
   const [competenciaDate, setCompetenciaDate] = useState<Date>(new Date());
   const [valor, setValor] = useState<number>(0);
   const [descricao, setDescricao] = useState<string>("");
+
+  const [tributacao, setTributacao] = useState<TributacaoData>(initialTributacao);
 
   const [gerarFatura, setGerarFatura] = useState(false);
   const [vencimentoDias, setVencimentoDias] = useState<number>(30);
@@ -72,7 +83,6 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
   });
 
   const asaasAvailable = !!asaasConfig?.api_key;
-  const useAsaasProvider = provider === "asaas" || (provider === "auto" && asaasAvailable);
 
   const { data: company } = useQuery({
     queryKey: ["company-config-for-nfse"],
@@ -124,19 +134,19 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
   const certificateDaysRemaining = primaryCertificate?.validade
     ? differenceInDays(new Date(primaryCertificate.validade), new Date())
     : null;
-  const certificateOk = certificateDaysRemaining !== null && certificateDaysRemaining > 0;
 
-  const canEmit = useAsaasProvider
-    ? isCompanyConfigured && !!clientId && !!serviceCode && valor > 0 && descricao.trim().length > 0
-    : isCompanyConfigured && certificateOk && !!clientId && !!serviceCode && valor > 0 && descricao.trim().length > 0;
+  // Alíquota do código de serviço selecionado
+  const aliquotaIss = serviceCode?.aliquota_sugerida ?? 0;
+
+  const canEmit = asaasAvailable && isCompanyConfigured && !!clientId && !!serviceCode && valor > 0 && descricao.trim().length > 0;
 
   const reset = () => {
-    setProvider("auto");
     setClientId("");
     setServiceCode(null);
     setCompetenciaDate(new Date());
     setValor(0);
     setDescricao("");
+    setTributacao(initialTributacao);
     setGerarFatura(false);
     setVencimentoDias(30);
   };
@@ -147,6 +157,18 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
       if (!serviceCode) throw new Error("Selecione um código de serviço");
       if (valor <= 0) throw new Error("Informe um valor válido");
       if (!descricao.trim()) throw new Error("Informe a descrição do serviço");
+
+      // Calcular retenções
+      const retencoes = calcularRetencoes({
+        valorServico: valor,
+        aliquotaIss,
+        issRetido: tributacao.issRetido,
+        valorPis: tributacao.valorPis,
+        valorCofins: tributacao.valorCofins,
+        valorCsll: tributacao.valorCsll,
+        valorIrrf: tributacao.valorIrrf,
+        valorInss: tributacao.valorInss,
+      });
 
       let invoiceId: string | null = null;
       if (gerarFatura) {
@@ -167,46 +189,35 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
         invoiceId = data.id;
       }
 
-      if (useAsaasProvider) {
-        const { data, error } = await supabase.functions.invoke("asaas-nfse", {
-          body: {
-            action: "emit_standalone",
-            client_id: clientId,
-            value: valor,
-            service_description: descricao,
-            service_code: serviceCode.codigo_tributacao,
-            cnae: serviceCode.cnae_principal,
-            aliquota: serviceCode.aliquota_sugerida,
-            competencia,
-            invoice_id: invoiceId,
-          },
-        });
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || "Falha ao emitir NFS-e (Asaas)");
-        return { provider: "asaas" as const, invoiceCreated: gerarFatura };
-      }
-
-      const { data, error } = await supabase.functions.invoke("nfse-nacional", {
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: "emit_standalone",
           client_id: clientId,
+          value: valor,
+          service_description: descricao,
           service_code: serviceCode.codigo_tributacao,
           cnae: serviceCode.cnae_principal,
-          aliquota: serviceCode.aliquota_sugerida,
+          aliquota: aliquotaIss,
           competencia,
-          valor,
-          descricao,
           invoice_id: invoiceId,
+          // Tributos Nacional 2026
+          retain_iss: tributacao.issRetido,
+          iss_rate: aliquotaIss,
+          pis_value: tributacao.valorPis,
+          cofins_value: tributacao.valorCofins,
+          csll_value: tributacao.valorCsll,
+          irrf_value: tributacao.valorIrrf,
+          inss_value: tributacao.valorInss,
+          valor_liquido: retencoes.valorLiquido,
         },
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || "Falha ao emitir NFS-e (API Nacional)");
-      return { provider: "nacional" as const, invoiceCreated: gerarFatura };
+      if (!data?.success) throw new Error(data?.error || "Falha ao emitir NFS-e");
+      return { invoiceCreated: gerarFatura };
     },
     onSuccess: (result) => {
-      const providerName = result.provider === "asaas" ? "Asaas" : "API Nacional";
       toast.success(result.invoiceCreated ? "NFS-e e fatura geradas com sucesso" : "NFS-e avulsa gerada com sucesso", {
-        description: `Provedor: ${providerName}`,
+        description: "Provedor: Asaas",
       });
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
@@ -238,6 +249,15 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
 
         <div className="space-y-4 py-2">
           {/* Alertas de pré-requisitos */}
+          {!asaasAvailable && (
+            <Alert variant="destructive" className="py-2">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                Integração Asaas não configurada. Configure em Configurações → Integrações.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {!isCompanyConfigured && (
             <Alert variant="destructive" className="py-2">
               <ShieldAlert className="h-4 w-4" />
@@ -247,42 +267,15 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
             </Alert>
           )}
 
-          {!useAsaasProvider && !primaryCertificate && (
-            <Alert variant="destructive" className="py-2">
-              <ShieldAlert className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                Nenhum certificado A1 principal configurado.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {!useAsaasProvider && primaryCertificate && certificateDaysRemaining !== null && certificateDaysRemaining <= 0 && (
-            <Alert variant="destructive" className="py-2">
-              <ShieldAlert className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                Certificado expirado: <strong>{primaryCertificate.nome}</strong>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Provedor e Ambiente em linha */}
+          {/* Provedor e Competência em linha */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-sm">Provedor</Label>
-              <Select value={provider} onValueChange={(v: ProviderChoice) => setProvider(v)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">
-                    Automático {asaasAvailable && <Badge variant="outline" className="ml-1 text-[10px]">Asaas</Badge>}
-                  </SelectItem>
-                  <SelectItem value="asaas" disabled={!asaasAvailable}>
-                    Asaas {!asaasAvailable && <span className="text-muted-foreground text-xs">(off)</span>}
-                  </SelectItem>
-                  <SelectItem value="nacional">API Nacional</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm">
+                <Badge variant="default" className="gap-1">
+                  Asaas
+                </Badge>
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -365,6 +358,16 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
             />
           </div>
 
+          {/* Seção de Tributação */}
+          {serviceCode && valor > 0 && (
+            <NfseTributacaoSection
+              valorServico={valor}
+              aliquotaIss={aliquotaIss}
+              data={tributacao}
+              onChange={setTributacao}
+            />
+          )}
+
           {/* Fatura - compacto */}
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <div className="flex items-center justify-between">
@@ -400,7 +403,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
           <Alert>
             <FileText className="h-4 w-4" />
             <AlertDescription>
-              Ambiente: <strong>{useAsaasProvider ? (asaasConfig?.environment === "production" ? "Produção (Asaas)" : "Sandbox (Asaas)") : (company?.nfse_ambiente === "producao" ? "Produção" : "Homologação")}</strong>
+              Ambiente: <strong>{asaasConfig?.environment === "production" ? "Produção" : "Sandbox"}</strong>
             </AlertDescription>
           </Alert>
         </div>

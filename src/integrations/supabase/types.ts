@@ -1972,6 +1972,7 @@ export type Database = {
           emitido_por: string | null
           id: string
           invoice_id: string | null
+          iss_retido: boolean | null
           mensagem_retorno: string | null
           motivo_cancelamento: string | null
           municipal_service_id: string | null
@@ -1984,7 +1985,18 @@ export type Database = {
           serie: string | null
           status: string
           updated_at: string | null
+          valor_cbs: number | null
+          valor_cofins: number | null
+          valor_csll: number | null
+          valor_deducoes: number | null
+          valor_desconto: number | null
+          valor_ibs: number | null
+          valor_inss: number | null
+          valor_irrf: number | null
           valor_iss: number | null
+          valor_iss_retido: number | null
+          valor_liquido: number | null
+          valor_pis: number | null
           valor_servico: number
           xml_url: string | null
         }
@@ -2011,6 +2023,7 @@ export type Database = {
           emitido_por?: string | null
           id?: string
           invoice_id?: string | null
+          iss_retido?: boolean | null
           mensagem_retorno?: string | null
           motivo_cancelamento?: string | null
           municipal_service_id?: string | null
@@ -2023,7 +2036,18 @@ export type Database = {
           serie?: string | null
           status?: string
           updated_at?: string | null
+          valor_cbs?: number | null
+          valor_cofins?: number | null
+          valor_csll?: number | null
+          valor_deducoes?: number | null
+          valor_desconto?: number | null
+          valor_ibs?: number | null
+          valor_inss?: number | null
+          valor_irrf?: number | null
           valor_iss?: number | null
+          valor_iss_retido?: number | null
+          valor_liquido?: number | null
+          valor_pis?: number | null
           valor_servico: number
           xml_url?: string | null
         }
@@ -2050,6 +2074,7 @@ export type Database = {
           emitido_por?: string | null
           id?: string
           invoice_id?: string | null
+          iss_retido?: boolean | null
           mensagem_retorno?: string | null
           motivo_cancelamento?: string | null
           municipal_service_id?: string | null
@@ -2062,7 +2087,18 @@ export type Database = {
           serie?: string | null
           status?: string
           updated_at?: string | null
+          valor_cbs?: number | null
+          valor_cofins?: number | null
+          valor_csll?: number | null
+          valor_deducoes?: number | null
+          valor_desconto?: number | null
+          valor_ibs?: number | null
+          valor_inss?: number | null
+          valor_irrf?: number | null
           valor_iss?: number | null
+          valor_iss_retido?: number | null
+          valor_liquido?: number | null
+          valor_pis?: number | null
           valor_servico?: number
           xml_url?: string | null
         }
