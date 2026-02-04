@@ -49,7 +49,7 @@ serve(async (req) => {
     console.log(`[send-ticket-notification] Requester contact:`, ticket.requester_contact);
 
     // Get portal URL from environment or use default
-    const portalUrl = Deno.env.get("PORTAL_URL") || "https://colmeiahdpro.lovable.app/portal";
+    const portalUrl = Deno.env.get("PORTAL_URL") || "https://suporte.colmeiagsti.com/portal";
 
     const eventMessages = {
       created: `Seu chamado #${ticket.ticket_number} foi aberto com sucesso.`,
