@@ -494,7 +494,7 @@ export function BillingInvoicesTab() {
               size="sm"
               onClick={() => setIsBatchProcessingOpen(true)}
             >
-              <ZapIcon className="mr-2 h-4 w-4" />
+              <Zap className="mr-2 h-4 w-4" />
               Processar Selecionados
             </Button>
           </PermissionGate>
