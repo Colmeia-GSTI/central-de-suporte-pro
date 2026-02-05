@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +22,10 @@ interface ConfirmDialogProps {
   isLoading?: boolean;
 }
 
-export function ConfirmDialog({
+export const ConfirmDialog = React.forwardRef<
+  React.ElementRef<typeof AlertDialogContent>,
+  ConfirmDialogProps
+>(({
   open,
   onOpenChange,
   title,
@@ -31,10 +35,10 @@ export function ConfirmDialog({
   variant = "default",
   onConfirm,
   isLoading = false,
-}: ConfirmDialogProps) {
+}, ref) => {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent ref={ref}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
@@ -52,4 +56,5 @@ export function ConfirmDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
-}
+});
+ConfirmDialog.displayName = "ConfirmDialog";

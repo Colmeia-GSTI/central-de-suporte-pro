@@ -44,7 +44,7 @@ type HistoryEntry = {
   changes: Record<string, any> | null;
   comment: string | null;
   created_at: string;
-  profiles?: { full_name: string } | null;
+  user_id: string | null;
 };
 
 type ServiceHistoryEntry = {
@@ -54,7 +54,7 @@ type ServiceHistoryEntry = {
   old_value: Record<string, any> | null;
   new_value: Record<string, any> | null;
   created_at: string;
-  profiles?: { full_name: string } | null;
+  user_id: string | null;
 };
 
 type InvoiceEntry = {
@@ -65,9 +65,9 @@ type InvoiceEntry = {
   status: string;
   paid_date: string | null;
   reference_month: string | null;
-  nfse_records: Array<{
+  nfse_history: Array<{
     id: string;
-    numero: string | null;
+    numero_nfse: string | null;
     status: string;
     created_at: string;
   }>;
@@ -92,7 +92,7 @@ export function ContractHistorySheet({
           changes,
           comment,
           created_at,
-          profiles:user_id(full_name)
+          user_id
         `)
         .eq("contract_id", contract.id)
         .order("created_at", { ascending: false })
@@ -116,7 +116,7 @@ export function ContractHistorySheet({
           old_value,
           new_value,
           created_at,
-          profiles:user_id(full_name)
+          user_id
         `)
         .eq("contract_id", contract.id)
         .order("created_at", { ascending: false })
@@ -127,7 +127,7 @@ export function ContractHistorySheet({
     enabled: open,
   });
 
-  // Fetch invoices with NFS-e records
+  // Fetch invoices with NFS-e history
   const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
     queryKey: ["contract-invoices", contract.id],
     queryFn: async () => {
@@ -141,7 +141,7 @@ export function ContractHistorySheet({
           status,
           paid_date,
           reference_month,
-          nfse_records(id, numero, status, created_at)
+          nfse_history(id, numero_nfse, status, created_at)
         `)
         .eq("contract_id", contract.id)
         .order("due_date", { ascending: false })
@@ -238,7 +238,7 @@ export function ContractHistorySheet({
 
   // Extract all NFS-e records from invoices
   const allNfseRecords = invoices.flatMap((invoice) =>
-    invoice.nfse_records.map((nfse) => ({
+    invoice.nfse_history.map((nfse) => ({
       ...nfse,
       invoice_number: invoice.invoice_number,
       invoice_id: invoice.id,
@@ -317,11 +317,6 @@ export function ContractHistorySheet({
                         {entry.comment && (
                           <p className="text-sm text-muted-foreground mt-1">
                             {entry.comment}
-                          </p>
-                        )}
-                        {entry.profiles?.full_name && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Por: {entry.profiles.full_name}
                           </p>
                         )}
                       </div>
@@ -447,11 +442,11 @@ export function ContractHistorySheet({
                           })}
                         </div>
                       )}
-                      {invoice.nfse_records.length > 0 && (
+                      {invoice.nfse_history.length > 0 && (
                         <div className="mt-2 flex items-center gap-2">
                           <Receipt className="h-3 w-3 text-muted-foreground" />
                           <span className="text-xs text-muted-foreground">
-                            {invoice.nfse_records.length} NFS-e vinculada(s)
+                            {invoice.nfse_history.length} NFS-e vinculada(s)
                           </span>
                         </div>
                       )}
@@ -486,7 +481,7 @@ export function ContractHistorySheet({
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">
-                            {nfse.numero || "Aguardando número"}
+                            {nfse.numero_nfse || "Aguardando número"}
                           </span>
                           {getNfseStatusBadge(nfse.status)}
                         </div>
