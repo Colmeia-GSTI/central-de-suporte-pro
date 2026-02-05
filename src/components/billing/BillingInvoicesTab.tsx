@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -72,6 +73,8 @@ import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
+import { InvoiceActionIndicators } from "@/components/billing/InvoiceActionIndicators";
+import { BillingBatchProcessing } from "@/components/billing/BillingBatchProcessing";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type InvoiceWithClient = Tables<"invoices"> & {
@@ -129,6 +132,8 @@ export function BillingInvoicesTab() {
   const [pixDialogInvoice, setPixDialogInvoice] = useState<InvoiceWithClient | null>(null);
   const [isNfseAvulsaOpen, setIsNfseAvulsaOpen] = useState(false);
   const [sendingNotification, setSendingNotification] = useState<string | null>(null);
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
+  const [isBatchProcessingOpen, setIsBatchProcessingOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: invoices = [], isLoading } = useQuery({
@@ -409,6 +414,25 @@ export function BillingInvoicesTab() {
   const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false);
   const [isBatchNotifying, setIsBatchNotifying] = useState(false);
 
+  // Handlers para seleção de faturas
+  const toggleInvoiceSelection = (invoiceId: string) => {
+    const newSelected = new Set(selectedInvoices);
+    if (newSelected.has(invoiceId)) {
+      newSelected.delete(invoiceId);
+    } else {
+      newSelected.add(invoiceId);
+    }
+    setSelectedInvoices(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedInvoices.size === invoices.length) {
+      setSelectedInvoices(new Set());
+    } else {
+      setSelectedInvoices(new Set(invoices.map((i) => i.id)));
+    }
+  };
+
   const handleGenerateMonthlyInvoices = async () => {
     setIsGeneratingMonthly(true);
     try {
@@ -459,6 +483,24 @@ export function BillingInvoicesTab() {
 
   return (
     <div className="space-y-6">
+      {/* Selection info and batch actions */}
+      {selectedInvoices.size > 0 && (
+        <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="text-sm font-medium">
+            {selectedInvoices.size} fatura(s) selecionada(s)
+          </div>
+          <PermissionGate module="financial" action="manage">
+            <Button
+              size="sm"
+              onClick={() => setIsBatchProcessingOpen(true)}
+            >
+              <ZapIcon className="mr-2 h-4 w-4" />
+              Processar Selecionados
+            </Button>
+          </PermissionGate>
+        </div>
+      )}
+
       {/* Header Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -603,31 +645,42 @@ export function BillingInvoicesTab() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={selectedInvoices.size > 0 && selectedInvoices.size === invoices.length}
+                  indeterminate={selectedInvoices.size > 0 && selectedInvoices.size < invoices.length}
+                  onCheckedChange={toggleSelectAll}
+                  disabled={invoices.length === 0}
+                />
+              </TableHead>
               <TableHead>#</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Competência</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead>Ações</TableHead>
+              <TableHead className="text-right">Menu</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-6" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                   <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
                 </TableRow>
               ))
             ) : invoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={9} className="text-center py-8">
                   <Receipt className="mx-auto h-12 w-12 text-muted-foreground/50" />
                   <p className="mt-2 text-muted-foreground">
                     Nenhuma fatura encontrada
@@ -636,7 +689,13 @@ export function BillingInvoicesTab() {
               </TableRow>
             ) : (
               invoices.map((invoice) => (
-                <TableRow key={invoice.id}>
+                <TableRow key={invoice.id} className={selectedInvoices.has(invoice.id) ? "bg-blue-50 dark:bg-blue-950" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedInvoices.has(invoice.id)}
+                      onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono">
                     #{invoice.invoice_number}
                   </TableCell>
@@ -682,6 +741,22 @@ export function BillingInvoicesTab() {
                       })()}
                     </div>
                   </TableCell>
+
+                  {/* NOVA COLUNA: Indicadores de Ações */}
+                  <TableCell>
+                    <InvoiceActionIndicators
+                      boletoStatus={invoice.boleto_status || "pendente"}
+                      boletoUrl={invoice.boleto_url}
+                      boletoError={invoice.boleto_error_msg}
+                      nfseStatus={invoice.nfse_status || "pendente"}
+                      nfseUrl={invoice.nfse_history_id ? `#nfse-${invoice.nfse_history_id}` : undefined}
+                      nfseError={invoice.nfse_error_msg}
+                      emailStatus={invoice.email_status || "pendente"}
+                      emailError={invoice.email_error_msg}
+                      size="sm"
+                    />
+                  </TableCell>
+
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {invoice.boleto_url && (
@@ -835,6 +910,18 @@ export function BillingInvoicesTab() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Batch Processing Dialog */}
+      <BillingBatchProcessing
+        open={isBatchProcessingOpen}
+        onOpenChange={setIsBatchProcessingOpen}
+        selectedInvoiceCount={selectedInvoices.size}
+        onProcessingComplete={() => {
+          setSelectedInvoices(new Set());
+          queryClient.invalidateQueries({ queryKey: ["invoices"] });
+          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+        }}
+      />
 
       {/* Dialogs */}
       {nfseInvoice && (
