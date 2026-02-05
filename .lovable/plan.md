@@ -1,375 +1,270 @@
 
-# Revisão Completa E2E: Diagnóstico de Problemas no Sistema de Faturamento
 
-## Resumo Executivo
+# Análise Completa: O Que Está Faltando
 
-Após análise profunda do sistema de faturamento, identifiquei **7 problemas críticos** que explicam por que a QUAZA não aparece no faturamento e outros erros detectados.
-
----
-
-## Problema 1: QUAZA Sem Faturas (CAUSA RAIZ)
-
-### Diagnóstico
-O contrato da QUAZA existe e está **ativo** no banco de dados:
-```
-Contrato: "Gestão de TI - Remoto"
-Cliente: QUAZA TECNOLOGIA LTDA
-Valor Mensal: R$ 650,00
-Status: active
-nfse_service_code: 010701
-billing_day: 7
-```
-
-Porém, **não existem faturas** na tabela `invoices` - a query retorna array vazio.
-
-### Causa
-O botão "Gerar Faturas Mensais" (`generate-monthly-invoices`) **nunca foi executado** para o mês atual:
-- Tabela `invoice_generation_log` está vazia
-- Nenhum log da edge function foi registrado
-- A fatura precisa ser gerada manualmente ou via CRON job configurado
-
-### Solução
-1. Usuário deve clicar em "Gerar Faturas Mensais" na aba Faturas
-2. OU configurar um CRON job para execução automática
+Após revisão detalhada do código e banco de dados, identifiquei **8 problemas críticos** que precisam ser corrigidos para o sistema funcionar corretamente.
 
 ---
 
-## Problema 2: Erro de Console - ConfirmDialog sem forwardRef
+## Situação Atual
+
+| Componente | Status | Problema |
+|------------|--------|----------|
+| Tabela `invoices` | ⚠️ VAZIA | Nenhuma fatura gerada |
+| QUAZA Contrato | ✅ Existe | Configurado corretamente |
+| Storage S3 Config | 🔴 NÃO ACESSÍVEL | Componente existe mas não está na UI |
+| Schema `storage_config` | 🔴 INCOMPATÍVEL | Colunas do DB diferem do formulário |
+
+---
+
+## Problema 1: QUAZA Não Aparece - Faturas Nunca Foram Geradas
 
 ### Diagnóstico
 ```
-Warning: Function components cannot be given refs. 
-Did you mean to use React.forwardRef()?
-Check the render method of `BillingBoletosTab`.
+Tabela: invoices
+Registros: 0 (VAZIA)
+
+Contrato QUAZA:
+- name: "Gestão de TI - Remoto"
+- nfse_service_code: "010701" ✓
+- billing_day: 7 ✓
+- status: active ✓
 ```
 
-### Causa
-O componente `ConfirmDialog` em `src/components/ui/confirm-dialog.tsx` é um function component normal, mas o Radix UI `AlertDialog` tenta passar uma ref para ele.
+### Causa Raiz
+O botão **"Gerar Faturas Mensais"** nunca foi clicado para este mês.
 
-### Código Atual (Linha 24-55)
-```typescript
-export function ConfirmDialog({...}: ConfirmDialogProps) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      ...
-    </AlertDialog>
-  );
-}
-```
-
-### Solução
-Converter para `React.forwardRef` ou simplificar removendo a necessidade de ref:
-```typescript
-import * as React from "react";
-
-export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps>(
-  ({ open, onOpenChange, title, description, ... }, ref) => {
-    return (
-      <AlertDialog open={open} onOpenChange={onOpenChange}>
-        <AlertDialogContent ref={ref}>
-          ...
-        </AlertDialogContent>
-      </AlertDialog>
-    );
-  }
-);
-ConfirmDialog.displayName = "ConfirmDialog";
-```
+### Solução (Ação do Usuário)
+1. Ir para `/billing` → aba "Faturas"
+2. Clicar em **"Gerar Faturas Mensais"**
+3. A fatura da QUAZA será criada automaticamente
 
 ---
 
-## Problema 3: ContractHistorySheet - Query Inválida (nfse_records)
+## Problema 2: S3StorageConfigForm Não Está na UI
 
 ### Diagnóstico
-O network request mostra erro 400:
-```json
-{
-  "code": "PGRST200",
-  "details": "Searched for a foreign key relationship between 'invoices' and 'nfse_records' in the schema 'public', but no matches were found.",
-  "hint": "Perhaps you meant 'nfse_history' instead of 'nfse_records'."
-}
+O componente `S3StorageConfigForm` existe em:
+```
+src/components/settings/S3StorageConfigForm.tsx (608 linhas)
 ```
 
-### Causa
-Em `ContractHistorySheet.tsx` (linha 144), a query usa `nfse_records` que não existe:
-```typescript
-.select(`
-  id, invoice_number, amount, due_date, status, paid_date, reference_month,
-  nfse_records(id, numero, status, created_at)  // ← INCORRETO
-`)
-```
-
-### Tabela Correta
-A tabela no banco é `nfse_history`, e ela tem:
-- Relação `nfse_history.invoice_id → invoices.id`
-- Campos: `numero_nfse` (não `numero`)
+Porém **NÃO É IMPORTADO** em nenhum lugar:
+- ❌ Não está em `SettingsPage.tsx`
+- ❌ Não está em `IntegrationsTab.tsx`
+- ❌ Não está em `BillingPage.tsx`
 
 ### Solução
-```typescript
-.select(`
-  id, invoice_number, amount, due_date, status, paid_date, reference_month,
-  nfse_history(id, numero_nfse, status, created_at)
-`)
-```
-
-E atualizar o tipo `InvoiceEntry`:
-```typescript
-type InvoiceEntry = {
-  ...
-  nfse_history: Array<{  // Renomeado
-    id: string;
-    numero_nfse: string | null;  // Renomeado
-    status: string;
-    created_at: string;
-  }>;
-};
-```
+Adicionar uma aba "Storage" em `IntegrationsTab.tsx` ou criar uma aba dedicada em `BillingPage.tsx`.
 
 ---
 
-## Problema 4: ContractHistorySheet - Query FK Inválida (profiles:user_id)
+## Problema 3: Schema de storage_config Incompatível com o Formulário
 
-### Diagnóstico
-Network request erro 400:
-```json
-{
-  "code": "PGRST200",
-  "details": "Searched for a foreign key relationship between 'contract_history' and 'user_id' in the schema 'public', but no matches were found."
-}
-```
-
-### Causa
-Em `ContractHistorySheet.tsx` (linhas 89-95 e 113-119), as queries tentam fazer join com `profiles` via `user_id`:
-```typescript
-.select(`..., profiles:user_id(full_name)`)
-```
-
-Mas o `user_id` em `contract_history` e `contract_service_history` aponta para `auth.users`, não para `profiles`. A tabela `profiles` tem sua própria FK: `profiles.user_id → auth.users.id`.
-
-### Solução
-Remover o join aninhado e buscar profiles separadamente, ou alterar a query:
-```typescript
-// Opção 1: Buscar sem profiles (simplificado)
-.select(`id, action, changes, comment, created_at, user_id`)
-
-// Depois buscar o nome do usuário separadamente se necessário
-```
-
----
-
-## Problema 5: PIX Não Funciona - Escopos Não Habilitados
-
-### Diagnóstico (Edge Function Logs)
-```
-[BANCO-INTER] Token error for scope "cob.read cob.write": No registered scope value for this client
-[BANCO-INTER] Escopos de PIX não disponíveis: Escopo "cob.read cob.write" não está habilitado
-```
-
-### Causa
-O Client ID do Banco Inter não tem os escopos de PIX habilitados no portal do banco.
-
-### Solução
-1. Acessar o portal de desenvolvedores do Banco Inter
-2. Editar a aplicação vinculada ao Client ID
-3. Habilitar os escopos: `cob.read`, `cob.write`
-4. Aguardar a aprovação do banco (pode levar até 24h)
-
----
-
-## Problema 6: NFS-e Avulsa Sem Vínculo
-
-### Diagnóstico
-A única NFS-e no sistema é avulsa:
+### Colunas no Banco de Dados
 ```sql
-id: 6832765e-dbaf-49c0-92f3-c873b8581422
-contract_id: NULL  -- Sem contrato
-invoice_id: NULL   -- Sem fatura
-client_id: 45e19c3b-53b9... (CXA DE PREST...)
-numero_nfse: 78
-status: autorizada
-valor_servico: 1461.44
+storage_config:
+- id
+- provider
+- bucket_name
+- endpoint_url          ← Diferente
+- region
+- access_key_encrypted  ← Diferente (criptografado)
+- secret_key_encrypted  ← Diferente (criptografado)
+- is_active
+- is_default
+- created_at
+- updated_at
 ```
 
-### Observação
-Esta NFS-e foi emitida de forma avulsa para outro cliente (CXA/CAPASEMU), não para a QUAZA. Isso é comportamento esperado para NFS-e avulsas.
-
----
-
-## Problema 7: Checkbox com Estado Indeterminate (Bug Visual)
-
-### Diagnóstico
-Em `BillingInvoicesTab.tsx` (linha 653), o checkbox usa a prop `indeterminate`:
-```tsx
-<Checkbox
-  checked={selectedInvoices.size > 0 && selectedInvoices.size === invoices.length}
-  indeterminate={selectedInvoices.size > 0 && selectedInvoices.size < invoices.length}
-  ...
-/>
+### Colunas Esperadas pelo Formulário
+```typescript
+S3StorageConfigForm espera:
+- name                  ← NÃO EXISTE
+- description           ← NÃO EXISTE
+- endpoint              ← Deve ser endpoint_url
+- access_key            ← Deve ser access_key_encrypted
+- secret_key            ← Deve ser secret_key_encrypted
+- path_prefix           ← NÃO EXISTE
+- signed_url_expiry_hours ← NÃO EXISTE
 ```
-
-### Problema
-O componente Radix UI Checkbox não suporta a prop `indeterminate` nativamente. Isso pode causar comportamento inesperado.
 
 ### Solução
-Usar `checked="indeterminate"` como valor do estado:
+Migração SQL para adicionar colunas faltantes:
+```sql
+ALTER TABLE storage_config 
+ADD COLUMN IF NOT EXISTS name text,
+ADD COLUMN IF NOT EXISTS description text,
+ADD COLUMN IF NOT EXISTS path_prefix text DEFAULT '{clientId}/{year}/{month}/{type}_{invoiceNumber}.pdf',
+ADD COLUMN IF NOT EXISTS signed_url_expiry_hours integer DEFAULT 48;
+
+-- Renomear para compatibilidade
+ALTER TABLE storage_config RENAME COLUMN endpoint_url TO endpoint;
+```
+
+E atualizar o formulário para usar os nomes de colunas corretos.
+
+---
+
+## Problema 4: Console Warning - WeeklyTrendChart
+
+### Diagnóstico
+```
+Warning: Function components cannot be given refs.
+Check the render method of `WeeklyTrendChart`.
+```
+
+O componente `CartesianGrid` do Recharts está recebendo uma ref inválida.
+
+### Solução
+Revisar `WeeklyTrendChart.tsx` para garantir que não está passando refs desnecessárias.
+
+---
+
+## Problema 5: Aba "Configurações Storage" Inexistente
+
+### Localização Sugerida
+A configuração de Storage S3 deveria estar em:
+
+**Opção A**: `/settings` → aba "Integrações" → sub-aba "Storage"
+**Opção B**: `/billing` → aba "Configurações" (nova aba)
+
+### Implementação
+Adicionar em `IntegrationsTab.tsx`:
 ```tsx
-<Checkbox
-  checked={
-    selectedInvoices.size === invoices.length 
-      ? true 
-      : selectedInvoices.size > 0 
-        ? "indeterminate" 
-        : false
-  }
-  ...
-/>
+import { S3StorageConfigForm } from "./S3StorageConfigForm";
+
+// Na TabsList:
+<TabsTrigger value="storage">
+  <HardDrive className="h-4 w-4" />
+  Storage
+</TabsTrigger>
+
+// No conteúdo:
+<TabsContent value="storage">
+  <S3StorageConfigForm />
+</TabsContent>
 ```
 
 ---
 
-## Resumo dos Arquivos a Corrigir
+## Problema 6: test-s3-connection Edge Function Pode Não Existir
 
-| # | Arquivo | Problema | Prioridade |
-|---|---------|----------|------------|
-| 1 | `src/components/ui/confirm-dialog.tsx` | forwardRef missing | Alta |
-| 2 | `src/components/contracts/ContractHistorySheet.tsx` | nfse_records → nfse_history | Alta |
-| 3 | `src/components/contracts/ContractHistorySheet.tsx` | profiles:user_id FK inválida | Alta |
-| 4 | `src/components/billing/BillingInvoicesTab.tsx` | Checkbox indeterminate | Média |
-| 5 | **Portal Banco Inter** | Habilitar escopos PIX | Externa |
-
----
-
-## Ações Imediatas para o Usuário
-
-### Para ver a QUAZA no faturamento:
-1. Vá para `/billing` → aba "Faturas"
-2. Clique no botão "Gerar Faturas Mensais"
-3. A fatura da QUAZA será criada para Fevereiro/2026
-4. Depois use "Processar Selecionados" para gerar boleto e NFS-e
-
-### Para habilitar PIX:
-1. Acesse https://developers.inter.co/
-2. Vá para sua aplicação
-3. Habilite os escopos `cob.read` e `cob.write`
-4. Aguarde aprovação do banco
-
----
-
-## Plano de Implementação
-
-### Fase 1: Correções Críticas de Frontend
-1. **ConfirmDialog**: Adicionar forwardRef
-2. **ContractHistorySheet**: Corrigir queries do Supabase
-
-### Fase 2: Melhorias de UX
-3. **BillingInvoicesTab**: Corrigir estado indeterminate do checkbox
-
-### Fase 3: Validações Preventivas
-4. Adicionar verificação se existem faturas antes de processar
-5. Melhorar mensagens de erro quando contrato não tem código de serviço
-
----
-
-## Detalhes Técnicos das Correções
-
-### 1. confirm-dialog.tsx (forwardRef)
+O formulário tenta invocar `test-s3-connection` para testar a conexão S3:
 ```typescript
-import * as React from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+const response = await supabase.functions.invoke("test-s3-connection", {...});
+```
 
-interface ConfirmDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  variant?: "default" | "destructive";
-  onConfirm: () => void;
-  isLoading?: boolean;
-}
+### Verificação Necessária
+Verificar se a edge function existe em `supabase/functions/test-s3-connection/`.
 
-export const ConfirmDialog = React.forwardRef<
-  React.ElementRef<typeof AlertDialogContent>,
-  ConfirmDialogProps
->(({ open, onOpenChange, title, description, confirmLabel = "Confirmar", 
-     cancelLabel = "Cancelar", variant = "default", onConfirm, isLoading = false }, ref) => {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent ref={ref}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isLoading}
-            className={variant === "destructive" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
-          >
-            {isLoading ? "Processando..." : confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+---
+
+## Problema 7: Colunas invoice_documents Podem Não Existir
+
+O código de upload de documentos referencia:
+```typescript
+supabase.from("invoice_documents").insert({
+  invoice_id, document_type, file_name, file_path,
+  file_size, mime_type, storage_config_id, upload_status
 });
-ConfirmDialog.displayName = "ConfirmDialog";
 ```
 
-### 2. ContractHistorySheet.tsx (Queries Corrigidas)
-```typescript
-// Tipo corrigido
-type InvoiceEntry = {
-  id: string;
-  invoice_number: number;
-  amount: number;
-  due_date: string;
-  status: string;
-  paid_date: string | null;
-  reference_month: string | null;
-  nfse_history: Array<{
-    id: string;
-    numero_nfse: string | null;
-    status: string;
-    created_at: string;
-  }>;
-};
+### Verificação Necessária
+Confirmar que a tabela `invoice_documents` existe com todas essas colunas.
 
-// Query de invoices corrigida (linha 134)
-.select(`
-  id, invoice_number, amount, due_date, status, paid_date, reference_month,
-  nfse_history(id, numero_nfse, status, created_at)
-`)
+---
 
-// Queries de history sem join de profiles (linhas 88 e 110)
-// Remover profiles:user_id() das queries
-.select(`id, action, changes, comment, created_at, user_id`)
-.select(`id, action, service_name, old_value, new_value, created_at, user_id`)
-```
+## Problema 8: InvoiceActionIndicators Não Está Recebendo Dados
 
-### 3. BillingInvoicesTab.tsx (Checkbox)
-```typescript
-// Linha 651-655
-<Checkbox
-  checked={
-    selectedInvoices.size === invoices.length
-      ? true
-      : selectedInvoices.size > 0
-        ? "indeterminate"
-        : false
-  }
-  onCheckedChange={toggleSelectAll}
-  disabled={invoices.length === 0}
+### Diagnóstico
+O componente `InvoiceActionIndicators` existe e é importado, mas as props não estão sendo passadas corretamente na tabela de faturas.
+
+### Verificação
+Em `BillingInvoicesTab.tsx`, verificar se:
+```tsx
+<InvoiceActionIndicators
+  boletoStatus={invoice.boleto_status}
+  boletoUrl={invoice.boleto_url}
+  nfseStatus={invoice.nfse_status}
+  // etc
 />
 ```
+
+---
+
+## Plano de Correções
+
+### Fase 1: Correções Imediatas no Frontend
+| # | Arquivo | Correção |
+|---|---------|----------|
+| 1 | `IntegrationsTab.tsx` | Adicionar aba Storage com S3StorageConfigForm |
+| 2 | `S3StorageConfigForm.tsx` | Ajustar nomes de colunas para match com DB |
+
+### Fase 2: Migração de Banco de Dados
+```sql
+ALTER TABLE storage_config 
+ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '',
+ADD COLUMN IF NOT EXISTS description text,
+ADD COLUMN IF NOT EXISTS path_prefix text DEFAULT '{clientId}/{year}/{month}/{type}_{invoiceNumber}.pdf',
+ADD COLUMN IF NOT EXISTS signed_url_expiry_hours integer DEFAULT 48;
+
+-- Verificar/criar tabela invoice_documents
+CREATE TABLE IF NOT EXISTS invoice_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id uuid REFERENCES invoices(id),
+  document_type text NOT NULL,
+  file_name text NOT NULL,
+  file_path text NOT NULL,
+  file_size integer,
+  mime_type text,
+  storage_config_id uuid REFERENCES storage_config(id),
+  upload_status text DEFAULT 'pending',
+  created_at timestamptz DEFAULT now()
+);
+```
+
+### Fase 3: Verificar Edge Functions
+- Verificar se `test-s3-connection` existe
+- Se não, criar a edge function
+
+### Fase 4: Ação do Usuário
+1. Clicar em "Gerar Faturas Mensais" para criar a fatura da QUAZA
+2. Configurar Storage S3 (após correções)
+3. Testar o fluxo completo
+
+---
+
+## Resumo Visual
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    CHECKLIST DE CORREÇÕES                           │
+├─────────────────────────────────────────────────────────────────────┤
+│ ❌ S3StorageConfigForm não acessível na UI                          │
+│ ❌ Schema storage_config incompatível com formulário                │
+│ ❌ Faturas não geradas (tabela vazia)                               │
+│ ❌ Tabela invoice_documents pode não existir                        │
+│ ❌ Edge function test-s3-connection pode não existir                │
+│ ⚠️  Warning de forwardRef em WeeklyTrendChart                       │
+├─────────────────────────────────────────────────────────────────────┤
+│ ✅ QUAZA contrato configurado corretamente                          │
+│ ✅ BillingInvoicesTab com seleção múltipla                          │
+│ ✅ BillingBatchProcessing funcional                                 │
+│ ✅ InvoiceActionIndicators criado                                   │
+│ ✅ InvoiceProcessingHistory criado                                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Arquivos a Modificar
+
+| Arquivo | Tipo | Prioridade |
+|---------|------|------------|
+| `src/components/settings/IntegrationsTab.tsx` | Frontend | Alta |
+| `src/components/settings/S3StorageConfigForm.tsx` | Frontend | Alta |
+| Migração SQL (storage_config + invoice_documents) | Database | Alta |
+| `supabase/functions/test-s3-connection/index.ts` | Backend | Média |
+| `src/components/dashboard/WeeklyTrendChart.tsx` | Frontend | Baixa |
+
