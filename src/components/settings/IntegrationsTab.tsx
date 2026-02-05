@@ -10,7 +10,8 @@ import { TelegramConfigForm } from "./integrations/TelegramConfigForm";
 import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigForm";
 import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
 import { S3StorageConfigForm } from "./S3StorageConfigForm";
-import { Mail, Building2, Activity, MessageSquare, Settings2, LayoutDashboard, HardDrive } from "lucide-react";
+import { LogsViewerTab } from "./LogsViewerTab";
+import { Mail, Building2, Activity, MessageSquare, Settings2, LayoutDashboard, HardDrive, FileText } from "lucide-react";
 
 export function IntegrationsTab() {
   return (
@@ -23,7 +24,7 @@ export function IntegrationsTab() {
       </div>
 
       <Tabs defaultValue="status" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="status" className="flex items-center gap-2">
             <LayoutDashboard className="h-4 w-4" />
             Status
@@ -51,6 +52,10 @@ export function IntegrationsTab() {
           <TabsTrigger value="automacao" className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
             Automação
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Logs
           </TabsTrigger>
         </TabsList>
 
@@ -84,6 +89,10 @@ export function IntegrationsTab() {
 
         <TabsContent value="automacao" className="space-y-4 mt-4">
           <NoContactCheckConfigForm />
+        </TabsContent>
+
+        <TabsContent value="logs" className="space-y-4 mt-4">
+          <LogsViewerTab />
         </TabsContent>
       </Tabs>
     </div>
