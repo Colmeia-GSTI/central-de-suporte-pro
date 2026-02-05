@@ -29,10 +29,75 @@ interface AdditionalCharge {
   amount: number;
 }
 
+interface ContractResult {
+  contract_id: string;
+  contract_name: string;
+  status: "created" | "skipped" | "error";
+  invoice_id: string | null;
+  invoice_number: number | null;
+  error: string | null;
+  duration_ms: number;
+}
+
+interface ExecutionError {
+  contract_id: string;
+  contract_name: string;
+  code: string;
+  message: string;
+  timestamp: string;
+}
+
+interface GenerationResponse {
+  success: boolean;
+  message: string;
+  timestamp: string;
+  execution_id: string;
+  reference_month: string;
+  stats: {
+    total_contracts: number;
+    generated: number;
+    skipped: number;
+    failed: number;
+  };
+  results: ContractResult[];
+  errors: ExecutionError[];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function logToDatabase(
+  supabase: any,
+  level: "info" | "warn" | "error",
+  module: string,
+  action: string,
+  message: string,
+  context?: Record<string, unknown>,
+  errorDetails?: Record<string, unknown>,
+  executionId?: string,
+  durationMs?: number
+) {
+  try {
+    await supabase.from("application_logs").insert({
+      level,
+      module,
+      action,
+      message,
+      context,
+      error_details: errorDetails,
+      execution_id: executionId,
+      duration_ms: durationMs,
+    });
+  } catch (e) {
+    console.error("[LOG-DB] Failed to persist log:", e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const executionId = crypto.randomUUID();
+  const startTime = Date.now();
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -45,7 +110,19 @@ Deno.serve(async (req) => {
     const targetYear = body.year || new Date().getFullYear();
     const referenceMonth = `${targetYear}-${String(targetMonth).padStart(2, "0")}`;
 
+    console.log(`[GEN-INVOICES] Execution ID: ${executionId}`);
     console.log(`[GEN-INVOICES] Gerando faturas para competência ${referenceMonth}`);
+
+    await logToDatabase(
+      supabase,
+      "info",
+      "Billing",
+      "generate-monthly-invoices",
+      `Iniciando geração de faturas para ${referenceMonth}`,
+      { reference_month: referenceMonth },
+      undefined,
+      executionId
+    );
 
     // Fetch active contracts with client info
     const { data: contracts, error: contractsError } = await supabase
@@ -72,25 +149,81 @@ Deno.serve(async (req) => {
 
     if (contractsError) {
       console.error("[GEN-INVOICES] Erro ao buscar contratos:", contractsError);
-      return new Response(
-        JSON.stringify({ success: false, error: contractsError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      
+      await logToDatabase(
+        supabase,
+        "error",
+        "Billing",
+        "generate-monthly-invoices",
+        "Erro ao buscar contratos ativos",
+        { reference_month: referenceMonth },
+        { message: contractsError.message, code: contractsError.code },
+        executionId,
+        Date.now() - startTime
       );
+
+      const response: GenerationResponse = {
+        success: false,
+        message: `Erro ao buscar contratos: ${contractsError.message}`,
+        timestamp: new Date().toISOString(),
+        execution_id: executionId,
+        reference_month: referenceMonth,
+        stats: { total_contracts: 0, generated: 0, skipped: 0, failed: 0 },
+        results: [],
+        errors: [{
+          contract_id: "",
+          contract_name: "",
+          code: contractsError.code || "DB_ERROR",
+          message: contractsError.message,
+          timestamp: new Date().toISOString(),
+        }],
+      };
+
+      return new Response(JSON.stringify(response), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (!contracts || contracts.length === 0) {
       console.log("[GEN-INVOICES] Nenhum contrato ativo encontrado");
-      return new Response(
-        JSON.stringify({ success: true, message: "Nenhum contrato ativo", generated: 0 }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      
+      await logToDatabase(
+        supabase,
+        "info",
+        "Billing",
+        "generate-monthly-invoices",
+        "Nenhum contrato ativo encontrado",
+        { reference_month: referenceMonth },
+        undefined,
+        executionId,
+        Date.now() - startTime
       );
+
+      const response: GenerationResponse = {
+        success: true,
+        message: "Nenhum contrato ativo encontrado",
+        timestamp: new Date().toISOString(),
+        execution_id: executionId,
+        reference_month: referenceMonth,
+        stats: { total_contracts: 0, generated: 0, skipped: 0, failed: 0 },
+        results: [],
+        errors: [],
+      };
+
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(`[GEN-INVOICES] ${contracts.length} contratos ativos encontrados`);
 
     let generated = 0;
     let skipped = 0;
-    const results: { contract: string; status: string; invoice_id?: string; error?: string }[] = [];
+    let failed = 0;
+    const results: ContractResult[] = [];
+    const errors: ExecutionError[] = [];
 
     // Check if billing providers are configured
     const { data: bancoInterSettings } = await supabase
@@ -109,8 +242,10 @@ Deno.serve(async (req) => {
     const asaasActive = asaasSettings?.is_active || false;
 
     for (const contract of contracts as unknown as Contract[]) {
+      const contractStartTime = Date.now();
+
       try {
-        // Check if invoice already exists for this contract and month using reference_month
+        // Check if invoice already exists for this contract and month
         const { data: existingInvoice } = await supabase
           .from("invoices")
           .select("id")
@@ -123,9 +258,13 @@ Deno.serve(async (req) => {
           console.log(`[GEN-INVOICES] Fatura já existe para contrato ${contract.name} (${referenceMonth})`);
           skipped++;
           results.push({
-            contract: contract.name,
+            contract_id: contract.id,
+            contract_name: contract.name,
             status: "skipped",
             invoice_id: existingInvoice[0].id,
+            invoice_number: null,
+            error: null,
+            duration_ms: Date.now() - contractStartTime,
           });
           continue;
         }
@@ -176,10 +315,22 @@ Deno.serve(async (req) => {
 
         if (invoiceError) {
           console.error(`[GEN-INVOICES] Erro ao criar fatura para ${contract.name}:`, invoiceError);
+          failed++;
           results.push({
-            contract: contract.name,
+            contract_id: contract.id,
+            contract_name: contract.name,
             status: "error",
+            invoice_id: null,
+            invoice_number: null,
             error: invoiceError.message,
+            duration_ms: Date.now() - contractStartTime,
+          });
+          errors.push({
+            contract_id: contract.id,
+            contract_name: contract.name,
+            code: invoiceError.code || "INSERT_ERROR",
+            message: invoiceError.message,
+            timestamp: new Date().toISOString(),
           });
 
           // Log the failure
@@ -195,16 +346,25 @@ Deno.serve(async (req) => {
 
         console.log(`[GEN-INVOICES] Fatura #${newInvoice.invoice_number} criada para ${contract.name} - R$ ${totalAmount.toFixed(2)}`);
         generated++;
+        results.push({
+          contract_id: contract.id,
+          contract_name: contract.name,
+          status: "created",
+          invoice_id: newInvoice.id,
+          invoice_number: newInvoice.invoice_number,
+          error: null,
+          duration_ms: Date.now() - contractStartTime,
+        });
 
         // Mark additional charges as applied
         if (charges.length > 0) {
           await supabase
             .from("contract_additional_charges")
-            .update({ 
-              applied: true, 
-              applied_invoice_id: newInvoice.id 
+            .update({
+              applied: true,
+              applied_invoice_id: newInvoice.id,
             })
-            .in("id", charges.map(c => c.id));
+            .in("id", charges.map((c) => c.id));
 
           console.log(`[GEN-INVOICES] ${charges.length} cobranças adicionais vinculadas à fatura`);
         }
@@ -217,16 +377,10 @@ Deno.serve(async (req) => {
           status: "success",
         });
 
-        results.push({
-          contract: contract.name,
-          status: "created",
-          invoice_id: newInvoice.id,
-        });
-
         // Auto-generate payment based on billing_provider
         const provider = contract.billing_provider || "banco_inter";
         const providerActive = provider === "asaas" ? asaasActive : bancoInterActive;
-        
+
         if (providerActive && contract.payment_preference) {
           try {
             const paymentTypes = contract.payment_preference === "both" 
@@ -235,7 +389,7 @@ Deno.serve(async (req) => {
 
             for (const paymentType of paymentTypes) {
               console.log(`[GEN-INVOICES] Gerando ${paymentType} via ${provider} para fatura #${newInvoice.invoice_number}`);
-              
+
               if (provider === "asaas") {
                 await supabase.functions.invoke("asaas-nfse", {
                   body: {
@@ -284,7 +438,7 @@ Deno.serve(async (req) => {
                   .replace(/{vencimento}/g, new Date(dueDate).toLocaleDateString("pt-BR"))
                   .replace(/{fatura}/g, `#${newInvoice.invoice_number}`)
                   .replace(/{competencia}/g, referenceMonth);
-                
+
                 customSection = `<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">${customSection}</div>`;
               }
 
@@ -350,33 +504,91 @@ Deno.serve(async (req) => {
         }
       } catch (contractError) {
         console.error(`[GEN-INVOICES] Erro ao processar contrato ${contract.name}:`, contractError);
+        failed++;
         results.push({
-          contract: contract.name,
+          contract_id: contract.id,
+          contract_name: contract.name,
           status: "error",
+          invoice_id: null,
+          invoice_number: null,
           error: contractError instanceof Error ? contractError.message : "Erro desconhecido",
+          duration_ms: Date.now() - contractStartTime,
+        });
+        errors.push({
+          contract_id: contract.id,
+          contract_name: contract.name,
+          code: "PROCESSING_ERROR",
+          message: contractError instanceof Error ? contractError.message : "Erro desconhecido",
+          timestamp: new Date().toISOString(),
         });
       }
     }
 
-    console.log(`[GEN-INVOICES] Concluído - Geradas: ${generated}, Ignoradas: ${skipped}`);
+    const totalDuration = Date.now() - startTime;
+    console.log(`[GEN-INVOICES] Concluído - Geradas: ${generated}, Ignoradas: ${skipped}, Falhas: ${failed}`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Geração de faturas concluída para ${referenceMonth}`,
+    // Log final result
+    await logToDatabase(
+      supabase,
+      failed > 0 ? "warn" : "info",
+      "Billing",
+      "generate-monthly-invoices",
+      `Geração concluída: ${generated} criadas, ${skipped} ignoradas, ${failed} falhas`,
+      {
         reference_month: referenceMonth,
         total_contracts: contracts.length,
         generated,
         skipped,
-        results,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        failed,
+      },
+      failed > 0 ? { errors } : undefined,
+      executionId,
+      totalDuration
     );
+
+    const response: GenerationResponse = {
+      success: failed === 0,
+      message: `Geração de faturas concluída para ${referenceMonth}`,
+      timestamp: new Date().toISOString(),
+      execution_id: executionId,
+      reference_month: referenceMonth,
+      stats: {
+        total_contracts: contracts.length,
+        generated,
+        skipped,
+        failed,
+      },
+      results,
+      errors,
+    };
+
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("[GEN-INVOICES] Erro geral:", error);
-    return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Erro interno" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    
+    const response: GenerationResponse = {
+      success: false,
+      message: error instanceof Error ? error.message : "Erro interno",
+      timestamp: new Date().toISOString(),
+      execution_id: executionId,
+      reference_month: "",
+      stats: { total_contracts: 0, generated: 0, skipped: 0, failed: 0 },
+      results: [],
+      errors: [{
+        contract_id: "",
+        contract_name: "",
+        code: "GENERAL_ERROR",
+        message: error instanceof Error ? error.message : "Erro interno",
+        timestamp: new Date().toISOString(),
+      }],
+    };
+
+    return new Response(JSON.stringify(response), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

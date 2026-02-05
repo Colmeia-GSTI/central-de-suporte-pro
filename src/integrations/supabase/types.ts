@@ -59,6 +59,48 @@ export type Database = {
           },
         ]
       }
+      application_logs: {
+        Row: {
+          action: string | null
+          context: Json | null
+          created_at: string | null
+          duration_ms: number | null
+          error_details: Json | null
+          execution_id: string | null
+          id: string
+          level: string
+          message: string
+          module: string
+          user_id: string | null
+        }
+        Insert: {
+          action?: string | null
+          context?: Json | null
+          created_at?: string | null
+          duration_ms?: number | null
+          error_details?: Json | null
+          execution_id?: string | null
+          id?: string
+          level: string
+          message: string
+          module: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string | null
+          context?: Json | null
+          created_at?: string | null
+          duration_ms?: number | null
+          error_details?: Json | null
+          execution_id?: string | null
+          id?: string
+          level?: string
+          message?: string
+          module?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           asset_type: Database["public"]["Enums"]["asset_type"]
@@ -3844,6 +3886,7 @@ export type Database = {
       }
     }
     Functions: {
+      cleanup_old_application_logs: { Args: never; Returns: undefined }
       cleanup_old_monitoring_alerts: { Args: never; Returns: undefined }
       client_owns_record: {
         Args: { _client_id: string; _user_id: string }

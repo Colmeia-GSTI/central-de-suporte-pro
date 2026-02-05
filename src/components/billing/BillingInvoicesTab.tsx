@@ -66,6 +66,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { logger, retryWithBackoff } from "@/lib/logger";
 import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
 import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialog";
@@ -437,24 +438,115 @@ export function BillingInvoicesTab() {
 
   const handleGenerateMonthlyInvoices = async () => {
     setIsGeneratingMonthly(true);
+    const executionId = logger.generateExecutionId();
+    const startTime = Date.now();
+
+    // Log start
+    await logger.billingOperation("generate-monthly-invoices", "start", {
+      execution_id: executionId,
+    }, true);
+
     try {
-      const { data, error } = await supabase.functions.invoke("generate-monthly-invoices", {
-        body: {},
-      });
+      // Retry with exponential backoff (3 attempts: 1s, 2s, 4s)
+      const data = await retryWithBackoff(
+        async () => {
+          const { data, error } = await supabase.functions.invoke("generate-monthly-invoices", {
+            body: {},
+          });
+          if (error) throw error;
+          return data;
+        },
+        {
+          maxRetries: 3,
+          baseDelayMs: 1000,
+          onRetry: (attempt, error, delayMs) => {
+            toast.warning(`Tentativa ${attempt}/3 falhou`, {
+              description: `Retentando em ${delayMs / 1000}s...`,
+            });
+            logger.billingOperation("generate-monthly-invoices", "retry", {
+              execution_id: executionId,
+              error: error.message,
+            });
+          },
+        }
+      );
 
-      if (error) throw error;
+      const duration = Date.now() - startTime;
 
-      if (data.success) {
-        toast.success("Faturas geradas com sucesso!", {
-          description: `${data.generated || 0} faturas criadas para o mês atual`,
-        });
+      if (data.success !== false) {
+        const stats = data.stats || { generated: data.generated || 0, skipped: data.skipped || 0, failed: 0 };
+        
+        // Log success
+        await logger.billingOperation("generate-monthly-invoices", "success", {
+          execution_id: data.execution_id || executionId,
+          contract_count: stats.total_contracts,
+          generated: stats.generated,
+          skipped: stats.skipped,
+          failed: stats.failed,
+          duration_ms: duration,
+        }, true);
+
+        // Show detailed success message
+        if (stats.generated > 0) {
+          toast.success("Faturas geradas com sucesso!", {
+            description: `${stats.generated} faturas criadas${stats.skipped > 0 ? `, ${stats.skipped} ignoradas` : ""}${stats.failed > 0 ? `, ${stats.failed} com erro` : ""}`,
+            action: data.execution_id ? {
+              label: "Ver Logs",
+              onClick: () => window.open("/settings?tab=integrations&subtab=logs", "_blank"),
+            } : undefined,
+          });
+        } else if (stats.skipped > 0) {
+          toast.info("Nenhuma fatura nova gerada", {
+            description: `${stats.skipped} faturas já existentes para este mês`,
+          });
+        } else {
+          toast.info("Nenhum contrato ativo encontrado");
+        }
+
+        // Show errors if any
+        if (data.errors && data.errors.length > 0) {
+          for (const err of data.errors.slice(0, 3)) {
+            toast.error(`Erro: ${err.contract_name}`, {
+              description: err.message,
+            });
+          }
+        }
+
         queryClient.invalidateQueries({ queryKey: ["invoices"] });
         queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       } else {
-        toast.error(data.error || "Erro ao gerar faturas");
+        // Log failure
+        await logger.billingOperation("generate-monthly-invoices", "error", {
+          execution_id: data.execution_id || executionId,
+          error: data.message || "Erro desconhecido",
+          duration_ms: duration,
+        }, true);
+
+        toast.error("Erro ao gerar faturas", {
+          description: data.message || "Erro desconhecido",
+          action: {
+            label: "Ver Logs",
+            onClick: () => window.open("/settings?tab=integrations&subtab=logs", "_blank"),
+          },
+        });
       }
     } catch (error: unknown) {
-      toast.error("Erro ao gerar faturas mensais", { description: getErrorMessage(error) });
+      const errorMessage = getErrorMessage(error);
+      
+      // Log error
+      await logger.billingOperation("generate-monthly-invoices", "error", {
+        execution_id: executionId,
+        error: errorMessage,
+        duration_ms: Date.now() - startTime,
+      }, true);
+
+      toast.error("Erro ao gerar faturas mensais", { 
+        description: errorMessage,
+        action: {
+          label: "Ver Logs",
+          onClick: () => window.open("/settings?tab=integrations&subtab=logs", "_blank"),
+        },
+      });
     } finally {
       setIsGeneratingMonthly(false);
     }
