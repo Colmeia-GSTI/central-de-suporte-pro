@@ -22,6 +22,11 @@ interface ProcessingResult {
   processed_at: string;
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 // Initialize Supabase client
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -39,8 +44,16 @@ async function processInvoices(
   req: ProcessInvoiceRequest
 ): Promise<ProcessingResult[]> {
   const results: ProcessingResult[] = [];
+  const totalInvoices = req.invoice_ids.length;
 
-  for (const invoiceId of req.invoice_ids) {
+  console.log(`[batch-process] Starting batch processing of ${totalInvoices} invoices`);
+  console.log(`[batch-process] Options: boleto=${req.generate_boleto}, pix=${req.generate_pix}, nfse=${req.emit_nfse}, email=${req.send_email}, whatsapp=${req.send_whatsapp}`);
+  console.log(`[batch-process] Provider: ${req.billing_provider || "banco_inter"}`);
+
+  for (let i = 0; i < req.invoice_ids.length; i++) {
+    const invoiceId = req.invoice_ids[i];
+    console.log(`[batch-process] Processing invoice ${i + 1}/${totalInvoices}: ${invoiceId}`);
+    
     const result: ProcessingResult = {
       invoice_id: invoiceId,
       success: true,
@@ -48,26 +61,37 @@ async function processInvoices(
     };
 
     try {
+      // Buscar dados atuais da fatura para incrementar attempts
+      const { data: currentInvoice } = await supabase
+        .from("invoices")
+        .select("processing_attempts")
+        .eq("id", invoiceId)
+        .single();
+
+      const currentAttempts = currentInvoice?.processing_attempts || 0;
+
       // 1. GERAR BOLETO
       if (req.generate_boleto) {
         try {
-          const { error: boletoError } = await supabase.functions.invoke(
-            req.billing_provider === "asaas" ? "asaas-nfse" : "banco-inter",
-            {
-              body: {
-                action: "generate_boleto",
-                invoice_id: invoiceId,
-                provider: req.billing_provider || "banco_inter",
-              },
-            }
-          );
+          console.log(`[batch-process] Generating boleto for ${invoiceId}`);
+          const functionName = req.billing_provider === "asaas" ? "asaas-nfse" : "banco-inter";
+          const body = req.billing_provider === "asaas" 
+            ? { action: "create_payment", invoice_id: invoiceId, billing_type: "BOLETO" }
+            : { invoice_id: invoiceId, payment_type: "boleto" };
+
+          const { data, error: boletoError } = await supabase.functions.invoke(functionName, { body });
 
           if (boletoError) {
             result.boleto_status = "error";
             result.boleto_error = boletoError.message;
-            console.error(`Error generating boleto for ${invoiceId}:`, boletoError);
+            console.error(`[batch-process] Error generating boleto for ${invoiceId}:`, boletoError);
+          } else if (data?.error) {
+            result.boleto_status = "error";
+            result.boleto_error = data.error;
+            console.error(`[batch-process] Boleto API error for ${invoiceId}:`, data.error);
           } else {
             result.boleto_status = "success";
+            console.log(`[batch-process] Boleto generated successfully for ${invoiceId}`);
 
             // Atualizar status no banco
             await supabase
@@ -75,39 +99,69 @@ async function processInvoices(
               .update({
                 boleto_status: "enviado",
                 boleto_sent_at: new Date().toISOString(),
-                processing_attempts: (old_attempts: number) => old_attempts + 1,
+                processing_attempts: currentAttempts + 1,
               })
               .eq("id", invoiceId);
           }
         } catch (error) {
           result.boleto_status = "error";
           result.boleto_error = error instanceof Error ? error.message : "Unknown error";
-          console.error("Boleto generation exception:", error);
+          console.error(`[batch-process] Boleto generation exception for ${invoiceId}:`, error);
         }
       } else {
         result.boleto_status = "skipped";
       }
 
-      // 2. GERAR NFS-e
+      // 2. GERAR PIX
+      if (req.generate_pix) {
+        try {
+          console.log(`[batch-process] Generating PIX for ${invoiceId}`);
+          const functionName = req.billing_provider === "asaas" ? "asaas-nfse" : "banco-inter";
+          const body = req.billing_provider === "asaas" 
+            ? { action: "create_payment", invoice_id: invoiceId, billing_type: "PIX" }
+            : { invoice_id: invoiceId, payment_type: "pix" };
+
+          const { data, error: pixError } = await supabase.functions.invoke(functionName, { body });
+
+          if (pixError) {
+            console.error(`[batch-process] Error generating PIX for ${invoiceId}:`, pixError);
+          } else if (data?.error) {
+            console.error(`[batch-process] PIX API error for ${invoiceId}:`, data.error);
+          } else {
+            console.log(`[batch-process] PIX generated successfully for ${invoiceId}`);
+          }
+        } catch (error) {
+          console.error(`[batch-process] PIX generation exception for ${invoiceId}:`, error);
+        }
+      }
+
+      // 3. GERAR NFS-e
       if (req.emit_nfse) {
         try {
           // Buscar dados da fatura
           const { data: invoice } = await supabase
             .from("invoices")
-            .select("*, nfse_history_id, contracts(name)")
+            .select("*, contracts(name, description, nfse_descricao_customizada)")
             .eq("id", invoiceId)
             .single();
 
-          if (!invoice?.contracts) {
+          if (!invoice?.contract_id) {
             result.nfse_status = "skipped";
-            console.log(`Invoice ${invoiceId} has no associated contract, skipping NFS-e`);
+            console.log(`[batch-process] Invoice ${invoiceId} has no associated contract, skipping NFS-e`);
           } else {
-            const { error: nfseError } = await supabase.functions.invoke(
+            console.log(`[batch-process] Emitting NFS-e for ${invoiceId}`);
+            const { data, error: nfseError } = await supabase.functions.invoke(
               "asaas-nfse",
               {
                 body: {
                   action: "emit",
+                  client_id: invoice.client_id,
                   invoice_id: invoiceId,
+                  contract_id: invoice.contract_id,
+                  value: invoice.amount,
+                  service_description: invoice.contracts?.nfse_descricao_customizada || 
+                    invoice.contracts?.description || 
+                    `Prestação de serviços - ${invoice.contracts?.name}`,
                 },
               }
             );
@@ -115,9 +169,14 @@ async function processInvoices(
             if (nfseError) {
               result.nfse_status = "error";
               result.nfse_error = nfseError.message;
-              console.error(`Error emitting NFS-e for ${invoiceId}:`, nfseError);
+              console.error(`[batch-process] Error emitting NFS-e for ${invoiceId}:`, nfseError);
+            } else if (data?.error) {
+              result.nfse_status = "error";
+              result.nfse_error = data.error;
+              console.error(`[batch-process] NFS-e API error for ${invoiceId}:`, data.error);
             } else {
               result.nfse_status = "success";
+              console.log(`[batch-process] NFS-e emitted successfully for ${invoiceId}`);
 
               // Atualizar status no banco
               await supabase
@@ -132,20 +191,21 @@ async function processInvoices(
         } catch (error) {
           result.nfse_status = "error";
           result.nfse_error = error instanceof Error ? error.message : "Unknown error";
-          console.error("NFS-e generation exception:", error);
+          console.error(`[batch-process] NFS-e generation exception for ${invoiceId}:`, error);
         }
       } else {
         result.nfse_status = "skipped";
       }
 
-      // 3. ENVIAR NOTIFICAÇÕES
+      // 4. ENVIAR NOTIFICAÇÕES
       if (req.send_email || req.send_whatsapp) {
         try {
           const channels = [];
           if (req.send_email) channels.push("email");
           if (req.send_whatsapp) channels.push("whatsapp");
 
-          const { error: notificationError } = await supabase.functions.invoke(
+          console.log(`[batch-process] Sending notifications (${channels.join(", ")}) for ${invoiceId}`);
+          const { data, error: notificationError } = await supabase.functions.invoke(
             "resend-payment-notification",
             {
               body: {
@@ -158,9 +218,14 @@ async function processInvoices(
           if (notificationError) {
             result.email_status = "error";
             result.email_error = notificationError.message;
-            console.error(`Error sending notifications for ${invoiceId}:`, notificationError);
+            console.error(`[batch-process] Error sending notifications for ${invoiceId}:`, notificationError);
+          } else if (!data?.success) {
+            result.email_status = "error";
+            result.email_error = data?.error || "Notification failed";
+            console.error(`[batch-process] Notification API error for ${invoiceId}:`, data?.error);
           } else {
             result.email_status = "success";
+            console.log(`[batch-process] Notifications sent successfully for ${invoiceId}`);
 
             // Atualizar status no banco
             await supabase
@@ -174,18 +239,19 @@ async function processInvoices(
         } catch (error) {
           result.email_status = "error";
           result.email_error = error instanceof Error ? error.message : "Unknown error";
-          console.error("Notification sending exception:", error);
+          console.error(`[batch-process] Notification sending exception for ${invoiceId}:`, error);
         }
       } else {
         result.email_status = "skipped";
       }
 
-      // Marcar fatura como processada se todos os passos foram bem-sucedidos
-      if (
-        result.boleto_status !== "error" &&
-        result.nfse_status !== "error" &&
-        result.email_status !== "error"
-      ) {
+      // Marcar fatura como processada se pelo menos uma ação foi bem-sucedida
+      const hasSuccess = 
+        result.boleto_status === "success" ||
+        result.nfse_status === "success" ||
+        result.email_status === "success";
+
+      if (hasSuccess) {
         await supabase
           .from("invoices")
           .update({
@@ -193,37 +259,42 @@ async function processInvoices(
             processing_metadata: {
               batch_processed: true,
               processed_at: new Date().toISOString(),
+              boleto_status: result.boleto_status,
+              nfse_status: result.nfse_status,
+              email_status: result.email_status,
+              provider: req.billing_provider || "banco_inter",
             },
           })
           .eq("id", invoiceId);
       }
 
-      result.success = true;
+      result.success = 
+        result.boleto_status !== "error" &&
+        result.nfse_status !== "error" &&
+        result.email_status !== "error";
+
     } catch (error) {
       result.success = false;
-      console.error(`Unexpected error processing invoice ${invoiceId}:`, error);
+      console.error(`[batch-process] Unexpected error processing invoice ${invoiceId}:`, error);
     }
 
     results.push(result);
 
     // Pequeno delay entre processamentos para não sobrecarregar
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (i < req.invoice_ids.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
   }
 
+  console.log(`[batch-process] Completed. Processed ${results.length} invoices. Success: ${results.filter(r => r.success).length}`);
   return results;
 }
 
 // Main handler
 Deno.serve(async (req) => {
-  // CORS headers
+  // CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -232,7 +303,7 @@ Deno.serve(async (req) => {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -245,9 +316,10 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
+      console.error("[batch-process] Auth error:", authError);
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -262,9 +334,10 @@ Deno.serve(async (req) => {
       false;
 
     if (!hasPermission) {
+      console.error("[batch-process] Permission denied for user:", user.id);
       return new Response(JSON.stringify({ error: "Permission denied" }), {
         status: 403,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -273,25 +346,20 @@ Deno.serve(async (req) => {
     if (!body.invoice_ids || body.invoice_ids.length === 0) {
       return new Response(
         JSON.stringify({ error: "No invoices specified" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(
-      `Processing ${body.invoice_ids.length} invoices for user ${user.id}`
-    );
+    console.log(`[batch-process] User ${user.id} processing ${body.invoice_ids.length} invoices`);
 
     const results = await processInvoices(body);
 
     return new Response(JSON.stringify({ success: true, results }), {
       status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("Batch processing error:", error);
+    console.error("[batch-process] Batch processing error:", error);
 
     return new Response(
       JSON.stringify({
@@ -299,10 +367,7 @@ Deno.serve(async (req) => {
       }),
       {
         status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }
