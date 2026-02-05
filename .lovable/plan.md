@@ -1,241 +1,162 @@
 
-# Plano: Sistema Integrado de Logging e Tratamento de Erros para Operações Financeiras
+# Plano de Acao - Fase 1: Correcoes Criticas do Sistema de Cobranca
 
-## Análise do Problema Atual
+Baseado no documento REVIEW_SISTEMA_COBRANCA.md, este plano implementa as correcoes da **Fase 1** (itens 1-8) que tem impacto imediato na receita e integridade dos dados.
 
-**Contexto da Falha:**
-O usuário teve um erro ao clicar em "Gerar Faturas Mensais" em `/billing`. O sistema atual:
-- ✅ Tem um logger (`logger.ts`) mas é pouco utilizado
-- ✅ Tem sanitização de erros (`api-error-handler.ts`) mas não está integrada no billing
-- ❌ Não registra logs estruturados de operações financeiras
-- ❌ Sem retry logic para falhas transitórias
-- ❌ Sem painel de visualização de logs (admin/diagnostics)
-- ❌ Edge function `generate-monthly-invoices` não retorna erros estruturados de forma consistente
+---
 
-## Solução Proposta em 4 Fases
+## 0. Corrigir Build Error (Bloqueante)
 
-### Fase 1: Extensão do Logger (Frontend)
+O build esta falhando porque `esm.sh` retorna erro 500 para imports de `@supabase/supabase-js`. Isso e um problema transiente do CDN, mas para maior estabilidade, vamos padronizar o import em `apply-contract-adjustment/index.ts` para usar `@2` (sem versao especifica pinada como `@2.95.1`).
 
-**Arquivo:** `src/lib/logger.ts`
+**Arquivo:** `supabase/functions/apply-contract-adjustment/index.ts`
+- Alterar import para `https://esm.sh/@supabase/supabase-js@2`
 
-Adicionar métodos específicos para Billing:
-```
-- billingInfo(message, context, data)
-- billingError(message, context, error)
-- billingGenerateMonthly(status, data) - inicio/sucesso/erro com detalhes
-- billingPayment(invoiceId, action, provider, status, error)
-```
+---
 
-E um método genérico para salvar logs também no banco:
-```
-- persistLogToDatabase(entry) - via edge function ou diretamente
-```
-
-### Fase 2: Integração em BillingInvoicesTab (Frontend)
-
-**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx`
-
-Na função `handleGenerateMonthlyInvoices`:
-1. Registrar início da operação com logger.billingGenerateMonthly("starting", {...})
-2. Implement retry logic com exponential backoff (3 tentativas, 1s → 2s → 4s)
-3. Registrar sucesso/erro com todos os detalhes (contracts processados, faturas geradas, etc)
-4. Melhorar feedback ao usuário (progress toast com: "Processando 3 contratos...")
-
-### Fase 3: Edge Function Melhorada (Backend)
+## 1. Preencher `payment_method` na geracao de faturas (Review 1.1)
 
 **Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts`
 
-Implementar estrutura de retorno padronizada:
-```json
-{
-  "success": boolean,
-  "message": string,
-  "timestamp": ISO8601,
-  "execution_id": uuid,
-  "stats": {
-    "total_contracts": number,
-    "generated": number,
-    "skipped": number,
-    "failed": number
-  },
-  "results": [
-    {
-      "contract_id": uuid,
-      "contract_name": string,
-      "status": "created" | "skipped" | "error",
-      "invoice_id": uuid | null,
-      "error": string | null,
-      "duration_ms": number
-    }
-  ],
-  "errors": [
-    {
-      "contract_name": string,
-      "code": string,
-      "message": string,
-      "timestamp": ISO8601
-    }
-  ]
-}
+Na linha 300-312, o insert de invoices nao inclui `payment_method`. Adicionar:
+```
+payment_method: contract.payment_preference || 'boleto'
 ```
 
-### Fase 4: Painel de Logs (Admin UI)
+Sem isso, o `poll-boleto-status` nunca encontra faturas para atualizar (filtra por `payment_method = 'boleto'`).
 
-**Arquivo:** Criar `src/components/settings/LogsViewerTab.tsx`
+---
 
-Local: Settings → Integrações → Logs (nova aba)
-Requisitos:
-- Visualizar últimos 100 logs
-- Filtrar por tipo (billing, payment, nfse, auth, etc)
-- Filtrar por nível (error, warning, info, debug)
-- Filtrar por data/hora
-- Copiar stack trace para debug
-- Apenas acessível para admin/financial
-- Botão "Baixar Logs" em formato JSON/CSV
+## 2. Incluir `contract_services` na geracao de faturas (Review 1.2)
 
-### Database Schema para Logs
+**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts`
 
-**Tabela a Criar:** `application_logs`
+Apos criar a fatura, buscar `contract_services` do contrato e gerar `invoice_items` correspondentes. Atualmente so considera `additional_charges`.
 
+Adicionar apos linha 370:
+- Query `contract_services` pelo `contract_id`
+- Para cada servico, inserir em `invoice_items` com `description`, `quantity`, `unit_value`, `total_value`
+
+---
+
+## 3. Recriar indices criticos removidos (Review 1.7)
+
+**Migracao SQL:**
 ```sql
-CREATE TABLE application_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid,
-  level text NOT NULL, -- error, warn, info, debug
-  module text NOT NULL, -- billing, auth, payment, nfse, etc
-  action text, -- generate-invoices, emit-nfse, etc
-  message text NOT NULL,
-  context jsonb, -- contract_id, invoice_id, etc
-  error_details jsonb, -- stack trace, error message
-  execution_id uuid, -- para rastrear operação fim-a-fim
-  duration_ms integer,
-  created_at timestamptz DEFAULT now(),
-  
-  -- Índices para performance
-  CONSTRAINT app_logs_level_check CHECK (level IN ('error', 'warn', 'info', 'debug'))
-);
-
-CREATE INDEX idx_app_logs_created_at ON application_logs(created_at DESC);
-CREATE INDEX idx_app_logs_user_id ON application_logs(user_id);
-CREATE INDEX idx_app_logs_module_level ON application_logs(module, level);
+CREATE INDEX IF NOT EXISTS idx_nfse_history_contract ON nfse_history(contract_id);
+CREATE INDEX IF NOT EXISTS idx_nfse_history_invoice ON nfse_history(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_nfse_history_client ON nfse_history(client_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status_due ON invoices(status, due_date);
+CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
+CREATE INDEX IF NOT EXISTS idx_contracts_active ON contracts(status) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_invoices_reference_month ON invoices(reference_month);
+CREATE INDEX IF NOT EXISTS idx_financial_entries_client ON financial_entries(client_id);
+CREATE INDEX IF NOT EXISTS idx_financial_entries_created ON financial_entries(created_at);
+CREATE INDEX IF NOT EXISTS idx_client_contacts_user_client ON client_contacts(user_id, client_id);
 ```
 
-## Fluxo de Operação Completo
+---
 
+## 4. Corrigir webhook para atualizar faturas "overdue" (Review 1.4)
+
+**Arquivo:** `supabase/functions/webhook-asaas-nfse/index.ts` (linha 378)
+
+Alterar:
 ```
-Usuario clica "Gerar Faturas Mensais"
-         ↓
-[Frontend] logger.billingGenerateMonthly("starting", {contract_count: 5})
-         ↓
-[Frontend] Tenta invocar edge function (retry: max 3 vezes)
-         ↓
-[Backend] Edge function processa com tracking de execution_id
-         ↓
-[Backend] Para cada contrato:
-  - Registra tentativa com logger
-  - Em sucesso: retorna invoice_id
-  - Em erro: retorna error code + message
-         ↓
-[Backend] Persiste logs estruturados em application_logs table
-         ↓
-[Frontend] Recebe resposta com execution_id
-         ↓
-[Frontend] Registra resultado final com execution_id
-         ↓
-[Frontend] Mostra toast com status detalhado
-         ↓
-[Admin] Pode ver logs completos em Settings → Logs
+.eq("status", "pending")
+```
+Para:
+```
+.in("status", ["pending", "overdue"])
 ```
 
-## Implementação Técnica - Detalhes
+Isso garante que um cliente que paga um boleto vencido tenha a fatura atualizada corretamente.
 
-### 1. Extensão do Logger (logger.ts)
+---
 
-Adicionar novo método:
+## 5. Corrigir campo `mensagem_erro` no webhook (Review 4.1.5)
+
+**Arquivo:** `supabase/functions/webhook-asaas-nfse/index.ts`
+
+O codigo usa `mensagem_erro` mas a coluna no banco e `mensagem_retorno`. Buscar e substituir todas as ocorrencias.
+
+---
+
+## 6. Remover FK bidirecional invoice-nfse (Review 1.8)
+
+**Migracao SQL:**
+```sql
+ALTER TABLE invoices DROP COLUMN IF EXISTS nfse_history_id;
+```
+
+A relacao correta e `nfse_history.invoice_id -> invoices.id` (1:N). O campo `invoices.nfse_history_id` cria dependencia circular desnecessaria.
+
+---
+
+## 7. Verificacao de duplicatas mais robusta (Review 2.1.1)
+
+**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts` (linha 254)
+
+Alterar:
+```
+.neq("status", "cancelled")
+```
+Para:
+```
+.not("status", "in", '("cancelled","voided")')
+```
+
+---
+
+## 8. Deteccao de duplicidade em `contract_services.name` (Review 5.1.3)
+
+**Verificacao:** A tabela `contract_services` ja tem a coluna `name` (confirmado no schema). Este item do review ja foi resolvido -- a coluna existe.
+
+---
+
+## Resumo de Arquivos a Modificar
+
+| # | Arquivo | Mudanca |
+|---|---------|---------|
+| 0 | `supabase/functions/apply-contract-adjustment/index.ts` | Fix import esm.sh |
+| 1 | `supabase/functions/generate-monthly-invoices/index.ts` | Adicionar `payment_method` + `invoice_items` de `contract_services` + duplicata check |
+| 2 | `supabase/functions/webhook-asaas-nfse/index.ts` | Fix status filter "overdue" + campo `mensagem_retorno` |
+| 3 | Migracao SQL | Recriar indices + remover `nfse_history_id` |
+
+## Ordem de Execucao
+
+1. Fix build error (import esm.sh)
+2. Migracao SQL (indices + remover FK circular)
+3. Edge function `generate-monthly-invoices` (payment_method + contract_services + duplicata)
+4. Edge function `webhook-asaas-nfse` (overdue + mensagem_retorno)
+
+## Detalhes Tecnicos
+
+### Contract Services -> Invoice Items
+
+Adicionar ao `generate-monthly-invoices`, apos a criacao da fatura:
+
 ```typescript
-billingOperation(action: string, status: "start" | "success" | "error", data: {
-  execution_id: string;
-  contract_count?: number;
-  generated?: number;
-  failed?: number;
-  error?: string;
-  duration_ms?: number;
-}) {
-  this.info(
-    `Billing: ${action} - ${status}`,
-    "Billing",
-    { ...data, action, status }
-  );
+// Fetch contract services
+const { data: services } = await supabase
+  .from("contract_services")
+  .select("name, description, quantity, unit_value, value")
+  .eq("contract_id", contract.id);
+
+if (services && services.length > 0) {
+  const items = services.map(s => ({
+    invoice_id: newInvoice.id,
+    description: s.description || s.name,
+    quantity: s.quantity || 1,
+    unit_value: s.unit_value || s.value,
+    total_value: s.value,
+  }));
+  await supabase.from("invoice_items").insert(items);
 }
 ```
 
-### 2. Edge Function: Retorno Padronizado
+### Webhook Fix - Multiplos Locais
 
-Retornar objeto estruturado com `execution_id` único para rastreamento fim-a-fim.
-
-### 3. Retry Logic no Frontend
-
-```typescript
-const retryWithBackoff = async (fn, maxRetries = 3) => {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt === maxRetries - 1) throw error;
-      const delayMs = Math.pow(2, attempt) * 1000;
-      logger.warn(`Retry attempt ${attempt + 1}/${maxRetries} em ${delayMs}ms`, "Billing");
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-  }
-};
-```
-
-### 4. UI Progress Feedback
-
-Em vez de simples toast:
-```
-[Loading] Processando 5 contratos...
-[Progress] ✓ QUAZA - Fatura #123 criada
-[Progress] ✓ ABC Corp - Fatura #124 criada
-[Progress] ✗ XYZ Ltda - Erro: Dados faltando
-[Success] 2 de 3 faturas geradas com sucesso
-[Info] Ver detalhes em Configurações → Logs (ID: abc-123-def-456)
-```
-
-## Arquivos a Modificar/Criar
-
-| Arquivo | Tipo | Conteúdo |
-|---------|------|----------|
-| `src/lib/logger.ts` | Edit | Adicionar métodos billing-específicos + persistToDatabase |
-| `src/components/billing/BillingInvoicesTab.tsx` | Edit | Integrar logging + retry logic + melhor UX |
-| `src/components/settings/LogsViewerTab.tsx` | Create | Painel de visualização de logs (admin only) |
-| `src/components/settings/IntegrationsTab.tsx` | Edit | Adicionar aba "Logs" |
-| `supabase/functions/generate-monthly-invoices/index.ts` | Edit | Estruturar retorno + persistent logs |
-| `supabase/functions/save-application-log/index.ts` | Create | Edge function para salvar logs no DB |
-| Migração SQL | Create | Criar tabela application_logs |
-
-## Timeline & Prioridade
-
-1. **Alta (Imediato):** 
-   - Extensão do logger com métodos billing
-   - Retry logic em BillingInvoicesTab
-   - Edge function com retorno estruturado
-
-2. **Média (Semana 1):**
-   - Painel LogsViewerTab
-   - Integração com application_logs table
-   - Melhor feedback ao usuário (toast com detalhes)
-
-3. **Baixa (Futura):**
-   - Alertas automáticos (Slack/Email) para erros críticos
-   - Análise de padrões de erro
-   - Auto-retry em background jobs
-
-## Benefícios
-
-✅ **Para Suporte:** Pode diagnosticar problemas rapidamente via Logs panel
-✅ **Para Dev:** Retry automático resolve falhas transitórias (network, timeout)
-✅ **Para Usuário:** Feedback claro do que aconteceu + ID para rastreamento
-✅ **Para Auditoria:** Histórico completo de todas operações financeiras
-✅ **Para Monitoramento:** Base para alertas futuros e análise de erros
-
+No `webhook-asaas-nfse/index.ts`, existem pelo menos 2 locais onde `.eq("status", "pending")` precisa ser alterado para `.in("status", ["pending", "overdue"])`:
+- Processamento de pagamento confirmado
+- Processamento de fatura vencida (ja correto - muda para "overdue")
