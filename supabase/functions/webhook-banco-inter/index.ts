@@ -100,6 +100,33 @@ serve(async (req) => {
     const payload: InterWebhookPayload = JSON.parse(rawPayload);
     console.log(`[WEBHOOK-BANCO-INTER] Payload recebido from ${clientIP}:`, JSON.stringify(payload));
 
+    // Idempotency check
+    const eventId = payload.codigoSolicitacao || payload.txid || payload.nossoNumero || `unknown-${Date.now()}`;
+    const idempotencyKey = `${payload.situacao || payload.status || "event"}-${eventId}`;
+
+    const { data: existingEvent } = await supabase
+      .from("webhook_events")
+      .select("id")
+      .eq("webhook_source", "banco_inter")
+      .eq("event_id", idempotencyKey)
+      .maybeSingle();
+
+    if (existingEvent) {
+      console.log(`[WEBHOOK-BANCO-INTER] Evento já processado (idempotency): ${idempotencyKey}`);
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: "already_processed" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Record event before processing
+    await supabase.from("webhook_events").insert({
+      webhook_source: "banco_inter",
+      event_id: idempotencyKey,
+      event_type: payload.situacao || payload.status || "unknown",
+      payload: payload as unknown as Record<string, unknown>,
+    });
+
     // Determine if it's boleto or PIX
     const isBoleto = !!payload.codigoSolicitacao || !!payload.nossoNumero;
     const isPix = !!payload.txid;

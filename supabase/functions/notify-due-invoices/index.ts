@@ -150,6 +150,19 @@ serve(async (req) => {
       const client = invoice.clients as unknown as Invoice['clients'];
       if (!client) continue;
 
+      // Check if notification already sent for this invoice (dedup)
+      const { data: existingNotif } = await supabase
+        .from("invoice_notification_logs")
+        .select("id")
+        .eq("invoice_id", invoice.id)
+        .eq("notification_type", "payment_reminder")
+        .limit(1);
+
+      if (existingNotif && existingNotif.length > 0) {
+        console.log(`[NOTIFY-DUE] Skipping invoice #${invoice.invoice_number} - already notified`);
+        continue;
+      }
+
       const dueDate = new Date(invoice.due_date);
       const daysUntilDue = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
       const dueDateFormatted = dueDate.toLocaleDateString('pt-BR');
@@ -258,6 +271,18 @@ Para evitar juros e multas, efetue o pagamento até a data de vencimento.`;
         }
       } catch (error) {
         console.error("Error creating notifications:", error);
+      }
+
+      // Log notification to prevent duplicates on re-run
+      if (result.email || result.whatsapp) {
+        const logs = [];
+        if (result.email) {
+          logs.push({ invoice_id: invoice.id, notification_type: "payment_reminder", channel: "email", recipient: client.financial_email || client.email });
+        }
+        if (result.whatsapp) {
+          logs.push({ invoice_id: invoice.id, notification_type: "payment_reminder", channel: "whatsapp", recipient: client.whatsapp });
+        }
+        await supabase.from("invoice_notification_logs").upsert(logs, { onConflict: "invoice_id,notification_type,channel" });
       }
 
       results.push(result);
