@@ -406,21 +406,46 @@ Deno.serve(async (req) => {
     const event = payload.event as string;
     console.log("[WEBHOOK-ASAAS] Evento recebido:", event);
 
+    // Generate idempotency key from event data
+    const eventId = payload.payment?.id || payload.invoice?.id || `${event}-${Date.now()}`;
+    const idempotencyKey = `${event}-${eventId}`;
+
+    // Check idempotency - skip if already processed
+    const { data: existing } = await supabase
+      .from("webhook_events")
+      .select("id")
+      .eq("webhook_source", "asaas")
+      .eq("event_id", idempotencyKey)
+      .maybeSingle();
+
+    if (existing) {
+      console.log(`[WEBHOOK-ASAAS] Evento já processado (idempotency): ${idempotencyKey}`);
+      return new Response(
+        JSON.stringify({ success: true, event, skipped: true, reason: "already_processed" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Record the event BEFORE processing to prevent race conditions
+    await supabase.from("webhook_events").insert({
+      webhook_source: "asaas",
+      event_id: idempotencyKey,
+      event_type: event,
+      payload: payload,
+    });
+
     // Determine event type and process in background
     const isInvoiceEvent = event?.startsWith("INVOICE_") || payload.invoice;
     const isPaymentEvent = event?.startsWith("PAYMENT_") || payload.payment;
 
     if (isInvoiceEvent && payload.invoice) {
-      // Process invoice webhook in background
       EdgeRuntime.waitUntil(processInvoiceWebhook(supabase, event, payload.invoice));
     } else if (isPaymentEvent && payload.payment) {
-      // Process payment webhook in background
       EdgeRuntime.waitUntil(processPaymentWebhook(supabase, event, payload.payment));
     } else {
       console.log(`[WEBHOOK-ASAAS] Evento não processado: ${event}`);
     }
 
-    // Return immediate success response
     return new Response(
       JSON.stringify({ success: true, event, received_at: new Date().toISOString() }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
