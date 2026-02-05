@@ -20,11 +20,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp } from "lucide-react";
+import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ContractAdjustmentDialog } from "@/components/contracts/ContractAdjustmentDialog";
+import { ContractHistorySheet } from "@/components/contracts/ContractHistorySheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -65,6 +66,10 @@ export default function ContractsPage() {
     contract: null,
   });
   const [adjustmentDialog, setAdjustmentDialog] = useState<{ open: boolean; contract: ContractWithClient | null }>({
+    open: false,
+    contract: null,
+  });
+  const [historySheet, setHistorySheet] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
     contract: null,
   });
@@ -253,6 +258,22 @@ export default function ContractsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setHistorySheet({ open: true, contract })}
+                              >
+                                <History className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Ver histórico</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <PermissionGate module="contracts" action="edit">
                           <TooltipProvider>
                             <Tooltip>
@@ -320,6 +341,19 @@ export default function ContractsPage() {
             name: adjustmentDialog.contract.name,
             monthly_value: adjustmentDialog.contract.monthly_value,
             adjustment_index: adjustmentDialog.contract.adjustment_index,
+          }}
+        />
+      )}
+
+      {/* Contract History Sheet */}
+      {historySheet.contract && (
+        <ContractHistorySheet
+          open={historySheet.open}
+          onOpenChange={(open) => setHistorySheet({ ...historySheet, open })}
+          contract={{
+            id: historySheet.contract.id,
+            name: historySheet.contract.name,
+            client_name: historySheet.contract.clients?.name,
           }}
         />
       )}
