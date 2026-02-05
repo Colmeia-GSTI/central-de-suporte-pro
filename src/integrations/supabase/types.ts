@@ -1456,6 +1456,59 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_documents: {
+        Row: {
+          bucket_name: string | null
+          created_at: string | null
+          document_type: string
+          expires_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          invoice_id: string
+          metadata: Json | null
+          mime_type: string | null
+          storage_provider: string | null
+        }
+        Insert: {
+          bucket_name?: string | null
+          created_at?: string | null
+          document_type: string
+          expires_at?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          invoice_id: string
+          metadata?: Json | null
+          mime_type?: string | null
+          storage_provider?: string | null
+        }
+        Update: {
+          bucket_name?: string | null
+          created_at?: string | null
+          document_type?: string
+          expires_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          invoice_id?: string
+          metadata?: Json | null
+          mime_type?: string | null
+          storage_provider?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_documents_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_generation_log: {
         Row: {
           contract_id: string | null
@@ -1588,20 +1641,39 @@ export type Database = {
           auto_payment_generated: boolean | null
           billing_provider: string | null
           boleto_barcode: string | null
+          boleto_error_msg: string | null
+          boleto_sent_at: string | null
+          boleto_status:
+            | Database["public"]["Enums"]["boleto_processing_status"]
+            | null
           boleto_url: string | null
           client_id: string
           contract_id: string | null
           created_at: string
           description: string | null
           due_date: string
+          email_error_msg: string | null
+          email_sent_at: string | null
+          email_status:
+            | Database["public"]["Enums"]["email_processing_status"]
+            | null
           id: string
           installment_number: number | null
           invoice_number: number
+          nfse_error_msg: string | null
+          nfse_generated_at: string | null
+          nfse_history_id: string | null
+          nfse_status:
+            | Database["public"]["Enums"]["nfse_processing_status"]
+            | null
           notes: string | null
           paid_date: string | null
           parent_invoice_id: string | null
           payment_method: string | null
           pix_code: string | null
+          processed_at: string | null
+          processing_attempts: number | null
+          processing_metadata: Json | null
           reference_month: string | null
           service_id: string | null
           status: Database["public"]["Enums"]["invoice_status"]
@@ -1616,20 +1688,39 @@ export type Database = {
           auto_payment_generated?: boolean | null
           billing_provider?: string | null
           boleto_barcode?: string | null
+          boleto_error_msg?: string | null
+          boleto_sent_at?: string | null
+          boleto_status?:
+            | Database["public"]["Enums"]["boleto_processing_status"]
+            | null
           boleto_url?: string | null
           client_id: string
           contract_id?: string | null
           created_at?: string
           description?: string | null
           due_date: string
+          email_error_msg?: string | null
+          email_sent_at?: string | null
+          email_status?:
+            | Database["public"]["Enums"]["email_processing_status"]
+            | null
           id?: string
           installment_number?: number | null
           invoice_number?: number
+          nfse_error_msg?: string | null
+          nfse_generated_at?: string | null
+          nfse_history_id?: string | null
+          nfse_status?:
+            | Database["public"]["Enums"]["nfse_processing_status"]
+            | null
           notes?: string | null
           paid_date?: string | null
           parent_invoice_id?: string | null
           payment_method?: string | null
           pix_code?: string | null
+          processed_at?: string | null
+          processing_attempts?: number | null
+          processing_metadata?: Json | null
           reference_month?: string | null
           service_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -1644,20 +1735,39 @@ export type Database = {
           auto_payment_generated?: boolean | null
           billing_provider?: string | null
           boleto_barcode?: string | null
+          boleto_error_msg?: string | null
+          boleto_sent_at?: string | null
+          boleto_status?:
+            | Database["public"]["Enums"]["boleto_processing_status"]
+            | null
           boleto_url?: string | null
           client_id?: string
           contract_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string
+          email_error_msg?: string | null
+          email_sent_at?: string | null
+          email_status?:
+            | Database["public"]["Enums"]["email_processing_status"]
+            | null
           id?: string
           installment_number?: number | null
           invoice_number?: number
+          nfse_error_msg?: string | null
+          nfse_generated_at?: string | null
+          nfse_history_id?: string | null
+          nfse_status?:
+            | Database["public"]["Enums"]["nfse_processing_status"]
+            | null
           notes?: string | null
           paid_date?: string | null
           parent_invoice_id?: string | null
           payment_method?: string | null
           pix_code?: string | null
+          processed_at?: string | null
+          processing_attempts?: number | null
+          processing_metadata?: Json | null
           reference_month?: string | null
           service_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -1685,6 +1795,20 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_nfse_history_id_fkey"
+            columns: ["nfse_history_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_nfse_history_id_fkey"
+            columns: ["nfse_history_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history_safe"
             referencedColumns: ["id"]
           },
           {
@@ -2682,6 +2806,48 @@ export type Database = {
           },
         ]
       }
+      storage_config: {
+        Row: {
+          access_key_encrypted: string | null
+          bucket_name: string
+          created_at: string | null
+          endpoint_url: string | null
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          provider: string
+          region: string | null
+          secret_key_encrypted: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          access_key_encrypted?: string | null
+          bucket_name: string
+          created_at?: string | null
+          endpoint_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          provider?: string
+          region?: string | null
+          secret_key_encrypted?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          access_key_encrypted?: string | null
+          bucket_name?: string
+          created_at?: string | null
+          endpoint_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          provider?: string
+          region?: string | null
+          secret_key_encrypted?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       technician_badges: {
         Row: {
           badge_id: string
@@ -3671,6 +3837,10 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      generate_signed_url: {
+        Args: { p_bucket: string; p_expires_in?: number; p_path: string }
+        Returns: string
+      }
       get_calendar_tokens: {
         Args: { user_uuid: string }
         Returns: {
@@ -3707,6 +3877,18 @@ export type Database = {
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
+      update_invoice_status: {
+        Args: {
+          p_boleto_error?: string
+          p_boleto_status?: Database["public"]["Enums"]["boleto_processing_status"]
+          p_email_error?: string
+          p_email_status?: Database["public"]["Enums"]["email_processing_status"]
+          p_invoice_id: string
+          p_nfse_error?: string
+          p_nfse_status?: Database["public"]["Enums"]["nfse_processing_status"]
+        }
+        Returns: undefined
+      }
       verify_tv_dashboard_token: {
         Args: { token_param: string }
         Returns: {
@@ -3752,7 +3934,9 @@ export type Database = {
         | "software"
         | "license"
         | "other"
+      boleto_processing_status: "pendente" | "gerado" | "enviado" | "erro"
       contract_status: "active" | "expired" | "cancelled" | "pending"
+      email_processing_status: "pendente" | "enviado" | "erro"
       event_type:
         | "visit"
         | "meeting"
@@ -3761,6 +3945,7 @@ export type Database = {
         | "personal"
         | "billing_reminder"
       invoice_status: "pending" | "paid" | "overdue" | "cancelled"
+      nfse_processing_status: "pendente" | "gerada" | "erro"
       support_model: "ticket" | "hours_bank" | "unlimited"
       technician_level: "bronze" | "silver" | "gold" | "platinum" | "diamond"
       ticket_origin: "portal" | "phone" | "email" | "chat" | "whatsapp"
@@ -3923,7 +4108,9 @@ export const Constants = {
         "license",
         "other",
       ],
+      boleto_processing_status: ["pendente", "gerado", "enviado", "erro"],
       contract_status: ["active", "expired", "cancelled", "pending"],
+      email_processing_status: ["pendente", "enviado", "erro"],
       event_type: [
         "visit",
         "meeting",
@@ -3933,6 +4120,7 @@ export const Constants = {
         "billing_reminder",
       ],
       invoice_status: ["pending", "paid", "overdue", "cancelled"],
+      nfse_processing_status: ["pendente", "gerada", "erro"],
       support_model: ["ticket", "hours_bank", "unlimited"],
       technician_level: ["bronze", "silver", "gold", "platinum", "diamond"],
       ticket_origin: ["portal", "phone", "email", "chat", "whatsapp"],
