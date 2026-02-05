@@ -649,8 +649,13 @@ export function BillingInvoicesTab() {
             <TableRow>
               <TableHead className="w-12">
                 <Checkbox
-                  checked={selectedInvoices.size > 0 && selectedInvoices.size === invoices.length}
-                  indeterminate={selectedInvoices.size > 0 && selectedInvoices.size < invoices.length}
+                  checked={
+                    selectedInvoices.size === invoices.length && invoices.length > 0
+                      ? true
+                      : selectedInvoices.size > 0
+                        ? "indeterminate"
+                        : false
+                  }
                   onCheckedChange={toggleSelectAll}
                   disabled={invoices.length === 0}
                 />
