@@ -728,14 +728,35 @@ Deno.serve(async (req) => {
         // Asaas requires municipalServiceId OR (municipalServiceCode + municipalServiceName) OR municipalServiceExternalId
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
+          log(correlationId, "info", `Usando municipalServiceId resolvido: ${resolvedMunicipalServiceId}`);
         } else if (municipal_service_code) {
-          // Use the LC 116 code as externalId (formato: "01.01" ou "0101")
+          // Use the LC 116 code as externalId (formato: "01.01" ou "0101" ou "010701")
           invoicePayload.municipalServiceExternalId = municipal_service_code;
           invoicePayload.municipalServiceName = service_description || "Serviços de TI";
+          log(correlationId, "info", `Usando municipalServiceExternalId do contrato: ${municipal_service_code}`);
         } else {
-          // Fallback: usar código padrão de serviços de informática
-          invoicePayload.municipalServiceExternalId = "0107";
-          invoicePayload.municipalServiceName = service_description || "Suporte técnico em informática";
+          // CORREÇÃO CRÍTICA: NÃO usar fallback - rejeitar se não houver código de serviço
+          const errorMsg = "Código de serviço municipal (LC 116) não fornecido. Configure o código de serviço no contrato antes de emitir NFS-e.";
+          log(correlationId, "error", errorMsg);
+          
+          // Log event: validation_error
+          if (historyId) {
+            await logNfseEvent(supabase, historyId, "validation_error", "error",
+              errorMsg, correlationId, { reason: "MISSING_MUNICIPAL_SERVICE_CODE" });
+            
+            // Update history to error status
+            await supabase
+              .from("nfse_history")
+              .update({
+                status: "erro",
+                mensagem_retorno: errorMsg,
+                codigo_retorno: "MISSING_MUNICIPAL_SERVICE_CODE",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", historyId);
+          }
+          
+          throw new AsaasApiError(errorMsg, 400, "MISSING_MUNICIPAL_SERVICE_CODE");
         }
 
         if (payment_id) {

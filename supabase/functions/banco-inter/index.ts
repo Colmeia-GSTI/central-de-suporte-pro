@@ -469,17 +469,21 @@ serve(async (req) => {
       console.log("[BANCO-INTER] Boleto gerado:", JSON.stringify(result));
 
       // Update invoice with boleto info
-      // API v3 returns codigoSolicitacao for async processing - we store it for polling
+      // API v3 returns codigoSolicitacao for async processing - implement polling
       const updateData: Record<string, any> = {
         payment_method: "boleto",
       };
 
-      if (result.codigoBarras) {
-        // Immediate response with barcode (rare)
-        updateData.boleto_barcode = result.codigoBarras;
+      if (result.codigoBarras && result.linhaDigitavel) {
+        // Immediate response with barcode (rare but handle it)
+        updateData.boleto_barcode = result.linhaDigitavel;
         updateData.boleto_url = result.pdfUrl;
+        updateData.boleto_status = "enviado";
+        console.log("[BANCO-INTER] Boleto com dados completos imediatos");
       } else if (result.codigoSolicitacao) {
-        // Async processing - store codigoSolicitacao in notes for polling
+        // Async processing - POLLING para obter dados completos
+        console.log("[BANCO-INTER] Boleto criado async, iniciando polling para codigoSolicitacao:", result.codigoSolicitacao);
+        
         const { data: currentInvoice } = await supabase
           .from("invoices")
           .select("notes")
@@ -487,7 +491,53 @@ serve(async (req) => {
           .single();
         
         const existingNotes = currentInvoice?.notes || "";
-        updateData.notes = `${existingNotes} codigoSolicitacao:${result.codigoSolicitacao}`.trim();
+        
+        let boletoCompleto = false;
+        const maxTentativas = 12; // 60 segundos (5 segundos cada)
+        
+        for (let tentativa = 1; tentativa <= maxTentativas && !boletoCompleto; tentativa++) {
+          await new Promise(r => setTimeout(r, 5000)); // Aguarda 5 segundos
+          console.log(`[BANCO-INTER] Polling tentativa ${tentativa}/${maxTentativas}...`);
+          
+          try {
+            const detailsResponse = await mtlsFetch(
+              `${baseUrl}/cobranca/v3/cobrancas/${result.codigoSolicitacao}`,
+              { 
+                method: "GET",
+                headers: { Authorization: `Bearer ${access_token}` }
+              }
+            );
+            
+            if (detailsResponse.ok) {
+              const details = await detailsResponse.json();
+              console.log("[BANCO-INTER] Polling response:", JSON.stringify(details).slice(0, 200));
+              
+              if (details.codigoBarras && details.linhaDigitavel) {
+                console.log("[BANCO-INTER] Dados do boleto obtidos com sucesso via polling");
+                
+                updateData.boleto_barcode = details.linhaDigitavel;
+                updateData.boleto_url = details.pdfUrl || `https://inter.co/boleto/${details.codigoBarras}`;
+                updateData.boleto_status = "enviado";
+                updateData.notes = `${existingNotes} codigoSolicitacao:${result.codigoSolicitacao} nossoNumero:${details.nossoNumero || ""}`.trim();
+                
+                boletoCompleto = true;
+                break;
+              }
+            } else {
+              const errorText = await detailsResponse.text();
+              console.warn(`[BANCO-INTER] Polling tentativa ${tentativa} resposta não-OK:`, errorText);
+            }
+          } catch (pollError) {
+            console.warn(`[BANCO-INTER] Polling tentativa ${tentativa} falhou:`, pollError);
+          }
+        }
+        
+        if (!boletoCompleto) {
+          // Se não conseguiu dados após polling, salvar codigoSolicitacao e status pendente
+          console.warn("[BANCO-INTER] Timeout no polling - boleto ainda pendente de processamento no Banco Inter");
+          updateData.notes = `${existingNotes} codigoSolicitacao:${result.codigoSolicitacao}`.trim();
+          updateData.boleto_status = "pendente"; // NÃO "enviado" - aguardando dados completos
+        }
       }
 
       await supabase

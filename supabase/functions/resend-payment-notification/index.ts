@@ -98,7 +98,7 @@ serve(async (req) => {
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "invoice_payment").maybeSingle(),
       supabase.from("invoices").select(`
-        id, invoice_number, amount, due_date, boleto_barcode, boleto_url, pix_code, payment_method,
+        id, invoice_number, amount, due_date, boleto_barcode, boleto_url, pix_code, payment_method, boleto_status,
         clients(id, name, email, whatsapp, financial_email)
       `).eq("id", invoice_id).single(),
     ]);
@@ -130,14 +130,28 @@ serve(async (req) => {
     }
 
     const client = clientData;
-    const hasBoleto = !!invoice.boleto_barcode;
+    const hasBoleto = !!invoice.boleto_barcode || !!invoice.boleto_url;
     const hasPix = !!invoice.pix_code;
+    // CORREÇÃO: Considerar boleto em processamento (ainda aguardando dados do Banco Inter)
+    const boletoEmProcessamento = invoice.boleto_status === "pendente" || invoice.boleto_status === "processando";
 
-    if (!hasBoleto && !hasPix) {
+    if (!hasBoleto && !hasPix && !boletoEmProcessamento) {
       return new Response(
-        JSON.stringify({ error: "Esta fatura não tem boleto ou PIX gerado" }),
+        JSON.stringify({ 
+          error: "Esta fatura não tem boleto ou PIX gerado e não está em processamento",
+          details: {
+            has_boleto: hasBoleto,
+            has_pix: hasPix,
+            boleto_status: invoice.boleto_status
+          }
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Se boleto está em processamento mas sem dados, avisar no log
+    if (boletoEmProcessamento && !hasBoleto) {
+      console.log(`[RESEND] Boleto em processamento (status=${invoice.boleto_status}) - enviando notificação com aviso`);
     }
 
     const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

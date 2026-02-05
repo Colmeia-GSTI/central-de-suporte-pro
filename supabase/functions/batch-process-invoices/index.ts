@@ -138,18 +138,23 @@ async function processInvoices(
       // 3. GERAR NFS-e
       if (req.emit_nfse) {
         try {
-          // Buscar dados da fatura
+          // Buscar dados da fatura COM nfse_service_code do contrato
           const { data: invoice } = await supabase
             .from("invoices")
-            .select("*, contracts(name, description, nfse_descricao_customizada)")
+            .select("*, contracts(name, description, nfse_descricao_customizada, nfse_service_code, nfse_cnae)")
             .eq("id", invoiceId)
             .single();
 
           if (!invoice?.contract_id) {
             result.nfse_status = "skipped";
             console.log(`[batch-process] Invoice ${invoiceId} has no associated contract, skipping NFS-e`);
+          } else if (!invoice.contracts?.nfse_service_code) {
+            // NOVA VALIDAÇÃO: Contrato deve ter código de serviço configurado
+            result.nfse_status = "error";
+            result.nfse_error = "Contrato não possui código de serviço NFS-e configurado. Configure o código LC 116 no contrato.";
+            console.error(`[batch-process] Contract ${invoice.contract_id} missing nfse_service_code, cannot emit NFS-e`);
           } else {
-            console.log(`[batch-process] Emitting NFS-e for ${invoiceId}`);
+            console.log(`[batch-process] Emitting NFS-e for ${invoiceId} with service_code=${invoice.contracts.nfse_service_code}`);
             const { data, error: nfseError } = await supabase.functions.invoke(
               "asaas-nfse",
               {
@@ -162,6 +167,9 @@ async function processInvoices(
                   service_description: invoice.contracts?.nfse_descricao_customizada || 
                     invoice.contracts?.description || 
                     `Prestação de serviços - ${invoice.contracts?.name}`,
+                  // CORREÇÃO CRÍTICA: Passar código de serviço do contrato
+                  municipal_service_code: invoice.contracts.nfse_service_code,
+                  cnae: invoice.contracts.nfse_cnae,
                 },
               }
             );
