@@ -353,7 +353,8 @@ async function processPaymentWebhook(
           paid_date: paymentDate,
           payment_method: payment.billingType as string || null,
         })
-        .eq("id", externalReference);
+        .eq("id", externalReference)
+        .in("status", ["pending", "overdue"]);
       
       if (error) {
         console.error(`[WEBHOOK-ASAAS] Erro ao atualizar fatura:`, error);
@@ -375,7 +376,7 @@ async function processPaymentWebhook(
         .from("invoices")
         .update({ status: "overdue" })
         .eq("id", externalReference)
-        .eq("status", "pending");
+        .in("status", ["pending"]);
     }
   }
 }

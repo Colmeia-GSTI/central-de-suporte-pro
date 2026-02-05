@@ -1704,7 +1704,6 @@ export type Database = {
           invoice_number: number
           nfse_error_msg: string | null
           nfse_generated_at: string | null
-          nfse_history_id: string | null
           nfse_status:
             | Database["public"]["Enums"]["nfse_processing_status"]
             | null
@@ -1751,7 +1750,6 @@ export type Database = {
           invoice_number?: number
           nfse_error_msg?: string | null
           nfse_generated_at?: string | null
-          nfse_history_id?: string | null
           nfse_status?:
             | Database["public"]["Enums"]["nfse_processing_status"]
             | null
@@ -1798,7 +1796,6 @@ export type Database = {
           invoice_number?: number
           nfse_error_msg?: string | null
           nfse_generated_at?: string | null
-          nfse_history_id?: string | null
           nfse_status?:
             | Database["public"]["Enums"]["nfse_processing_status"]
             | null
@@ -1837,20 +1834,6 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "contracts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoices_nfse_history_id_fkey"
-            columns: ["nfse_history_id"]
-            isOneToOne: false
-            referencedRelation: "nfse_history"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoices_nfse_history_id_fkey"
-            columns: ["nfse_history_id"]
-            isOneToOne: false
-            referencedRelation: "nfse_history_safe"
             referencedColumns: ["id"]
           },
           {

@@ -251,7 +251,7 @@ Deno.serve(async (req) => {
           .select("id")
           .eq("contract_id", contract.id)
           .eq("reference_month", referenceMonth)
-          .neq("status", "cancelled")
+          .not("status", "in", '("cancelled","voided")')
           .limit(1);
 
         if (existingInvoice && existingInvoice.length > 0) {
@@ -306,6 +306,7 @@ Deno.serve(async (req) => {
             due_date: dueDate,
             reference_month: referenceMonth,
             status: "pending",
+            payment_method: contract.payment_preference || "boleto",
             notes: invoiceNotes,
             auto_payment_generated: false,
             billing_provider: contract.billing_provider || null,
@@ -367,6 +368,28 @@ Deno.serve(async (req) => {
             .in("id", charges.map((c) => c.id));
 
           console.log(`[GEN-INVOICES] ${charges.length} cobranças adicionais vinculadas à fatura`);
+        }
+
+        // Generate invoice_items from contract_services (Review 1.2)
+        try {
+          const { data: services } = await supabase
+            .from("contract_services")
+            .select("name, description, quantity, unit_value, value")
+            .eq("contract_id", contract.id);
+
+          if (services && services.length > 0) {
+            const items = services.map((s: Record<string, unknown>) => ({
+              invoice_id: newInvoice.id,
+              description: (s.description as string) || (s.name as string) || "Serviço",
+              quantity: (s.quantity as number) || 1,
+              unit_value: (s.unit_value as number) || (s.value as number) || 0,
+              total_value: (s.value as number) || 0,
+            }));
+            await supabase.from("invoice_items").insert(items);
+            console.log(`[GEN-INVOICES] ${items.length} invoice_items criados a partir de contract_services`);
+          }
+        } catch (itemsError) {
+          console.error(`[GEN-INVOICES] Erro ao criar invoice_items para ${contract.name}:`, itemsError);
         }
 
         // Log success
