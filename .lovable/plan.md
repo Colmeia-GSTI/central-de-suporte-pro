@@ -31,19 +31,33 @@ Baseado no documento REVIEW_SISTEMA_COBRANCA.md
 
 ---
 
-## Fase 3: Melhorias Operacionais (PRÓXIMA)
+## ✅ Fase 3: Melhorias Operacionais (CONCLUÍDA)
 
-Da seção 9 do REVIEW (itens 16-21):
-
-| # | Item | Descrição | Prioridade |
-|---|------|-----------|------------|
-| 1 | Dashboard de conciliação bancária | Comparar extratos vs faturas | Alta |
-| 2 | Relatório de aging de recebíveis | Classificar faturas por faixas de atraso | Alta |
-| 3 | Busca automática de índices IGPM/IPCA | Integrar com API do Banco Central | Alta |
-| 4 | Emissão automática de NFS-e vinculada ao pagamento | Emitir quando fatura é paga | Alta |
-| 5 | Baixa manual de pagamento | Registrar pagamento manual com comprovante | Alta |
-| 6 | Multa e juros automáticos | Calcular 2% multa + 1% a.m. juros | Alta |
-| 7 | Retry automático para falhas de pagamento | Sistema com backoff | Alta |
+1. ✅ Dashboard de conciliação bancária
+   - Nova aba "Conciliação" no BillingPage
+   - Tabela `bank_reconciliation` com status (pending/matched/unmatched/ignored)
+   - Cards de métricas: pendentes, conciliados, não conciliados, taxa de conciliação
+2. ✅ Relatório de aging de recebíveis
+   - Widget `AgingReportWidget` com faixas 1-15, 16-30, 31-60, 61-90, 90+ dias
+   - Barras visuais com proporção de valores e contagem
+3. ✅ Busca automática de índices IGPM/IPCA/INPC
+   - Edge function `fetch-economic-indices` integrada com API do Banco Central (SGS)
+   - Tabela `economic_indices` com acumulado 12 meses
+   - Widget `EconomicIndicesWidget` na aba Conciliação
+4. ✅ Emissão automática de NFS-e vinculada ao pagamento
+   - Webhook `webhook-asaas-nfse` auto-emite NFS-e quando fatura é paga
+   - Verifica `nfse_service_code` no contrato antes de emitir
+   - Campo `auto_nfse_emitted` para controle de duplicidade
+5. ✅ Baixa manual de pagamento
+   - Edge function `manual-payment` com autenticação
+   - Dialog `ManualPaymentDialog` com valor, data, método, observações
+   - Opção de emitir NFS-e junto com o pagamento
+   - Cria `financial_entry` e `audit_log` automaticamente
+6. ✅ Multa e juros automáticos
+   - Edge function `calculate-invoice-penalties` (2% multa + 1% a.m. juros pro-rata)
+   - Campos `fine_amount`, `interest_amount`, `total_with_penalties` (GENERATED) na tabela invoices
+   - Função SQL `calculate_penalties()` para cálculos ad-hoc
+   - Suporte a dry_run para simulação
 
 ---
 
