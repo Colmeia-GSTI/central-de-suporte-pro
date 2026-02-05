@@ -40,7 +40,9 @@ import {
   Clock,
   CheckCircle,
   Star,
+  DollarSign,
 } from "lucide-react";
+import { ClientPortalFinancialTab } from "@/components/client-portal/ClientPortalFinancialTab";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -78,6 +80,7 @@ export default function ClientPortalPage() {
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"my" | "all">("my");
   const [ratingTicket, setRatingTicket] = useState<{id: string; number: number; title: string} | null>(null);
+  const [activeSection, setActiveSection] = useState<"chamados" | "financeiro">("chamados");
 
   const isClient = roles.includes("client") || roles.includes("client_master");
   const isClientMaster = roles.includes("client_master");
@@ -291,6 +294,36 @@ export default function ClientPortalPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* Section Navigation for client_master */}
+        {isClientMaster && (
+          <div className="flex items-center gap-2 mb-6">
+            <Button
+              variant={activeSection === "chamados" ? "default" : "outline"}
+              onClick={() => setActiveSection("chamados")}
+              className="gap-2"
+            >
+              <Ticket className="h-4 w-4" />
+              Chamados
+            </Button>
+            <Button
+              variant={activeSection === "financeiro" ? "default" : "outline"}
+              onClick={() => setActiveSection("financeiro")}
+              className="gap-2"
+            >
+              <DollarSign className="h-4 w-4" />
+              Financeiro
+            </Button>
+          </div>
+        )}
+
+        {/* Financial Tab - client_master only */}
+        {isClientMaster && activeSection === "financeiro" && clientData?.id && (
+          <ClientPortalFinancialTab clientId={clientData.id} />
+        )}
+
+        {/* Tickets Section */}
+        {activeSection === "chamados" && (
+        <>
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4 mb-8">
           <Card>
@@ -310,7 +343,7 @@ export default function ClientPortalPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-green-600">{closedTickets.length}</p>
+              <p className="text-2xl font-bold text-status-success">{closedTickets.length}</p>
             </CardContent>
           </Card>
           <Card>
@@ -691,6 +724,8 @@ export default function ClientPortalPage() {
             </Card>
           </div>
         </div>
+        </>
+        )}
       </main>
 
       {/* Rating Dialog */}
