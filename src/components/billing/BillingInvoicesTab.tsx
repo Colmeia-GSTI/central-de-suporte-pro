@@ -75,6 +75,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import { InvoiceActionIndicators } from "@/components/billing/InvoiceActionIndicators";
 import { BillingBatchProcessing } from "@/components/billing/BillingBatchProcessing";
+import { InvoiceProcessingHistory } from "@/components/billing/InvoiceProcessingHistory";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type InvoiceWithClient = Tables<"invoices"> & {
@@ -134,6 +135,7 @@ export function BillingInvoicesTab() {
   const [sendingNotification, setSendingNotification] = useState<string | null>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [isBatchProcessingOpen, setIsBatchProcessingOpen] = useState(false);
+  const [historyInvoice, setHistoryInvoice] = useState<InvoiceWithClient | null>(null);
   const queryClient = useQueryClient();
 
   const { data: invoices = [], isLoading } = useQuery({
@@ -485,7 +487,7 @@ export function BillingInvoicesTab() {
     <div className="space-y-6">
       {/* Selection info and batch actions */}
       {selectedInvoices.size > 0 && (
-        <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+        <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
           <div className="text-sm font-medium">
             {selectedInvoices.size} fatura(s) selecionada(s)
           </div>
@@ -899,6 +901,12 @@ export function BillingInvoicesTab() {
                                 </DropdownMenuItem>
                               </>
                             )}
+                            
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setHistoryInvoice(invoice)}>
+                              <Clock className="mr-2 h-4 w-4" />
+                              Ver Histórico
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -915,11 +923,13 @@ export function BillingInvoicesTab() {
       <BillingBatchProcessing
         open={isBatchProcessingOpen}
         onOpenChange={setIsBatchProcessingOpen}
+        selectedInvoiceIds={Array.from(selectedInvoices)}
         selectedInvoiceCount={selectedInvoices.size}
         onProcessingComplete={() => {
           setSelectedInvoices(new Set());
           queryClient.invalidateQueries({ queryKey: ["invoices"] });
           queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+          queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
         }}
       />
 
@@ -947,6 +957,13 @@ export function BillingInvoicesTab() {
           clientName={pixDialogInvoice.clients?.name || "Cliente"}
         />
       )}
+
+      {/* Processing History Sheet */}
+      <InvoiceProcessingHistory
+        open={!!historyInvoice}
+        onOpenChange={(open) => !open && setHistoryInvoice(null)}
+        invoice={historyInvoice}
+      />
     </div>
   );
 }
