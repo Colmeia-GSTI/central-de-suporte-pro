@@ -61,6 +61,7 @@ import {
   XCircle,
   RefreshCw,
   Building2,
+  HandCoins,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -77,6 +78,7 @@ import { Link } from "react-router-dom";
 import { InvoiceActionIndicators } from "@/components/billing/InvoiceActionIndicators";
 import { BillingBatchProcessing } from "@/components/billing/BillingBatchProcessing";
 import { InvoiceProcessingHistory } from "@/components/billing/InvoiceProcessingHistory";
+import { ManualPaymentDialog } from "@/components/billing/ManualPaymentDialog";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type InvoiceWithClient = Tables<"invoices"> & {
@@ -137,6 +139,7 @@ export function BillingInvoicesTab() {
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [isBatchProcessingOpen, setIsBatchProcessingOpen] = useState(false);
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceWithClient | null>(null);
+  const [manualPaymentInvoice, setManualPaymentInvoice] = useState<InvoiceWithClient | null>(null);
   const queryClient = useQueryClient();
 
   const { data: invoices = [], isLoading } = useQuery({
@@ -956,10 +959,16 @@ export function BillingInvoicesTab() {
                               </DropdownMenuSub>
                             )}
                             <DropdownMenuItem
+                              onClick={() => setManualPaymentInvoice(invoice)}
+                            >
+                              <HandCoins className="mr-2 h-4 w-4" />
+                              Baixa Manual
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => markAsPaidMutation.mutate(invoice.id)}
                             >
                               <CheckCircle2 className="mr-2 h-4 w-4" />
-                              Marcar como Pago
+                              Marcar como Pago (rápido)
                             </DropdownMenuItem>
                             
                             {(invoice.boleto_url || invoice.pix_code) && (
@@ -1060,6 +1069,21 @@ export function BillingInvoicesTab() {
         open={!!historyInvoice}
         onOpenChange={(open) => !open && setHistoryInvoice(null)}
         invoice={historyInvoice}
+      />
+
+      {/* Manual Payment Dialog */}
+      <ManualPaymentDialog
+        open={!!manualPaymentInvoice}
+        onOpenChange={(open) => !open && setManualPaymentInvoice(null)}
+        invoice={manualPaymentInvoice ? {
+          id: manualPaymentInvoice.id,
+          invoice_number: manualPaymentInvoice.invoice_number,
+          amount: manualPaymentInvoice.amount,
+          fine_amount: (manualPaymentInvoice as any).fine_amount || 0,
+          interest_amount: (manualPaymentInvoice as any).interest_amount || 0,
+          contract_id: manualPaymentInvoice.contract_id,
+          client_name: manualPaymentInvoice.clients?.name,
+        } : null}
       />
     </div>
   );

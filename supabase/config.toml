@@ -23,3 +23,12 @@ verify_jwt = false
 
 [functions.batch-process-invoices]
 verify_jwt = false
+
+[functions.fetch-economic-indices]
+verify_jwt = false
+
+[functions.calculate-invoice-penalties]
+verify_jwt = false
+
+[functions.manual-payment]
+verify_jwt = false

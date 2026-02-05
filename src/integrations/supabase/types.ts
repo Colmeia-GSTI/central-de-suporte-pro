@@ -240,6 +240,69 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_reconciliation: {
+        Row: {
+          bank_amount: number
+          bank_date: string
+          bank_description: string
+          bank_reference: string | null
+          created_at: string
+          financial_entry_id: string | null
+          id: string
+          invoice_id: string | null
+          matched_at: string | null
+          matched_by: string | null
+          notes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          bank_amount: number
+          bank_date: string
+          bank_description: string
+          bank_reference?: string | null
+          created_at?: string
+          financial_entry_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          matched_at?: string | null
+          matched_by?: string | null
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          bank_amount?: number
+          bank_date?: string
+          bank_description?: string
+          bank_reference?: string | null
+          created_at?: string
+          financial_entry_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          matched_at?: string | null
+          matched_by?: string | null
+          notes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_reconciliation_financial_entry_id_fkey"
+            columns: ["financial_entry_id"]
+            isOneToOne: false
+            referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_reconciliation_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           all_day: boolean
@@ -1259,6 +1322,39 @@ export type Database = {
         }
         Relationships: []
       }
+      economic_indices: {
+        Row: {
+          accumulated_12m: number | null
+          created_at: string
+          fetched_at: string
+          id: string
+          index_type: string
+          reference_date: string
+          source: string | null
+          value: number
+        }
+        Insert: {
+          accumulated_12m?: number | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          index_type: string
+          reference_date: string
+          source?: string | null
+          value: number
+        }
+        Update: {
+          accumulated_12m?: number | null
+          created_at?: string
+          fetched_at?: string
+          id?: string
+          index_type?: string
+          reference_date?: string
+          source?: string | null
+          value?: number
+        }
+        Relationships: []
+      }
       email_settings: {
         Row: {
           created_at: string | null
@@ -1680,6 +1776,7 @@ export type Database = {
           amount: number
           asaas_invoice_url: string | null
           asaas_payment_id: string | null
+          auto_nfse_emitted: boolean | null
           auto_payment_generated: boolean | null
           billing_provider: string | null
           boleto_barcode: string | null
@@ -1699,18 +1796,24 @@ export type Database = {
           email_status:
             | Database["public"]["Enums"]["email_processing_status"]
             | null
+          fine_amount: number | null
           id: string
           installment_number: number | null
+          interest_amount: number | null
           invoice_number: number
+          manual_payment: boolean | null
           nfse_error_msg: string | null
           nfse_generated_at: string | null
           nfse_status:
             | Database["public"]["Enums"]["nfse_processing_status"]
             | null
           notes: string | null
+          paid_amount: number | null
           paid_date: string | null
           parent_invoice_id: string | null
           payment_method: string | null
+          payment_notes: string | null
+          payment_proof_url: string | null
           pix_code: string | null
           processed_at: string | null
           processing_attempts: number | null
@@ -1720,12 +1823,14 @@ export type Database = {
           status: Database["public"]["Enums"]["invoice_status"]
           ticket_id: string | null
           total_installments: number | null
+          total_with_penalties: number | null
           updated_at: string
         }
         Insert: {
           amount: number
           asaas_invoice_url?: string | null
           asaas_payment_id?: string | null
+          auto_nfse_emitted?: boolean | null
           auto_payment_generated?: boolean | null
           billing_provider?: string | null
           boleto_barcode?: string | null
@@ -1745,18 +1850,24 @@ export type Database = {
           email_status?:
             | Database["public"]["Enums"]["email_processing_status"]
             | null
+          fine_amount?: number | null
           id?: string
           installment_number?: number | null
+          interest_amount?: number | null
           invoice_number?: number
+          manual_payment?: boolean | null
           nfse_error_msg?: string | null
           nfse_generated_at?: string | null
           nfse_status?:
             | Database["public"]["Enums"]["nfse_processing_status"]
             | null
           notes?: string | null
+          paid_amount?: number | null
           paid_date?: string | null
           parent_invoice_id?: string | null
           payment_method?: string | null
+          payment_notes?: string | null
+          payment_proof_url?: string | null
           pix_code?: string | null
           processed_at?: string | null
           processing_attempts?: number | null
@@ -1766,12 +1877,14 @@ export type Database = {
           status?: Database["public"]["Enums"]["invoice_status"]
           ticket_id?: string | null
           total_installments?: number | null
+          total_with_penalties?: number | null
           updated_at?: string
         }
         Update: {
           amount?: number
           asaas_invoice_url?: string | null
           asaas_payment_id?: string | null
+          auto_nfse_emitted?: boolean | null
           auto_payment_generated?: boolean | null
           billing_provider?: string | null
           boleto_barcode?: string | null
@@ -1791,18 +1904,24 @@ export type Database = {
           email_status?:
             | Database["public"]["Enums"]["email_processing_status"]
             | null
+          fine_amount?: number | null
           id?: string
           installment_number?: number | null
+          interest_amount?: number | null
           invoice_number?: number
+          manual_payment?: boolean | null
           nfse_error_msg?: string | null
           nfse_generated_at?: string | null
           nfse_status?:
             | Database["public"]["Enums"]["nfse_processing_status"]
             | null
           notes?: string | null
+          paid_amount?: number | null
           paid_date?: string | null
           parent_invoice_id?: string | null
           payment_method?: string | null
+          payment_notes?: string | null
+          payment_proof_url?: string | null
           pix_code?: string | null
           processed_at?: string | null
           processing_attempts?: number | null
@@ -1812,6 +1931,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["invoice_status"]
           ticket_id?: string | null
           total_installments?: number | null
+          total_with_penalties?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -3869,6 +3989,20 @@ export type Database = {
       }
     }
     Functions: {
+      calculate_penalties: {
+        Args: {
+          p_amount: number
+          p_due_date: string
+          p_fine_pct?: number
+          p_monthly_interest_pct?: number
+        }
+        Returns: {
+          days_overdue: number
+          fine: number
+          interest: number
+          total: number
+        }[]
+      }
       cleanup_old_application_logs: { Args: never; Returns: undefined }
       cleanup_old_monitoring_alerts: { Args: never; Returns: undefined }
       client_owns_record: {

@@ -346,7 +346,7 @@ async function processPaymentWebhook(
       
       const paymentDate = (payment.paymentDate as string) || new Date().toISOString().split("T")[0];
       
-      const { error } = await supabase
+      const { data: updatedInvoice, error } = await supabase
         .from("invoices")
         .update({ 
           status: "paid", 
@@ -354,12 +354,51 @@ async function processPaymentWebhook(
           payment_method: payment.billingType as string || null,
         })
         .eq("id", externalReference)
-        .in("status", ["pending", "overdue"]);
+        .in("status", ["pending", "overdue"])
+        .select("id, contract_id, client_id, amount, auto_nfse_emitted")
+        .maybeSingle();
       
       if (error) {
         console.error(`[WEBHOOK-ASAAS] Erro ao atualizar fatura:`, error);
-      } else {
+      } else if (updatedInvoice) {
         console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como paga`);
+        
+        // Auto-emit NFS-e if invoice has a contract and hasn't been emitted yet
+        if (updatedInvoice.contract_id && !updatedInvoice.auto_nfse_emitted) {
+          try {
+            console.log(`[WEBHOOK-ASAAS] Auto-emitindo NFS-e para fatura ${externalReference}`);
+            
+            const { data: contract } = await supabase
+              .from("contracts")
+              .select("name, description, nfse_descricao_customizada, nfse_service_code")
+              .eq("id", updatedInvoice.contract_id)
+              .single();
+            
+            if (contract?.nfse_service_code) {
+              await supabase.functions.invoke("asaas-nfse", {
+                body: {
+                  action: "emit",
+                  client_id: updatedInvoice.client_id,
+                  invoice_id: updatedInvoice.id,
+                  contract_id: updatedInvoice.contract_id,
+                  value: updatedInvoice.amount,
+                  service_description: contract.nfse_descricao_customizada || contract.description || `Prestação de serviços - ${contract.name}`,
+                },
+              });
+              
+              await supabase
+                .from("invoices")
+                .update({ auto_nfse_emitted: true })
+                .eq("id", updatedInvoice.id);
+              
+              console.log(`[WEBHOOK-ASAAS] NFS-e emitida automaticamente para fatura ${externalReference}`);
+            } else {
+              console.log(`[WEBHOOK-ASAAS] Contrato sem nfse_service_code, NFS-e não emitida automaticamente`);
+            }
+          } catch (nfseError) {
+            console.error(`[WEBHOOK-ASAAS] Erro ao auto-emitir NFS-e:`, nfseError);
+          }
+        }
         
         // Create notification for staff
         await createNotification(
