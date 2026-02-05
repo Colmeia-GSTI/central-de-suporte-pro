@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft } from "lucide-react";
+import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBillingCounters } from "@/hooks/useBillingCounters";
 import { BillingInvoicesTab } from "@/components/billing/BillingInvoicesTab";
@@ -11,6 +11,7 @@ import { BillingNfseTab } from "@/components/billing/BillingNfseTab";
 import { BillingServicesTab } from "@/components/billing/BillingServicesTab";
 import { BillingTaxCodesTab } from "@/components/billing/BillingTaxCodesTab";
 import { BankReconciliationTab } from "@/components/billing/BankReconciliationTab";
+import { FiscalReportTab } from "@/components/billing/FiscalReportTab";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface TabBadgeProps {
@@ -44,6 +45,7 @@ const BILLING_TABS = [
   { id: "boletos", label: "Boletos", icon: Barcode },
   { id: "nfse", label: "NFS-e", icon: FileText },
   { id: "reconciliation", label: "Conciliação", icon: ArrowRightLeft },
+  { id: "fiscal", label: "Fiscal", icon: Scale },
   { id: "services", label: "Serviços", icon: Wrench },
   { id: "tax-codes", label: "Códigos Tributários", icon: Calculator },
 ] as const;
@@ -123,7 +125,7 @@ export default function BillingPage() {
 
         {/* Tabs */}
         <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
             {BILLING_TABS.map((tab) => {
               // Services and tax-codes require edit permission
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {
@@ -157,6 +159,10 @@ export default function BillingPage() {
 
           <TabsContent value="reconciliation" className="mt-6">
             <BankReconciliationTab />
+          </TabsContent>
+
+          <TabsContent value="fiscal" className="mt-6">
+            <FiscalReportTab />
           </TabsContent>
 
           <TabsContent value="services" className="mt-6">

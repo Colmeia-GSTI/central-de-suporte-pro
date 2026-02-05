@@ -79,6 +79,8 @@ import { InvoiceActionIndicators } from "@/components/billing/InvoiceActionIndic
 import { BillingBatchProcessing } from "@/components/billing/BillingBatchProcessing";
 import { InvoiceProcessingHistory } from "@/components/billing/InvoiceProcessingHistory";
 import { ManualPaymentDialog } from "@/components/billing/ManualPaymentDialog";
+import { SecondCopyDialog } from "@/components/billing/SecondCopyDialog";
+import { RenegotiateInvoiceDialog } from "@/components/billing/RenegotiateInvoiceDialog";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type InvoiceWithClient = Tables<"invoices"> & {
@@ -140,6 +142,8 @@ export function BillingInvoicesTab() {
   const [isBatchProcessingOpen, setIsBatchProcessingOpen] = useState(false);
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceWithClient | null>(null);
   const [manualPaymentInvoice, setManualPaymentInvoice] = useState<InvoiceWithClient | null>(null);
+  const [secondCopyInvoice, setSecondCopyInvoice] = useState<InvoiceWithClient | null>(null);
+  const [renegotiateInvoice, setRenegotiateInvoice] = useState<InvoiceWithClient | null>(null);
   const queryClient = useQueryClient();
 
   const { data: invoices = [], isLoading } = useQuery({
@@ -964,6 +968,22 @@ export function BillingInvoicesTab() {
                               <HandCoins className="mr-2 h-4 w-4" />
                               Baixa Manual
                             </DropdownMenuItem>
+                            {invoice.status === "overdue" && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => setSecondCopyInvoice(invoice)}
+                                >
+                                  <Barcode className="mr-2 h-4 w-4" />
+                                  Segunda Via
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setRenegotiateInvoice(invoice)}
+                                >
+                                  <HandCoins className="mr-2 h-4 w-4" />
+                                  Renegociar
+                                </DropdownMenuItem>
+                              </>
+                            )}
                             <DropdownMenuItem
                               onClick={() => markAsPaidMutation.mutate(invoice.id)}
                             >
@@ -1084,6 +1104,44 @@ export function BillingInvoicesTab() {
           contract_id: manualPaymentInvoice.contract_id,
           client_name: manualPaymentInvoice.clients?.name,
         } : null}
+      />
+
+      {/* Second Copy Dialog */}
+      <SecondCopyDialog
+        open={!!secondCopyInvoice}
+        onOpenChange={(open) => !open && setSecondCopyInvoice(null)}
+        invoice={secondCopyInvoice ? {
+          id: secondCopyInvoice.id,
+          invoice_number: secondCopyInvoice.invoice_number,
+          amount: secondCopyInvoice.amount,
+          due_date: secondCopyInvoice.due_date,
+          fine_amount: (secondCopyInvoice as any).fine_amount,
+          interest_amount: (secondCopyInvoice as any).interest_amount,
+          client_name: secondCopyInvoice.clients?.name,
+        } : null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["invoices"] });
+          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+        }}
+      />
+
+      {/* Renegotiate Dialog */}
+      <RenegotiateInvoiceDialog
+        open={!!renegotiateInvoice}
+        onOpenChange={(open) => !open && setRenegotiateInvoice(null)}
+        invoice={renegotiateInvoice ? {
+          id: renegotiateInvoice.id,
+          invoice_number: renegotiateInvoice.invoice_number,
+          amount: renegotiateInvoice.amount,
+          due_date: renegotiateInvoice.due_date,
+          fine_amount: (renegotiateInvoice as any).fine_amount,
+          interest_amount: (renegotiateInvoice as any).interest_amount,
+          client_name: renegotiateInvoice.clients?.name,
+        } : null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["invoices"] });
+          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+        }}
       />
     </div>
   );

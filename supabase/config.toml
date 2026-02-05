@@ -32,3 +32,9 @@ verify_jwt = false
 
 [functions.manual-payment]
 verify_jwt = false
+
+[functions.generate-second-copy]
+verify_jwt = false
+
+[functions.renegotiate-invoice]
+verify_jwt = false
