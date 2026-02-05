@@ -2808,42 +2808,54 @@ export type Database = {
       }
       storage_config: {
         Row: {
-          access_key_encrypted: string | null
+          access_key: string | null
           bucket_name: string
           created_at: string | null
-          endpoint_url: string | null
+          description: string | null
+          endpoint: string | null
           id: string
           is_active: boolean | null
           is_default: boolean | null
+          name: string
+          path_prefix: string | null
           provider: string
           region: string | null
-          secret_key_encrypted: string | null
+          secret_key: string | null
+          signed_url_expiry_hours: number | null
           updated_at: string | null
         }
         Insert: {
-          access_key_encrypted?: string | null
+          access_key?: string | null
           bucket_name: string
           created_at?: string | null
-          endpoint_url?: string | null
+          description?: string | null
+          endpoint?: string | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
+          name?: string
+          path_prefix?: string | null
           provider?: string
           region?: string | null
-          secret_key_encrypted?: string | null
+          secret_key?: string | null
+          signed_url_expiry_hours?: number | null
           updated_at?: string | null
         }
         Update: {
-          access_key_encrypted?: string | null
+          access_key?: string | null
           bucket_name?: string
           created_at?: string | null
-          endpoint_url?: string | null
+          description?: string | null
+          endpoint?: string | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
+          name?: string
+          path_prefix?: string | null
           provider?: string
           region?: string | null
-          secret_key_encrypted?: string | null
+          secret_key?: string | null
+          signed_url_expiry_hours?: number | null
           updated_at?: string | null
         }
         Relationships: []
