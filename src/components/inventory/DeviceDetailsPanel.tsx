@@ -39,7 +39,9 @@ export function DeviceDetailsPanel({
   needsReboot,
   externalSource 
 }: DeviceDetailsPanelProps) {
-  if (!serviceData || Object.keys(serviceData).length === 0) {
+  // Check if serviceData has any non-null values (not just keys)
+  const hasAnyData = serviceData && Object.values(serviceData).some(v => v != null);
+  if (!hasAnyData) {
     return (
       <div className="p-4 text-center text-muted-foreground">
         <Info className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -185,7 +187,14 @@ export function DeviceDetailsPanel({
             {serviceData.boot_time && (
               <span>
                 <strong>Último boot:</strong>{" "}
-                {new Date(serviceData.boot_time).toLocaleString("pt-BR")}
+                {(() => {
+                  try {
+                    const d = new Date(serviceData.boot_time);
+                    return isNaN(d.getTime()) ? "Data inválida" : d.toLocaleString("pt-BR");
+                  } catch {
+                    return "Data inválida";
+                  }
+                })()}
               </span>
             )}
             {needsReboot && (

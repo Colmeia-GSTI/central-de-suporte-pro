@@ -29,8 +29,12 @@ import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import type { Tables } from "@/integrations/supabase/types";
 
 const articleSchema = z.object({
-  title: z.string().min(5, "Título deve ter pelo menos 5 caracteres"),
-  content: z.string().min(20, "Conteúdo deve ter pelo menos 20 caracteres"),
+  title: z.string()
+    .min(5, "Título deve ter pelo menos 5 caracteres")
+    .max(255, "Título deve ter no máximo 255 caracteres"),
+  content: z.string()
+    .min(20, "Conteúdo deve ter pelo menos 20 caracteres")
+    .max(50000, "Conteúdo deve ter no máximo 50.000 caracteres"),
   category_id: z.string().optional(),
   is_public: z.boolean().default(true),
 });
@@ -80,12 +84,16 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
 
   const mutation = useMutation({
     mutationFn: async (data: ArticleFormData) => {
+      if (!user?.id) {
+        throw new Error("Usuário não autenticado. Faça login novamente.");
+      }
+
       const payload = {
-        title: data.title,
+        title: data.title.trim(),
         content: data.content,
         category_id: data.category_id || null,
         is_public: data.is_public,
-        author_id: user?.id,
+        author_id: user.id,
       };
 
       if (article) {
@@ -133,7 +141,7 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
           )}
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="category_id"

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { useDebounce } from "@/hooks/useDebounce";
 // Removed: useRealtimeMonitoring - now handled by unified realtime hook
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -91,18 +92,21 @@ export default function MonitoringPage() {
     localStorage.setItem(STORAGE_KEYS.groupBy, groupBy);
   }, [groupBy]);
 
+  // Debounce search to avoid excessive queries
+  const debouncedSearch = useDebounce(search, 300);
+
   // Real-time updates now handled by useUnifiedRealtime in App.tsx
 
   const { data: devices = [], isLoading: loadingDevices } = useQuery({
-    queryKey: ["devices", search],
+    queryKey: ["devices", debouncedSearch],
     queryFn: async () => {
       let query = supabase
         .from("monitored_devices")
         .select("*, clients(name)")
         .order("name");
 
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,hostname.ilike.%${search}%`);
+      if (debouncedSearch) {
+        query = query.or(`name.ilike.%${debouncedSearch}%,hostname.ilike.%${debouncedSearch}%`);
       }
 
       const { data, error } = await query;
@@ -160,19 +164,21 @@ export default function MonitoringPage() {
         .update({ status: "acknowledged", acknowledged_at: new Date().toISOString() })
         .in("id", alertIds);
       if (error) throw error;
+      return alertIds.length;
     },
-    onSuccess: () => {
+    onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      toast.success(`${count} alerta(s) reconhecido(s)`);
       setSelectedAlerts([]);
-      toast.success(`${selectedAlerts.length} alertas reconhecidos`);
     },
   });
 
   const onlineDevices = devices.filter((d) => d.is_online).length;
   const offlineDevices = devices.filter((d) => !d.is_online).length;
   const criticalAlerts = alerts.filter((a) => a.level === "critical").length;
-  const uptimeAverage = devices.length > 0 
-    ? devices.reduce((acc, d) => acc + (d.uptime_percent || 0), 0) / devices.length 
+  const devicesWithUptime = devices.filter((d) => d.uptime_percent != null);
+  const uptimeAverage = devicesWithUptime.length > 0
+    ? devicesWithUptime.reduce((acc, d) => acc + (d.uptime_percent || 0), 0) / devicesWithUptime.length
     : 0;
 
   const handleRefresh = async () => {

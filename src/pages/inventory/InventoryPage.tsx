@@ -24,6 +24,7 @@ import {
 import { Plus, Search, Monitor, Key, Shield, Edit, Trash2, LayoutDashboard } from "lucide-react";
 import { InventoryOverview } from "@/components/inventory/InventoryOverview";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
 import { AssetForm } from "@/components/inventory/AssetForm";
 import { LicenseForm } from "@/components/inventory/LicenseForm";
 import { PermissionGate } from "@/components/auth/PermissionGate";
@@ -97,17 +98,18 @@ export default function InventoryPage() {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const debouncedSearch = useDebounce(search, 300);
 
   const { data: assets = [], isLoading: loadingAssets } = useQuery({
-    queryKey: ["assets", search],
+    queryKey: ["assets", debouncedSearch],
     queryFn: async () => {
       let query = supabase
         .from("assets")
         .select("*, clients(name)")
         .order("name");
 
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,serial_number.ilike.%${search}%`);
+      if (debouncedSearch) {
+        query = query.or(`name.ilike.%${debouncedSearch}%,serial_number.ilike.%${debouncedSearch}%`);
       }
 
       const { data, error } = await query;
@@ -118,7 +120,7 @@ export default function InventoryPage() {
 
   // Use safe view to mask license keys - protects sensitive data
   const { data: licenses = [], isLoading: loadingLicenses } = useQuery({
-    queryKey: ["licenses", search],
+    queryKey: ["licenses", debouncedSearch],
     queryFn: async () => {
       // Query the safe view which masks license_key
       const { data: licensesData, error: licensesError } = await supabase
@@ -151,8 +153,8 @@ export default function InventoryPage() {
         clients: clientsMap[l.client_id] || null,
       }));
       
-      if (search) {
-        const searchLower = search.toLowerCase();
+      if (debouncedSearch) {
+        const searchLower = debouncedSearch.toLowerCase();
         results = results.filter(l => 
           l.name.toLowerCase().includes(searchLower) ||
           (l.vendor && l.vendor.toLowerCase().includes(searchLower))
@@ -173,6 +175,9 @@ export default function InventoryPage() {
       toast({ title: "Ativo excluído com sucesso" });
       setDeleteAssetConfirm({ open: false, asset: null });
     },
+    onError: (error) => {
+      toast({ title: "Erro ao excluir ativo", description: error.message, variant: "destructive" });
+    },
   });
 
   const deleteLicenseMutation = useMutation({
@@ -184,6 +189,9 @@ export default function InventoryPage() {
       queryClient.invalidateQueries({ queryKey: ["licenses"] });
       toast({ title: "Licença excluída com sucesso" });
       setDeleteLicenseConfirm({ open: false, license: null });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao excluir licença", description: error.message, variant: "destructive" });
     },
   });
 

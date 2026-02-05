@@ -141,9 +141,9 @@ export function useUnifiedRealtime() {
   }, [queryClient]);
 
   // Handle ticket events
-  const handleTicketEvent = useCallback((payload: { eventType: string; new: TicketPayload; old: TicketPayload }) => {
+  const handleTicketEvent = useCallback((payload: { eventType: string; new: TicketPayload; old: TicketPayload | null }) => {
     const ticket = payload.new;
-    const oldTicket = payload.old;
+    const oldTicket = payload.eventType === "UPDATE" ? payload.old : null;
 
     // Batch invalidate all ticket-related queries
     invalidateQueries([
@@ -311,13 +311,15 @@ export function useUnifiedRealtime() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tickets" },
-        handleTicketEvent as any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        handleTicketEvent as (payload: any) => void
       )
       // Notifications - filtered by user (essential for UX)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        handleNotificationEvent as any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        handleNotificationEvent as (payload: any) => void
       )
       .subscribe();
 
@@ -327,7 +329,7 @@ export function useUnifiedRealtime() {
         window.clearTimeout(invalidationTimeoutRef.current);
       }
     };
-  }, [user, isStaff, handleTicketEvent, handleNotificationEvent, handleAlertEvent, handleDeviceEvent]);
+  }, [user, isStaff, handleTicketEvent, handleNotificationEvent]);
 
   return null;
 }

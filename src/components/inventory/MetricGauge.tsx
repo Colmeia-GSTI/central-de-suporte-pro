@@ -13,7 +13,9 @@ export function MetricGauge({ label, value, className }: MetricGaugeProps) {
     return "bg-status-danger";
   };
 
-  const displayValue = Math.min(Math.max(value, 0), 100);
+  // Guard against NaN, Infinity, and out-of-bounds values
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const displayValue = Math.min(Math.max(safeValue, 0), 100);
 
   return (
     <div className={cn("flex flex-col items-center gap-1 min-w-[70px]", className)}>

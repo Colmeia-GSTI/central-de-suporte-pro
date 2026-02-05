@@ -30,17 +30,36 @@ import { useAuth } from "@/hooks/useAuth";
 import { Eye, EyeOff, Loader2, Lock, ShieldCheck } from "lucide-react";
 
 const licenseSchema = z.object({
-  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  name: z.string()
+    .min(2, "Nome deve ter pelo menos 2 caracteres")
+    .max(255, "Nome deve ter no máximo 255 caracteres"),
   client_id: z.string().min(1, "Selecione um cliente"),
-  vendor: z.string().optional(),
-  license_key: z.string().optional(),
+  vendor: z.string().max(255, "Fornecedor deve ter no máximo 255 caracteres").optional(),
+  license_key: z.string().max(1000, "Chave deve ter no máximo 1.000 caracteres").optional(),
   total_licenses: z.coerce.number().min(1, "Deve ter pelo menos 1 licença"),
   used_licenses: z.coerce.number().min(0),
   purchase_date: z.string().optional(),
   expire_date: z.string().optional(),
   purchase_value: z.coerce.number().optional(),
-  notes: z.string().optional(),
-});
+  notes: z.string().max(5000, "Observações deve ter no máximo 5.000 caracteres").optional(),
+}).refine(
+  (data) => data.used_licenses <= data.total_licenses,
+  {
+    message: "Licenças em uso não podem exceder o total de licenças",
+    path: ["used_licenses"],
+  }
+).refine(
+  (data) => {
+    if (data.purchase_date && data.expire_date) {
+      return new Date(data.expire_date) >= new Date(data.purchase_date);
+    }
+    return true;
+  },
+  {
+    message: "Data de expiração deve ser posterior à data de compra",
+    path: ["expire_date"],
+  }
+);
 
 type LicenseFormData = z.infer<typeof licenseSchema>;
 
@@ -133,10 +152,10 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
         title: "Chave revelada",
         description: "Acesso registrado em auditoria.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao revelar chave",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Erro desconhecido",
         variant: "destructive",
       });
     } finally {
@@ -146,7 +165,7 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
 
   const mutation = useMutation({
     mutationFn: async (data: LicenseFormData) => {
-      const payload: Record<string, any> = {
+      const payload: Record<string, string | number | null> = {
         name: data.name,
         client_id: data.client_id,
         vendor: data.vendor || null,
