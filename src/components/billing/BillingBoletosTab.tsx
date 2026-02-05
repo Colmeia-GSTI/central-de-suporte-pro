@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Clock,
   CheckCircle2,
@@ -27,6 +35,8 @@ import {
   AlertTriangle,
   ShieldCheck,
   Settings,
+  Trash2,
+  MoreHorizontal,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -60,9 +70,20 @@ type IntegrationStatus = {
 export function BillingBoletosTab() {
   const [isPolling, setIsPolling] = useState(false);
   const [isNotifying, setIsNotifying] = useState(false);
+  const [selectedBoletos, setSelectedBoletos] = useState<Set<string>>(new Set());
   const [cancelDialog, setCancelDialog] = useState<{ open: boolean; invoice: BoletoInvoice | null; isLoading: boolean }>({
     open: false,
     invoice: null,
+    isLoading: false,
+  });
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; invoice: BoletoInvoice | null; isLoading: boolean }>({
+    open: false,
+    invoice: null,
+    isLoading: false,
+  });
+  const [batchActionDialog, setBatchActionDialog] = useState<{ open: boolean; action: "cancel" | "delete" | null; isLoading: boolean }>({
+    open: false,
+    action: null,
     isLoading: false,
   });
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>({
@@ -238,6 +259,19 @@ export function BillingBoletosTab() {
     }
   };
 
+  // Selection helpers
+  const toggleBoletoSelection = (id: string) => {
+    setSelectedBoletos((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
   const pendingProcessing = invoices.filter(
     (i) => i.status === "pending" && !i.boleto_barcode && i.notes?.includes("codigoSolicitacao")
   );
@@ -245,6 +279,108 @@ export function BillingBoletosTab() {
     (i) => (i.status === "pending" || i.status === "overdue") && i.boleto_barcode
   );
   const paidBoletos = invoices.filter((i) => i.status === "paid");
+
+  const allPendingSelected = pendingProcessing.length > 0 && pendingProcessing.every((i) => selectedBoletos.has(i.id));
+  const somePendingSelected = pendingProcessing.some((i) => selectedBoletos.has(i.id));
+
+  const toggleSelectAllPending = () => {
+    if (allPendingSelected) {
+      setSelectedBoletos(new Set());
+    } else {
+      setSelectedBoletos(new Set(pendingProcessing.map((i) => i.id)));
+    }
+  };
+
+  // Delete individual invoice
+  const handleDeleteInvoice = async () => {
+    if (!deleteDialog.invoice) return;
+
+    setDeleteDialog((prev) => ({ ...prev, isLoading: true }));
+    try {
+      const { error } = await supabase
+        .from("invoices")
+        .delete()
+        .eq("id", deleteDialog.invoice.id);
+
+      if (error) throw error;
+
+      toast.success("Fatura excluída", {
+        description: `Fatura #${deleteDialog.invoice.invoice_number} removida com sucesso`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      setDeleteDialog({ open: false, invoice: null, isLoading: false });
+    } catch (error: unknown) {
+      toast.error("Erro ao excluir fatura", { description: getErrorMessage(error) });
+      setDeleteDialog((prev) => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  // Batch cancel boletos
+  const handleBatchCancel = async () => {
+    setBatchActionDialog((prev) => ({ ...prev, isLoading: true }));
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const invoiceId of selectedBoletos) {
+      try {
+        const { data, error } = await supabase.functions.invoke("banco-inter", {
+          body: {
+            action: "cancel",
+            invoice_id: invoiceId,
+            motivo_cancelamento: "ACERTOS",
+          },
+        });
+
+        if (error || data.error) {
+          errorCount++;
+        } else {
+          successCount++;
+        }
+      } catch {
+        errorCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success("Boletos cancelados", {
+        description: `${successCount} boleto(s) cancelado(s) com sucesso${errorCount > 0 ? `, ${errorCount} falha(s)` : ""}`,
+      });
+    } else {
+      toast.error("Erro ao cancelar boletos", {
+        description: `${errorCount} falha(s) no cancelamento`,
+      });
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    setSelectedBoletos(new Set());
+    setBatchActionDialog({ open: false, action: null, isLoading: false });
+  };
+
+  // Batch delete invoices
+  const handleBatchDelete = async () => {
+    setBatchActionDialog((prev) => ({ ...prev, isLoading: true }));
+    try {
+      const { error } = await supabase
+        .from("invoices")
+        .delete()
+        .in("id", Array.from(selectedBoletos));
+
+      if (error) throw error;
+
+      toast.success("Faturas excluídas", {
+        description: `${selectedBoletos.size} fatura(s) removida(s) com sucesso`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      setSelectedBoletos(new Set());
+      setBatchActionDialog({ open: false, action: null, isLoading: false });
+    } catch (error: unknown) {
+      toast.error("Erro ao excluir faturas", { description: getErrorMessage(error) });
+      setBatchActionDialog((prev) => ({ ...prev, isLoading: false }));
+    }
+  };
 
   const stats = [
     {
@@ -417,20 +553,63 @@ export function BillingBoletosTab() {
               Boletos solicitados ao banco aguardando geração do código de barras
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Batch Action Bar */}
+            {selectedBoletos.size > 0 && (
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+                <span className="text-sm font-medium">
+                  {selectedBoletos.size} boleto(s) selecionado(s)
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBatchActionDialog({ open: true, action: "cancel", isLoading: false })}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Cancelar Selecionados
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBatchActionDialog({ open: true, action: "delete", isLoading: false })}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir Selecionados
+                  </Button>
+                </div>
+              </div>
+            )}
+            
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={allPendingSelected}
+                      onCheckedChange={toggleSelectAllPending}
+                      aria-label="Selecionar todos"
+                      className={somePendingSelected && !allPendingSelected ? "data-[state=checked]:bg-primary/50" : ""}
+                    />
+                  </TableHead>
                   <TableHead>#</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Valor</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pendingProcessing.map((invoice) => (
-                  <TableRow key={invoice.id}>
+                  <TableRow key={invoice.id} className={selectedBoletos.has(invoice.id) ? "bg-muted/30" : ""}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedBoletos.has(invoice.id)}
+                        onCheckedChange={() => toggleBoletoSelection(invoice.id)}
+                        aria-label={`Selecionar fatura ${invoice.invoice_number}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono">#{invoice.invoice_number}</TableCell>
                     <TableCell>{invoice.clients?.name || "-"}</TableCell>
                     <TableCell>{formatCurrency(invoice.amount)}</TableCell>
@@ -442,6 +621,31 @@ export function BillingBoletosTab() {
                         <Clock className="h-3 w-3 mr-1" />
                         Processando
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setCancelDialog({ open: true, invoice, isLoading: false })}
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Cancelar Boleto
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setDeleteDialog({ open: true, invoice, isLoading: false })}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir Fatura
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -592,6 +796,34 @@ export function BillingBoletosTab() {
         variant="destructive"
         onConfirm={handleCancelBoleto}
         isLoading={cancelDialog.isLoading}
+      />
+
+      {/* Delete Dialog */}
+      <ConfirmDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog({ ...deleteDialog, open })}
+        title="Excluir Fatura"
+        description={`Tem certeza que deseja excluir a fatura #${deleteDialog.invoice?.invoice_number}? Esta ação não pode ser desfeita e removerá todos os dados da fatura.`}
+        confirmLabel="Excluir Fatura"
+        variant="destructive"
+        onConfirm={handleDeleteInvoice}
+        isLoading={deleteDialog.isLoading}
+      />
+
+      {/* Batch Action Dialog */}
+      <ConfirmDialog
+        open={batchActionDialog.open}
+        onOpenChange={(open) => setBatchActionDialog({ ...batchActionDialog, open })}
+        title={batchActionDialog.action === "cancel" ? "Cancelar Boletos" : "Excluir Faturas"}
+        description={
+          batchActionDialog.action === "cancel"
+            ? `Tem certeza que deseja cancelar ${selectedBoletos.size} boleto(s) selecionado(s)? Esta ação não pode ser desfeita.`
+            : `Tem certeza que deseja excluir ${selectedBoletos.size} fatura(s) selecionada(s)? Esta ação não pode ser desfeita e removerá todos os dados.`
+        }
+        confirmLabel={batchActionDialog.action === "cancel" ? "Cancelar Boletos" : "Excluir Faturas"}
+        variant="destructive"
+        onConfirm={batchActionDialog.action === "cancel" ? handleBatchCancel : handleBatchDelete}
+        isLoading={batchActionDialog.isLoading}
       />
     </div>
   );
