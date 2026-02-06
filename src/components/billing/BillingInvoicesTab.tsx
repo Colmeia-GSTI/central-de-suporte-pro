@@ -855,7 +855,7 @@ export function BillingInvoicesTab() {
                       boletoUrl={invoice.boleto_url}
                       boletoError={invoice.boleto_error_msg}
                       nfseStatus={invoice.nfse_status || "pendente"}
-                      nfseUrl={invoice.nfse_history_id ? `#nfse-${invoice.nfse_history_id}` : undefined}
+                      nfseUrl={nfseByInvoice[invoice.id] ? "#nfse" : undefined}
                       nfseError={invoice.nfse_error_msg}
                       emailStatus={invoice.email_status || "pendente"}
                       emailError={invoice.email_error_msg}
@@ -1099,8 +1099,8 @@ export function BillingInvoicesTab() {
           id: manualPaymentInvoice.id,
           invoice_number: manualPaymentInvoice.invoice_number,
           amount: manualPaymentInvoice.amount,
-          fine_amount: (manualPaymentInvoice as any).fine_amount || 0,
-          interest_amount: (manualPaymentInvoice as any).interest_amount || 0,
+          fine_amount: manualPaymentInvoice.fine_amount || 0,
+          interest_amount: manualPaymentInvoice.interest_amount || 0,
           contract_id: manualPaymentInvoice.contract_id,
           client_name: manualPaymentInvoice.clients?.name,
         } : null}
@@ -1115,8 +1115,8 @@ export function BillingInvoicesTab() {
           invoice_number: secondCopyInvoice.invoice_number,
           amount: secondCopyInvoice.amount,
           due_date: secondCopyInvoice.due_date,
-          fine_amount: (secondCopyInvoice as any).fine_amount,
-          interest_amount: (secondCopyInvoice as any).interest_amount,
+          fine_amount: secondCopyInvoice.fine_amount,
+          interest_amount: secondCopyInvoice.interest_amount,
           client_name: secondCopyInvoice.clients?.name,
         } : null}
         onSuccess={() => {
@@ -1134,8 +1134,8 @@ export function BillingInvoicesTab() {
           invoice_number: renegotiateInvoice.invoice_number,
           amount: renegotiateInvoice.amount,
           due_date: renegotiateInvoice.due_date,
-          fine_amount: (renegotiateInvoice as any).fine_amount,
-          interest_amount: (renegotiateInvoice as any).interest_amount,
+          fine_amount: renegotiateInvoice.fine_amount,
+          interest_amount: renegotiateInvoice.interest_amount,
           client_name: renegotiateInvoice.clients?.name,
         } : null}
         onSuccess={() => {

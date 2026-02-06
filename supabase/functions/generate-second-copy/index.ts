@@ -35,6 +35,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Role validation
+    const { data: userRoles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id);
+
+    const roles = (userRoles || []).map((r: any) => r.role);
+    const allowedRoles = ["admin", "financial", "client_master"];
+    if (!roles.some((r: string) => allowedRoles.includes(r))) {
+      return new Response(JSON.stringify({ error: "Sem permissão para gerar segunda via" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { invoice_id } = await req.json();
     if (!invoice_id) {
       return new Response(JSON.stringify({ error: "invoice_id obrigatório" }), {
