@@ -109,23 +109,24 @@ Deno.serve(async (req) => {
     const targetMonth = body.month || new Date().getMonth() + 1;
     const targetYear = body.year || new Date().getFullYear();
     const referenceMonth = `${targetYear}-${String(targetMonth).padStart(2, "0")}`;
+    const manualContractId = body.contract_id || null;
 
     console.log(`[GEN-INVOICES] Execution ID: ${executionId}`);
-    console.log(`[GEN-INVOICES] Gerando faturas para competência ${referenceMonth}`);
+    console.log(`[GEN-INVOICES] Gerando faturas para competência ${referenceMonth}${manualContractId ? ` (manual: ${manualContractId})` : ""}`);
 
     await logToDatabase(
       supabase,
       "info",
       "Billing",
       "generate-monthly-invoices",
-      `Iniciando geração de faturas para ${referenceMonth}`,
-      { reference_month: referenceMonth },
+      `Iniciando geração de faturas para ${referenceMonth}${manualContractId ? " (manual)" : ""}`,
+      { reference_month: referenceMonth, contract_id: manualContractId },
       undefined,
       executionId
     );
 
     // Fetch active contracts with client info
-    const { data: contracts, error: contractsError } = await supabase
+    let contractsQuery = supabase
       .from("contracts")
       .select(`
         id,
@@ -146,6 +147,13 @@ Deno.serve(async (req) => {
       `)
       .eq("status", "active")
       .gt("monthly_value", 0);
+
+    // When contract_id is provided, filter to that specific contract
+    if (manualContractId) {
+      contractsQuery = contractsQuery.eq("id", manualContractId);
+    }
+
+    const { data: contracts, error: contractsError } = await contractsQuery;
 
     if (contractsError) {
       console.error("[GEN-INVOICES] Erro ao buscar contratos:", contractsError);
