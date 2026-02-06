@@ -17,6 +17,7 @@ import { Plus, Search, BookOpen, Eye, Edit, Trash2, Globe, Lock } from "lucide-r
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
 import { ArticleForm } from "@/components/knowledge/ArticleForm";
 import { ArticleViewer } from "@/components/knowledge/ArticleViewer";
 import { PermissionGate } from "@/components/auth/PermissionGate";
@@ -39,17 +40,18 @@ export default function KnowledgePage() {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const debouncedSearch = useDebounce(search, 300);
 
   const { data: articles = [], isLoading } = useQuery({
-    queryKey: ["knowledge-articles", search],
+    queryKey: ["knowledge-articles", debouncedSearch],
     queryFn: async () => {
       let query = supabase
         .from("knowledge_articles")
         .select("*, ticket_categories(name)")
         .order("updated_at", { ascending: false });
 
-      if (search) {
-        query = query.or(`title.ilike.%${search}%,content.ilike.%${search}%`);
+      if (debouncedSearch) {
+        query = query.or(`title.ilike.%${debouncedSearch}%,content.ilike.%${debouncedSearch}%`);
       }
 
       const { data, error } = await query;
@@ -67,6 +69,13 @@ export default function KnowledgePage() {
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
       toast({ title: "Artigo excluído com sucesso" });
       setDeleteConfirm({ open: false, article: null });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao excluir artigo",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -166,7 +175,15 @@ export default function KnowledgePage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
-                    {article.content.replace(/<[^>]*>/g, "").slice(0, 150)}...
+                    {(() => {
+                      try {
+                        const doc = new DOMParser().parseFromString(article.content, "text/html");
+                        return (doc.body.textContent || "").slice(0, 150);
+                      } catch {
+                        return article.content.replace(/<[^>]*>/g, "").slice(0, 150);
+                      }
+                    })()}
+                    {article.content.length > 150 ? "..." : ""}
                   </p>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -205,10 +222,16 @@ export default function KnowledgePage() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Atualizado {formatDistanceToNow(new Date(article.updated_at), {
-                      addSuffix: true,
-                      locale: ptBR,
-                    })}
+                    {(() => {
+                      try {
+                        return `Atualizado ${formatDistanceToNow(new Date(article.updated_at), {
+                          addSuffix: true,
+                          locale: ptBR,
+                        })}`;
+                      } catch {
+                        return "Data indisponível";
+                      }
+                    })()}
                   </p>
                 </CardContent>
               </Card>

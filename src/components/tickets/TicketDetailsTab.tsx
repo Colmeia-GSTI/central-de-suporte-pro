@@ -44,6 +44,8 @@ type TicketWithRelations = Tables<"tickets"> & {
   ticket_categories: Tables<"ticket_categories"> | null;
   ticket_subcategories?: { id: string; name: string } | null;
   requester_contact?: RequesterContactType | null;
+  subcategory_id?: string | null;
+  asset_description?: string | null;
 };
 
 interface TicketDetailsTabProps {
@@ -95,7 +97,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     status: ticket.status,
     priority: ticket.priority,
     category_id: ticket.category_id || "",
-    subcategory_id: (ticket as any).subcategory_id || "",
+    subcategory_id: ticket.subcategory_id || "",
     assigned_to: ticket.assigned_to || "",
     asset_id: ticket.asset_id || "",
   });
@@ -112,7 +114,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
       status: ticket.status,
       priority: ticket.priority,
       category_id: ticket.category_id || "",
-      subcategory_id: (ticket as any).subcategory_id || "",
+      subcategory_id: ticket.subcategory_id || "",
       assigned_to: ticket.assigned_to || "",
       asset_id: ticket.asset_id || "",
     });
@@ -296,7 +298,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
       status: ticket.status,
       priority: ticket.priority,
       category_id: ticket.category_id || "",
-      subcategory_id: (ticket as any).subcategory_id || "",
+      subcategory_id: ticket.subcategory_id || "",
       assigned_to: ticket.assigned_to || "",
       asset_id: ticket.asset_id || "",
     });
@@ -304,8 +306,29 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     setIsEditing(false);
   };
 
+  // Valid status transitions - prevents invalid state changes
+  const validTransitions: Record<string, string[]> = {
+    open: ["in_progress", "waiting", "paused", "waiting_third_party", "no_contact", "closed"],
+    in_progress: ["waiting", "paused", "waiting_third_party", "no_contact", "resolved", "closed"],
+    waiting: ["in_progress", "paused", "waiting_third_party", "no_contact", "resolved", "closed"],
+    paused: ["in_progress", "waiting", "waiting_third_party", "no_contact"],
+    waiting_third_party: ["in_progress", "waiting", "paused", "no_contact"],
+    no_contact: ["in_progress", "waiting", "paused", "waiting_third_party", "closed"],
+    resolved: ["closed", "in_progress"],
+    closed: ["in_progress"],
+  };
+
   const handleStatusChange = async (newStatus: string) => {
     const oldStatus = formData.status;
+    const allowed = validTransitions[oldStatus] || [];
+    if (!allowed.includes(newStatus)) {
+      toast({
+        title: "Transição inválida",
+        description: `Não é possível mudar de "${statusLabels[oldStatus]}" para "${statusLabels[newStatus as Enums<"ticket_status">]}"`,
+        variant: "destructive",
+      });
+      return;
+    }
     setFormData((prev) => ({ ...prev, status: newStatus as Enums<"ticket_status"> }));
     if (!isEditing) {
       // Registrar mudança de status no histórico
@@ -530,8 +553,8 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
               ticketTags.map((assignment) => (
                 <TagBadge
                   key={assignment.tag_id}
-                  name={(assignment.ticket_tags as any)?.name || ""}
-                  color={(assignment.ticket_tags as any)?.color || "#6b7280"}
+                  name={(assignment.ticket_tags as { name: string; color: string | null } | null)?.name || ""}
+                  color={(assignment.ticket_tags as { name: string; color: string | null } | null)?.color || "#6b7280"}
                 />
               ))
             )}
@@ -570,9 +593,9 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         <div className="space-y-2">
           <Label>Dispositivo Atendido</Label>
           {/* Show asset_description if set (when "Outro" was selected) */}
-          {(ticket as any).asset_description && !formData.asset_id ? (
+          {ticket.asset_description && !formData.asset_id ? (
             <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm font-medium">{(ticket as any).asset_description}</p>
+              <p className="text-sm font-medium">{ticket.asset_description}</p>
               <p className="text-xs text-muted-foreground mt-1">Descrição personalizada</p>
             </div>
           ) : (

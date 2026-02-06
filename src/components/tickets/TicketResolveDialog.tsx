@@ -181,7 +181,7 @@ export function TicketResolveDialog({
     onOpenChange(false);
   };
 
-  const canSubmit = resolutionNotes.trim().length > 0;
+  const canSubmit = resolutionNotes.trim().length >= 10;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -260,6 +260,9 @@ export function TicketResolveDialog({
           <div className="space-y-2">
             <Label htmlFor="resolution-notes">
               Descreva a solução aplicada <span className="text-destructive">*</span>
+              <span className="text-xs text-muted-foreground ml-2">
+                (mínimo 10 caracteres)
+              </span>
             </Label>
             <Textarea
               id="resolution-notes"

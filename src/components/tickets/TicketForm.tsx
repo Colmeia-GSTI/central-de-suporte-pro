@@ -32,8 +32,12 @@ import { TagsInput } from "@/components/tickets/TagsInput";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const ticketSchema = z.object({
-  title: z.string().min(5, "Título deve ter pelo menos 5 caracteres"),
-  description: z.string().optional(),
+  title: z.string()
+    .min(5, "Título deve ter pelo menos 5 caracteres")
+    .max(255, "Título deve ter no máximo 255 caracteres"),
+  description: z.string()
+    .max(10000, "Descrição deve ter no máximo 10.000 caracteres")
+    .optional(),
   client_id: z.string().optional(),
   category_id: z.string().optional(),
   subcategory_id: z.string().optional(),

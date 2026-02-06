@@ -34,8 +34,17 @@ function getWorkMinutesForDay(
   let totalMinutes = 0;
 
   for (const shift of shifts) {
-    const [startH, startM] = shift.start.split(":").map(Number);
-    const [endH, endM] = shift.end.split(":").map(Number);
+    const parts = shift.start.split(":");
+    const endParts = shift.end.split(":");
+    const startH = parseInt(parts[0], 10);
+    const startM = parseInt(parts[1], 10);
+    const endH = parseInt(endParts[0], 10);
+    const endM = parseInt(endParts[1], 10);
+
+    // Validate parsed time values
+    if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) {
+      continue; // Skip invalid shift definitions
+    }
 
     let shiftStart = setMinutes(setHours(startOfDay(date), startH), startM);
     let shiftEnd = setMinutes(setHours(startOfDay(date), endH), endM);
@@ -119,18 +128,24 @@ export function calculateRemainingBusinessMinutes(
 
   // Descontar tempo de pausas
   if (pauses?.length) {
+    let totalPauseMinutes = 0;
     for (const pause of pauses) {
       const pauseStart = new Date(pause.paused_at);
       const pauseEnd = pause.resumed_at ? new Date(pause.resumed_at) : now;
-      
+
+      // Validate that pause start is before pause end
+      if (pauseStart >= pauseEnd) continue;
+
       const pauseMinutes = calculateElapsedBusinessMinutes(
         pauseStart,
         pauseEnd,
         businessHours
       );
-      
-      elapsedMinutes -= pauseMinutes;
+
+      totalPauseMinutes += pauseMinutes;
     }
+    // Ensure pause time never exceeds elapsed time
+    elapsedMinutes = Math.max(0, elapsedMinutes - totalPauseMinutes);
   }
 
   return Math.max(0, slaMinutes - elapsedMinutes);
@@ -214,11 +229,14 @@ export function calculateSLAStatus(
     );
     // Descontar pausas
     if (pauses?.length) {
+      let totalPauseMinutes = 0;
       for (const pause of pauses) {
         const pauseStart = new Date(pause.paused_at);
         const pauseEnd = pause.resumed_at ? new Date(pause.resumed_at) : new Date(resolvedAt);
-        resolutionElapsed -= calculateElapsedBusinessMinutes(pauseStart, pauseEnd, businessHours);
+        if (pauseStart >= pauseEnd) continue;
+        totalPauseMinutes += calculateElapsedBusinessMinutes(pauseStart, pauseEnd, businessHours);
       }
+      resolutionElapsed = Math.max(0, resolutionElapsed - totalPauseMinutes);
     }
     resolutionBreached = resolutionElapsed > resolutionTarget;
   } else {

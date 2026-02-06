@@ -265,7 +265,7 @@ export function TicketPauseDialog({
             </Button>
             <Button
               onClick={() => pauseMutation.mutate()}
-              disabled={pauseMutation.isPending}
+              disabled={pauseMutation.isPending || !reason.trim() || (pauseType === "third_party" && !thirdPartyName.trim())}
             >
               {pauseMutation.isPending ? (
                 <>
