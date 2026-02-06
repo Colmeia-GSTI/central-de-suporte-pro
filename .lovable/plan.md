@@ -1,66 +1,96 @@
 
-# Gerar Fatura Manual por Contrato
+# Adicionar Emissao de NFS-e na Geracao de Faturas
 
-## Objetivo
-Adicionar um botao na tabela de contratos que permite gerar a fatura manualmente para um contrato especifico, ignorando a regra de antecedencia (`days_before_due`). Util para contratos com vencimento proximo que nao se enquadram na janela automatica.
-
----
+## Problema Atual
+A edge function `generate-monthly-invoices` cria a fatura e gera a cobranca (boleto/PIX), mas **nao emite a NFS-e**, mesmo quando o contrato tem `nfse_enabled = true`.
 
 ## O que muda
 
-### 1. Backend - Edge Function `generate-monthly-invoices`
-- Aceitar um parametro opcional `contract_id` no body da requisicao
-- Quando `contract_id` estiver presente, filtrar apenas esse contrato (em vez de todos os ativos)
-- O resto do fluxo permanece identico: verifica duplicidade, gera fatura, emite cobranca e NFS-e se configurado
+### Edge Function `generate-monthly-invoices/index.ts`
+Adicionar um bloco de emissao de NFS-e apos a geracao do pagamento (apos a linha ~450), seguindo a mesma logica do fluxo "Emitir Completo" do frontend.
 
-### 2. Frontend - `ContractsPage.tsx`
-- Adicionar um botao com icone de "Gerar Fatura" (icone `Receipt`) na coluna de acoes de cada contrato ativo
-- Ao clicar, exibir um dialog de confirmacao informando:
-  - Nome do contrato
-  - Valor mensal
-  - Competencia que sera gerada (mes atual)
-- Ao confirmar, chamar `supabase.functions.invoke("generate-monthly-invoices", { body: { contract_id } })`
-- Mostrar toast de sucesso/erro com o resultado
-- O botao so aparece para contratos com status "active"
-- Protegido por `PermissionGate` (modulo `financial`, acao `manage`)
+**Logica:**
+1. Verificar se `contract.nfse_enabled === true`
+2. Se sim, buscar dados complementares do contrato (`description`, `nfse_descricao_customizada`, `nfse_service_code`)
+3. Chamar `supabase.functions.invoke("asaas-nfse")` com `action: "emit"` passando os dados necessarios
+4. Logar sucesso ou erro da emissao
 
----
-
-## Fluxo do usuario
-
-```text
-Contratos -> Coluna Acoes -> Botao "Gerar Fatura"
-    |
-    v
-Dialog de Confirmacao
-  "Gerar fatura para [Nome do Contrato]?"
-  "Competencia: 02/2026 - Valor: R$ X.XXX,XX"
-    |
-    v
-[Confirmar] -> Chama Edge Function com contract_id
-    |
-    v
-Toast: "Fatura gerada com sucesso!" ou "Fatura ja existe para este mes"
-```
+**Campos necessarios para a chamada:**
+- `action: "emit"`
+- `client_id`: do contrato
+- `invoice_id`: da fatura recem-criada
+- `contract_id`: do contrato
+- `value`: valor total da fatura
+- `service_description`: descricao customizada ou descricao do contrato
 
 ---
 
 ## Detalhes Tecnicos
 
-### Edge Function (`generate-monthly-invoices/index.ts`)
-- Linha ~108: Extrair `contract_id` do body junto com `month` e `year`
-- Linha ~128-148: Se `contract_id` presente, adicionar `.eq("id", contract_id)` na query de contratos
-- Nenhuma outra alteracao necessaria - a logica de verificacao de duplicidade ja existe
+### Alteracao no arquivo `supabase/functions/generate-monthly-invoices/index.ts`
 
-### Frontend (`ContractsPage.tsx`)
-- Adicionar estado para controlar o dialog de confirmacao e loading
-- Adicionar `useMutation` para chamar a edge function
-- Adicionar botao com `Receipt` icon entre o botao de reajuste e o de editar
-- Invalidar queries `["invoices"]` e `["billing-counters"]` apos sucesso
-- Importar `Loader2` para estado de loading
+Apos o bloco de geracao de pagamento (linha ~450), adicionar:
 
-### Componentes reutilizados
-- `ConfirmDialog` (ja importado na pagina)
-- `PermissionGate` (ja importado)
-- `TooltipProvider/Tooltip` (ja importado)
-- `toast` via `useToast` (ja importado)
+```text
+// Auto-emit NFS-e if contract has nfse_enabled
+if (contract.nfse_enabled) {
+  try {
+    // Fetch contract details for NFS-e
+    const { data: contractDetails } = await supabase
+      .from("contracts")
+      .select("description, nfse_descricao_customizada, nfse_service_code")
+      .eq("id", contract.id)
+      .single();
+
+    const serviceDescription = contractDetails?.nfse_descricao_customizada
+      || contractDetails?.description
+      || `Prestacao de servicos - ${contract.name}`;
+
+    await supabase.functions.invoke("asaas-nfse", {
+      body: {
+        action: "emit",
+        client_id: contract.client_id,
+        invoice_id: newInvoice.id,
+        contract_id: contract.id,
+        value: totalAmount,
+        service_description: serviceDescription,
+      },
+    });
+
+    console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}`);
+  } catch (nfseError) {
+    console.error(`[GEN-INVOICES] Erro ao emitir NFS-e para ${contract.name}:`, nfseError);
+  }
+}
+```
+
+### Campos adicionais na query de contratos
+Adicionar `description`, `nfse_descricao_customizada` e `nfse_service_code` na select principal (linha ~131) para evitar uma query extra por contrato. Isso e mais eficiente do que buscar depois.
+
+### Interface `Contract`
+Atualizar a interface (linha ~8) para incluir os novos campos:
+- `description: string | null`
+- `nfse_descricao_customizada: string | null`
+- `nfse_service_code: string | null`
+
+---
+
+## Fluxo Completo Apos Alteracao
+
+```text
+Contrato Ativo (nfse_enabled = true)
+    |
+    v
+1. Cria Fatura (invoice)
+2. Gera Itens (invoice_items)
+3. Gera Cobranca (Boleto/PIX via Asaas ou Inter)
+4. [NOVO] Emite NFS-e (via asaas-nfse action: "emit")
+5. Envia Email/Notificacao
+```
+
+## Arquivos Modificados
+- `supabase/functions/generate-monthly-invoices/index.ts` (unico arquivo)
+
+## Riscos e Mitigacoes
+- A emissao de NFS-e e envolvida em try/catch, entao um erro na NFS-e nao impede a geracao da fatura ou da cobranca
+- O sistema de unicidade de NFS-e existente (verificacao de `asaas_invoice_id`) previne emissoes duplicadas caso o job rode novamente
