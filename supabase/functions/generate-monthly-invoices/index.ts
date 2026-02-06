@@ -16,6 +16,9 @@ interface Contract {
   billing_provider: string | null;
   nfse_enabled: boolean | null;
   notification_message: string | null;
+  description: string | null;
+  nfse_descricao_customizada: string | null;
+  nfse_service_code: string | null;
   clients: {
     name: string;
     email: string | null;
@@ -139,6 +142,9 @@ Deno.serve(async (req) => {
         billing_provider,
         nfse_enabled,
         notification_message,
+        description,
+        nfse_descricao_customizada,
+        nfse_service_code,
         clients (
           name,
           email,
@@ -446,6 +452,34 @@ Deno.serve(async (req) => {
               .eq("id", newInvoice.id);
           } catch (paymentError) {
             console.error(`[GEN-INVOICES] Erro ao gerar pagamento para ${contract.name}:`, paymentError);
+          }
+        }
+
+        // Auto-emit NFS-e if contract has nfse_enabled
+        if (contract.nfse_enabled) {
+          try {
+            const serviceDescription = contract.nfse_descricao_customizada
+              || contract.description
+              || `Prestação de serviços - ${contract.name}`;
+
+            const { data: nfseResult, error: nfseError } = await supabase.functions.invoke("asaas-nfse", {
+              body: {
+                action: "emit",
+                client_id: contract.client_id,
+                invoice_id: newInvoice.id,
+                contract_id: contract.id,
+                value: totalAmount,
+                service_description: serviceDescription,
+              },
+            });
+
+            if (nfseError) {
+              console.error(`[GEN-INVOICES] Erro ao emitir NFS-e para ${contract.name}:`, nfseError);
+            } else {
+              console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}:`, nfseResult?.success ? "OK" : nfseResult?.error || "sem resposta");
+            }
+          } catch (nfseErr) {
+            console.error(`[GEN-INVOICES] Exceção ao emitir NFS-e para ${contract.name}:`, nfseErr);
           }
         }
 
