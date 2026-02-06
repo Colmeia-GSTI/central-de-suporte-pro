@@ -250,32 +250,9 @@ export function InvoiceActionIndicators({
 
   return (
     <div className="flex gap-1.5">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {renderBoletoIndicator()}
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          Boleto Bancário
-        </TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {renderNfseIndicator()}
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          Nota Fiscal de Serviço
-        </TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {renderEmailIndicator()}
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          Email Notificação
-        </TooltipContent>
-      </Tooltip>
+      {renderBoletoIndicator()}
+      {renderNfseIndicator()}
+      {renderEmailIndicator()}
     </div>
   );
 }

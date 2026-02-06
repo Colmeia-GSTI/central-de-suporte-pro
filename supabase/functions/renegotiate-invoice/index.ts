@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
 
     // Calculate installment values
     const installmentValue = Math.floor((totalAmount / number_of_installments) * 100) / 100;
-    const lastInstallmentValue = Math.round((totalAmount - installmentValue * (number_of_installments - 1)) * 100) / 100;
+    const lastInstallmentValue = Math.max(0.01, Math.round((totalAmount - installmentValue * (number_of_installments - 1)) * 100) / 100);
 
     // Generate new invoices
     const today = new Date();
