@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History } from "lucide-react";
+import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -70,6 +70,10 @@ export default function ContractsPage() {
     contract: null,
   });
   const [historySheet, setHistorySheet] = useState<{ open: boolean; contract: ContractWithClient | null }>({
+    open: false,
+    contract: null,
+  });
+  const [generateInvoiceConfirm, setGenerateInvoiceConfirm] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
     contract: null,
   });
@@ -125,6 +129,43 @@ export default function ContractsPage() {
       deleteMutation.mutate(deleteConfirm.contract.id);
     }
   };
+
+  const generateInvoiceMutation = useMutation({
+    mutationFn: async (contractId: string) => {
+      const { data, error } = await supabase.functions.invoke("generate-monthly-invoices", {
+        body: { contract_id: contractId },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      setGenerateInvoiceConfirm({ open: false, contract: null });
+
+      const stats = data.stats || { generated: 0, skipped: 0 };
+      if (stats.generated > 0) {
+        toast({ title: "Fatura gerada com sucesso!", description: `${stats.generated} fatura(s) criada(s)` });
+      } else if (stats.skipped > 0) {
+        toast({ title: "Fatura já existe para este mês", variant: "default" });
+      } else {
+        toast({ title: data.message || "Nenhuma fatura gerada" });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao gerar fatura", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleGenerateInvoice = () => {
+    if (generateInvoiceConfirm.contract) {
+      generateInvoiceMutation.mutate(generateInvoiceConfirm.contract.id);
+    }
+  };
+
+  const currentMonth = `${new Date().getMonth() + 1}`.padStart(2, "0");
+  const currentYear = new Date().getFullYear();
+  const currentCompetence = `${currentMonth}/${currentYear}`;
 
   return (
     <AppLayout>
@@ -292,6 +333,29 @@ export default function ContractsPage() {
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
+                          <PermissionGate module="financial" action="manage">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setGenerateInvoiceConfirm({ open: true, contract })}
+                                    disabled={contract.status !== "active" || generateInvoiceMutation.isPending}
+                                  >
+                                    {generateInvoiceMutation.isPending && generateInvoiceConfirm.contract?.id === contract.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Gerar fatura manual</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </PermissionGate>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -357,6 +421,17 @@ export default function ContractsPage() {
           }}
         />
       )}
+
+      {/* Generate Invoice Confirmation Dialog */}
+      <ConfirmDialog
+        open={generateInvoiceConfirm.open}
+        onOpenChange={(open) => setGenerateInvoiceConfirm({ ...generateInvoiceConfirm, open })}
+        title="Gerar Fatura Manual"
+        description={`Gerar fatura para "${generateInvoiceConfirm.contract?.name}"?\n\nCompetência: ${currentCompetence}\nValor: ${generateInvoiceConfirm.contract ? formatCurrencyBRLWithSymbol(generateInvoiceConfirm.contract.monthly_value) : ""}`}
+        confirmLabel="Gerar Fatura"
+        onConfirm={handleGenerateInvoice}
+        isLoading={generateInvoiceMutation.isPending}
+      />
     </AppLayout>
   );
 }
