@@ -1,58 +1,98 @@
 
 
-# Corrigir Menu de Acoes na Aba de Faturas do Contrato
+# Corrigir Escopos OAuth do Banco Inter
 
-## Problema Identificado
+## Problema
 
-A aba "Faturas" dentro do historico do contrato (`ContractHistorySheet.tsx`) **nao possui menu de acoes**. Ela exibe apenas informacoes basicas da fatura (numero, status, valor, vencimento) sem nenhum botao interativo. Diferente da tela principal de Faturamento (`/billing`), onde existe um dropdown com acoes como "Emitir Completo", "Gerar Boleto", etc.
+O sistema solicita os escopos `boleto-cobranca.read` e `boleto-cobranca.write` ao autenticar com o Banco Inter, mas a API v3 do Inter alterou os nomes dos escopos. O portal mostra "API Cobranca (Boleto + Pix)" habilitada, porem os nomes internos dos escopos mudaram.
+
+Na API v3 do Banco Inter (endpoint `cdpj.partners.bancointer.com.br`), os escopos corretos sao:
+
+- **Boleto**: `boleto-cobranca.read` e `boleto-cobranca.write` (para a API /cobranca/v3/)
+
+Entretanto, o Inter pode rejeitar a requisicao quando ambos os escopos sao enviados **juntos** em uma unica string separada por espaco. Algumas aplicacoes no portal exigem que os escopos sejam solicitados **individualmente**.
+
+## Diagnostico Detalhado
+
+1. A funcao `banco-inter` solicita na linha 181: `"boleto-cobranca.read boleto-cobranca.write"` (ambos juntos)
+2. Na geracao de boleto (linha 396): `"boleto-cobranca.read boleto-cobranca.write"` (ambos juntos)
+3. O portal Inter mostra os escopos como habilitados, mas o token OAuth retorna `"No registered scope value"`
+4. A rede mostra "Failed to fetch" — a funcao pode nao estar implantada
 
 ## Solucao
 
-Adicionar um menu de acoes (dropdown) em cada fatura listada na aba "Faturas" do `ContractHistorySheet`, com as acoes mais comuns:
+### 1. Reimplantar a funcao `banco-inter`
+A funcao pode nao estar implantada apos alteracoes recentes. Reimplantar para garantir que esta ativa.
 
-- **Emitir Completo** (Boleto + PIX + NFS-e + Notificacao)
-- **Gerar Boleto** (submenu com Banco Inter / Asaas)
-- **Gerar PIX** (submenu com Banco Inter / Asaas)
-- **Emitir NFS-e Manual**
-- **Enviar por Email / WhatsApp**
-- **Marcar como Pago**
-- **Ver na aba de Faturamento** (link para `/billing`)
+### 2. Alterar a estrategia de solicitacao de escopos
+Em vez de pedir ambos os escopos juntos (`"boleto-cobranca.read boleto-cobranca.write"`), solicitar **apenas o escopo necessario** para cada operacao:
 
-## Detalhes Tecnicos
+- Para **gerar boleto**: usar apenas `boleto-cobranca.write`
+- Para **consultar boleto**: usar apenas `boleto-cobranca.read`  
+- Para **cancelar boleto**: usar `boleto-cobranca.write`
+- Para **gerar PIX**: usar apenas `cob.write`
+- Para **teste de conexao**: testar cada escopo **individualmente** (um por um)
 
-### Arquivo: `src/components/contracts/ContractHistorySheet.tsx`
+### 3. Adicionar fallback
+Se a solicitacao com escopo unico falhar, tentar com ambos juntos como fallback. Isso garante compatibilidade com diferentes configuracoes no portal Inter.
 
-1. **Expandir a query de faturas** (linha ~136) para incluir campos necessarios para as acoes:
-   - `boleto_url`, `boleto_barcode`, `pix_code`, `client_id`, `contract_id`, `billing_provider`, `boleto_status`, `nfse_status`, `email_status`
+## Alteracoes Tecnicas
 
-2. **Atualizar o tipo `InvoiceEntry`** (linha ~60) para incluir os novos campos
+### Arquivo: `supabase/functions/banco-inter/index.ts`
 
-3. **Adicionar imports** necessarios:
-   - `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuSeparator`, `DropdownMenuSub`, `DropdownMenuSubContent`, `DropdownMenuSubTrigger`, `DropdownMenuTrigger` do Radix
-   - Icones: `MoreHorizontal`, `Barcode`, `QrCode`, `Zap`, `Mail`, `MessageCircle`, `Send`, `Building2`, `Loader2`, `ExternalLink`, `HandCoins`
-   - `useMutation`, `useQueryClient` do React Query
-   - `toast` do sonner
-   - `supabase` client
+**Linha 181** - Teste de conexao (boleto):
+```
+// Antes: "boleto-cobranca.read boleto-cobranca.write" (juntos)
+// Depois: testar cada escopo individualmente
+```
 
-4. **Adicionar estados e handlers** para:
-   - `generatingPayment`, `processingComplete`, `sendingNotification`
-   - `handleGeneratePayment()` - gerar boleto/PIX
-   - `handleEmitComplete()` - fluxo completo
-   - `handleResendNotification()` - enviar notificacoes
-   - `markAsPaid` mutation
+**Linha 191** - Teste de conexao (PIX):
+```
+// Antes: "cob.read cob.write" (juntos)  
+// Depois: testar cada escopo individualmente
+```
 
-5. **Adicionar botao de acoes** em cada card de fatura (dentro do `invoices.map`, apos as informacoes existentes):
-   - Botao "..." (MoreHorizontal) que abre dropdown com as acoes
-   - Condicional: so exibir para faturas `pending` ou `overdue`
-   - Reutilizar a mesma logica de acoes do `BillingInvoicesTab`
+**Linhas 394-397** - Geracao de pagamento:
+```
+// Antes: ambos escopos juntos
+// Depois: apenas o escopo de escrita para geracao
+```
 
-6. **Adicionar dialogs necessarios**:
-   - `EmitNfseDialog` para emissao manual de NFS-e
-   - `PixCodeDialog` para exibir codigo PIX
+**Linha 268** - Cancelamento:
+```
+// Antes: "boleto-cobranca.read boleto-cobranca.write"
+// Depois: "boleto-cobranca.write" (so precisa de write para cancelar)
+```
 
-### Arquivo modificado
-- `src/components/contracts/ContractHistorySheet.tsx` (unico arquivo)
+### Logica do teste de conexao (action: "test")
+```text
+1. Tentar "boleto-cobranca.write" sozinho
+   - Se OK: marcar boleto.write como disponivel
+   - Se falhar: logar erro
+2. Tentar "boleto-cobranca.read" sozinho
+   - Se OK: marcar boleto.read como disponivel
+   - Se falhar: logar erro
+3. Tentar "cob.write" sozinho
+   - Se OK: marcar pix.write como disponivel
+   - Se falhar: logar erro
+4. Tentar "cob.read" sozinho
+   - Se OK: marcar pix.read como disponivel
+   - Se falhar: logar erro
+5. Retornar lista de escopos disponiveis
+```
 
-### Riscos
-- Nenhum risco estrutural - estamos adicionando funcionalidade que ja existe no `BillingInvoicesTab` e reaproveitando a mesma logica
-- Os handlers chamam as mesmas edge functions ja existentes (`banco-inter`, `asaas-nfse`, `resend-payment-notification`)
+### Logica de geracao de boleto/PIX
+```text
+1. Tentar com escopo unico ("boleto-cobranca.write")
+2. Se falhar, tentar com ambos ("boleto-cobranca.read boleto-cobranca.write")
+3. Se ambos falharem, retornar erro detalhado
+```
+
+## Arquivos Modificados
+- `supabase/functions/banco-inter/index.ts` (unico arquivo)
+- Reimplantar a funcao apos a alteracao
+
+## Riscos
+- Nenhum risco — estamos apenas alterando a estrategia de solicitacao de escopo OAuth, sem mudar a logica de negocio
+- O fallback garante compatibilidade com ambas as configuracoes (escopos individuais ou combinados)
+
