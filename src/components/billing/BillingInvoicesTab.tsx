@@ -860,6 +860,23 @@ export function BillingInvoicesTab() {
                       emailStatus={invoice.email_status || "pendente"}
                       emailError={invoice.email_error_msg}
                       size="sm"
+                      onBoletoClick={() => {
+                        if (invoice.boleto_url) {
+                          window.open(invoice.boleto_url, "_blank");
+                        } else if (invoice.status === "pending" || invoice.status === "overdue") {
+                          handleGeneratePayment(invoice.id, "boleto", (invoice.billing_provider as "banco_inter" | "asaas") || "banco_inter");
+                        }
+                      }}
+                      onNfseClick={() => {
+                        if (invoice.contract_id) {
+                          setNfseInvoice(invoice);
+                        }
+                      }}
+                      onEmailClick={() => {
+                        if (invoice.boleto_url || invoice.pix_code) {
+                          handleResendNotification(invoice.id, ["email"]);
+                        }
+                      }}
                     />
                   </TableCell>
 
