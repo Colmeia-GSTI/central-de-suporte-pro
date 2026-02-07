@@ -23,7 +23,10 @@ import {
   Plus,
   Edit2,
   Trash2,
+  ExternalLink,
+  QrCode,
 } from "lucide-react";
+import { ContractInvoiceActionsMenu, type ContractInvoiceData } from "./ContractInvoiceActionsMenu";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
@@ -57,21 +60,7 @@ type ServiceHistoryEntry = {
   user_id: string | null;
 };
 
-type InvoiceEntry = {
-  id: string;
-  invoice_number: number;
-  amount: number;
-  due_date: string;
-  status: string;
-  paid_date: string | null;
-  reference_month: string | null;
-  nfse_history: Array<{
-    id: string;
-    numero_nfse: string | null;
-    status: string;
-    created_at: string;
-  }>;
-};
+type InvoiceEntry = ContractInvoiceData;
 
 export function ContractHistorySheet({
   open,
@@ -141,6 +130,13 @@ export function ContractHistorySheet({
           status,
           paid_date,
           reference_month,
+          boleto_url,
+          boleto_barcode,
+          pix_code,
+          client_id,
+          contract_id,
+          billing_provider,
+          clients(name),
           nfse_history(id, numero_nfse, status, created_at)
         `)
         .eq("contract_id", contract.id)
@@ -419,9 +415,17 @@ export function ContractHistorySheet({
                           </span>
                           {getInvoiceStatusBadge(invoice.status)}
                         </div>
-                        <span className="font-mono font-semibold">
-                          {formatCurrencyBRLWithSymbol(invoice.amount)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-semibold">
+                            {formatCurrencyBRLWithSymbol(invoice.amount)}
+                          </span>
+                          {(invoice.status === "pending" || invoice.status === "overdue") && (
+                            <ContractInvoiceActionsMenu
+                              invoice={invoice}
+                              clientName={contract.client_name}
+                            />
+                          )}
+                        </div>
                       </div>
                       <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
                         <span>
@@ -442,8 +446,28 @@ export function ContractHistorySheet({
                           })}
                         </div>
                       )}
-                      {invoice.nfse_history.length > 0 && (
+                      {/* Quick action buttons for boleto/pix */}
+                      {(invoice.boleto_url || invoice.pix_code) && (
                         <div className="mt-2 flex items-center gap-2">
+                          {invoice.boleto_url && (
+                            <button
+                              onClick={() => window.open(invoice.boleto_url!, "_blank")}
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Boleto
+                            </button>
+                          )}
+                          {invoice.pix_code && (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <QrCode className="h-3 w-3" />
+                              PIX gerado
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {invoice.nfse_history.length > 0 && (
+                        <div className="mt-1 flex items-center gap-2">
                           <Receipt className="h-3 w-3 text-muted-foreground" />
                           <span className="text-xs text-muted-foreground">
                             {invoice.nfse_history.length} NFS-e vinculada(s)
