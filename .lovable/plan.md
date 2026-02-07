@@ -1,96 +1,58 @@
 
-# Adicionar Emissao de NFS-e na Geracao de Faturas
 
-## Problema Atual
-A edge function `generate-monthly-invoices` cria a fatura e gera a cobranca (boleto/PIX), mas **nao emite a NFS-e**, mesmo quando o contrato tem `nfse_enabled = true`.
+# Corrigir Menu de Acoes na Aba de Faturas do Contrato
 
-## O que muda
+## Problema Identificado
 
-### Edge Function `generate-monthly-invoices/index.ts`
-Adicionar um bloco de emissao de NFS-e apos a geracao do pagamento (apos a linha ~450), seguindo a mesma logica do fluxo "Emitir Completo" do frontend.
+A aba "Faturas" dentro do historico do contrato (`ContractHistorySheet.tsx`) **nao possui menu de acoes**. Ela exibe apenas informacoes basicas da fatura (numero, status, valor, vencimento) sem nenhum botao interativo. Diferente da tela principal de Faturamento (`/billing`), onde existe um dropdown com acoes como "Emitir Completo", "Gerar Boleto", etc.
 
-**Logica:**
-1. Verificar se `contract.nfse_enabled === true`
-2. Se sim, buscar dados complementares do contrato (`description`, `nfse_descricao_customizada`, `nfse_service_code`)
-3. Chamar `supabase.functions.invoke("asaas-nfse")` com `action: "emit"` passando os dados necessarios
-4. Logar sucesso ou erro da emissao
+## Solucao
 
-**Campos necessarios para a chamada:**
-- `action: "emit"`
-- `client_id`: do contrato
-- `invoice_id`: da fatura recem-criada
-- `contract_id`: do contrato
-- `value`: valor total da fatura
-- `service_description`: descricao customizada ou descricao do contrato
+Adicionar um menu de acoes (dropdown) em cada fatura listada na aba "Faturas" do `ContractHistorySheet`, com as acoes mais comuns:
 
----
+- **Emitir Completo** (Boleto + PIX + NFS-e + Notificacao)
+- **Gerar Boleto** (submenu com Banco Inter / Asaas)
+- **Gerar PIX** (submenu com Banco Inter / Asaas)
+- **Emitir NFS-e Manual**
+- **Enviar por Email / WhatsApp**
+- **Marcar como Pago**
+- **Ver na aba de Faturamento** (link para `/billing`)
 
 ## Detalhes Tecnicos
 
-### Alteracao no arquivo `supabase/functions/generate-monthly-invoices/index.ts`
+### Arquivo: `src/components/contracts/ContractHistorySheet.tsx`
 
-Apos o bloco de geracao de pagamento (linha ~450), adicionar:
+1. **Expandir a query de faturas** (linha ~136) para incluir campos necessarios para as acoes:
+   - `boleto_url`, `boleto_barcode`, `pix_code`, `client_id`, `contract_id`, `billing_provider`, `boleto_status`, `nfse_status`, `email_status`
 
-```text
-// Auto-emit NFS-e if contract has nfse_enabled
-if (contract.nfse_enabled) {
-  try {
-    // Fetch contract details for NFS-e
-    const { data: contractDetails } = await supabase
-      .from("contracts")
-      .select("description, nfse_descricao_customizada, nfse_service_code")
-      .eq("id", contract.id)
-      .single();
+2. **Atualizar o tipo `InvoiceEntry`** (linha ~60) para incluir os novos campos
 
-    const serviceDescription = contractDetails?.nfse_descricao_customizada
-      || contractDetails?.description
-      || `Prestacao de servicos - ${contract.name}`;
+3. **Adicionar imports** necessarios:
+   - `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuSeparator`, `DropdownMenuSub`, `DropdownMenuSubContent`, `DropdownMenuSubTrigger`, `DropdownMenuTrigger` do Radix
+   - Icones: `MoreHorizontal`, `Barcode`, `QrCode`, `Zap`, `Mail`, `MessageCircle`, `Send`, `Building2`, `Loader2`, `ExternalLink`, `HandCoins`
+   - `useMutation`, `useQueryClient` do React Query
+   - `toast` do sonner
+   - `supabase` client
 
-    await supabase.functions.invoke("asaas-nfse", {
-      body: {
-        action: "emit",
-        client_id: contract.client_id,
-        invoice_id: newInvoice.id,
-        contract_id: contract.id,
-        value: totalAmount,
-        service_description: serviceDescription,
-      },
-    });
+4. **Adicionar estados e handlers** para:
+   - `generatingPayment`, `processingComplete`, `sendingNotification`
+   - `handleGeneratePayment()` - gerar boleto/PIX
+   - `handleEmitComplete()` - fluxo completo
+   - `handleResendNotification()` - enviar notificacoes
+   - `markAsPaid` mutation
 
-    console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}`);
-  } catch (nfseError) {
-    console.error(`[GEN-INVOICES] Erro ao emitir NFS-e para ${contract.name}:`, nfseError);
-  }
-}
-```
+5. **Adicionar botao de acoes** em cada card de fatura (dentro do `invoices.map`, apos as informacoes existentes):
+   - Botao "..." (MoreHorizontal) que abre dropdown com as acoes
+   - Condicional: so exibir para faturas `pending` ou `overdue`
+   - Reutilizar a mesma logica de acoes do `BillingInvoicesTab`
 
-### Campos adicionais na query de contratos
-Adicionar `description`, `nfse_descricao_customizada` e `nfse_service_code` na select principal (linha ~131) para evitar uma query extra por contrato. Isso e mais eficiente do que buscar depois.
+6. **Adicionar dialogs necessarios**:
+   - `EmitNfseDialog` para emissao manual de NFS-e
+   - `PixCodeDialog` para exibir codigo PIX
 
-### Interface `Contract`
-Atualizar a interface (linha ~8) para incluir os novos campos:
-- `description: string | null`
-- `nfse_descricao_customizada: string | null`
-- `nfse_service_code: string | null`
+### Arquivo modificado
+- `src/components/contracts/ContractHistorySheet.tsx` (unico arquivo)
 
----
-
-## Fluxo Completo Apos Alteracao
-
-```text
-Contrato Ativo (nfse_enabled = true)
-    |
-    v
-1. Cria Fatura (invoice)
-2. Gera Itens (invoice_items)
-3. Gera Cobranca (Boleto/PIX via Asaas ou Inter)
-4. [NOVO] Emite NFS-e (via asaas-nfse action: "emit")
-5. Envia Email/Notificacao
-```
-
-## Arquivos Modificados
-- `supabase/functions/generate-monthly-invoices/index.ts` (unico arquivo)
-
-## Riscos e Mitigacoes
-- A emissao de NFS-e e envolvida em try/catch, entao um erro na NFS-e nao impede a geracao da fatura ou da cobranca
-- O sistema de unicidade de NFS-e existente (verificacao de `asaas_invoice_id`) previne emissoes duplicadas caso o job rode novamente
+### Riscos
+- Nenhum risco estrutural - estamos adicionando funcionalidade que ja existe no `BillingInvoicesTab` e reaproveitando a mesma logica
+- Os handlers chamam as mesmas edge functions ja existentes (`banco-inter`, `asaas-nfse`, `resend-payment-notification`)
