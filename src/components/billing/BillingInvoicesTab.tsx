@@ -851,7 +851,11 @@ export function BillingInvoicesTab() {
                   {/* NOVA COLUNA: Indicadores de Ações */}
                   <TableCell>
                     <InvoiceActionIndicators
-                      boletoStatus={invoice.boleto_status || "pendente"}
+                      boletoStatus={
+                        invoice.boleto_error_msg ? "erro" :
+                        invoice.boleto_url ? "enviado" :
+                        (invoice.boleto_status as any) || "pendente"
+                      }
                       boletoUrl={invoice.boleto_url}
                       boletoError={invoice.boleto_error_msg}
                       nfseStatus={invoice.nfse_status || "pendente"}
