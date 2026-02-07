@@ -150,7 +150,6 @@ serve(async (req) => {
           const errorText = await response.text();
           console.error(`[BANCO-INTER] Token error for scope "${scope}":`, errorText);
           
-          // Check for scope registration error
           if (errorText.includes("No registered scope value")) {
             return { error: `Escopo "${scope}" não está habilitado para este Client ID no portal do Banco Inter.` };
           }
@@ -169,6 +168,24 @@ serve(async (req) => {
       }
     };
 
+    // Helper: try individual scope first, then combined as fallback
+    const tryGetTokenWithFallback = async (
+      primaryScope: string,
+      fallbackScope: string
+    ): Promise<{ access_token?: string; error?: string; usedScope?: string }> => {
+      console.log(`[BANCO-INTER] Tentando escopo individual: "${primaryScope}"`);
+      const primary = await tryGetToken(primaryScope);
+      if (primary.access_token) {
+        return { ...primary, usedScope: primaryScope };
+      }
+      console.log(`[BANCO-INTER] Escopo individual falhou, tentando combinado: "${fallbackScope}"`);
+      const fallback = await tryGetToken(fallbackScope);
+      if (fallback.access_token) {
+        return { ...fallback, usedScope: fallbackScope };
+      }
+      return { error: `Falha em ambos os escopos. Individual: ${primary.error}. Combinado: ${fallback.error}` };
+    };
+
     // Test action - verify credentials and check which scopes are available
     if (action === "test") {
       console.log("[BANCO-INTER] Testando conexão e verificando escopos...");
@@ -177,24 +194,60 @@ serve(async (req) => {
       let boletoError: string | undefined;
       let pixError: string | undefined;
 
-      // Test boleto scope
-      const boletoResult = await tryGetToken("boleto-cobranca.read boleto-cobranca.write");
-      if (boletoResult.access_token) {
-        console.log("[BANCO-INTER] Escopos de boleto OK");
-        availableScopes.push("boleto-cobranca.read", "boleto-cobranca.write");
+      // Test boleto scopes individually
+      const boletoWriteResult = await tryGetToken("boleto-cobranca.write");
+      if (boletoWriteResult.access_token) {
+        console.log("[BANCO-INTER] Escopo boleto-cobranca.write OK");
+        availableScopes.push("boleto-cobranca.write");
       } else {
-        boletoError = boletoResult.error;
-        console.log("[BANCO-INTER] Escopos de boleto não disponíveis:", boletoError);
+        console.log("[BANCO-INTER] boleto-cobranca.write falhou:", boletoWriteResult.error);
       }
 
-      // Test PIX scope
-      const pixResult = await tryGetToken("cob.read cob.write");
-      if (pixResult.access_token) {
-        console.log("[BANCO-INTER] Escopos de PIX OK");
-        availableScopes.push("cob.read", "cob.write");
+      const boletoReadResult = await tryGetToken("boleto-cobranca.read");
+      if (boletoReadResult.access_token) {
+        console.log("[BANCO-INTER] Escopo boleto-cobranca.read OK");
+        availableScopes.push("boleto-cobranca.read");
       } else {
-        pixError = pixResult.error;
-        console.log("[BANCO-INTER] Escopos de PIX não disponíveis:", pixError);
+        console.log("[BANCO-INTER] boleto-cobranca.read falhou:", boletoReadResult.error);
+      }
+
+      // If individual scopes failed, try combined as fallback
+      if (!availableScopes.includes("boleto-cobranca.write") && !availableScopes.includes("boleto-cobranca.read")) {
+        const boletoCombined = await tryGetToken("boleto-cobranca.read boleto-cobranca.write");
+        if (boletoCombined.access_token) {
+          console.log("[BANCO-INTER] Escopos de boleto combinados OK");
+          availableScopes.push("boleto-cobranca.read", "boleto-cobranca.write");
+        } else {
+          boletoError = boletoCombined.error;
+        }
+      }
+
+      // Test PIX scopes individually
+      const pixWriteResult = await tryGetToken("cob.write");
+      if (pixWriteResult.access_token) {
+        console.log("[BANCO-INTER] Escopo cob.write OK");
+        availableScopes.push("cob.write");
+      } else {
+        console.log("[BANCO-INTER] cob.write falhou:", pixWriteResult.error);
+      }
+
+      const pixReadResult = await tryGetToken("cob.read");
+      if (pixReadResult.access_token) {
+        console.log("[BANCO-INTER] Escopo cob.read OK");
+        availableScopes.push("cob.read");
+      } else {
+        console.log("[BANCO-INTER] cob.read falhou:", pixReadResult.error);
+      }
+
+      // If individual PIX scopes failed, try combined
+      if (!availableScopes.includes("cob.write") && !availableScopes.includes("cob.read")) {
+        const pixCombined = await tryGetToken("cob.read cob.write");
+        if (pixCombined.access_token) {
+          console.log("[BANCO-INTER] Escopos PIX combinados OK");
+          availableScopes.push("cob.read", "cob.write");
+        } else {
+          pixError = pixCombined.error;
+        }
       }
 
       // Return results
@@ -265,7 +318,7 @@ serve(async (req) => {
             client_id: settings.client_id,
             client_secret: settings.client_secret,
             grant_type: "client_credentials",
-            scope: "boleto-cobranca.read boleto-cobranca.write",
+            scope: "boleto-cobranca.write",
           }),
         });
 
@@ -391,16 +444,15 @@ serve(async (req) => {
 
     // Get OAuth token from Banco Inter
     // NOTE: for expected auth/scope issues, we return 200 with { error } so the UI can show a friendly message
-    const requiredScope =
-      payment_type === "boleto"
-        ? "boleto-cobranca.read boleto-cobranca.write"
-        : "cob.read cob.write";
+    // Use individual scope first, fallback to combined
+    const primaryScope = payment_type === "boleto" ? "boleto-cobranca.write" : "cob.write";
+    const fallbackScope = payment_type === "boleto"
+      ? "boleto-cobranca.read boleto-cobranca.write"
+      : "cob.read cob.write";
 
-    const tokenResult = await tryGetToken(requiredScope);
+    const tokenResult = await tryGetTokenWithFallback(primaryScope, fallbackScope);
 
     if (!tokenResult.access_token) {
-      const requiredScopesList = requiredScope.split(" ").filter(Boolean);
-
       const friendlyError =
         tokenResult.error?.includes("Escopo")
           ? tokenResult.error
@@ -412,9 +464,9 @@ serve(async (req) => {
         JSON.stringify({
           error:
             `${friendlyError}\n\n` +
-            `Habilite no portal do Banco Inter os escopos: ${requiredScopesList.join(", ")} (Client ID atual) e tente novamente.`,
+            `Habilite no portal do Banco Inter o escopo "${primaryScope}" e tente novamente.`,
           configured: true,
-          required_scopes: requiredScopesList,
+          required_scopes: [primaryScope],
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
