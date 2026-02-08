@@ -1,200 +1,124 @@
 
-# Varredura E2E Completa - Colmeia GSTI
+# Otimizacao de Consumo de Recursos - Colmeia GSTI
 
-## Erros e Problemas Encontrados
+## Diagnostico Atual
 
-### 1. CRITICO: MonitoringPage chama Edge Function inexistente
-**Arquivo:** `src/pages/monitoring/MonitoringPage.tsx` (linhas 200-203)
-O botao "Sincronizar" chama `supabase.functions.invoke("uptime-kuma-sync")`, mas **essa Edge Function nao existe** em `supabase/functions/`. O sistema tem `checkmk-sync` e `tactical-rmm-sync`, mas nenhuma `uptime-kuma-sync`. Isso causa erro silencioso ao clicar em Sincronizar quando a integracao `uptime_kuma` esta ativa.
+Analise completa dos pontos de consumo excessivo identificados no sistema:
 
-**Correcao:** Substituir a referencia `uptime_kuma` por `checkmk` (que e o monitoramento efetivamente implementado). Atualizar o `handleRefresh` para verificar `checkmk` em vez de `uptime_kuma`.
+### Problema 1: Queries de Auth Duplicadas (CRITICO)
+O `useAuth` faz fetch de `profiles` + `user_roles` no init. Quando `onAuthStateChange` dispara (evento `SIGNED_IN` ou `TOKEN_REFRESHED`), faz fetch novamente via `setTimeout`. Na rede, observam-se **3 chamadas duplicadas** de `profiles` e `user_roles` no carregamento inicial.
 
----
+**Causa raiz:** O init busca os dados, depois o listener `onAuthStateChange` dispara quase simultaneamente e busca de novo, e em seguida um token refresh pode disparar mais uma vez.
 
-### 2. MEDIO: Contratos sem paginacao nem limite de query
-**Arquivo:** `src/pages/contracts/ContractsPage.tsx` (linhas 83-102)
-A query de contratos nao tem `.limit()` nem paginacao. Com o crescimento do sistema, pode retornar centenas de registros causando lentidao.
+**Correcao:** Adicionar um guard no `onAuthStateChange` para pular o `fetchUserData` se os dados ja foram carregados recentemente (debounce por timestamp).
 
-**Correcao:** Adicionar `.limit(200)` e busca server-side com `ilike`.
+### Problema 2: TV Dashboard Polling sem Visibility Check (CRITICO)
+O `TVDashboardPage` tem **4 queries** com `refetchInterval` (120s-300s) que rodam continuamente, mesmo com a aba em segundo plano. Em um monitor TV ligado 24h, isso representa ~4.320 requests/dia. Mas se alguem abrir a pagina em uma aba do navegador e esquecer, o polling continua desnecessariamente.
 
----
+**Correcao:** Adicionar `refetchIntervalInBackground: false` em todas as queries do TV Dashboard. Isso e nativo do React Query e pausa o polling quando a aba nao esta visivel.
 
-### 3. MEDIO: TVDashboardPage carrega TODOS os tickets sem filtro
-**Arquivo:** `src/pages/tv-dashboard/TVDashboardPage.tsx` (linhas 32-49)
-A query `select("status, priority")` carrega **todos os tickets** da base para calcular estatisticas. Com milhares de tickets, isso e muito ineficiente.
+### Problema 3: TV Dashboard Ranking com N+1 (MEDIO)
+O ranking no TV Dashboard ainda usa o padrao antigo: busca `technician_points`, depois busca `profiles` em query separada. A RPC `get_technician_ranking` ja existe e faz tudo em uma unica query.
 
-**Correcao:** Usar `.select("id", { count: "exact", head: true })` com filtros por status (igual ao Dashboard principal), ou usar a RPC `get_ticket_report_stats`.
+**Correcao:** Substituir as 2 queries por uma chamada RPC.
 
----
+### Problema 4: useTechnicianTicketCount roda para todos (MEDIO)
+O hook `useTechnicianTicketCount` e chamado no `AppSidebar` para **todos os usuarios**, inclusive admins e financeiros que nao precisam do badge. A propriedade `enabled: !!user?.id` nao filtra por role, gerando polling desnecessario a cada 5 minutos para usuarios que nunca verao o badge (ele so aparece no link "/tickets").
 
-### 4. BAIXO: GamificationPage faz N+1 queries
-**Arquivo:** `src/pages/gamification/GamificationPage.tsx` (linhas 38-80)
-A pagina busca `technician_points`, depois itera pelos user_ids para buscar `profiles` em queries separadas. Isso causa multiplas round-trips ao banco.
+**Correcao:** Condicionar o `enabled` a roles que incluem `technician`, usando o `useAuth` que ja esta disponivel no hook.
 
-**Correcao:** Usar a RPC `get_technician_ranking` que ja existe e faz tudo em uma unica query.
+### Problema 5: Dashboard staleTime curto para Recent Tickets (BAIXO)
+A query `recent-tickets` no Dashboard tem `staleTime: 30s`, o que significa que ao navegar para outra pagina e voltar em menos de 1 minuto, ela refaz o fetch. Como o Realtime ja cobre atualizacoes de tickets, esse staleTime pode ser aumentado.
 
----
+**Correcao:** Aumentar `staleTime` de 30s para 120s.
 
-### 5. BAIXO: ClientPortalPage falta status `paused`, `waiting_third_party`, `no_contact` no mapeamento
-**Arquivo:** `src/pages/client-portal/ClientPortalPage.tsx` (linhas 52-58)
-O portal do cliente mapeia apenas 5 status de ticket (open, in_progress, waiting, resolved, closed), mas o sistema tem 8. Tickets com status `paused`, `waiting_third_party`, ou `no_contact` nao terao label nem cor no portal.
+### Problema 6: MessageMetricsDashboard carrega TODOS os message_logs (BAIXO)
+A query em `MessageMetricsDashboard` faz `select("channel, status")` sem limit, carregando **todos** os registros de `message_logs` para agregar no frontend. Com o tempo, isso pode se tornar milhares de registros.
 
-**Correcao:** Adicionar os 3 status faltantes ao mapeamento.
+**Correcao:** Adicionar `.limit(500)` como teto de seguranca. Em futuro, substituir por uma RPC de agregacao.
 
----
+### Problema 7: AgingReportWidget sem staleTime (BAIXO)
+O widget tem `refetchInterval: 5min` mas nenhum `staleTime`, o que significa que toda navegacao para a aba de conciliacao dispara um novo fetch mesmo que os dados tenham acabado de ser carregados.
 
-### 6. INFO: IntegrationsTab - S3 foi removido com sucesso
-A aba Storage e os arquivos `s3-storage.ts` e `S3StorageConfigForm.tsx` foram removidos corretamente na ultima sessao. O `IntegrationsTab` esta com 7 colunas, sem referencia residual ao S3. Nenhuma acao necessaria.
-
----
-
-### 7. INFO: Indicadores de Fatura (Boleto/NFS-e/Email) funcionando
-Os indicadores no `BillingInvoicesTab` estao corretos apos as correcoes anteriores:
-- Boleto: fallback por `boleto_url` e `boleto_error_msg`
-- NFS-e: usa `mapNfseStatus()` com dados do `nfse_history`
-- Email: fallback por `email_sent_at` e `email_error_msg`
-Nenhuma acao necessaria.
-
----
-
-### 8. INFO: useInvoiceActions centralizado e funcional
-O hook `useInvoiceActions` centraliza corretamente as acoes de fatura (gerar boleto/PIX, emitir NFS-e, reenviar notificacao, marcar como pago). Usado tanto no `BillingInvoicesTab` quanto no `ContractInvoiceActionsMenu`. Nenhuma acao necessaria.
+**Correcao:** Adicionar `staleTime: 120000`.
 
 ---
 
 ## Plano de Implementacao
 
-### Fase 1: Correcoes criticas
+### Fase 1: Auth - Eliminar queries duplicadas
 
-1. **MonitoringPage.tsx** - Substituir `uptime_kuma` por `checkmk`:
-   - Linha 188-192: Mudar `eq("integration_type", "uptime_kuma")` para `eq("integration_type", "checkmk")`
-   - Linhas 200-203: Mudar `invoke("uptime-kuma-sync")` para `invoke("checkmk-sync")`
+**Arquivo:** `src/hooks/useAuth.tsx`
 
-### Fase 2: Otimizacoes de performance
+Adicionar um `lastFetchRef` com timestamp para evitar re-fetch dentro de 5 segundos:
+- Declarar `const lastFetchRef = useRef<number>(0)` no AuthProvider
+- No `fetchUserData`, verificar se `Date.now() - lastFetchRef.current < 5000` e retornar cedo se verdadeiro
+- Atualizar `lastFetchRef.current = Date.now()` no inicio de cada fetch real
 
-2. **ContractsPage.tsx** - Adicionar `.limit(200)` na query de contratos
+Resultado esperado: de 3 fetches para 1 no carregamento inicial.
 
-3. **TVDashboardPage.tsx** - Substituir a query que carrega todos os tickets por `select("id", { count: "exact", head: true })` com filtros por status, eliminando carga desnecessaria de dados
+### Fase 2: TV Dashboard - Otimizar polling e ranking
 
-4. **GamificationPage.tsx** - Substituir N+1 queries pela RPC `get_technician_ranking` que ja existe
+**Arquivo:** `src/pages/tv-dashboard/TVDashboardPage.tsx`
 
-### Fase 3: Compatibilidade
+1. Adicionar `refetchIntervalInBackground: false` em todas as 4 queries
+2. Substituir a query de ranking (linhas 73-105) pela RPC `get_technician_ranking`:
+```typescript
+const { data } = await supabase.rpc("get_technician_ranking", {
+  start_date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+  limit_count: 5,
+});
+return (data || []).map((r: any) => ({
+  name: r.name,
+  points: r.points,
+}));
+```
 
-5. **ClientPortalPage.tsx** - Adicionar status `paused`, `waiting_third_party` e `no_contact` aos mapeamentos de labels e cores
+### Fase 3: Sidebar Badge - Condicionar por role
 
----
+**Arquivo:** `src/hooks/useTechnicianTicketCount.ts`
 
-## Listagem Completa de Funcionalidades do Sistema
+Adicionar import de `useAuth` para verificar roles e condicionar `enabled`:
+```typescript
+const { user, roles } = useAuth();
+const isTechnician = roles.includes("technician");
+// ...
+enabled: !!user?.id && isTechnician,
+```
 
-### Modulo 1: Dashboard
-**Rota:** `/`
-**Conexao Backend:** Sim (queries a `tickets`, `clients`, RPC `get_weekly_ticket_trend`)
-**Fluxo:** Ao acessar, o sistema carrega contadores de tickets por status, taxa de resolucao, clientes ativos e SLA violado em paralelo. Graficos exibem distribuicao por status e tendencia semanal. Tecnicos veem um dashboard simplificado (`TechnicianDashboard`). Clientes sao redirecionados automaticamente para `/portal`.
+**Arquivo:** `src/components/layout/AppSidebar.tsx`
 
-### Modulo 2: Chamados (Tickets)
-**Rota:** `/tickets`, `/tickets/new`
-**Conexao Backend:** Sim (CRUD `tickets`, `ticket_history`, `ticket_comments`, `ticket_tag_assignments`)
-**Edge Functions:** `send-ticket-notification`, `check-no-contact-tickets`
-**Fluxo:** Lista de tickets com busca por titulo/numero, filtro por status e paginacao cursor-based. Ao criar, preenche titulo, descricao, cliente, categoria, subcategoria, prioridade e tecnico. Ao iniciar atendimento, seleciona ativo vinculado. Acoes: transferir, pausar, finalizar, marcar "sem contato". Historico de alteracoes e comentarios internos/publicos em abas separadas. SLA calculado automaticamente.
+O hook ja retorna `0` quando desabilitado, nenhuma mudanca necessaria na sidebar.
 
-### Modulo 3: Clientes
-**Rota:** `/clients`, `/clients/:id`
-**Conexao Backend:** Sim (CRUD `clients`, `client_contacts`, `assets`)
-**Edge Functions:** `cnpj-lookup`, `create-client-user`, `validate-whatsapp`
-**Fluxo:** Lista com busca por nome/email/CNPJ e paginacao cursor-based. Cada cliente tem pagina de detalhes com abas: contatos, ativos, tecnicos responsaveis, documentacao e usuarios de acesso ao portal. Validacao de WhatsApp integrada. Busca automatica de dados por CNPJ.
+### Fase 4: Ajustes de staleTime e limites
 
-### Modulo 4: Contratos
-**Rota:** `/contracts`, `/contracts/new`, `/contracts/edit/:id`
-**Conexao Backend:** Sim (CRUD `contracts`, `contract_services`, `contract_adjustments`)
-**Edge Functions:** `generate-monthly-invoices`, `apply-contract-adjustment`, `check-contract-adjustments`
-**Fluxo:** Lista de contratos com status, modelo de suporte (ticket/banco de horas/ilimitado) e valor mensal. Criacao com servicos vinculados e opcao de cobranca inicial automatica. Reajuste anual com base em indices economicos (IGPM, IPCA, etc). Geracao manual de faturas por contrato. Historico de faturas e acoes via sheet lateral.
+**Arquivo:** `src/pages/Dashboard.tsx` (linha 101)
+- Alterar `staleTime: 1000 * 30` para `staleTime: 1000 * 120` na query `recent-tickets`
 
-### Modulo 5: Faturamento (Billing)
-**Rota:** `/billing` (7 abas)
-**Conexao Backend:** Sim (CRUD `invoices`, `nfse_history`, `financial_entries`, `boleto_payments`)
-**Edge Functions:** `banco-inter`, `asaas-nfse`, `generate-invoice-payments`, `batch-process-invoices`, `resend-payment-notification`, `notify-due-invoices`, `generate-second-copy`, `renegotiate-invoice`, `manual-payment`, `calculate-invoice-penalties`, `poll-boleto-status`, `poll-asaas-nfse-status`, `send-nfse-notification`
-**Abas:**
-- **Faturas:** Lista com busca, filtro por status, selecao em lote, indicadores visuais (boleto/NFS-e/email), acoes: gerar boleto/PIX (Inter ou Asaas), emitir NFS-e, reenviar notificacao, processamento completo, 2a via, renegociacao, pagamento manual.
-- **Boletos:** Gestao de boletos pendentes com acoes em lote (cancelar, excluir).
-- **NFS-e:** Historico de notas fiscais emitidas com detalhes, reenvio e cancelamento.
-- **Conciliacao:** Cruzamento de extratos bancarios com faturas.
-- **Fiscal:** Relatorios fiscais com exportacao.
-- **Servicos:** Catalogo de servicos com precos.
-- **Codigos Tributarios:** Gestao de codigos de servico para NFS-e.
+**Arquivo:** `src/components/settings/MessageMetricsDashboard.tsx` (linha 24)
+- Adicionar `.limit(500)` na query de `message_logs`
 
-### Modulo 6: Monitoramento
-**Rota:** `/monitoring`
-**Conexao Backend:** Sim (queries `monitored_devices`, `monitoring_alerts`)
-**Edge Functions:** `checkmk-sync`, `tactical-rmm-sync`, `send-alert-notification`, `escalate-alerts`
-**Fluxo:** Dashboard com cards de online/offline/alertas criticos/uptime. Abas: dispositivos (tabela com status, IP, uptime), alertas (agrupados por cliente ou dispositivo, reconhecimento individual ou em lote), graficos de uptime. Sincronizacao manual via botao. Alertas em tempo real via Realtime.
-
-### Modulo 7: Inventario
-**Rota:** `/inventory`
-**Conexao Backend:** Sim (CRUD `assets`, `software_licenses`)
-**Fluxo:** Tres abas: visao geral (overview com metricas de ativos e licencas), ativos (tabela de equipamentos por cliente com tipo, serial, status) e licencas (controle de licencas de software com chaves seguras, data de expiracao e uso). Ativos podem ser vinculados a tickets.
-
-### Modulo 8: Agenda (Calendario)
-**Rota:** `/calendar`
-**Conexao Backend:** Sim (CRUD `calendar_events`)
-**Edge Functions:** `google-calendar`
-**Fluxo:** Calendario visual (FullCalendar) com visao mensal, semanal e diaria. Criacao de eventos com titulo, descricao, cliente, data/hora, tipo (visita, reuniao, manutencao). Detalhes em sheet lateral. Integracao opcional com Google Calendar.
-
-### Modulo 9: Base de Conhecimento
-**Rota:** `/knowledge`
-**Conexao Backend:** Sim (CRUD `knowledge_articles`)
-**Fluxo:** Cards de artigos com busca por titulo/conteudo. Criacao com editor rico, categoria vinculada, visibilidade (publica/interna). Visualizador de artigos com contagem de views.
-
-### Modulo 10: Gamificacao
-**Rota:** `/gamification`
-**Conexao Backend:** Sim (queries `technician_points`, `technician_badges`, `profiles`)
-**Fluxo:** Ranking de tecnicos por pontos (bronze/prata/ouro/platina/diamante). Exibicao de badges conquistados. Pontos atribuidos por resolucao de tickets, tempo de resposta e avaliacoes.
-
-### Modulo 11: Dashboard TV
-**Rota:** `/tv-dashboard`
-**Conexao Backend:** Sim (queries `tickets`, `technician_points`, `monitored_devices`, `tv_dashboard_config`)
-**Fluxo:** Tela para monitores com rotacao automatica de slides (15s): metricas de tickets, tickets recentes, ranking de tecnicos e status de monitoramento. Acesso publico via token.
-
-### Modulo 12: Relatorios
-**Rota:** `/reports`
-**Conexao Backend:** Sim (RPCs `get_ticket_report_stats`, `get_invoice_report_stats`, `get_technician_ranking`)
-**Fluxo:** Graficos de tickets por status, prioridade, tendencia diaria e metricas de SLA. Relatorio de tempo (horas trabalhadas por tecnico). Filtros por periodo (7d/30d/90d/12m).
-
-### Modulo 13: Portal do Cliente
-**Rota:** `/portal`
-**Conexao Backend:** Sim (queries `tickets`, `ticket_comments`, `invoices`)
-**Fluxo:** Interface simplificada para clientes. Abas: meus tickets (criar/comentar/avaliar), financeiro (faturas com download de boleto e PIX). Acesso restrito a roles `client` e `client_master`.
-
-### Modulo 14: Configuracoes
-**Rota:** `/settings` (15 abas)
-**Conexao Backend:** Sim (CRUD em multiplas tabelas de configuracao)
-**Abas:** Usuarios, Permissoes, Categorias, Tags, SLA, Empresa, Departamentos, Integracoes (Status/Email/Mensagens/Financeiro/Monitoramento/Automacao/Logs), Auditoria, Mapeamentos de Clientes, Regras de Notificacao, Mensagens, Metricas de Mensagens, Templates de Email.
-
-### Modulo 15: Certificados Digitais
-**Rota:** `/settings/certificates`
-**Conexao Backend:** Sim (CRUD `certificates`, `company_settings`)
-**Edge Functions:** `parse-certificate`, `certificate-vault`, `check-certificate-expiry`
-**Fluxo:** Upload de certificados A1 (.pfx/.p12), parsing automatico de dados (CNPJ, validade, emissor). Dashboard com alertas de expiracao. Armazenamento seguro via vault.
-
-### Modulo 16: Perfil do Usuario
-**Rota:** `/profile`
-**Conexao Backend:** Sim (CRUD `profiles`, push subscriptions)
-**Edge Functions:** `send-push-notification`
-**Fluxo:** Edicao de nome, email, avatar. Configuracao de canais de notificacao (email, WhatsApp, Telegram, push). Preferencias granulares por tipo de alerta. Visualizacao de roles e permissoes.
-
-### Modulo 17: Autenticacao
-**Rotas:** `/login`, `/register`, `/forgot-password`, `/setup`
-**Edge Functions:** `forgot-password`, `reset-password`, `bootstrap-admin`, `create-user`, `resolve-username`
-**Fluxo:** Login por email/senha. Registro (quando permitido). Recuperacao de senha via Edge Function. Setup inicial para criar primeiro admin. Sessao persistente com auto-refresh.
-
-### Modulo 18: Notificacoes em Tempo Real
-**Conexao Backend:** Sim (Supabase Realtime em `tickets`, `notifications`, `monitoring_alerts`, `invoices`, `nfse_history`)
-**Fluxo:** Hook unificado (`useUnifiedRealtime`) que consolida todas as subscricoes em um unico canal WebSocket. Notificacoes toast para novos tickets, mudancas de status, alertas de monitoramento e atualizacoes de faturas. Dropdown de notificacoes com marcacao de lidas.
+**Arquivo:** `src/components/billing/AgingReportWidget.tsx` (linha 58)
+- Adicionar `staleTime: 120000` na query
 
 ---
+
+## Resumo de Impacto
+
+| Otimizacao | Requests Eliminados | Impacto |
+|---|---|---|
+| Auth dedup | ~4 requests/login | Carregamento 200ms mais rapido |
+| TV background pause | ~4.320/dia (se aba oculta) | Reducao massiva em cenario de aba esquecida |
+| TV ranking RPC | 1 query em vez de 2 | Reducao de round-trips |
+| Sidebar badge role filter | ~288/dia (para nao-tecnicos) | Elimina polling desnecessario |
+| Dashboard staleTime | ~variavel | Menos refetches em navegacao |
+| MessageMetrics limit | Protecao de egress | Evita carga de milhares de registros |
+| AgingReport staleTime | ~variavel | Evita refetches duplicados |
 
 ## Arquivos a Modificar
-- `src/pages/monitoring/MonitoringPage.tsx` - Correcao #1
-- `src/pages/contracts/ContractsPage.tsx` - Correcao #2
-- `src/pages/tv-dashboard/TVDashboardPage.tsx` - Correcao #3
-- `src/pages/gamification/GamificationPage.tsx` - Correcao #4
-- `src/pages/client-portal/ClientPortalPage.tsx` - Correcao #5
+- `src/hooks/useAuth.tsx` - Guard de dedup
+- `src/pages/tv-dashboard/TVDashboardPage.tsx` - Background pause + RPC ranking
+- `src/hooks/useTechnicianTicketCount.ts` - Role filter
+- `src/pages/Dashboard.tsx` - staleTime
+- `src/components/settings/MessageMetricsDashboard.tsx` - Limit
+- `src/components/billing/AgingReportWidget.tsx` - staleTime
