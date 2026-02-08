@@ -545,7 +545,7 @@ serve(async (req) => {
         const existingNotes = currentInvoice?.notes || "";
         
         let boletoCompleto = false;
-        const maxTentativas = 12; // 60 segundos (5 segundos cada)
+        const maxTentativas = 6; // 30 segundos (5 segundos cada) - webhook/poll-services cuida do resto
         
         for (let tentativa = 1; tentativa <= maxTentativas && !boletoCompleto; tentativa++) {
           await new Promise(r => setTimeout(r, 5000)); // Aguarda 5 segundos
