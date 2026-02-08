@@ -50,7 +50,8 @@ export default function TVDashboardPage() {
         critical: critical.count || 0,
       };
     },
-    refetchInterval: 120000, // 2 minutes (was 30s - reduced 4x)
+    refetchInterval: 120000,
+    refetchIntervalInBackground: false,
     staleTime: 60000,
   });
 
@@ -66,41 +67,27 @@ export default function TVDashboardPage() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 120000, // 2 minutes (was 30s)
+    refetchInterval: 120000,
+    refetchIntervalInBackground: false,
     staleTime: 60000,
   });
 
   const { data: ranking = [] } = useQuery({
     queryKey: ["tv-ranking"],
     queryFn: async () => {
-      const { data: points, error } = await supabase
-        .from("technician_points")
-        .select("user_id, points");
-      if (error) throw error;
-
-      const userPoints: Record<string, number> = {};
-      points.forEach((p) => {
-        userPoints[p.user_id] = (userPoints[p.user_id] || 0) + p.points;
+      const { data, error } = await supabase.rpc("get_technician_ranking", {
+        start_date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+        limit_count: 5,
       });
-
-      const userIds = Object.keys(userPoints);
-      if (userIds.length === 0) return [];
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name")
-        .in("user_id", userIds);
-
-      return Object.entries(userPoints)
-        .map(([userId, totalPoints]) => ({
-          userId,
-          name: profiles?.find((p) => p.user_id === userId)?.full_name || "Usuário",
-          points: totalPoints,
-        }))
-        .sort((a, b) => b.points - a.points)
-        .slice(0, 5);
+      if (error) throw error;
+      return (data || []).map((r: any, index: number) => ({
+        userId: `rank-${index}`,
+        name: r.name || "Usuário",
+        points: Number(r.points) || 0,
+      }));
     },
-    refetchInterval: 300000, // 5 minutes (was 1 min)
+    refetchInterval: 300000,
+    refetchIntervalInBackground: false,
     staleTime: 120000,
   });
 
@@ -115,7 +102,8 @@ export default function TVDashboardPage() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 120000, // 2 minutes (was 30s)
+    refetchInterval: 120000,
+    refetchIntervalInBackground: false,
     staleTime: 60000,
   });
 

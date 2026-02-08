@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRevalidating, setIsRevalidating] = useState(false);
   const refreshTimeoutRef = useRef<number | null>(null);
+  const lastFetchRef = useRef<number>(0);
   // Track if user was already logged in to differentiate genuine login from tab revalidation
   const wasLoggedInRef = useRef(false);
 
@@ -87,6 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchUserData = useCallback(async (userId: string) => {
+    // Skip if fetched recently (dedup guard)
+    if (Date.now() - lastFetchRef.current < 5000) {
+      logger.debug("Skipping fetch - data loaded recently", "Auth");
+      return;
+    }
+    lastFetchRef.current = Date.now();
     try {
       logger.debug("Fetching user data", "Auth", { userId });
       
