@@ -185,10 +185,10 @@ export default function MonitoringPage() {
     setIsRefreshing(true);
     try {
       // Trigger sync from integrations
-      const { data: uptimeSettings } = await supabase
+      const { data: checkmkSettings } = await supabase
         .from("integration_settings")
         .select("is_active")
-        .eq("integration_type", "uptime_kuma")
+        .eq("integration_type", "checkmk")
         .single();
 
       const { data: tacticalSettings } = await supabase
@@ -197,8 +197,8 @@ export default function MonitoringPage() {
         .eq("integration_type", "tactical_rmm")
         .single();
 
-      if (uptimeSettings?.is_active) {
-        await supabase.functions.invoke("uptime-kuma-sync", {
+      if (checkmkSettings?.is_active) {
+        await supabase.functions.invoke("checkmk-sync", {
           body: { action: "sync" },
         });
       }

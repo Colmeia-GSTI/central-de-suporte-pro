@@ -95,7 +95,7 @@ export default function ContractsPage() {
         query = query.or(`name.ilike.%${search}%`);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await query.limit(200);
       if (error) throw error;
       return data as ContractWithClient[];
     },
