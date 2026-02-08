@@ -32,20 +32,23 @@ export default function TVDashboardPage() {
   const { data: ticketStats } = useQuery({
     queryKey: ["tv-ticket-stats"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("status, priority");
-      if (error) throw error;
+      const [total, open, inProgress, waiting, resolved, critical] = await Promise.all([
+        supabase.from("tickets").select("id", { count: "exact", head: true }),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "open"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "in_progress"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "waiting"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "resolved"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("priority", "critical"),
+      ]);
 
-      const stats = {
-        total: data.length,
-        open: data.filter((t) => t.status === "open").length,
-        inProgress: data.filter((t) => t.status === "in_progress").length,
-        waiting: data.filter((t) => t.status === "waiting").length,
-        resolved: data.filter((t) => t.status === "resolved").length,
-        critical: data.filter((t) => t.priority === "critical").length,
+      return {
+        total: total.count || 0,
+        open: open.count || 0,
+        inProgress: inProgress.count || 0,
+        waiting: waiting.count || 0,
+        resolved: resolved.count || 0,
+        critical: critical.count || 0,
       };
-      return stats;
     },
     refetchInterval: 120000, // 2 minutes (was 30s - reduced 4x)
     staleTime: 60000,

@@ -38,40 +38,18 @@ export default function GamificationPage() {
   const { data: ranking = [], isLoading: loadingRanking } = useQuery({
     queryKey: ["technician-ranking"],
     queryFn: async () => {
-      const { data: points, error } = await supabase
-        .from("technician_points")
-        .select("user_id, points")
-        .order("points", { ascending: false });
+      const { data, error } = await supabase.rpc("get_technician_ranking", {
+        start_date: new Date(0).toISOString(),
+        limit_count: 10,
+      });
       if (error) throw error;
 
-      // Aggregate points by user
-      const userPoints: Record<string, number> = {};
-      points.forEach((p) => {
-        userPoints[p.user_id] = (userPoints[p.user_id] || 0) + p.points;
-      });
-
-      // Get profiles for users
-      const userIds = Object.keys(userPoints);
-      if (userIds.length === 0) return [];
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, avatar_url")
-        .in("user_id", userIds);
-
-      return Object.entries(userPoints)
-        .map(([userId, totalPoints]) => {
-          const profile = profiles?.find((p) => p.user_id === userId);
-          return {
-            userId,
-            name: profile?.full_name || "Usuário",
-            avatar: profile?.avatar_url,
-            points: totalPoints,
-            level: getLevel(totalPoints),
-          };
-        })
-        .sort((a, b) => b.points - a.points)
-        .slice(0, 10);
+      return (data || []).map((r: { name: string; points: number }) => ({
+        userId: r.name,
+        name: r.name,
+        points: r.points,
+        level: getLevel(r.points),
+      }));
     },
   });
 
