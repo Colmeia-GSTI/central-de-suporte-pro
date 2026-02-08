@@ -56,6 +56,7 @@ export function AgingReportWidget() {
       return agingBuckets;
     },
     refetchInterval: 5 * 60 * 1000,
+    staleTime: 120000,
   });
 
   const totalOverdue = buckets?.reduce((acc, b) => acc + b.total, 0) || 0;

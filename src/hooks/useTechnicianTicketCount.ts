@@ -4,7 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/logger";
 
 export function useTechnicianTicketCount() {
-  const { user } = useAuth();
+  const { user, roles } = useAuth();
+  const isTechnician = roles.includes("technician");
 
   return useQuery({
     queryKey: ["technician-ticket-count", user?.id],
@@ -24,7 +25,7 @@ export function useTechnicianTicketCount() {
       
       return count || 0;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && isTechnician,
     staleTime: 1000 * 120, // 2 minutes (was 30s)
     refetchInterval: 1000 * 300, // 5 minutes (was 1 min)
   });

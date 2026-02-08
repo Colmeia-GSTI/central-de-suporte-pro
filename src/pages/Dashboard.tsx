@@ -98,7 +98,7 @@ export default function Dashboard() {
         .limit(5);
       return data || [];
     },
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 120,
   });
 
   // Optimized: Single RPC call instead of 14 separate queries

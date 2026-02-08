@@ -21,7 +21,8 @@ export function MessageMetricsDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("message_logs")
-        .select("channel, status");
+        .select("channel, status")
+        .limit(500);
       
       if (error) throw error;
 
