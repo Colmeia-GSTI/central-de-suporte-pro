@@ -1,124 +1,107 @@
 
-# Otimizacao de Consumo de Recursos - Colmeia GSTI
 
-## Diagnostico Atual
+# Otimizacao de Consumo de Recursos - Implementacao
 
-Analise completa dos pontos de consumo excessivo identificados no sistema:
+Todas as 7 otimizacoes serao aplicadas conforme o plano ja aprovado anteriormente.
 
-### Problema 1: Queries de Auth Duplicadas (CRITICO)
-O `useAuth` faz fetch de `profiles` + `user_roles` no init. Quando `onAuthStateChange` dispara (evento `SIGNED_IN` ou `TOKEN_REFRESHED`), faz fetch novamente via `setTimeout`. Na rede, observam-se **3 chamadas duplicadas** de `profiles` e `user_roles` no carregamento inicial.
+## Alteracoes
 
-**Causa raiz:** O init busca os dados, depois o listener `onAuthStateChange` dispara quase simultaneamente e busca de novo, e em seguida um token refresh pode disparar mais uma vez.
-
-**Correcao:** Adicionar um guard no `onAuthStateChange` para pular o `fetchUserData` se os dados ja foram carregados recentemente (debounce por timestamp).
-
-### Problema 2: TV Dashboard Polling sem Visibility Check (CRITICO)
-O `TVDashboardPage` tem **4 queries** com `refetchInterval` (120s-300s) que rodam continuamente, mesmo com a aba em segundo plano. Em um monitor TV ligado 24h, isso representa ~4.320 requests/dia. Mas se alguem abrir a pagina em uma aba do navegador e esquecer, o polling continua desnecessariamente.
-
-**Correcao:** Adicionar `refetchIntervalInBackground: false` em todas as queries do TV Dashboard. Isso e nativo do React Query e pausa o polling quando a aba nao esta visivel.
-
-### Problema 3: TV Dashboard Ranking com N+1 (MEDIO)
-O ranking no TV Dashboard ainda usa o padrao antigo: busca `technician_points`, depois busca `profiles` em query separada. A RPC `get_technician_ranking` ja existe e faz tudo em uma unica query.
-
-**Correcao:** Substituir as 2 queries por uma chamada RPC.
-
-### Problema 4: useTechnicianTicketCount roda para todos (MEDIO)
-O hook `useTechnicianTicketCount` e chamado no `AppSidebar` para **todos os usuarios**, inclusive admins e financeiros que nao precisam do badge. A propriedade `enabled: !!user?.id` nao filtra por role, gerando polling desnecessario a cada 5 minutos para usuarios que nunca verao o badge (ele so aparece no link "/tickets").
-
-**Correcao:** Condicionar o `enabled` a roles que incluem `technician`, usando o `useAuth` que ja esta disponivel no hook.
-
-### Problema 5: Dashboard staleTime curto para Recent Tickets (BAIXO)
-A query `recent-tickets` no Dashboard tem `staleTime: 30s`, o que significa que ao navegar para outra pagina e voltar em menos de 1 minuto, ela refaz o fetch. Como o Realtime ja cobre atualizacoes de tickets, esse staleTime pode ser aumentado.
-
-**Correcao:** Aumentar `staleTime` de 30s para 120s.
-
-### Problema 6: MessageMetricsDashboard carrega TODOS os message_logs (BAIXO)
-A query em `MessageMetricsDashboard` faz `select("channel, status")` sem limit, carregando **todos** os registros de `message_logs` para agregar no frontend. Com o tempo, isso pode se tornar milhares de registros.
-
-**Correcao:** Adicionar `.limit(500)` como teto de seguranca. Em futuro, substituir por uma RPC de agregacao.
-
-### Problema 7: AgingReportWidget sem staleTime (BAIXO)
-O widget tem `refetchInterval: 5min` mas nenhum `staleTime`, o que significa que toda navegacao para a aba de conciliacao dispara um novo fetch mesmo que os dados tenham acabado de ser carregados.
-
-**Correcao:** Adicionar `staleTime: 120000`.
-
----
-
-## Plano de Implementacao
-
-### Fase 1: Auth - Eliminar queries duplicadas
-
+### 1. Auth - Eliminar queries duplicadas
 **Arquivo:** `src/hooks/useAuth.tsx`
-
-Adicionar um `lastFetchRef` com timestamp para evitar re-fetch dentro de 5 segundos:
-- Declarar `const lastFetchRef = useRef<number>(0)` no AuthProvider
-- No `fetchUserData`, verificar se `Date.now() - lastFetchRef.current < 5000` e retornar cedo se verdadeiro
+- Adicionar `lastFetchRef = useRef<number>(0)` junto aos outros refs
+- No `fetchUserData`, verificar `Date.now() - lastFetchRef.current < 5000` para pular re-fetch recente
 - Atualizar `lastFetchRef.current = Date.now()` no inicio de cada fetch real
+- Resultado: de 3 fetches de profiles/user_roles para 1 no carregamento inicial
 
-Resultado esperado: de 3 fetches para 1 no carregamento inicial.
-
-### Fase 2: TV Dashboard - Otimizar polling e ranking
-
+### 2. TV Dashboard - Pausa em background
 **Arquivo:** `src/pages/tv-dashboard/TVDashboardPage.tsx`
+- Adicionar `refetchIntervalInBackground: false` nas 4 queries existentes (linhas 53-55, 69-71, 103-105, 118-120)
+- Resultado: polling pausa automaticamente quando a aba nao esta visivel
 
-1. Adicionar `refetchIntervalInBackground: false` em todas as 4 queries
-2. Substituir a query de ranking (linhas 73-105) pela RPC `get_technician_ranking`:
-```typescript
-const { data } = await supabase.rpc("get_technician_ranking", {
-  start_date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
-  limit_count: 5,
-});
-return (data || []).map((r: any) => ({
-  name: r.name,
-  points: r.points,
-}));
-```
+### 3. TV Dashboard - Ranking via RPC
+**Arquivo:** `src/pages/tv-dashboard/TVDashboardPage.tsx`
+- Substituir a query N+1 do ranking (linhas 73-105) pela RPC `get_technician_ranking`
+- Elimina 2 queries separadas (technician_points + profiles) por 1 chamada RPC
 
-### Fase 3: Sidebar Badge - Condicionar por role
-
+### 4. Sidebar Badge - Filtro por role
 **Arquivo:** `src/hooks/useTechnicianTicketCount.ts`
+- Importar `roles` do `useAuth` (ja disponivel no hook)
+- Condicionar `enabled` para rodar apenas quando o usuario tem role `technician`
+- Resultado: elimina polling de 5 minutos para admins, financeiros e managers
 
-Adicionar import de `useAuth` para verificar roles e condicionar `enabled`:
-```typescript
-const { user, roles } = useAuth();
-const isTechnician = roles.includes("technician");
-// ...
-enabled: !!user?.id && isTechnician,
+### 5. Dashboard - Aumentar staleTime de Recent Tickets
+**Arquivo:** `src/pages/Dashboard.tsx`
+- Linha 101: alterar `staleTime: 1000 * 30` para `staleTime: 1000 * 120`
+- Resultado: menos refetches ao navegar entre paginas
+
+### 6. MessageMetrics - Limite de registros
+**Arquivo:** `src/components/settings/MessageMetricsDashboard.tsx`
+- Linha 24: adicionar `.limit(500)` na query de `message_logs`
+- Resultado: protecao contra carga excessiva de dados
+
+### 7. AgingReport - Adicionar staleTime
+**Arquivo:** `src/components/billing/AgingReportWidget.tsx`
+- Adicionar `staleTime: 120000` na query (junto ao `refetchInterval` existente)
+- Resultado: evita refetches duplicados ao navegar entre abas
+
+## Detalhes Tecnicos
+
+### useAuth.tsx - Guard de dedup (diff conceitual)
+```text
++ const lastFetchRef = useRef<number>(0);
+
+  const fetchUserData = useCallback(async (userId: string) => {
++   // Skip if fetched recently (dedup guard)
++   if (Date.now() - lastFetchRef.current < 5000) {
++     logger.debug("Skipping fetch - data loaded recently", "Auth");
++     return;
++   }
++   lastFetchRef.current = Date.now();
+    // ... rest of fetch logic unchanged
 ```
 
-**Arquivo:** `src/components/layout/AppSidebar.tsx`
+### useTechnicianTicketCount.ts - Role filter (diff conceitual)
+```text
+  export function useTechnicianTicketCount() {
+-   const { user } = useAuth();
++   const { user, roles } = useAuth();
++   const isTechnician = roles.includes("technician");
 
-O hook ja retorna `0` quando desabilitado, nenhuma mudanca necessaria na sidebar.
+    return useQuery({
+      // ...
+-     enabled: !!user?.id,
++     enabled: !!user?.id && isTechnician,
+```
 
-### Fase 4: Ajustes de staleTime e limites
+### TVDashboardPage.tsx - Background pause + RPC (diff conceitual)
+```text
+  // Todas as 4 queries recebem:
+  + refetchIntervalInBackground: false,
 
-**Arquivo:** `src/pages/Dashboard.tsx` (linha 101)
-- Alterar `staleTime: 1000 * 30` para `staleTime: 1000 * 120` na query `recent-tickets`
-
-**Arquivo:** `src/components/settings/MessageMetricsDashboard.tsx` (linha 24)
-- Adicionar `.limit(500)` na query de `message_logs`
-
-**Arquivo:** `src/components/billing/AgingReportWidget.tsx` (linha 58)
-- Adicionar `staleTime: 120000` na query
-
----
+  // Ranking substituido por:
+  const { data } = await supabase.rpc("get_technician_ranking", {
+    start_date: new Date(Date.now() - 365*24*60*60*1000).toISOString(),
+    limit_count: 5,
+  });
+```
 
 ## Resumo de Impacto
 
-| Otimizacao | Requests Eliminados | Impacto |
-|---|---|---|
-| Auth dedup | ~4 requests/login | Carregamento 200ms mais rapido |
-| TV background pause | ~4.320/dia (se aba oculta) | Reducao massiva em cenario de aba esquecida |
-| TV ranking RPC | 1 query em vez de 2 | Reducao de round-trips |
-| Sidebar badge role filter | ~288/dia (para nao-tecnicos) | Elimina polling desnecessario |
-| Dashboard staleTime | ~variavel | Menos refetches em navegacao |
-| MessageMetrics limit | Protecao de egress | Evita carga de milhares de registros |
-| AgingReport staleTime | ~variavel | Evita refetches duplicados |
+| Otimizacao | Requests Eliminados |
+|---|---|
+| Auth dedup | ~4 requests/login |
+| TV background pause | ~4.320/dia (aba oculta) |
+| TV ranking RPC | 1 em vez de 2 queries |
+| Sidebar badge filter | ~288/dia (nao-tecnicos) |
+| Dashboard staleTime | Variavel (navegacao) |
+| MessageMetrics limit | Protecao de egress |
+| AgingReport staleTime | Variavel (navegacao) |
 
 ## Arquivos a Modificar
-- `src/hooks/useAuth.tsx` - Guard de dedup
-- `src/pages/tv-dashboard/TVDashboardPage.tsx` - Background pause + RPC ranking
-- `src/hooks/useTechnicianTicketCount.ts` - Role filter
-- `src/pages/Dashboard.tsx` - staleTime
-- `src/components/settings/MessageMetricsDashboard.tsx` - Limit
-- `src/components/billing/AgingReportWidget.tsx` - staleTime
+- `src/hooks/useAuth.tsx`
+- `src/pages/tv-dashboard/TVDashboardPage.tsx`
+- `src/hooks/useTechnicianTicketCount.ts`
+- `src/pages/Dashboard.tsx`
+- `src/components/settings/MessageMetricsDashboard.tsx`
+- `src/components/billing/AgingReportWidget.tsx`
+
