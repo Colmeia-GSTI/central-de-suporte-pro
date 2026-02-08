@@ -214,6 +214,12 @@ serve(async (req) => {
           if (!emailError) {
             result.email = true;
             console.log(`Email sent to ${clientEmail} for invoice #${invoice.invoice_number}`);
+
+            // Atualizar status do email na fatura
+            await supabase.from("invoices").update({
+              email_status: "enviado",
+              email_sent_at: new Date().toISOString(),
+            }).eq("id", invoice.id);
           }
         } catch (error) {
           console.error("Error sending email:", error);

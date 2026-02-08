@@ -244,10 +244,22 @@ serve(async (req) => {
 
           results.push({ channel: "email", success: true });
           console.log(`[RESEND] Email enviado para ${emailTo}`);
+
+          // Atualizar status do email na fatura
+          await supabase.from("invoices").update({
+            email_status: "enviado",
+            email_sent_at: new Date().toISOString(),
+          }).eq("id", invoice_id);
         } catch (emailError: unknown) {
           console.error("[RESEND] Erro ao enviar email:", emailError);
           const errMsg = emailError instanceof Error ? emailError.message : "Erro desconhecido";
           results.push({ channel: "email", success: false, error: errMsg });
+
+          // Registrar erro no status do email
+          await supabase.from("invoices").update({
+            email_status: "erro",
+            email_error_msg: errMsg,
+          }).eq("id", invoice_id);
         }
       }
     }

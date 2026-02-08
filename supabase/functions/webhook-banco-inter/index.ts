@@ -144,9 +144,8 @@ serve(async (req) => {
         updateData.boleto_barcode = payload.codigoBarras;
       }
 
-      if (payload.linhaDigitavel) {
-        // The linha digitavel can be used to generate payment URL
-        updateData.boleto_url = `https://inter.co/boleto/${payload.codigoBarras}`;
+      if (payload.urlPdf) {
+        updateData.boleto_url = payload.urlPdf;
       }
 
       // Check if paid
