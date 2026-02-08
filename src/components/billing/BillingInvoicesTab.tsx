@@ -623,7 +623,10 @@ export function BillingInvoicesTab() {
                       nfseStatus={mapNfseStatus(nfseByInvoice[invoice.id]?.status)}
                       nfseUrl={nfseByInvoice[invoice.id]?.status === "autorizada" ? "#nfse" : undefined}
                       nfseError={invoice.nfse_error_msg}
-                      emailStatus={invoice.email_status || "pendente"}
+                      emailStatus={
+                        invoice.email_status ||
+                        (invoice.email_sent_at ? "enviado" : invoice.email_error_msg ? "erro" : "pendente")
+                      }
                       emailError={invoice.email_error_msg}
                       size="sm"
                       onBoletoClick={() => {

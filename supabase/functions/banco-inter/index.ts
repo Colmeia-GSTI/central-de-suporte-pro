@@ -568,7 +568,7 @@ serve(async (req) => {
                 console.log("[BANCO-INTER] Dados do boleto obtidos com sucesso via polling");
                 
                 updateData.boleto_barcode = details.linhaDigitavel;
-                updateData.boleto_url = details.pdfUrl || `https://inter.co/boleto/${details.codigoBarras}`;
+                updateData.boleto_url = details.pdfUrl || details.boleto?.urlPdf || details.urlPdf || null;
                 updateData.boleto_status = "enviado";
                 updateData.notes = `${existingNotes} codigoSolicitacao:${result.codigoSolicitacao} nossoNumero:${details.nossoNumero || ""}`.trim();
                 
