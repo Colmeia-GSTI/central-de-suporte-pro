@@ -1,98 +1,120 @@
 
 
-# Corrigir Escopos OAuth do Banco Inter
+# Varredura E2E - Erros, Otimizacoes e Correcoes
 
-## Problema
+## Problemas Encontrados
 
-O sistema solicita os escopos `boleto-cobranca.read` e `boleto-cobranca.write` ao autenticar com o Banco Inter, mas a API v3 do Inter alterou os nomes dos escopos. O portal mostra "API Cobranca (Boleto + Pix)" habilitada, porem os nomes internos dos escopos mudaram.
+### 1. CRITICO: Filtro de busca de faturas nao funciona
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx` (linhas 149-164)
 
-Na API v3 do Banco Inter (endpoint `cdpj.partners.bancointer.com.br`), os escopos corretos sao:
+O campo de busca (`search`) esta incluido no `queryKey` (linha 150), o que dispara uma nova query a cada digitacao, mas **a variavel `search` nunca e usada na query SQL** (linhas 152-163). O filtro de texto simplesmente nao faz nada -- o usuario digita e nada muda.
 
-- **Boleto**: `boleto-cobranca.read` e `boleto-cobranca.write` (para a API /cobranca/v3/)
+**Correcao:** Filtrar faturas no frontend (`invoices.filter(...)`) pelo nome do cliente e numero da fatura, ou usar `.ilike()` no Supabase. Filtrar no frontend e mais simples e eficiente aqui, ja que os dados ja estao carregados.
 
-Entretanto, o Inter pode rejeitar a requisicao quando ambos os escopos sao enviados **juntos** em uma unica string separada por espaco. Algumas aplicacoes no portal exigem que os escopos sejam solicitados **individualmente**.
+---
 
-## Diagnostico Detalhado
+### 2. CRITICO: Query de faturas sem limite no BillingInvoicesTab
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx` (linha 152-161)
 
-1. A funcao `banco-inter` solicita na linha 181: `"boleto-cobranca.read boleto-cobranca.write"` (ambos juntos)
-2. Na geracao de boleto (linha 396): `"boleto-cobranca.read boleto-cobranca.write"` (ambos juntos)
-3. O portal Inter mostra os escopos como habilitados, mas o token OAuth retorna `"No registered scope value"`
-4. A rede mostra "Failed to fetch" — a funcao pode nao estar implantada
+A query de faturas nao tem `.limit()`. Com o tempo, isso pode retornar centenas/milhares de faturas, causando lentidao e estouro do limite de 1000 registros do Supabase.
 
-## Solucao
+**Correcao:** Adicionar `.limit(200)` ou implementar paginacao.
 
-### 1. Reimplantar a funcao `banco-inter`
-A funcao pode nao estar implantada apos alteracoes recentes. Reimplantar para garantir que esta ativa.
+---
 
-### 2. Alterar a estrategia de solicitacao de escopos
-Em vez de pedir ambos os escopos juntos (`"boleto-cobranca.read boleto-cobranca.write"`), solicitar **apenas o escopo necessario** para cada operacao:
+### 3. MEDIO: Query NFS-e sem filtro carrega TODOS os registros
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx` (linhas 168-186)
 
-- Para **gerar boleto**: usar apenas `boleto-cobranca.write`
-- Para **consultar boleto**: usar apenas `boleto-cobranca.read`  
-- Para **cancelar boleto**: usar `boleto-cobranca.write`
-- Para **gerar PIX**: usar apenas `cob.write`
-- Para **teste de conexao**: testar cada escopo **individualmente** (um por um)
+A query `nfse-by-invoices` carrega **todas** as NFS-e do banco, sem filtro por `invoice_id`. Isso e ineficiente e vai piorar com o volume.
 
-### 3. Adicionar fallback
-Se a solicitacao com escopo unico falhar, tentar com ambos juntos como fallback. Isso garante compatibilidade com diferentes configuracoes no portal Inter.
+**Correcao:** Filtrar apenas pelas faturas atualmente vissiveis: `.in("invoice_id", invoices.map(i => i.id))`.
 
-## Alteracoes Tecnicas
+---
 
-### Arquivo: `supabase/functions/banco-inter/index.ts`
+### 4. MEDIO: Codigo duplicado entre `BillingInvoicesTab` e `ContractInvoiceActionsMenu`
+**Arquivos:** `BillingInvoicesTab.tsx` (~250 linhas de logica) e `ContractInvoiceActionsMenu.tsx` (~260 linhas)
 
-**Linha 181** - Teste de conexao (boleto):
-```
-// Antes: "boleto-cobranca.read boleto-cobranca.write" (juntos)
-// Depois: testar cada escopo individualmente
-```
+As funcoes `handleGeneratePayment`, `handleEmitComplete`, `handleResendNotification` e `markAsPaidMutation` estao copiadas quase identicamente em ambos os arquivos. Qualquer correcao em um precisa ser replicada no outro.
 
-**Linha 191** - Teste de conexao (PIX):
-```
-// Antes: "cob.read cob.write" (juntos)  
-// Depois: testar cada escopo individualmente
-```
+**Correcao:** Extrair um hook customizado `useInvoiceActions()` que centraliza toda a logica de acoes sobre faturas.
 
-**Linhas 394-397** - Geracao de pagamento:
-```
-// Antes: ambos escopos juntos
-// Depois: apenas o escopo de escrita para geracao
-```
+---
 
-**Linha 268** - Cancelamento:
-```
-// Antes: "boleto-cobranca.read boleto-cobranca.write"
-// Depois: "boleto-cobranca.write" (so precisa de write para cancelar)
-```
+### 5. BAIXO: InvoiceActionIndicators com status incompativeis
+**Arquivo:** `src/components/billing/InvoiceActionIndicators.tsx` (linhas 6-14)
 
-### Logica do teste de conexao (action: "test")
-```text
-1. Tentar "boleto-cobranca.write" sozinho
-   - Se OK: marcar boleto.write como disponivel
-   - Se falhar: logar erro
-2. Tentar "boleto-cobranca.read" sozinho
-   - Se OK: marcar boleto.read como disponivel
-   - Se falhar: logar erro
-3. Tentar "cob.write" sozinho
-   - Se OK: marcar pix.write como disponivel
-   - Se falhar: logar erro
-4. Tentar "cob.read" sozinho
-   - Se OK: marcar pix.read como disponivel
-   - Se falhar: logar erro
-5. Retornar lista de escopos disponiveis
-```
+O componente espera `boletoStatus` como `"pendente" | "gerado" | "enviado" | "erro"`, mas o banco de dados armazena o enum `boleto_processing_status` com os mesmos valores. O problema e que na linha 857, usamos `as any` para forcar o tipo, indicando incompatibilidade de tipos.
 
-### Logica de geracao de boleto/PIX
-```text
-1. Tentar com escopo unico ("boleto-cobranca.write")
-2. Se falhar, tentar com ambos ("boleto-cobranca.read boleto-cobranca.write")
-3. Se ambos falharem, retornar erro detalhado
-```
+**Correcao:** Usar os tipos do enum diretamente do Supabase em vez de strings hardcoded.
+
+---
+
+### 6. BAIXO: `nfseStatus` no InvoiceActionIndicators nunca mostra "gerada"
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx` (linha 861)
+
+O `nfseStatus` esta sendo alimentado pelo campo `invoice.nfse_status` da tabela `invoices`, mas o status real da NFS-e vem da tabela `nfse_history` (acessada via `nfseByInvoice`). O campo `invoice.nfse_status` pode estar dessincronizado do status real.
+
+**Correcao:** Usar `nfseByInvoice[invoice.id]?.status || "pendente"` para o indicador, com mapeamento dos status da tabela `nfse_history` para os aceitos pelo componente.
+
+---
+
+### 7. BAIXO: Polling do banco-inter bloqueia a Edge Function por ate 60s
+**Arquivo:** `supabase/functions/banco-inter/index.ts` (linhas 548-585)
+
+O loop de polling interno (12 tentativas x 5s = 60s) pode causar timeout da Edge Function. Se o boleto demora para ser processado pelo banco, a funcao fica bloqueada.
+
+**Correcao:** Reduzir para 6 tentativas (30s max) e confiar no `poll-services` como fallback para os casos que excedem esse tempo. O webhook ja cuida dos updates em tempo real.
+
+---
+
+### 8. BAIXO: `toggleSelectAll` seleciona TODAS as faturas, nao apenas as filtradas
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx` (linhas 438-444)
+
+Se o usuario filtra por "Pendente", o botao "selecionar todos" seleciona todas as faturas incluindo pagas/canceladas (porque `invoices` contem todos os resultados da query).
+
+**Correcao:** Aplicar o mesmo filtro de busca antes de selecionar.
+
+---
+
+## Plano de Implementacao
+
+### Fase 1: Correcoes criticas (impacto imediato)
+
+1. **Implementar filtro de busca funcional** no `BillingInvoicesTab`:
+   - Criar `filteredInvoices` com `invoices.filter()` usando `search` para filtrar por nome do cliente e numero da fatura
+   - Substituir `invoices` por `filteredInvoices` no render da tabela e nos calculos de totais
+   - Remover `search` do `queryKey` (evita re-fetch desnecessario)
+
+2. **Adicionar limite na query de faturas** (`.limit(500)`)
+
+3. **Otimizar query NFS-e** para filtrar apenas faturas vissiveis
+
+### Fase 2: Otimizacoes de codigo
+
+4. **Extrair hook `useInvoiceActions`** com:
+   - `handleGeneratePayment(invoiceId, type, provider)`
+   - `handleEmitComplete(invoice, nfseByInvoice)`
+   - `handleResendNotification(invoiceId, channels)`
+   - `markAsPaid(invoiceId)`
+   - Estados: `generatingPayment`, `processingComplete`, `sendingNotification`
+
+5. **Corrigir `nfseStatus` nos indicadores** usando dados reais do `nfseByInvoice`
+
+6. **Corrigir `toggleSelectAll`** para usar `filteredInvoices`
+
+### Fase 3: Otimizacoes de backend
+
+7. **Reduzir timeout de polling do banco-inter** de 60s para 30s
 
 ## Arquivos Modificados
-- `supabase/functions/banco-inter/index.ts` (unico arquivo)
-- Reimplantar a funcao apos a alteracao
+
+- `src/components/billing/BillingInvoicesTab.tsx` - Correcoes 1, 2, 3, 5, 6, 8
+- `src/hooks/useInvoiceActions.ts` - Novo hook (correcao 4)
+- `src/components/contracts/ContractInvoiceActionsMenu.tsx` - Refatorar para usar o hook
+- `supabase/functions/banco-inter/index.ts` - Correcao 7
 
 ## Riscos
-- Nenhum risco — estamos apenas alterando a estrategia de solicitacao de escopo OAuth, sem mudar a logica de negocio
-- O fallback garante compatibilidade com ambas as configuracoes (escopos individuais ou combinados)
+
+- O hook `useInvoiceActions` centraliza logica que antes era local -- testar ambos os pontos de uso (BillingInvoicesTab e ContractHistorySheet)
+- A reducao do polling de 60s para 30s pode causar mais boletos ficando em estado "pendente" temporariamente, mas o `poll-services` e webhooks compensam
 
