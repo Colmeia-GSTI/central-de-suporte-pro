@@ -1,107 +1,138 @@
 
+# Correcao: Status de Processamento Nao Atualizado Apos Geracao de Fatura
 
-# Otimizacao de Consumo de Recursos - Implementacao
+## Problema Diagnosticado
 
-Todas as 7 otimizacoes serao aplicadas conforme o plano ja aprovado anteriormente.
+A fatura #2 da Quaza foi criada com sucesso em 06/02/2026 (comprovado pelo `invoice_generation_log` com status "success" e `auto_payment_generated: true`). Porem os 3 campos de rastreamento permaneceram em "pendente":
 
-## Alteracoes
+| Campo | Valor Atual | Esperado |
+|---|---|---|
+| boleto_status | pendente | gerado ou enviado |
+| nfse_status | pendente | gerada ou processando |
+| email_status | pendente | enviado |
 
-### 1. Auth - Eliminar queries duplicadas
-**Arquivo:** `src/hooks/useAuth.tsx`
-- Adicionar `lastFetchRef = useRef<number>(0)` junto aos outros refs
-- No `fetchUserData`, verificar `Date.now() - lastFetchRef.current < 5000` para pular re-fetch recente
-- Atualizar `lastFetchRef.current = Date.now()` no inicio de cada fetch real
-- Resultado: de 3 fetches de profiles/user_roles para 1 no carregamento inicial
+**Causa raiz:** A Edge Function `generate-monthly-invoices` invoca as sub-funcoes (`banco-inter`, `asaas-nfse`, `send-email-smtp`) mas **nunca atualiza os campos de status na tabela `invoices`** apos cada etapa. Os blocos `try/catch` engolem erros silenciosamente e o `auto_payment_generated = true` e setado antes de confirmar o resultado real.
 
-### 2. TV Dashboard - Pausa em background
-**Arquivo:** `src/pages/tv-dashboard/TVDashboardPage.tsx`
-- Adicionar `refetchIntervalInBackground: false` nas 4 queries existentes (linhas 53-55, 69-71, 103-105, 118-120)
-- Resultado: polling pausa automaticamente quando a aba nao esta visivel
+Alem disso, a tabela `webhook_events` (necessaria para idempotencia de webhooks do Banco Inter) **nao existe** no banco de dados, impedindo que webhooks de confirmacao de pagamento sejam processados.
 
-### 3. TV Dashboard - Ranking via RPC
-**Arquivo:** `src/pages/tv-dashboard/TVDashboardPage.tsx`
-- Substituir a query N+1 do ranking (linhas 73-105) pela RPC `get_technician_ranking`
-- Elimina 2 queries separadas (technician_points + profiles) por 1 chamada RPC
+## Plano de Correcao
 
-### 4. Sidebar Badge - Filtro por role
-**Arquivo:** `src/hooks/useTechnicianTicketCount.ts`
-- Importar `roles` do `useAuth` (ja disponivel no hook)
-- Condicionar `enabled` para rodar apenas quando o usuario tem role `technician`
-- Resultado: elimina polling de 5 minutos para admins, financeiros e managers
+### Fase 1: Criar tabela `webhook_events`
 
-### 5. Dashboard - Aumentar staleTime de Recent Tickets
-**Arquivo:** `src/pages/Dashboard.tsx`
-- Linha 101: alterar `staleTime: 1000 * 30` para `staleTime: 1000 * 120`
-- Resultado: menos refetches ao navegar entre paginas
+Criar via migracao SQL a tabela de idempotencia referenciada pelas Edge Functions `webhook-banco-inter` e `webhook-asaas-nfse`:
 
-### 6. MessageMetrics - Limite de registros
-**Arquivo:** `src/components/settings/MessageMetricsDashboard.tsx`
-- Linha 24: adicionar `.limit(500)` na query de `message_logs`
-- Resultado: protecao contra carga excessiva de dados
+```sql
+CREATE TABLE IF NOT EXISTS webhook_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  webhook_source text NOT NULL,
+  event_id text NOT NULL,
+  event_type text,
+  payload jsonb,
+  created_at timestamptz DEFAULT now()
+);
+CREATE UNIQUE INDEX idx_webhook_events_source_event 
+  ON webhook_events (webhook_source, event_id);
+ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
+-- Politicas: service insere, staff consulta
+```
 
-### 7. AgingReport - Adicionar staleTime
-**Arquivo:** `src/components/billing/AgingReportWidget.tsx`
-- Adicionar `staleTime: 120000` na query (junto ao `refetchInterval` existente)
-- Resultado: evita refetches duplicados ao navegar entre abas
+### Fase 2: Atualizar `generate-monthly-invoices` para registrar status
+
+**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts`
+
+Tres blocos serao corrigidos:
+
+**Bloco 1 - Apos gerar pagamento (linhas 421-456):**
+- Sucesso: `UPDATE invoices SET boleto_status = 'gerado' WHERE id = ...`
+- Erro: `UPDATE invoices SET boleto_status = 'erro', boleto_error_msg = '...' WHERE id = ...`
+- Mover o `auto_payment_generated = true` para dentro do bloco de sucesso
+
+**Bloco 2 - Apos emitir NFS-e (linhas 459-484):**
+- Sucesso: `UPDATE invoices SET nfse_status = 'processando' WHERE id = ...` (o Asaas processa de forma assincrona, entao o status inicial e "processando", nao "gerada")
+- Erro: `UPDATE invoices SET nfse_status = 'erro', nfse_error_msg = '...' WHERE id = ...`
+
+**Bloco 3 - Apos enviar email (linhas 488-549):**
+- Sucesso: `UPDATE invoices SET email_status = 'enviado', email_sent_at = now() WHERE id = ...`
+- Erro: `UPDATE invoices SET email_status = 'erro', email_error_msg = '...' WHERE id = ...`
+
+### Fase 3: Corrigir fatura Quaza manualmente
+
+Atualizar via SQL os dados da fatura #2 existente para refletir o estado correto (status "overdue" permanece ate confirmacao de pagamento via webhook ou pagamento manual).
 
 ## Detalhes Tecnicos
 
-### useAuth.tsx - Guard de dedup (diff conceitual)
+### generate-monthly-invoices - Bloco de pagamento corrigido
 ```text
-+ const lastFetchRef = useRef<number>(0);
+if (providerActive && contract.payment_preference) {
+  try {
+    // ... invoke banco-inter ou asaas-nfse ...
 
-  const fetchUserData = useCallback(async (userId: string) => {
-+   // Skip if fetched recently (dedup guard)
-+   if (Date.now() - lastFetchRef.current < 5000) {
-+     logger.debug("Skipping fetch - data loaded recently", "Auth");
-+     return;
-+   }
-+   lastFetchRef.current = Date.now();
-    // ... rest of fetch logic unchanged
+    // Atualizar status COM o resultado real
+    await supabase.from("invoices").update({
+      auto_payment_generated: true,
+      boleto_status: "gerado",
+    }).eq("id", newInvoice.id);
+
+  } catch (paymentError) {
+    console.error(...);
+    // Registrar ERRO no status
+    await supabase.from("invoices").update({
+      boleto_status: "erro",
+      boleto_error_msg: paymentError.message || "Erro ao gerar pagamento",
+    }).eq("id", newInvoice.id);
+  }
+}
 ```
 
-### useTechnicianTicketCount.ts - Role filter (diff conceitual)
+### generate-monthly-invoices - Bloco de NFS-e corrigido
 ```text
-  export function useTechnicianTicketCount() {
--   const { user } = useAuth();
-+   const { user, roles } = useAuth();
-+   const isTechnician = roles.includes("technician");
-
-    return useQuery({
-      // ...
--     enabled: !!user?.id,
-+     enabled: !!user?.id && isTechnician,
+if (contract.nfse_enabled) {
+  try {
+    const { data: nfseResult, error: nfseError } = await supabase.functions.invoke("asaas-nfse", ...);
+    
+    if (nfseError) {
+      await supabase.from("invoices").update({
+        nfse_status: "erro",
+        nfse_error_msg: nfseError.message || "Erro ao emitir NFS-e",
+      }).eq("id", newInvoice.id);
+    } else {
+      await supabase.from("invoices").update({
+        nfse_status: nfseResult?.success ? "processando" : "erro",
+        nfse_error_msg: nfseResult?.success ? null : (nfseResult?.error || null),
+        auto_nfse_emitted: nfseResult?.success || false,
+      }).eq("id", newInvoice.id);
+    }
+  } catch (nfseErr) {
+    await supabase.from("invoices").update({
+      nfse_status: "erro",
+      nfse_error_msg: nfseErr.message || "Excecao ao emitir NFS-e",
+    }).eq("id", newInvoice.id);
+  }
+}
 ```
 
-### TVDashboardPage.tsx - Background pause + RPC (diff conceitual)
+### generate-monthly-invoices - Bloco de email corrigido
 ```text
-  // Todas as 4 queries recebem:
-  + refetchIntervalInBackground: false,
-
-  // Ranking substituido por:
-  const { data } = await supabase.rpc("get_technician_ranking", {
-    start_date: new Date(Date.now() - 365*24*60*60*1000).toISOString(),
-    limit_count: 5,
-  });
+if (smtpSettings?.is_active) {
+  try {
+    await supabase.functions.invoke("send-email-smtp", ...);
+    
+    await supabase.from("invoices").update({
+      email_status: "enviado",
+      email_sent_at: new Date().toISOString(),
+    }).eq("id", newInvoice.id);
+  } catch (emailError) {
+    // ... (ja existe o catch)
+  }
+}
+// Adicionar catch para atualizar email_status = 'erro' em caso de falha
 ```
-
-## Resumo de Impacto
-
-| Otimizacao | Requests Eliminados |
-|---|---|
-| Auth dedup | ~4 requests/login |
-| TV background pause | ~4.320/dia (aba oculta) |
-| TV ranking RPC | 1 em vez de 2 queries |
-| Sidebar badge filter | ~288/dia (nao-tecnicos) |
-| Dashboard staleTime | Variavel (navegacao) |
-| MessageMetrics limit | Protecao de egress |
-| AgingReport staleTime | Variavel (navegacao) |
 
 ## Arquivos a Modificar
-- `src/hooks/useAuth.tsx`
-- `src/pages/tv-dashboard/TVDashboardPage.tsx`
-- `src/hooks/useTechnicianTicketCount.ts`
-- `src/pages/Dashboard.tsx`
-- `src/components/settings/MessageMetricsDashboard.tsx`
-- `src/components/billing/AgingReportWidget.tsx`
+- **Nova migracao SQL** - Criar tabela `webhook_events`
+- `supabase/functions/generate-monthly-invoices/index.ts` - Atualizar status apos cada etapa
 
+## Impacto
+- Todas as faturas futuras (de qualquer cliente) terao os indicadores visuais atualizados em tempo real
+- Erros serao visiveis na interface em vez de ficarem ocultos nos logs
+- Webhooks do Banco Inter poderao funcionar corretamente (tabela de idempotencia criada)
