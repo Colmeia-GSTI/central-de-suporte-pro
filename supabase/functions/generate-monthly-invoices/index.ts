@@ -445,13 +445,27 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Update invoice to mark payment as generated
+            // Update invoice to mark payment as generated WITH status tracking
             await supabase
               .from("invoices")
-              .update({ auto_payment_generated: true })
+              .update({
+                auto_payment_generated: true,
+                boleto_status: "gerado",
+              })
               .eq("id", newInvoice.id);
+
+            console.log(`[GEN-INVOICES] boleto_status atualizado para 'gerado' na fatura #${newInvoice.invoice_number}`);
           } catch (paymentError) {
             console.error(`[GEN-INVOICES] Erro ao gerar pagamento para ${contract.name}:`, paymentError);
+
+            // Record payment error in invoice status
+            await supabase
+              .from("invoices")
+              .update({
+                boleto_status: "erro",
+                boleto_error_msg: paymentError instanceof Error ? paymentError.message : "Erro ao gerar pagamento",
+              })
+              .eq("id", newInvoice.id);
           }
         }
 
@@ -475,11 +489,39 @@ Deno.serve(async (req) => {
 
             if (nfseError) {
               console.error(`[GEN-INVOICES] Erro ao emitir NFS-e para ${contract.name}:`, nfseError);
+
+              // Record NFS-e error in invoice status
+              await supabase
+                .from("invoices")
+                .update({
+                  nfse_status: "erro",
+                  nfse_error_msg: nfseError.message || "Erro ao emitir NFS-e",
+                })
+                .eq("id", newInvoice.id);
             } else {
-              console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}:`, nfseResult?.success ? "OK" : nfseResult?.error || "sem resposta");
+              const nfseSuccess = nfseResult?.success === true;
+              console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}:`, nfseSuccess ? "OK" : nfseResult?.error || "sem resposta");
+
+              // Record NFS-e status based on result
+              await supabase
+                .from("invoices")
+                .update({
+                  nfse_status: nfseSuccess ? "processando" : "erro",
+                  nfse_error_msg: nfseSuccess ? null : (nfseResult?.error || "Resposta inesperada da API NFS-e"),
+                })
+                .eq("id", newInvoice.id);
             }
           } catch (nfseErr) {
             console.error(`[GEN-INVOICES] Exceção ao emitir NFS-e para ${contract.name}:`, nfseErr);
+
+            // Record NFS-e exception in invoice status
+            await supabase
+              .from("invoices")
+              .update({
+                nfse_status: "erro",
+                nfse_error_msg: nfseErr instanceof Error ? nfseErr.message : "Exceção ao emitir NFS-e",
+              })
+              .eq("id", newInvoice.id);
           }
         }
 
@@ -543,9 +585,27 @@ Deno.serve(async (req) => {
                 },
               });
               console.log(`[GEN-INVOICES] Email enviado para ${clientEmail}`);
+
+              // Record email success in invoice status
+              await supabase
+                .from("invoices")
+                .update({
+                  email_status: "enviado",
+                  email_sent_at: new Date().toISOString(),
+                })
+                .eq("id", newInvoice.id);
             }
           } catch (emailError) {
             console.error(`[GEN-INVOICES] Erro ao enviar email para ${clientEmail}:`, emailError);
+
+            // Record email error in invoice status
+            await supabase
+              .from("invoices")
+              .update({
+                email_status: "erro",
+                email_error_msg: emailError instanceof Error ? emailError.message : "Erro ao enviar email",
+              })
+              .eq("id", newInvoice.id);
           }
         }
 
