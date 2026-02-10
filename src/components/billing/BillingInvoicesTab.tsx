@@ -844,28 +844,23 @@ export function BillingInvoicesTab() {
                             {(() => {
                               const hasBoleto = !!invoice.boleto_url;
                               const canCancelBoleto = hasBoleto && invoice.status !== "paid";
+                              const boletoHint = !hasBoleto 
+                                ? "Nenhum boleto gerado" 
+                                : "Boleto de fatura paga não pode ser cancelado";
                               return (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div>
-                                        <DropdownMenuItem
-                                          onClick={() => canCancelBoleto && setCancelBoletoInvoice(invoice)}
-                                          disabled={!canCancelBoleto}
-                                          className={canCancelBoleto ? "text-destructive focus:text-destructive" : ""}
-                                        >
-                                          <Ban className="mr-2 h-4 w-4" />
-                                          Cancelar Boleto
-                                        </DropdownMenuItem>
-                                      </div>
-                                    </TooltipTrigger>
+                                <DropdownMenuItem
+                                  onClick={() => canCancelBoleto && setCancelBoletoInvoice(invoice)}
+                                  disabled={!canCancelBoleto}
+                                  className={canCancelBoleto ? "text-destructive focus:text-destructive" : ""}
+                                >
+                                  <Ban className="mr-2 h-4 w-4" />
+                                  <div className="flex flex-col">
+                                    <span>Cancelar Boleto</span>
                                     {!canCancelBoleto && (
-                                      <TooltipContent>
-                                        {!hasBoleto ? "Nenhum boleto gerado" : "Boleto de fatura paga não pode ser cancelado"}
-                                      </TooltipContent>
+                                      <span className="text-xs text-muted-foreground">{boletoHint}</span>
                                     )}
-                                  </Tooltip>
-                                </TooltipProvider>
+                                  </div>
+                                </DropdownMenuItem>
                               );
                             })()}
 
@@ -873,28 +868,23 @@ export function BillingInvoicesTab() {
                             {(() => {
                               const nfseInfo = nfseByInvoice[invoice.id];
                               const hasAuthorizedNfse = nfseInfo?.status === "autorizada";
+                              const nfseHint = nfseInfo 
+                                ? `NFS-e "${nfseInfo.status}" não pode ser cancelada` 
+                                : "Sem NFS-e vinculada";
                               return (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div>
-                                        <DropdownMenuItem
-                                          onClick={() => hasAuthorizedNfse && setCancelNfseInvoice(invoice)}
-                                          disabled={!hasAuthorizedNfse}
-                                          className={hasAuthorizedNfse ? "text-destructive focus:text-destructive" : ""}
-                                        >
-                                          <XCircle className="mr-2 h-4 w-4" />
-                                          Cancelar NFS-e
-                                        </DropdownMenuItem>
-                                      </div>
-                                    </TooltipTrigger>
+                                <DropdownMenuItem
+                                  onClick={() => hasAuthorizedNfse && setCancelNfseInvoice(invoice)}
+                                  disabled={!hasAuthorizedNfse}
+                                  className={hasAuthorizedNfse ? "text-destructive focus:text-destructive" : ""}
+                                >
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  <div className="flex flex-col">
+                                    <span>Cancelar NFS-e</span>
                                     {!hasAuthorizedNfse && (
-                                      <TooltipContent>
-                                        {nfseInfo ? `NFS-e com status "${nfseInfo.status}" não pode ser cancelada` : "Sem NFS-e vinculada a esta fatura"}
-                                      </TooltipContent>
+                                      <span className="text-xs text-muted-foreground">{nfseHint}</span>
                                     )}
-                                  </Tooltip>
-                                </TooltipProvider>
+                                  </div>
+                                </DropdownMenuItem>
                               );
                             })()}
 
