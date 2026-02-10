@@ -1,82 +1,59 @@
 
-# Correção: Menu de 3 pontinhos não abre na listagem de faturas
 
-## Causa Raiz
+# Correcao: Menu Kebab Nao Abre na Listagem de Faturas
 
-O `DropdownMenuContent` contém componentes `Tooltip` + `TooltipProvider` aninhados (linhas 848-898 de `BillingInvoicesTab.tsx`). Isso causa um conflito conhecido no Radix UI onde o tooltip intercepta eventos de ponteiro (`onPointerDownOutside`) e fecha o dropdown imediatamente após abrir.
+## Investigacao Realizada
 
-Os dois blocos problemáticos são:
-- Linhas 848-870: Tooltip no "Cancelar Boleto"
-- Linhas 877-898: Tooltip no "Cancelar NFS-e"
+Testei o menu diretamente no browser automatizado: cliquei o botao varias vezes (por click e por teclado), e confirmei que o dropdown **nunca aparece**. O `Select` de filtro de status na mesma pagina funciona normalmente, entao o problema e especifico do `DropdownMenu`.
 
-## Solução
+## Causa Raiz Identificada
 
-Remover todos os `Tooltip`/`TooltipProvider` de dentro do `DropdownMenuContent` e substituir por texto descritivo inline nos itens desabilitados.
+O componente `Button` (`src/components/ui/button.tsx`) tem um efeito **ripple** habilitado por padrao que adiciona `overflow-hidden` ao botao (linha 73). Mais criticamente, o `Button` intercepta o `onClick` com um `handleClick` customizado (linhas 47-67) que manipula o DOM diretamente (cria e remove elementos `span`).
+
+Quando o `DropdownMenuTrigger` usa `asChild`, o Radix mescla seus event handlers (`onPointerDown`) com os do `Button`. O handler `onPointerDown` do Radix chama `event.preventDefault()` internamente para evitar que o foco mude. Porem, o ripple effect do Button insere elementos no DOM durante o ciclo de eventos, o que pode interferir com o calculo de posicionamento do Popper e causar o fechamento imediato do menu.
+
+**A solucao mais segura e direta**: desabilitar o ripple no botao do trigger do DropdownMenu adicionando `ripple={false}`.
+
+## Mudancas
 
 **Arquivo:** `src/components/billing/BillingInvoicesTab.tsx`
 
-### Mudancas especificas:
-
-**1. Bloco "Cancelar Boleto" (linhas 844-870)** - substituir o wrapper Tooltip por um `DropdownMenuItem` simples com texto de ajuda:
+Na linha 687, alterar o `Button` do trigger para desabilitar o ripple:
 
 ```text
-{/* Cancelar Boleto */}
-{(() => {
-  const hasBoleto = !!invoice.boleto_url;
-  const canCancelBoleto = hasBoleto && invoice.status !== "paid";
-  const boletoHint = !hasBoleto 
-    ? "Nenhum boleto gerado" 
-    : "Boleto de fatura paga não pode ser cancelado";
-  return (
-    <DropdownMenuItem
-      onClick={() => canCancelBoleto && setCancelBoletoInvoice(invoice)}
-      disabled={!canCancelBoleto}
-      className={canCancelBoleto ? "text-destructive focus:text-destructive" : ""}
-    >
-      <Ban className="mr-2 h-4 w-4" />
-      <div className="flex flex-col">
-        <span>Cancelar Boleto</span>
-        {!canCancelBoleto && (
-          <span className="text-xs text-muted-foreground">{boletoHint}</span>
-        )}
-      </div>
-    </DropdownMenuItem>
-  );
-})()}
+// ANTES:
+<Button variant="outline" size="sm">
+
+// DEPOIS:
+<Button variant="outline" size="sm" ripple={false}>
 ```
 
-**2. Bloco "Cancelar NFS-e" (linhas 872-899)** - mesma abordagem:
+Isso remove o `overflow-hidden` e a manipulacao de DOM no click, eliminando a interferencia com o Radix DropdownMenu.
+
+## Verificacao Adicional
+
+Se a mudanca acima nao resolver, a alternativa e substituir o `Button` por um `button` nativo com as mesmas classes visuais, removendo completamente a camada do componente Button:
 
 ```text
-{/* Cancelar NFS-e */}
-{(() => {
-  const nfseInfo = nfseByInvoice[invoice.id];
-  const hasAuthorizedNfse = nfseInfo?.status === "autorizada";
-  const nfseHint = nfseInfo 
-    ? `NFS-e "${nfseInfo.status}" não pode ser cancelada` 
-    : "Sem NFS-e vinculada";
-  return (
-    <DropdownMenuItem
-      onClick={() => hasAuthorizedNfse && setCancelNfseInvoice(invoice)}
-      disabled={!hasAuthorizedNfse}
-      className={hasAuthorizedNfse ? "text-destructive focus:text-destructive" : ""}
-    >
-      <XCircle className="mr-2 h-4 w-4" />
-      <div className="flex flex-col">
-        <span>Cancelar NFS-e</span>
-        {!hasAuthorizedNfse && (
-          <span className="text-xs text-muted-foreground">{nfseHint}</span>
-        )}
-      </div>
-    </DropdownMenuItem>
-  );
-})()}
+<DropdownMenuTrigger asChild>
+  <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-9 px-3 text-sm hover:bg-accent hover:text-accent-foreground">
+    {generatingPayment?.startsWith(invoice.id) ? (
+      <Loader2 className="h-4 w-4 animate-spin" />
+    ) : (
+      <MoreHorizontal className="h-4 w-4" />
+    )}
+  </button>
+</DropdownMenuTrigger>
 ```
 
-## Impacto
-- O menu de 3 pontinhos voltara a abrir normalmente para todas as faturas
-- As dicas de "por que esta desabilitado" aparecerao como texto inline (abaixo do nome da acao) em vez de tooltip
-- Nenhuma funcionalidade sera perdida
+Essa segunda abordagem elimina qualquer possibilidade de conflito entre o Button customizado e o Radix.
+
+**Recomendacao**: implementar as DUAS abordagens em sequencia -- primeiro tentar `ripple={false}`, e se nao resolver, usar o `button` nativo.
+
+## Limpeza
+
+Remover o import nao utilizado de `Tooltip`, `TooltipContent`, `TooltipProvider`, `TooltipTrigger` (linhas 48-50) ja que nenhuma tooltip e mais usada neste componente.
 
 ## Arquivo a modificar
-- `src/components/billing/BillingInvoicesTab.tsx` - remover Tooltip/TooltipProvider de dentro do DropdownMenuContent
+- `src/components/billing/BillingInvoicesTab.tsx`
+
