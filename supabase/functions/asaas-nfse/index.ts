@@ -1244,7 +1244,7 @@ Deno.serve(async (req) => {
       }
 
       case "cancel": {
-        const { invoice_id, nfse_history_id } = params;
+        const { invoice_id, nfse_history_id, justification } = params;
         
         log(correlationId, "info", "Iniciando cancelamento de NFS-e", { invoice_id, nfse_history_id });
 
@@ -1252,26 +1252,117 @@ Deno.serve(async (req) => {
           throw new AsaasApiError("ID da NFS-e no Asaas é obrigatório", 400, "MISSING_INVOICE_ID");
         }
 
-        await asaasRequest(settings, `/invoices/${invoice_id}`, "DELETE", undefined, correlationId);
-
-        // Update local record if history_id provided
-        if (nfse_history_id) {
-          await supabase
-            .from("nfse_history")
-            .update({
-              status: "cancelada",
-              data_cancelamento: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", nfse_history_id);
+        // Validate justification (required, 15-500 chars)
+        if (!justification || typeof justification !== "string") {
+          throw new AsaasApiError("Justificativa é obrigatória para cancelamento", 400, "MISSING_JUSTIFICATION");
+        }
+        const trimmedJustification = justification.trim();
+        if (trimmedJustification.length < 15 || trimmedJustification.length > 500) {
+          throw new AsaasApiError("Justificativa deve ter entre 15 e 500 caracteres", 400, "INVALID_JUSTIFICATION");
         }
 
-        log(correlationId, "info", "NFS-e cancelada com sucesso", { invoice_id });
+        // Idempotency check: block if already cancelled
+        if (nfse_history_id) {
+          const { data: existingCancellation } = await supabase
+            .from("nfse_cancellation_log")
+            .select("id")
+            .eq("nfse_history_id", nfse_history_id)
+            .eq("status", "CANCELLED")
+            .maybeSingle();
 
-        return new Response(
-          JSON.stringify({ success: true, correlation_id: correlationId }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+          if (existingCancellation) {
+            throw new AsaasApiError("Esta NFS-e já foi cancelada anteriormente", 409, "ALREADY_CANCELLED");
+          }
+        }
+
+        // Resolve invoice_id from nfse_history if needed
+        let resolvedInvoiceRefId: string | null = null;
+        if (nfse_history_id) {
+          const { data: histRecord } = await supabase
+            .from("nfse_history")
+            .select("invoice_id")
+            .eq("id", nfse_history_id)
+            .maybeSingle();
+          resolvedInvoiceRefId = histRecord?.invoice_id || null;
+        }
+
+        // Create audit log with REQUESTED status BEFORE calling Asaas
+        const { data: cancellationLog, error: logInsertError } = await supabase
+          .from("nfse_cancellation_log")
+          .insert({
+            user_id: null, // service role context
+            nfse_history_id: nfse_history_id || null,
+            invoice_id: resolvedInvoiceRefId,
+            asaas_invoice_id: invoice_id,
+            justification: trimmedJustification,
+            status: "REQUESTED",
+            request_id: correlationId,
+          })
+          .select("id")
+          .single();
+
+        if (logInsertError) {
+          log(correlationId, "error", "Falha ao criar log de auditoria", { error: logInsertError.message });
+          throw new AsaasApiError("Falha ao registrar solicitação de cancelamento", 500, "AUDIT_LOG_FAILED");
+        }
+
+        const cancellationLogId = cancellationLog.id;
+
+        try {
+          await asaasRequest(settings, `/invoices/${invoice_id}`, "DELETE", undefined, correlationId);
+
+          // Success: update audit log to CANCELLED
+          await supabase
+            .from("nfse_cancellation_log")
+            .update({ status: "CANCELLED" })
+            .eq("id", cancellationLogId);
+
+          // Update local nfse_history record
+          if (nfse_history_id) {
+            await supabase
+              .from("nfse_history")
+              .update({
+                status: "cancelada",
+                motivo_cancelamento: trimmedJustification,
+                data_cancelamento: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", nfse_history_id);
+
+            await logNfseEvent(supabase, nfse_history_id, "cancelled", "info",
+              `NFS-e cancelada. Justificativa: ${trimmedJustification.slice(0, 100)}`,
+              correlationId, { asaas_invoice_id: invoice_id });
+          }
+
+          log(correlationId, "info", "NFS-e cancelada com sucesso", { invoice_id });
+
+          return new Response(
+            JSON.stringify({ success: true, correlation_id: correlationId }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (cancelError) {
+          // Failure: update audit log to FAILED with error payload
+          const errorMessage = cancelError instanceof Error ? cancelError.message : String(cancelError);
+          const errorPayload = cancelError instanceof AsaasApiError
+            ? { status: cancelError.status, code: cancelError.code, message: errorMessage, details: cancelError.details }
+            : { message: errorMessage };
+
+          await supabase
+            .from("nfse_cancellation_log")
+            .update({
+              status: "FAILED",
+              error_payload: errorPayload,
+            })
+            .eq("id", cancellationLogId);
+
+          if (nfse_history_id) {
+            await logNfseEvent(supabase, nfse_history_id, "cancel_failed", "error",
+              `Falha ao cancelar NFS-e: ${errorMessage}`,
+              correlationId, errorPayload);
+          }
+
+          throw cancelError;
+        }
       }
 
       case "link_external": {
