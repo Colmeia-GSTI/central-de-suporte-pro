@@ -2326,6 +2326,67 @@ export type Database = {
           },
         ]
       }
+      nfse_cancellation_log: {
+        Row: {
+          asaas_invoice_id: string | null
+          created_at: string
+          error_payload: Json | null
+          id: string
+          invoice_id: string | null
+          justification: string
+          nfse_history_id: string | null
+          request_id: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          asaas_invoice_id?: string | null
+          created_at?: string
+          error_payload?: Json | null
+          id?: string
+          invoice_id?: string | null
+          justification: string
+          nfse_history_id?: string | null
+          request_id?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          asaas_invoice_id?: string | null
+          created_at?: string
+          error_payload?: Json | null
+          id?: string
+          invoice_id?: string | null
+          justification?: string
+          nfse_history_id?: string | null
+          request_id?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfse_cancellation_log_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_cancellation_log_nfse_history_id_fkey"
+            columns: ["nfse_history_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_cancellation_log_nfse_history_id_fkey"
+            columns: ["nfse_history_id"]
+            isOneToOne: false
+            referencedRelation: "nfse_history_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nfse_event_logs: {
         Row: {
           correlation_id: string | null
