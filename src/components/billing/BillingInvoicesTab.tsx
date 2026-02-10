@@ -651,6 +651,21 @@ export function BillingInvoicesTab() {
 
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {/* Botão rápido para dar baixa/receber - apenas para faturas pendentes/vencidas */}
+                      {(invoice.status === "pending" || invoice.status === "overdue") && (
+                        <PermissionGate module="financial" action="manage">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="bg-status-success hover:bg-status-success/90 text-white"
+                            onClick={() => setManualPaymentInvoice(invoice)}
+                          >
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Receber
+                          </Button>
+                        </PermissionGate>
+                      )}
+
                       {invoice.boleto_url && (
                         <Button
                           variant="outline"
