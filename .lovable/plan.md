@@ -1,138 +1,163 @@
 
-# Correcao: Status de Processamento Nao Atualizado Apos Geracao de Fatura
+# Menu de Acoes para Faturas - Baixa, Cancelar Boleto, Cancelar NFS-e
 
-## Problema Diagnosticado
+## Mapeamento Atual
 
-A fatura #2 da Quaza foi criada com sucesso em 06/02/2026 (comprovado pelo `invoice_generation_log` com status "success" e `auto_payment_generated: true`). Porem os 3 campos de rastreamento permaneceram em "pendente":
+### Onde fica o "Receber" / "A Receber"
+- **Componente:** `src/components/billing/BillingInvoicesTab.tsx` (linha 449)
+- **Entidade:** E um card de estatisticas ("A Receber") que mostra o total pendente. Nao e um botao de acao.
+- **Menu existente:** Ja existe um kebab menu (tres pontinhos) nas linhas 676-822, mas **so aparece para faturas `pending` ou `overdue`**. Faturas pagas ou canceladas nao tem menu.
 
-| Campo | Valor Atual | Esperado |
-|---|---|---|
-| boleto_status | pendente | gerado ou enviado |
-| nfse_status | pendente | gerada ou processando |
-| email_status | pendente | enviado |
+### Estados atuais
 
-**Causa raiz:** A Edge Function `generate-monthly-invoices` invoca as sub-funcoes (`banco-inter`, `asaas-nfse`, `send-email-smtp`) mas **nunca atualiza os campos de status na tabela `invoices`** apos cada etapa. Os blocos `try/catch` engolem erros silenciosamente e o `auto_payment_generated = true` e setado antes de confirmar o resultado real.
+**Fatura (invoices.status):**
+- `pending` - aguardando pagamento
+- `overdue` - vencida
+- `paid` - paga
+- `cancelled` - cancelada
 
-Alem disso, a tabela `webhook_events` (necessaria para idempotencia de webhooks do Banco Inter) **nao existe** no banco de dados, impedindo que webhooks de confirmacao de pagamento sejam processados.
+**Boleto (invoices.boleto_status):**
+- `pendente` - nao gerado
+- `gerado` - gerado no provedor
+- `enviado` - PDF disponivel
+- `erro` - falha na geracao
 
-## Plano de Correcao
+**NFS-e (nfse_history.status):**
+- `processando` - enviada ao Asaas, aguardando retorno
+- `autorizada` - emitida e valida
+- `rejeitada` - recusada pela prefeitura
+- `cancelada` - cancelada
+- `erro` - falha
 
-### Fase 1: Criar tabela `webhook_events`
+### Acoes existentes no backend
+- **Baixa manual:** Edge Function `manual-payment` + dialog `ManualPaymentDialog`
+- **Cancelar boleto:** Edge Function `banco-inter` com `action: "cancel"` (ja usado em `BillingBoletosTab`)
+- **Cancelar NFS-e:** Edge Function `asaas-nfse` com `action: "cancel"` (ja existe, usa `DELETE /invoices/{asaas_invoice_id}`)
+- **Tabela `nfse_history`:** Ja tem campo `motivo_cancelamento` (text) e `data_cancelamento` (timestamptz)
 
-Criar via migracao SQL a tabela de idempotencia referenciada pelas Edge Functions `webhook-banco-inter` e `webhook-asaas-nfse`:
+---
 
-```sql
-CREATE TABLE IF NOT EXISTS webhook_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  webhook_source text NOT NULL,
-  event_id text NOT NULL,
-  event_type text,
-  payload jsonb,
-  created_at timestamptz DEFAULT now()
-);
-CREATE UNIQUE INDEX idx_webhook_events_source_event 
-  ON webhook_events (webhook_source, event_id);
-ALTER TABLE webhook_events ENABLE ROW LEVEL SECURITY;
--- Politicas: service insere, staff consulta
-```
+## O que sera implementado
 
-### Fase 2: Atualizar `generate-monthly-invoices` para registrar status
+### 1. Expandir o menu de acoes existente (UI)
 
-**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts`
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx`
 
-Tres blocos serao corrigidos:
+O menu kebab atual so aparece para `pending`/`overdue`. Sera expandido para aparecer em **todos os status** (exceto `cancelled`), com acoes condicionais:
 
-**Bloco 1 - Apos gerar pagamento (linhas 421-456):**
-- Sucesso: `UPDATE invoices SET boleto_status = 'gerado' WHERE id = ...`
-- Erro: `UPDATE invoices SET boleto_status = 'erro', boleto_error_msg = '...' WHERE id = ...`
-- Mover o `auto_payment_generated = true` para dentro do bloco de sucesso
+| Acao | pending/overdue | paid | cancelled |
+|---|---|---|---|
+| Dar baixa como recebido | Habilitado | Desabilitado (ja pago) | Oculto |
+| Cancelar boleto | Habilitado (se boleto_url existe) | Desabilitado | Oculto |
+| Cancelar NFS-e | Habilitado (se NFS-e autorizada) | Habilitado (se NFS-e autorizada) | Oculto |
 
-**Bloco 2 - Apos emitir NFS-e (linhas 459-484):**
-- Sucesso: `UPDATE invoices SET nfse_status = 'processando' WHERE id = ...` (o Asaas processa de forma assincrona, entao o status inicial e "processando", nao "gerada")
-- Erro: `UPDATE invoices SET nfse_status = 'erro', nfse_error_msg = '...' WHERE id = ...`
+### 2. Modal de cancelamento de NFS-e com justificativa
 
-**Bloco 3 - Apos enviar email (linhas 488-549):**
-- Sucesso: `UPDATE invoices SET email_status = 'enviado', email_sent_at = now() WHERE id = ...`
-- Erro: `UPDATE invoices SET email_status = 'erro', email_error_msg = '...' WHERE id = ...`
+**Novo componente:** `src/components/billing/CancelNfseDialog.tsx`
 
-### Fase 3: Corrigir fatura Quaza manualmente
+- Textarea com validacao: obrigatorio, min 15 caracteres, max 500
+- Contador de caracteres em tempo real
+- Botao "Confirmar cancelamento" so habilita com justificativa valida
+- Loading state durante processamento
+- Acessibilidade: foco automatico no textarea, ESC fecha, navegacao por teclado
 
-Atualizar via SQL os dados da fatura #2 existente para refletir o estado correto (status "overdue" permanece ate confirmacao de pagamento via webhook ou pagamento manual).
+### 3. Tabela de auditoria para cancelamentos de NFS-e
 
-## Detalhes Tecnicos
+**Nova migracao SQL:** Criar tabela `nfse_cancellation_log`
 
-### generate-monthly-invoices - Bloco de pagamento corrigido
 ```text
-if (providerActive && contract.payment_preference) {
-  try {
-    // ... invoke banco-inter ou asaas-nfse ...
-
-    // Atualizar status COM o resultado real
-    await supabase.from("invoices").update({
-      auto_payment_generated: true,
-      boleto_status: "gerado",
-    }).eq("id", newInvoice.id);
-
-  } catch (paymentError) {
-    console.error(...);
-    // Registrar ERRO no status
-    await supabase.from("invoices").update({
-      boleto_status: "erro",
-      boleto_error_msg: paymentError.message || "Erro ao gerar pagamento",
-    }).eq("id", newInvoice.id);
-  }
-}
+id (uuid, PK)
+created_at (timestamptz)
+user_id (uuid, ref auth.users)
+nfse_history_id (uuid, ref nfse_history)
+invoice_id (uuid, ref invoices)
+asaas_invoice_id (text)
+justification (text, NOT NULL)
+status (text: REQUESTED | CANCELLED | FAILED)
+error_payload (jsonb)
+request_id (text)
 ```
 
-### generate-monthly-invoices - Bloco de NFS-e corrigido
-```text
-if (contract.nfse_enabled) {
-  try {
-    const { data: nfseResult, error: nfseError } = await supabase.functions.invoke("asaas-nfse", ...);
-    
-    if (nfseError) {
-      await supabase.from("invoices").update({
-        nfse_status: "erro",
-        nfse_error_msg: nfseError.message || "Erro ao emitir NFS-e",
-      }).eq("id", newInvoice.id);
-    } else {
-      await supabase.from("invoices").update({
-        nfse_status: nfseResult?.success ? "processando" : "erro",
-        nfse_error_msg: nfseResult?.success ? null : (nfseResult?.error || null),
-        auto_nfse_emitted: nfseResult?.success || false,
-      }).eq("id", newInvoice.id);
-    }
-  } catch (nfseErr) {
-    await supabase.from("invoices").update({
-      nfse_status: "erro",
-      nfse_error_msg: nfseErr.message || "Excecao ao emitir NFS-e",
-    }).eq("id", newInvoice.id);
-  }
-}
-```
+Com RLS: staff pode ler, service pode inserir.
 
-### generate-monthly-invoices - Bloco de email corrigido
-```text
-if (smtpSettings?.is_active) {
-  try {
-    await supabase.functions.invoke("send-email-smtp", ...);
-    
-    await supabase.from("invoices").update({
-      email_status: "enviado",
-      email_sent_at: new Date().toISOString(),
-    }).eq("id", newInvoice.id);
-  } catch (emailError) {
-    // ... (ja existe o catch)
-  }
-}
-// Adicionar catch para atualizar email_status = 'erro' em caso de falha
-```
+### 4. Atualizar Edge Function `asaas-nfse` (action: cancel)
 
-## Arquivos a Modificar
-- **Nova migracao SQL** - Criar tabela `webhook_events`
-- `supabase/functions/generate-monthly-invoices/index.ts` - Atualizar status apos cada etapa
+**Arquivo:** `supabase/functions/asaas-nfse/index.ts`
 
-## Impacto
-- Todas as faturas futuras (de qualquer cliente) terao os indicadores visuais atualizados em tempo real
-- Erros serao visiveis na interface em vez de ficarem ocultos nos logs
-- Webhooks do Banco Inter poderao funcionar corretamente (tabela de idempotencia criada)
+O `cancel` existente e simples demais -- nao valida justificativa nem registra auditoria. Sera atualizado para:
+
+1. Receber parametro `justification` (obrigatorio, 15-500 chars)
+2. Verificar idempotencia: se ja existe `nfse_cancellation_log` com status `CANCELLED` para o mesmo `nfse_history_id`, retornar erro
+3. Criar registro em `nfse_cancellation_log` com status `REQUESTED`
+4. Chamar `DELETE /invoices/{asaas_invoice_id}` no Asaas
+5. Sucesso: atualizar log para `CANCELLED`, atualizar `nfse_history` com `status: cancelada`, `motivo_cancelamento`, `data_cancelamento`
+6. Erro (400/401/404/timeout): atualizar log para `FAILED` com `error_payload`
+
+### 5. Cancelar boleto na aba de Faturas
+
+O cancelamento de boleto ja existe na `BillingBoletosTab` via `banco-inter` action `cancel`. Sera reutilizado no menu da `BillingInvoicesTab`:
+- Chamar `supabase.functions.invoke("banco-inter", { body: { action: "cancel", invoice_id } })`
+- Confirmar via `ConfirmDialog` antes de executar
+- Atualizar `boleto_status` para refletir o cancelamento
+
+---
+
+## Checklist de implementacao por etapas
+
+### Etapa 1: Banco de dados
+- [ ] Criar tabela `nfse_cancellation_log` com campos listados acima
+- [ ] Criar politicas RLS (staff SELECT, service INSERT/UPDATE)
+- [ ] Adicionar indice unico `(nfse_history_id, status)` WHERE `status = 'CANCELLED'` para idempotencia
+
+### Etapa 2: Backend (Edge Function)
+- [ ] Atualizar `asaas-nfse` action `cancel` para exigir `justification`
+- [ ] Adicionar validacao server-side (15-500 chars)
+- [ ] Inserir `nfse_cancellation_log` com REQUESTED antes da chamada
+- [ ] Verificar idempotencia (ja cancelada?)
+- [ ] Tratar respostas 200/400/401/404 do Asaas
+- [ ] Atualizar log para CANCELLED ou FAILED
+- [ ] Atualizar `nfse_history.motivo_cancelamento` e `data_cancelamento`
+
+### Etapa 3: Frontend - Componente de cancelamento
+- [ ] Criar `CancelNfseDialog.tsx` com textarea validada
+- [ ] Contador de caracteres (15-500)
+- [ ] Botao desabilitado ate justificativa valida
+- [ ] Loading state + feedback de sucesso/erro
+- [ ] Acessibilidade (foco, ESC, teclado)
+
+### Etapa 4: Frontend - Expandir menu de acoes
+- [ ] Remover condicao `status === "pending" || status === "overdue"` do menu kebab
+- [ ] Adicionar "Cancelar Boleto" ao menu (condicional: so se `boleto_url` existe e status nao e `paid`/`cancelled`)
+- [ ] Adicionar "Cancelar NFS-e" ao menu (condicional: so se existe NFS-e autorizada para a fatura)
+- [ ] Tooltip/texto de ajuda quando acao esta desabilitada
+- [ ] Integrar `CancelNfseDialog` no fluxo
+- [ ] Integrar `ConfirmDialog` para cancelamento de boleto
+
+### Etapa 5: Logs e auditoria
+- [ ] Registrar todas as operacoes em `nfse_cancellation_log`
+- [ ] Log de correlacao no `asaas-nfse` (ja existe infra de logging)
+- [ ] Invalidar queries apos operacoes (`invoices`, `nfse-by-invoices`, `billing-counters`)
+
+---
+
+## Criterios de aceite
+
+- Menu de tres pontinhos visivel para faturas `pending`, `overdue` e `paid`
+- "Dar baixa como recebido" disponivel apenas para faturas nao pagas
+- "Cancelar boleto" disponivel apenas quando existe boleto gerado e fatura nao esta paga
+- "Cancelar NFS-e" disponivel apenas quando existe NFS-e com status `autorizada`
+- "Cancelar NFS-e" desabilitado com tooltip explicativo quando nao ha NFS-e vinculada
+- Justificativa obrigatoria (15-500 caracteres) validada no front e no back
+- Token do Asaas nunca exposto no client
+- Registro de auditoria criado ANTES da chamada ao Asaas
+- Idempotencia: nao permite cancelar NFS-e ja cancelada
+- Fluxo trata erros 400/401/404 com mensagem amigavel
+- Apos sucesso, UI atualiza status da NFS-e para "cancelada" e desabilita a acao
+- Foco automatico no textarea ao abrir modal; ESC fecha
+
+## Arquivos a criar/modificar
+
+- **Nova migracao SQL** - tabela `nfse_cancellation_log`
+- `supabase/functions/asaas-nfse/index.ts` - atualizar action `cancel`
+- `src/components/billing/CancelNfseDialog.tsx` - novo componente
+- `src/components/billing/BillingInvoicesTab.tsx` - expandir menu de acoes
