@@ -15,10 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
-  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import {
   Search, Plus, DollarSign, TrendingUp, TrendingDown, Receipt, CheckCircle2, Clock,
   AlertTriangle, Barcode, QrCode, MoreHorizontal, Loader2, ExternalLink, FileText,
@@ -679,220 +676,24 @@ export function BillingInvoicesTab() {
                       )}
 
                       {invoice.status !== "cancelled" && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-9 w-9 text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                              {generatingPayment?.startsWith(invoice.id) ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <MoreHorizontal className="h-4 w-4" />
-                              )}
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {/* === Emitir Completo (only pending/overdue) === */}
-                            {(invoice.status === "pending" || invoice.status === "overdue") && (
-                              <>
-                                <DropdownMenuItem
-                                  onClick={() => handleEmitComplete(invoice, nfseByInvoice)}
-                                  disabled={processingComplete !== null || generatingPayment !== null}
-                                  className="font-medium text-primary"
-                                >
-                                  {processingComplete === invoice.id ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Zap className="mr-2 h-4 w-4" />
-                                  )}
-                                  Emitir Completo
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                              </>
-                            )}
-
-                            {/* === Generate Boleto/PIX (only pending/overdue) === */}
-                            {(invoice.status === "pending" || invoice.status === "overdue") && (
-                              <>
-                                {!invoice.boleto_url && (
-                                  <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger>
-                                      <Barcode className="mr-2 h-4 w-4" />
-                                      Gerar Boleto
-                                    </DropdownMenuSubTrigger>
-                                    <DropdownMenuSubContent>
-                                      <DropdownMenuItem
-                                        onClick={() => handleGeneratePayment(invoice.id, "boleto", "banco_inter")}
-                                        disabled={generatingPayment !== null}
-                                      >
-                                        <Building2 className="mr-2 h-4 w-4" />
-                                        Banco Inter
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleGeneratePayment(invoice.id, "boleto", "asaas")}
-                                        disabled={generatingPayment !== null}
-                                      >
-                                        <Building2 className="mr-2 h-4 w-4" />
-                                        Asaas
-                                      </DropdownMenuItem>
-                                    </DropdownMenuSubContent>
-                                  </DropdownMenuSub>
-                                )}
-                                {!invoice.pix_code && (
-                                  <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger>
-                                      <QrCode className="mr-2 h-4 w-4" />
-                                      Gerar PIX
-                                    </DropdownMenuSubTrigger>
-                                    <DropdownMenuSubContent>
-                                      <DropdownMenuItem
-                                        onClick={() => handleGeneratePayment(invoice.id, "pix", "banco_inter")}
-                                        disabled={generatingPayment !== null}
-                                      >
-                                        <Building2 className="mr-2 h-4 w-4" />
-                                        Banco Inter
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleGeneratePayment(invoice.id, "pix", "asaas")}
-                                        disabled={generatingPayment !== null}
-                                      >
-                                        <Building2 className="mr-2 h-4 w-4" />
-                                        Asaas
-                                      </DropdownMenuItem>
-                                    </DropdownMenuSubContent>
-                                  </DropdownMenuSub>
-                                )}
-                              </>
-                            )}
-
-                            {/* === Baixa Manual (only pending/overdue) === */}
-                            {(invoice.status === "pending" || invoice.status === "overdue") && (
-                              <>
-                                <DropdownMenuItem
-                                  onClick={() => setManualPaymentInvoice(invoice)}
-                                >
-                                  <HandCoins className="mr-2 h-4 w-4" />
-                                  Baixa Manual
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => markAsPaidMutation.mutate(invoice.id)}
-                                >
-                                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                                  Marcar como Pago (rápido)
-                                </DropdownMenuItem>
-                              </>
-                            )}
-
-                            {/* === Segunda Via / Renegociar (only overdue) === */}
-                            {invoice.status === "overdue" && (
-                              <>
-                                <DropdownMenuItem onClick={() => setSecondCopyInvoice(invoice)}>
-                                  <Barcode className="mr-2 h-4 w-4" />
-                                  Segunda Via
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setRenegotiateInvoice(invoice)}>
-                                  <HandCoins className="mr-2 h-4 w-4" />
-                                  Renegociar
-                                </DropdownMenuItem>
-                              </>
-                            )}
-
-                            {/* === Notifications (if boleto/pix exists, pending/overdue) === */}
-                            {(invoice.status === "pending" || invoice.status === "overdue") && (invoice.boleto_url || invoice.pix_code) && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() => handleResendNotification(invoice.id, ["email"])}
-                                  disabled={sendingNotification !== null}
-                                >
-                                  <Mail className="mr-2 h-4 w-4" />
-                                  Enviar por Email
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleResendNotification(invoice.id, ["whatsapp"])}
-                                  disabled={sendingNotification !== null}
-                                >
-                                  <MessageCircle className="mr-2 h-4 w-4" />
-                                  Enviar por WhatsApp
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleResendNotification(invoice.id, ["email", "whatsapp"])}
-                                  disabled={sendingNotification !== null}
-                                >
-                                  <Send className="mr-2 h-4 w-4" />
-                                  Enviar Email + WhatsApp
-                                </DropdownMenuItem>
-                              </>
-                            )}
-
-                            {/* === Emitir NFS-e Manual (if contract, pending/overdue) === */}
-                            {invoice.contract_id && (invoice.status === "pending" || invoice.status === "overdue") && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => setNfseInvoice(invoice)}>
-                                  <FileText className="mr-2 h-4 w-4" />
-                                  Emitir NFS-e Manual
-                                </DropdownMenuItem>
-                              </>
-                            )}
-
-                            {/* === CANCEL ACTIONS SECTION === */}
-                            <DropdownMenuSeparator />
-
-                            {/* Cancelar Boleto */}
-                            {(() => {
-                              const hasBoleto = !!invoice.boleto_url;
-                              const canCancelBoleto = hasBoleto && invoice.status !== "paid";
-                              const boletoHint = !hasBoleto 
-                                ? "Nenhum boleto gerado" 
-                                : "Boleto de fatura paga não pode ser cancelado";
-                              return (
-                                <DropdownMenuItem
-                                  onClick={() => canCancelBoleto && setCancelBoletoInvoice(invoice)}
-                                  disabled={!canCancelBoleto}
-                                  className={canCancelBoleto ? "text-destructive focus:text-destructive" : ""}
-                                >
-                                  <Ban className="mr-2 h-4 w-4" />
-                                  <div className="flex flex-col">
-                                    <span>Cancelar Boleto</span>
-                                    {!canCancelBoleto && (
-                                      <span className="text-xs text-muted-foreground">{boletoHint}</span>
-                                    )}
-                                  </div>
-                                </DropdownMenuItem>
-                              );
-                            })()}
-
-                            {/* Cancelar NFS-e */}
-                            {(() => {
-                              const nfseInfo = nfseByInvoice[invoice.id];
-                              const hasAuthorizedNfse = nfseInfo?.status === "autorizada";
-                              const nfseHint = nfseInfo 
-                                ? `NFS-e "${nfseInfo.status}" não pode ser cancelada` 
-                                : "Sem NFS-e vinculada";
-                              return (
-                                <DropdownMenuItem
-                                  onClick={() => hasAuthorizedNfse && setCancelNfseInvoice(invoice)}
-                                  disabled={!hasAuthorizedNfse}
-                                  className={hasAuthorizedNfse ? "text-destructive focus:text-destructive" : ""}
-                                >
-                                  <XCircle className="mr-2 h-4 w-4" />
-                                  <div className="flex flex-col">
-                                    <span>Cancelar NFS-e</span>
-                                    {!hasAuthorizedNfse && (
-                                      <span className="text-xs text-muted-foreground">{nfseHint}</span>
-                                    )}
-                                  </div>
-                                </DropdownMenuItem>
-                              );
-                            })()}
-
-                            {/* === Ver Histórico (always visible) === */}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => setHistoryInvoice(invoice)}>
-                              <Clock className="mr-2 h-4 w-4" />
-                              Ver Histórico
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <InvoiceActionsPopover
+                          invoice={invoice}
+                          nfseInfo={nfseByInvoice[invoice.id]}
+                          generatingPayment={generatingPayment}
+                          processingComplete={processingComplete}
+                          sendingNotification={sendingNotification}
+                          onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                          onGeneratePayment={handleGeneratePayment}
+                          onManualPayment={() => setManualPaymentInvoice(invoice)}
+                          onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                          onSecondCopy={() => setSecondCopyInvoice(invoice)}
+                          onRenegotiate={() => setRenegotiateInvoice(invoice)}
+                          onResendNotification={handleResendNotification}
+                          onEmitNfse={() => setNfseInvoice(invoice)}
+                          onCancelBoleto={() => setCancelBoletoInvoice(invoice)}
+                          onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                          onViewHistory={() => setHistoryInvoice(invoice)}
+                        />
                       )}
                     </div>
                   </TableCell>
