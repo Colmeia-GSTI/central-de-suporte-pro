@@ -45,9 +45,6 @@ import { RenegotiateInvoiceDialog } from "@/components/billing/RenegotiateInvoic
 import { CancelNfseDialog } from "@/components/billing/CancelNfseDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type InvoiceWithClient = Tables<"invoices"> & {
@@ -684,13 +681,13 @@ export function BillingInvoicesTab() {
                       {invoice.status !== "cancelled" && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
+                            <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-9 w-9 text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                               {generatingPayment?.startsWith(invoice.id) ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <MoreHorizontal className="h-4 w-4" />
                               )}
-                            </Button>
+                            </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             {/* === Emitir Completo (only pending/overdue) === */}
