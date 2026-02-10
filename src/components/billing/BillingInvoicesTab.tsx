@@ -17,9 +17,8 @@ import {
 } from "@/components/ui/select";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import {
-  Search, Plus, DollarSign, TrendingUp, TrendingDown, Receipt, CheckCircle2, Clock,
-  AlertTriangle, Barcode, QrCode, MoreHorizontal, Loader2, ExternalLink, FileText,
-  Mail, MessageCircle, Send, Zap, XCircle, RefreshCw, Building2, HandCoins, Ban,
+  Search, Plus, DollarSign, TrendingUp, Receipt, CheckCircle2, Clock,
+  AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -349,15 +348,16 @@ export function BillingInvoicesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Selection info and batch actions */}
+      {/* Selection Bar */}
       {selectedInvoices.size > 0 && (
-        <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
+        <div className="flex items-center justify-between p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
           <div className="text-sm font-medium">
             {selectedInvoices.size} fatura(s) selecionada(s)
           </div>
           <PermissionGate module="financial" action="manage">
             <Button
               size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-black"
               onClick={() => setIsBatchProcessingOpen(true)}
             >
               <Zap className="mr-2 h-4 w-4" />
@@ -367,92 +367,83 @@ export function BillingInvoicesTab() {
         </div>
       )}
 
-      {/* Header Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/billing/delinquency">
-            <Button variant="outline" size="sm">
-              <AlertTriangle className="mr-2 h-4 w-4" />
-              Inadimplência
-            </Button>
-          </Link>
-          <Button variant="outline" size="sm" onClick={() => setIsNfseAvulsaOpen(true)}>
-            <FileText className="mr-2 h-4 w-4" />
-            NFS-e Avulsa
+      {/* Quick Actions */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <Link to="/billing/delinquency">
+          <Button variant="outline" size="sm">
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            Inadimplência
           </Button>
-          <PermissionGate module="financial" action="manage">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateMonthlyInvoices}
-              disabled={isGeneratingMonthly}
-            >
-              {isGeneratingMonthly ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Receipt className="mr-2 h-4 w-4" />
-              )}
-              Gerar Faturas Mensais
-            </Button>
-          </PermissionGate>
-          <PermissionGate module="financial" action="manage">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBatchNotification}
-              disabled={isBatchNotifying}
-            >
-              {isBatchNotifying ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
-              Cobrança em Lote
-            </Button>
-          </PermissionGate>
+        </Link>
+        <Button variant="outline" size="sm" onClick={() => setIsNfseAvulsaOpen(true)}>
+          <FileText className="mr-2 h-4 w-4" />
+          NFS-e Avulsa
+        </Button>
+        <PermissionGate module="financial" action="manage">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateMonthlyInvoices}
+            disabled={isGeneratingMonthly}
+          >
+            {isGeneratingMonthly ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Receipt className="mr-2 h-4 w-4" />
+            )}
+            Gerar Faturas Mensais
+          </Button>
+        </PermissionGate>
+        <PermissionGate module="financial" action="manage">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBatchNotification}
+            disabled={isBatchNotifying}
+          >
+            {isBatchNotifying ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-2 h-4 w-4" />
+            )}
+            Cobrança em Lote
+          </Button>
+        </PermissionGate>
+        <div className="ml-auto flex-shrink-0">
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <PermissionGate module="financial" action="create">
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova Fatura
+                </Button>
+              </DialogTrigger>
+            </PermissionGate>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Nova Fatura</DialogTitle>
+              </DialogHeader>
+              <InvoiceForm
+                onSuccess={() => {
+                  setIsFormOpen(false);
+                  queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+                }}
+                onCancel={() => setIsFormOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <PermissionGate module="financial" action="create">
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Nova Fatura
-              </Button>
-            </DialogTrigger>
-          </PermissionGate>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Nova Fatura</DialogTitle>
-            </DialogHeader>
-            <InvoiceForm
-              onSuccess={() => {
-                setIsFormOpen(false);
-                queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-              }}
-              onCancel={() => setIsFormOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Faturas</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{invoices.length}</div>
-          </CardContent>
-        </Card>
+      {/* Summary Cards */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">A Receber</CardTitle>
-            <Clock className="h-4 w-4 text-status-warning" />
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-status-warning">
+            <div className="text-2xl font-bold text-emerald-500">
               {formatCurrency(totalPending)}
             </div>
           </CardContent>
@@ -460,10 +451,10 @@ export function BillingInvoicesTab() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vencido</CardTitle>
-            <TrendingDown className="h-4 w-4 text-status-danger" />
+            <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-status-danger">
+            <div className="text-2xl font-bold text-destructive">
               {formatCurrency(totalOverdue)}
             </div>
           </CardContent>
@@ -471,17 +462,17 @@ export function BillingInvoicesTab() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Recebido</CardTitle>
-            <TrendingUp className="h-4 w-4 text-status-success" />
+            <TrendingUp className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-status-success">
+            <div className="text-2xl font-bold text-emerald-500">
               {formatCurrency(totalPaid)}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Search & Filters */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -546,7 +537,7 @@ export function BillingInvoicesTab() {
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-16" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
                 </TableRow>
               ))
             ) : filteredInvoices.length === 0 ? (
@@ -560,27 +551,21 @@ export function BillingInvoicesTab() {
               </TableRow>
             ) : (
               filteredInvoices.map((invoice) => (
-                <TableRow key={invoice.id} className={selectedInvoices.has(invoice.id) ? "bg-blue-50 dark:bg-blue-950" : ""}>
+                <TableRow key={invoice.id} className={selectedInvoices.has(invoice.id) ? "bg-amber-500/5" : ""}>
                   <TableCell>
                     <Checkbox
                       checked={selectedInvoices.has(invoice.id)}
                       onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
                     />
                   </TableCell>
-                  <TableCell className="font-mono">
-                    #{invoice.invoice_number}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {invoice.clients?.name || "-"}
-                  </TableCell>
+                  <TableCell className="font-mono">#{invoice.invoice_number}</TableCell>
+                  <TableCell className="font-medium">{invoice.clients?.name || "-"}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {invoice.reference_month ? (
                       <span className="font-mono text-sm">
                         {invoice.reference_month.split("-").reverse().join("/")}
                       </span>
-                    ) : (
-                      "-"
-                    )}
+                    ) : "-"}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -589,9 +574,7 @@ export function BillingInvoicesTab() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {format(new Date(invoice.due_date), "dd/MM/yyyy", {
-                      locale: ptBR,
-                    })}
+                    {format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1">
@@ -611,8 +594,6 @@ export function BillingInvoicesTab() {
                       })()}
                     </div>
                   </TableCell>
-
-                  {/* Indicadores de Ações - FIX #5 & #6 */}
                   <TableCell>
                     <InvoiceActionIndicators
                       boletoStatus={
@@ -650,52 +631,27 @@ export function BillingInvoicesTab() {
                       }}
                     />
                   </TableCell>
-
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-
-                      {invoice.boleto_url && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(invoice.boleto_url!, "_blank")}
-                        >
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          Ver Boleto
-                        </Button>
-                      )}
-                      {invoice.pix_code && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPixDialogInvoice(invoice)}
-                        >
-                          <QrCode className="h-3 w-3 mr-1" />
-                          Ver PIX
-                        </Button>
-                      )}
-
-                      {invoice.status !== "cancelled" && (
-                        <InvoiceActionsPopover
-                          invoice={invoice}
-                          nfseInfo={nfseByInvoice[invoice.id]}
-                          generatingPayment={generatingPayment}
-                          processingComplete={processingComplete}
-                          sendingNotification={sendingNotification}
-                          onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                          onGeneratePayment={handleGeneratePayment}
-                          onManualPayment={() => setManualPaymentInvoice(invoice)}
-                          onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
-                          onSecondCopy={() => setSecondCopyInvoice(invoice)}
-                          onRenegotiate={() => setRenegotiateInvoice(invoice)}
-                          onResendNotification={handleResendNotification}
-                          onEmitNfse={() => setNfseInvoice(invoice)}
-                          onCancelBoleto={() => setCancelBoletoInvoice(invoice)}
-                          onCancelNfse={() => setCancelNfseInvoice(invoice)}
-                          onViewHistory={() => setHistoryInvoice(invoice)}
-                        />
-                      )}
-                    </div>
+                    {invoice.status !== "cancelled" && (
+                      <InvoiceActionsPopover
+                        invoice={invoice}
+                        nfseInfo={nfseByInvoice[invoice.id]}
+                        generatingPayment={generatingPayment}
+                        processingComplete={processingComplete}
+                        sendingNotification={sendingNotification}
+                        onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                        onGeneratePayment={handleGeneratePayment}
+                        onManualPayment={() => setManualPaymentInvoice(invoice)}
+                        onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                        onSecondCopy={() => setSecondCopyInvoice(invoice)}
+                        onRenegotiate={() => setRenegotiateInvoice(invoice)}
+                        onResendNotification={handleResendNotification}
+                        onEmitNfse={() => setNfseInvoice(invoice)}
+                        onCancelBoleto={() => setCancelBoletoInvoice(invoice)}
+                        onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                        onViewHistory={() => setHistoryInvoice(invoice)}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))
