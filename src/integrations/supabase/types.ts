@@ -3705,6 +3705,33 @@ export type Database = {
           },
         ]
       }
+      webhook_events: {
+        Row: {
+          created_at: string
+          event_id: string
+          event_type: string | null
+          id: string
+          payload: Json | null
+          webhook_source: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          webhook_source: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          webhook_source?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       clients_contact_only: {
