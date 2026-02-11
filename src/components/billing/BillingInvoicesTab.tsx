@@ -614,21 +614,25 @@ export function BillingInvoicesTab() {
       </div>
 
       {/* Dialogs */}
-      <EmitNfseDialog
-        invoice={nfseInvoice}
-        open={!!nfseInvoice}
-        onOpenChange={(open) => {
-          if (!open) setNfseInvoice(null);
-        }}
-      />
+      {nfseInvoice && (
+        <EmitNfseDialog
+          invoice={nfseInvoice}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setNfseInvoice(null);
+          }}
+        />
+      )}
 
-      <PixCodeDialog
-        invoice={pixDialogInvoice}
-        open={!!pixDialogInvoice}
-        onOpenChange={(open) => {
-          if (!open) setPixDialogInvoice(null);
-        }}
-      />
+      {pixDialogInvoice && (
+        <PixCodeDialog
+          invoice={pixDialogInvoice}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setPixDialogInvoice(null);
+          }}
+        />
+      )}
 
       <EmitNfseAvulsaDialog
         open={isNfseAvulsaOpen}
