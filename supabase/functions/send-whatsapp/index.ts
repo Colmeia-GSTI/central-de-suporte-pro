@@ -23,6 +23,32 @@ interface EvolutionSettings {
 const TOKEN_TIMEOUT_MS = 5000; // Reduzido de 15000ms
 const MAX_RETRIES = 2;
 
+// Rate limiting: 10 req/seg por phone
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 1000;
+
+function checkRateLimit(key: string): { allowed: boolean; remaining: number } {
+  const now = Date.now();
+  const record = rateLimitMap.get(key);
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, remaining: RATE_LIMIT_MAX - 1 };
+  }
+  if (record.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, remaining: 0 };
+  }
+  record.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX - record.count };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of rateLimitMap) {
+    if (now > val.resetTime) rateLimitMap.delete(key);
+  }
+}, 60_000);
+
 // Timeout wrapper for fetch
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = TOKEN_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -42,6 +68,16 @@ serve(async (req) => {
   }
 
   try {
+    // Rate limit by IP before processing
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
+    const { allowed } = checkRateLimit(`send-whatsapp:${clientIp}`);
+    if (!allowed) {
+      console.warn(`[send-whatsapp] Rate limit exceeded for IP: ${clientIp}`);
+      return new Response(
+        JSON.stringify({ error: "Muitas requisições. Tente novamente em instantes." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "1" } }
+      );
+    }
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
