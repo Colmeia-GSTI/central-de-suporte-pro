@@ -1,115 +1,110 @@
 
 
-# Refatoracao Completa do Sistema de Faturamento
+# Refatoracao Completa do Layout de Faturamento
 
-## Problemas Identificados
+## Objetivo
 
-### BUG CRITICO 1: Menu de Acoes (Popover) NAO abre
-O botao de tres pontos (Menu) na tabela de faturas nao abre o menu de acoes. O componente `InvoiceActionsPopover` usa `Popover` do Radix, mas o trigger com `<button>` nativo nao esta funcionando corretamente no ambiente atual. O clique e registrado mas o popover nao renderiza.
+Redesenhar a aba de Faturas inspirando-se no layout ERP da imagem de referencia: tabela densa orientada a dados, filtros por periodo/status no topo, acoes rapidas por linha via icones, e barra de acoes em lote fixa no rodape. Toda a logica de backend permanece intacta.
 
-### BUG CRITICO 2: "Nova Fatura" crasha a aplicacao
-Ao clicar em "Nova Fatura", o app inteiro crasha com erro:
-```
-A <Select.Item /> must have a value prop that is not an empty string.
-```
-**Causa**: Linha 240 do `InvoiceForm.tsx` tem `<SelectItem value="">Padrao do contrato</SelectItem>`. O Radix Select nao aceita `value=""`.
+## Novo Layout (de cima para baixo)
 
-### FUNCIONALIDADES OK (confirmadas via teste):
-- Checkbox de selecao funciona
-- Barra de selecao amarela aparece corretamente
-- Cards de resumo financeiro mostram valores corretos do backend
-- Busca e filtro de status funcionam
-- Badge de NFS-e na coluna Status funciona
-- Indicadores de acoes (Boleto/NFS-e/Email) renderizam
+### 1. Barra de Cabecalho
+- Titulo "Faturamento" a esquerda
+- Filtro de periodo (mes/ano) com date range picker
+- Campo de busca com icone de lupa a direita
+- Botao "Nova Fatura" (com PermissionGate)
 
----
+### 2. Barra de Filtros
+- Filtros horizontais: Status (Todos/Pendente/Pago/Vencido/Cancelado), Provedor, Tipo NFS-e
+- Botao "Aplicar" com icone de filtro
+- Botao "Limpar" para resetar filtros
 
-## Plano de Correcoes
+### 3. Cards de Resumo (compactos, inline)
+- 3 mini-cards horizontais: A Receber (verde), Vencido (vermelho), Recebido (verde)
+- Formato compacto (nao cards grandes, sim badges/chips com valor)
 
-### 1. Corrigir `InvoiceForm.tsx` - Bug do SelectItem vazio
+### 4. Tabela Principal (estilo ERP denso)
 
-**Problema**: `<SelectItem value="">` causa crash fatal.
-**Solucao**: Trocar `value=""` por `value="default"` e ajustar a logica de submit para tratar "default" como null.
+Colunas:
+| Checkbox | Cliente (nome + CNPJ/documento) | Faturamento | Vencimento | Tipo | Situacao | Valor (R$) | Acoes (icones) | Menu |
 
-### 2. Reescrever `InvoiceActionsPopover.tsx` - Menu que nao abre
+**Coluna "Cliente"**: Nome em negrito + documento abaixo em texto menor cinza (como na imagem de referencia)
 
-**Problema**: O Popover do Radix com trigger `<button>` nativo nao esta abrindo.
-**Solucao**: Substituir o Popover por um `DropdownMenu` simplificado do Shadcn, OU trocar o trigger para usar `<Button>` do Shadcn com `asChild`. A abordagem sera usar `DropdownMenu` pois e o componente semanticamente correto para menus de acoes e nao sofre do mesmo problema de eventos do Popover.
+**Coluna "Tipo"**: Badge com o tipo (FATURAMENTO, RENEGOCIACAO, etc.) baseado no campo `reference_month` ou origem
 
-**Nota importante**: Se o `DropdownMenu` tambem apresentar o bug global mencionado nos memorandos, a solucao alternativa sera manter o `Popover` mas corrigir o trigger usando o componente `Button` do Shadcn em vez de `<button>` nativo, e adicionar `modal={false}` ao Popover.
+**Coluna "Situacao"**: Badge colorido (FATURADO/PENDENTE/VENCIDO/PAGO/ERRO)
 
-### 3. Preservar todas as integracoes backend
+**Coluna "Acoes"**: Icones inline clicaveis (como na imagem):
+- Olho (ver detalhes/historico)
+- Refresh (reprocessar/emitir completo)
+- Setas (transferir/renegociar)
+- Grafico (indicador boleto)
+- Documento (indicador NFS-e)
+- Check (indicador email)
+- Envelope (reenviar notificacao)
+- Cifrao (pagamento/baixa manual)
 
-Todos os handlers e edge functions permanecem intactos:
-- `useInvoiceActions` hook (handleGeneratePayment, handleEmitComplete, handleResendNotification, markAsPaidMutation)
-- `generate-monthly-invoices` edge function
-- `batch-collection-notification` edge function
-- `banco-inter` edge function (gerar boleto, cancelar boleto)
-- `asaas-nfse` edge function (gerar pagamento, emitir NFS-e, cancelar NFS-e)
-- `manual-payment` edge function
-- `generate-second-copy` edge function
-- `renegotiate-invoice` edge function
-- `calculate-invoice-penalties` edge function
-- `resend-payment-notification` edge function
-- `batch-process-invoices` edge function
+**Coluna "Menu"**: Botao tres pontos com DropdownMenu (InvoiceActionsPopover existente)
 
-Todos os dialogs (ManualPaymentDialog, SecondCopyDialog, RenegotiateInvoiceDialog, CancelNfseDialog, BillingBatchProcessing, EmitNfseDialog, EmitNfseAvulsaDialog, PixCodeDialog, InvoiceProcessingHistory) permanecem intactos.
+### 5. Paginacao
+- Texto "1 a 12 de 51"
+- Botoes: Primeiro, Anterior, "Pagina X de Y", Proxima, Ultimo
+- Implementar paginacao no frontend (itens por pagina: 15)
 
----
+### 6. Barra de Acoes em Lote (rodape fixo)
+Aparece SEMPRE na parte inferior, com botoes:
+- "Mais Opcoes" (dropdown com NFS-e Avulsa, Gerar Faturas Mensais, Cobranca em Lote)
+- "Cancelar Nota Fiscal" (vermelho, desabilitado se nenhum selecionado)
+- "Cancelar Boleto/Pix" (vermelho, desabilitado se nenhum selecionado)
+- "Reenviar Fatura" (outline, desabilitado se nenhum selecionado)
+- "Faturar Agora" (primario amarelo, desabilitado se nenhum selecionado)
 
 ## Detalhes Tecnicos
 
-### Arquivo 1: `src/components/financial/InvoiceForm.tsx`
+### Arquivo principal: `src/components/billing/BillingInvoicesTab.tsx`
+- Reescrever o JSX completo com novo layout
+- Adicionar estado de paginacao (`currentPage`, `itemsPerPage = 15`)
+- Adicionar `paginatedInvoices = filteredInvoices.slice(start, end)` via useMemo
+- Mover acoes rapidas (Gerar Faturas Mensais, Cobranca em Lote, NFS-e Avulsa) para dropdown "Mais Opcoes" no rodape
+- Adicionar coluna de acoes inline com icones pequenos
+- Manter TODOS os estados, queries, handlers e dialogs existentes
 
-**Mudancas**:
-- Linha 33: Trocar `z.enum(["", "banco_inter", "asaas"])` por `z.enum(["default", "banco_inter", "asaas"])`
-- Linha 55: Trocar `billing_provider: ""` por `billing_provider: "default"`
-- Linha 100: Trocar `data.billing_provider || null` por `data.billing_provider === "default" ? null : (data.billing_provider || null)`
-- Linha 240: Trocar `<SelectItem value="">` por `<SelectItem value="default">`
+### Componente novo: `src/components/billing/InvoiceInlineActions.tsx`
+- Componente que renderiza os icones de acao rapida por linha
+- Props: invoice, nfseInfo, handlers (mesmos do InvoiceActionsPopover)
+- Icones: Eye (historico), Zap (emitir completo), RefreshCw (reprocessar), BarChart (boleto), FileText (NFS-e), Mail (email), DollarSign (pagamento)
+- Cada icone com tooltip e cor contextual (verde=ok, vermelho=erro, cinza=pendente)
+- Tamanho compacto (h-4 w-4) com gap-1
 
-### Arquivo 2: `src/components/billing/InvoiceActionsPopover.tsx`
+### Arquivo mantido: `src/components/billing/InvoiceActionsPopover.tsx`
+- Sem alteracoes (ja usa DropdownMenu corretamente)
 
-**Mudancas**:
-- Substituir `Popover`/`PopoverTrigger`/`PopoverContent` por `DropdownMenu`/`DropdownMenuTrigger`/`DropdownMenuContent`/`DropdownMenuItem`/`DropdownMenuSeparator` do Shadcn
-- Substituir os `MenuButton` customizados por `DropdownMenuItem`
-- Substituir `MenuSeparator` customizado por `DropdownMenuSeparator`
-- Manter toda a logica de negocio (sub-menus de provedor, condicoes de status, handlers)
-- Usar `DropdownMenuSub`/`DropdownMenuSubTrigger`/`DropdownMenuSubContent` para os sub-menus de selecao de provedor (Boleto/PIX)
-- O trigger usara `<Button variant="outline" size="icon">` do Shadcn
+### Arquivo mantido: `src/hooks/useInvoiceActions.ts`
+- Sem alteracoes
 
-Se o DropdownMenu tambem nao funcionar (bug global), a abordagem alternativa sera:
-- Manter Popover mas usar `<Button asChild>` como trigger em vez de `<button>` nativo
-- Adicionar `modal={false}` no Popover Root
-- Testar e iterar
+### Arquivo mantido: `src/components/billing/InvoiceActionIndicators.tsx`
+- Sera substituido pelo novo `InvoiceInlineActions` na tabela
+- O componente antigo permanece no codebase para uso em outros contextos
 
-### Arquivo 3: `src/components/billing/BillingInvoicesTab.tsx`
+## Backend -- Tudo Preservado
 
-**Mudancas minimas** (apenas se necessario para compatibilidade):
-- Ajustar a passagem de props ao novo componente de menu, caso a interface mude
+Nenhuma logica de backend sera alterada. Todos os handlers, edge functions, queries e dialogs permanecem identicos:
 
----
+- Query `invoices` com `.select("*, clients(name), contract_id, billing_provider")`
+- Query `nfse-by-invoices`
+- Hook `useInvoiceActions` (handleGeneratePayment, handleEmitComplete, handleResendNotification, markAsPaidMutation)
+- Handlers locais (handleGenerateMonthlyInvoices, handleBatchNotification)
+- Todos os 12 dialogs (BillingBatchProcessing, EmitNfseDialog, EmitNfseAvulsaDialog, PixCodeDialog, InvoiceProcessingHistory, ManualPaymentDialog, SecondCopyDialog, RenegotiateInvoiceDialog, CancelNfseDialog, ConfirmDialog, InvoiceForm Dialog)
+- Cancel boleto via edge function `banco-inter`
+- Cancel NFS-e via edge function `asaas-nfse`
 
-## Mapeamento Frontend-Backend Validado
+## Estilo Visual
 
-| Botao/Acao | Edge Function | Status |
-|---|---|---|
-| Gerar Faturas Mensais | `generate-monthly-invoices` | OK |
-| Cobranca em Lote | `batch-collection-notification` | OK |
-| Processar Selecionados | `batch-process-invoices` | OK |
-| Emitir Completo | `banco-inter` + `asaas-nfse` + `resend-payment-notification` | OK |
-| Gerar Boleto (Inter) | `banco-inter` | OK |
-| Gerar Boleto (Asaas) | `asaas-nfse` (action: create_payment) | OK |
-| Gerar PIX (Inter) | `banco-inter` | OK |
-| Gerar PIX (Asaas) | `asaas-nfse` (action: create_payment) | OK |
-| Marcar como Pago | Supabase direct update (invoices) | OK |
-| Baixa Manual | `manual-payment` | OK |
-| Segunda Via | `generate-second-copy` | OK |
-| Renegociar | `renegotiate-invoice` | OK |
-| Cancelar Boleto | `banco-inter` (action: cancel) | OK |
-| Cancelar NFS-e | `asaas-nfse` (action: cancel) | OK |
-| Emitir NFS-e Manual | Dialog EmitNfseDialog → `asaas-nfse` | OK |
-| NFS-e Avulsa | Dialog EmitNfseAvulsaDialog | OK |
-| Enviar Email | `resend-payment-notification` | OK |
-| Enviar WhatsApp | `resend-payment-notification` | OK |
-| Nova Fatura | Supabase direct insert (invoices) | **CRASH** - corrigir |
+- Background escuro (#0a0a0a) conforme tema existente
+- Tabela densa com linhas compactas (py-2 em vez de p-4)
+- Bordas sutis (#2a2a2a)
+- Badges coloridos para status (verde, amarelo, vermelho)
+- Icones de acao com hover scale e cores contextuais
+- Barra de rodape com fundo escuro e borda superior
+- Paginacao estilo classico com botoes outline
 
