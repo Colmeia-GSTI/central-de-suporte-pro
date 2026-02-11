@@ -392,10 +392,10 @@ export function BillingInvoicesTab() {
                         </div>
                       </TableCell>
                       <TableCell className="py-2 text-xs">
-                        {format(new Date(invoice.issued_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {invoice.issued_date ? (() => { const [y,m,d] = invoice.issued_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
                       </TableCell>
                       <TableCell className="py-2 text-xs">
-                        {format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
                       </TableCell>
                       <TableCell className="py-2">
                         <div className="flex items-center gap-1">
