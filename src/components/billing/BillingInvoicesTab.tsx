@@ -15,15 +15,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
 import {
-  Search, Plus, DollarSign, Receipt, CheckCircle2, Clock,
-  AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreVertical,
-  Filter, X, Ban,
+  Search, Plus, DollarSign, AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Filter, X, Ban, Eye, MoreHorizontal, Ellipsis,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -69,15 +68,6 @@ const statusColors: Record<Enums<"invoice_status">, string> = {
   cancelled: "bg-muted text-muted-foreground border-border",
 };
 
-const nfseStatusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
-  autorizada: { label: "NFS-e", icon: <CheckCircle2 className="h-3 w-3" />, className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40" },
-  processando: { label: "NFS-e", icon: <RefreshCw className="h-3 w-3 animate-spin" />, className: "bg-blue-500/20 text-blue-400 border-blue-500/40" },
-  pendente: { label: "NFS-e", icon: <Clock className="h-3 w-3" />, className: "bg-status-warning/20 text-status-warning border-status-warning/40" },
-  rejeitada: { label: "NFS-e", icon: <XCircle className="h-3 w-3" />, className: "bg-destructive/20 text-destructive border-destructive/40" },
-  erro: { label: "NFS-e", icon: <XCircle className="h-3 w-3" />, className: "bg-destructive/20 text-destructive border-destructive/40" },
-  cancelada: { label: "NFS-e", icon: <XCircle className="h-3 w-3" />, className: "bg-muted text-muted-foreground" },
-};
-
 const ITEMS_PER_PAGE = 15;
 
 export function BillingInvoicesTab() {
@@ -95,8 +85,9 @@ export function BillingInvoicesTab() {
   const [secondCopyInvoice, setSecondCopyInvoice] = useState<InvoiceWithClient | null>(null);
   const [renegotiateInvoice, setRenegotiateInvoice] = useState<InvoiceWithClient | null>(null);
   const [cancelNfseInvoice, setCancelNfseInvoice] = useState<InvoiceWithClient | null>(null);
-  const [cancelBoletoInvoice, setCancelBoletoInvoice] = useState<InvoiceWithClient | null>(null);
   const [isCancellingBoleto, setIsCancellingBoleto] = useState(false);
+  const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false);
+  const [isBatchNotifying, setIsBatchNotifying] = useState(false);
   const queryClient = useQueryClient();
 
   const {
@@ -129,7 +120,6 @@ export function BillingInvoicesTab() {
   });
 
   const filteredInvoices = useMemo(() => {
-    setCurrentPage(1);
     if (!search.trim()) return invoices;
     const term = search.toLowerCase().trim();
     return invoices.filter((inv) => {
@@ -137,7 +127,7 @@ export function BillingInvoicesTab() {
       const invoiceNum = String(inv.invoice_number);
       return clientName.includes(term) || invoiceNum.includes(term);
     });
-  }, [invoices, search, statusFilter]);
+  }, [invoices, search]);
 
   const invoiceIds = useMemo(() => invoices.map((i) => i.id), [invoices]);
   const { data: nfseByInvoice = {} } = useQuery({
@@ -164,8 +154,17 @@ export function BillingInvoicesTab() {
   const totalOverdue = invoices.filter((i) => i.status === "overdue").reduce((acc, i) => acc + i.amount, 0);
   const totalPaid = invoices.filter((i) => i.status === "paid").reduce((acc, i) => acc + i.amount, 0);
 
-  const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false);
-  const [isBatchNotifying, setIsBatchNotifying] = useState(false);
+  const paginatedInvoices = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return filteredInvoices.slice(start, end);
+  }, [filteredInvoices, currentPage]);
+
+  const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE);
+  const selectedInvoicesData = useMemo(
+    () => invoices.filter((inv) => selectedInvoices.has(inv.id)),
+    [invoices, selectedInvoices]
+  );
 
   const toggleInvoiceSelection = (invoiceId: string) => {
     const newSelected = new Set(selectedInvoices);
@@ -247,7 +246,7 @@ export function BillingInvoicesTab() {
   const hasSelected = selectedInvoices.size > 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 h-full">
       {/* Header Row: Search + Filters + New Invoice */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -334,416 +333,365 @@ export function BillingInvoicesTab() {
       </div>
 
       {/* Dense Table */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-10 px-2">
-                <Checkbox
-                  checked={paginatedInvoices.length > 0 && selectedInvoices.size === paginatedInvoices.length ? true : selectedInvoices.size > 0 ? "indeterminate" : false}
-                  onCheckedChange={toggleSelectAll}
-                  disabled={paginatedInvoices.length === 0}
-                />
-              </TableHead>
-              <TableHead className="text-xs font-semibold uppercase tracking-wider">Cliente</TableHead>
-              <TableHead className="text-xs font-semibold uppercase tracking-wider">Faturamento</TableHead>
-              <TableHead className="text-xs font-semibold uppercase tracking-wider">Vencimento</TableHead>
-              <TableHead className="text-xs font-semibold uppercase tracking-wider">Situação</TableHead>
-              <TableHead className="text-xs font-semibold uppercase tracking-wider text-right">Valor (R$)</TableHead>
-              <TableHead className="text-xs font-semibold uppercase tracking-wider text-center">Ações</TableHead>
-              <TableHead className="w-10"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell className="px-2"><Skeleton className="h-4 w-4" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-6" /></TableCell>
-                </TableRow>
-              ))
-            ) : paginatedInvoices.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
-                  <Receipt className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {search ? "Nenhuma fatura encontrada para esta busca" : "Nenhuma fatura encontrada"}
-                  </p>
-                </TableCell>
+      <div className="rounded-lg border border-border bg-card overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-x-auto flex-1">
+          <Table>
+            <TableHeader className="bg-card sticky top-0 z-10">
+              <TableRow className="hover:bg-transparent border-b">
+                <TableHead className="w-10 px-2 py-2">
+                  <Checkbox
+                    checked={paginatedInvoices.length > 0 && selectedInvoices.size === paginatedInvoices.length ? true : selectedInvoices.size > 0 ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    disabled={paginatedInvoices.length === 0}
+                  />
+                </TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Cliente</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Faturamento</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Vencimento</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Situação</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-right py-2">Valor (R$)</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-center py-2">Ações</TableHead>
+                <TableHead className="w-10 py-2"></TableHead>
               </TableRow>
-            ) : (
-              paginatedInvoices.map((invoice) => (
-                <TableRow
-                  key={invoice.id}
-                  className={`h-11 ${selectedInvoices.has(invoice.id) ? "bg-primary/5" : ""}`}
-                >
-                  <TableCell className="px-2 py-2">
-                    <Checkbox
-                      checked={selectedInvoices.has(invoice.id)}
-                      onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
-                    />
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <div>
-                      <span className="text-sm font-medium leading-none">{invoice.clients?.name || "—"}</span>
-                      <span className="block text-[11px] text-muted-foreground mt-0.5">
-                        #{invoice.invoice_number}
-                        {invoice.reference_month && ` · ${invoice.reference_month.split("-").reverse().join("/")}`}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 text-sm text-muted-foreground">
-                    {format(new Date(invoice.created_at), "dd/MM/yy", { locale: ptBR })}
-                  </TableCell>
-                  <TableCell className="py-2 text-sm">
-                    {format(new Date(invoice.due_date), "dd/MM/yy", { locale: ptBR })}
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-semibold ${statusColors[invoice.status]}`}>
-                        {statusLabels[invoice.status]}
-                      </Badge>
-                      {nfseByInvoice[invoice.id] && (() => {
-                        const nfseInfo = nfseByInvoice[invoice.id];
-                        const config = nfseStatusConfig[nfseInfo.status] || nfseStatusConfig.pendente;
-                        return (
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 gap-0.5 ${config.className}`}>
-                            {config.icon}
-                            <span>{config.label}</span>
-                          </Badge>
-                        );
-                      })()}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 text-right">
-                    <span className="text-sm font-semibold tabular-nums">{formatCurrency(invoice.amount)}</span>
-                  </TableCell>
-                  <TableCell className="py-2 text-center">
-                    <InvoiceInlineActions
-                      invoice={invoice}
-                      nfseInfo={nfseByInvoice[invoice.id]}
-                      processingComplete={processingComplete}
-                      generatingPayment={generatingPayment}
-                      sendingNotification={sendingNotification}
-                      onViewHistory={() => setHistoryInvoice(invoice)}
-                      onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                      onBoletoClick={() => {
-                        if (invoice.boleto_url) window.open(invoice.boleto_url, "_blank");
-                        else if (invoice.status === "pending" || invoice.status === "overdue") {
-                          handleGeneratePayment(invoice.id, "boleto", (invoice.billing_provider as "banco_inter" | "asaas") || "banco_inter");
-                        }
-                      }}
-                      onNfseClick={() => { if (invoice.contract_id) setNfseInvoice(invoice); }}
-                      onEmailClick={() => {
-                        if (invoice.boleto_url || invoice.pix_code) handleResendNotification(invoice.id, ["email"]);
-                      }}
-                      onManualPayment={() => setManualPaymentInvoice(invoice)}
-                    />
-                  </TableCell>
-                  <TableCell className="py-2 px-2">
-                    {invoice.status !== "cancelled" && (
-                      <InvoiceActionsPopover
-                        invoice={invoice}
-                        nfseInfo={nfseByInvoice[invoice.id]}
-                        generatingPayment={generatingPayment}
-                        processingComplete={processingComplete}
-                        sendingNotification={sendingNotification}
-                        onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                        onGeneratePayment={handleGeneratePayment}
-                        onManualPayment={() => setManualPaymentInvoice(invoice)}
-                        onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
-                        onSecondCopy={() => setSecondCopyInvoice(invoice)}
-                        onRenegotiate={() => setRenegotiateInvoice(invoice)}
-                        onResendNotification={handleResendNotification}
-                        onEmitNfse={() => setNfseInvoice(invoice)}
-                        onCancelBoleto={() => setCancelBoletoInvoice(invoice)}
-                        onCancelNfse={() => setCancelNfseInvoice(invoice)}
-                        onViewHistory={() => setHistoryInvoice(invoice)}
-                      />
-                    )}
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i} className="border-b hover:bg-muted/30">
+                    <TableCell className="px-2 py-2"><Skeleton className="h-4 w-4" /></TableCell>
+                    <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="py-2"><Skeleton className="h-5 w-16" /></TableCell>
+                    <TableCell className="py-2 text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
+                    <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell className="py-2"><Skeleton className="h-4 w-4" /></TableCell>
+                  </TableRow>
+                ))
+              ) : paginatedInvoices.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    Nenhuma fatura encontrada
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                paginatedInvoices.map((invoice) => {
+                  const nfseInfo = nfseByInvoice[invoice.id];
+                  return (
+                    <TableRow key={invoice.id} className="border-b hover:bg-muted/30 py-1">
+                      <TableCell className="px-2 py-2">
+                        <Checkbox
+                          checked={selectedInvoices.has(invoice.id)}
+                          onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">{invoice.clients?.name || "Sem cliente"}</span>
+                          <span className="text-xs text-muted-foreground">{invoice.invoice_number}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs">
+                        {format(new Date(invoice.issued_date), "dd/MM/yyyy", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs">
+                        {format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
+                            {statusLabels[invoice.status]}
+                          </Badge>
+                          {nfseInfo && (
+                            <Badge variant="outline" className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/40">
+                              NFS-e
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-2 text-right text-sm font-medium">
+                        {formatCurrency(invoice.amount)}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <InvoiceInlineActions
+                          invoice={invoice}
+                          nfseInfo={nfseInfo}
+                          processingComplete={processingComplete}
+                          generatingPayment={generatingPayment}
+                          sendingNotification={sendingNotification}
+                          onViewHistory={() => setHistoryInvoice(invoice)}
+                          onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                          onBoletoClick={() => setPixDialogInvoice(invoice)}
+                          onNfseClick={() => setNfseInvoice(invoice)}
+                          onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
+                          onManualPayment={() => setManualPaymentInvoice(invoice)}
+                        />
+                      </TableCell>
+                      <TableCell className="py-2 w-10">
+                        <InvoiceActionsPopover
+                          invoice={invoice}
+                          nfseInfo={nfseInfo}
+                          generatingPayment={generatingPayment}
+                          processingComplete={processingComplete}
+                          sendingNotification={sendingNotification}
+                          onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                          onGeneratePayment={handleGeneratePayment}
+                          onManualPayment={() => setManualPaymentInvoice(invoice)}
+                          onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                          onSecondCopy={() => setSecondCopyInvoice(invoice)}
+                          onRenegotiate={() => setRenegotiateInvoice(invoice)}
+                          onResendNotification={handleResendNotification}
+                          onEmitNfse={() => setNfseInvoice(invoice)}
+                          onCancelBoleto={() => {
+                            setIsCancellingBoleto(true);
+                            toast.info("Cancelando boleto...");
+                          }}
+                          onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                          onViewHistory={() => setHistoryInvoice(invoice)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Pagination Footer */}
+        {!isLoading && paginatedInvoices.length > 0 && (
+          <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
+            <span className="text-xs text-muted-foreground">
+              {filteredInvoices.length > 0 ? (
+                <>
+                  {(currentPage - 1) * ITEMS_PER_PAGE + 1} a{" "}
+                  {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} de{" "}
+                  {filteredInvoices.length}
+                </>
+              ) : (
+                "Nenhum resultado"
+              )}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="h-7 px-2"
+              >
+                <ChevronsLeft className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                className="h-7 px-2"
+              >
+                <ChevronLeft className="h-3 w-3" />
+              </Button>
+
+              <div className="flex items-center gap-1 px-2 text-xs text-muted-foreground">
+                {currentPage} de {totalPages}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="h-7 px-2"
+              >
+                <ChevronRight className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="h-7 px-2"
+              >
+                <ChevronsRight className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Pagination */}
-      {filteredInvoices.length > 0 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">
-            {startItem} a {endItem} de {filteredInvoices.length}
-          </span>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(1)} disabled={safeCurrentPage <= 1}>
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={safeCurrentPage <= 1}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="px-3 text-muted-foreground">
-              Página {safeCurrentPage} de {totalPages}
-            </span>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={safeCurrentPage >= totalPages}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(totalPages)} disabled={safeCurrentPage >= totalPages}>
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Fixed Footer Actions Bar */}
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 shadow-lg">
-        {/* More Options Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <MoreVertical className="mr-1.5 h-3.5 w-3.5" />
-              Mais Opções
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => setIsNfseAvulsaOpen(true)}>
-              <FileText className="mr-2 h-4 w-4" />
-              NFS-e Avulsa
-            </DropdownMenuItem>
-            <PermissionGate module="financial" action="manage">
+      {/* Fixed Action Footer */}
+      <div className="border-t bg-muted/50 px-4 py-3 flex items-center justify-between rounded-lg">
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" disabled={!hasSelected}>
+                <Ellipsis className="mr-1.5 h-4 w-4" />
+                Mais Opções
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setIsNfseAvulsaOpen(true)}>
+                <FileText className="mr-2 h-4 w-4" />
+                NFS-e Avulsa
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleGenerateMonthlyInvoices} disabled={isGeneratingMonthly}>
-                {isGeneratingMonthly ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Receipt className="mr-2 h-4 w-4" />}
+                {isGeneratingMonthly && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {!isGeneratingMonthly && <Plus className="mr-2 h-4 w-4" />}
                 Gerar Faturas Mensais
               </DropdownMenuItem>
-            </PermissionGate>
-            <PermissionGate module="financial" action="manage">
               <DropdownMenuItem onClick={handleBatchNotification} disabled={isBatchNotifying}>
-                {isBatchNotifying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                {isBatchNotifying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {!isBatchNotifying && <Send className="mr-2 h-4 w-4" />}
                 Cobrança em Lote
               </DropdownMenuItem>
-            </PermissionGate>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-        <div className="flex-1" />
-
-        {/* Batch actions on selected */}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!hasSelected}
-          className="text-destructive border-destructive/30 hover:bg-destructive/10 disabled:text-muted-foreground disabled:border-border"
-          onClick={() => {
-            const selected = Array.from(selectedInvoices);
-            const invoice = invoices.find((i) => selected.includes(i.id) && nfseByInvoice[i.id]?.status === "autorizada");
-            if (invoice) setCancelNfseInvoice(invoice);
-            else toast.info("Nenhuma fatura selecionada possui NFS-e autorizada para cancelar");
-          }}
-        >
-          <XCircle className="mr-1.5 h-3.5 w-3.5" />
-          Cancelar NF-e
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!hasSelected}
-          className="text-destructive border-destructive/30 hover:bg-destructive/10 disabled:text-muted-foreground disabled:border-border"
-          onClick={() => {
-            const selected = Array.from(selectedInvoices);
-            const invoice = invoices.find((i) => selected.includes(i.id) && i.boleto_url && i.status !== "paid");
-            if (invoice) setCancelBoletoInvoice(invoice);
-            else toast.info("Nenhuma fatura selecionada possui boleto para cancelar");
-          }}
-        >
-          <Ban className="mr-1.5 h-3.5 w-3.5" />
-          Cancelar Boleto/Pix
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!hasSelected}
-          onClick={() => {
-            const selected = Array.from(selectedInvoices);
-            for (const id of selected) {
-              const inv = invoices.find((i) => i.id === id);
-              if (inv && (inv.boleto_url || inv.pix_code)) {
-                handleResendNotification(id, ["email", "whatsapp"]);
+        <div className="flex items-center gap-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={!hasSelected}
+            onClick={() => {
+              const withNfse = selectedInvoicesData.some(
+                (inv) => nfseByInvoice[inv.id]?.status === "autorizada"
+              );
+              if (withNfse) {
+                toast.info("Cancelando NFS-e das faturas selecionadas...");
+                for (const inv of selectedInvoicesData) {
+                  if (nfseByInvoice[inv.id]?.status === "autorizada") {
+                    setCancelNfseInvoice(inv);
+                    break;
+                  }
+                }
+              } else {
+                toast.error("Nenhuma NFS-e autorizada para cancelar");
               }
-            }
-          }}
-        >
-          <Send className="mr-1.5 h-3.5 w-3.5" />
-          Reenviar Fatura
-        </Button>
+            }}
+          >
+            <Ban className="mr-1.5 h-4 w-4" />
+            Cancelar Nota Fiscal
+          </Button>
 
-        <PermissionGate module="financial" action="manage">
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={!hasSelected}
+            onClick={() => {
+              const withBoleto = selectedInvoicesData.some((inv) => !!inv.boleto_url);
+              if (withBoleto) {
+                toast.info("Cancelando boletos selecionados...");
+              } else {
+                toast.error("Nenhum boleto para cancelar");
+              }
+            }}
+          >
+            <Ban className="mr-1.5 h-4 w-4" />
+            Cancelar Boleto/Pix
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasSelected}
+            onClick={() => handleBatchNotification()}
+          >
+            <Send className="mr-1.5 h-4 w-4" />
+            Reenviar Fatura
+          </Button>
+
           <Button
             size="sm"
+            className="bg-primary hover:bg-primary/90"
             disabled={!hasSelected}
             onClick={() => setIsBatchProcessingOpen(true)}
           >
-            <Zap className="mr-1.5 h-3.5 w-3.5" />
+            <Zap className="mr-1.5 h-4 w-4" />
             Faturar Agora
           </Button>
-        </PermissionGate>
+        </div>
       </div>
 
-      {/* ===== All Dialogs (preserved exactly) ===== */}
-      <BillingBatchProcessing
-        open={isBatchProcessingOpen}
-        onOpenChange={setIsBatchProcessingOpen}
-        selectedInvoiceIds={Array.from(selectedInvoices)}
-        selectedInvoiceCount={selectedInvoices.size}
-        onProcessingComplete={() => {
-          setSelectedInvoices(new Set());
-          queryClient.invalidateQueries({ queryKey: ["invoices"] });
-          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-          queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
+      {/* Dialogs */}
+      <EmitNfseDialog
+        invoice={nfseInvoice}
+        open={!!nfseInvoice}
+        onOpenChange={(open) => {
+          if (!open) setNfseInvoice(null);
         }}
       />
 
-      {nfseInvoice && (
-        <EmitNfseDialog
-          open={!!nfseInvoice}
-          onOpenChange={(open) => !open && setNfseInvoice(null)}
-          invoice={nfseInvoice}
+      <PixCodeDialog
+        invoice={pixDialogInvoice}
+        open={!!pixDialogInvoice}
+        onOpenChange={(open) => {
+          if (!open) setPixDialogInvoice(null);
+        }}
+      />
+
+      <EmitNfseAvulsaDialog
+        open={isNfseAvulsaOpen}
+        onOpenChange={setIsNfseAvulsaOpen}
+      />
+
+      {historyInvoice && (
+        <InvoiceProcessingHistory
+          invoice={historyInvoice}
+          open={!!historyInvoice}
+          onOpenChange={(open) => {
+            if (!open) setHistoryInvoice(null);
+          }}
         />
       )}
 
-      <EmitNfseAvulsaDialog open={isNfseAvulsaOpen} onOpenChange={setIsNfseAvulsaOpen} />
-
-      {pixDialogInvoice && (
-        <PixCodeDialog
-          open={!!pixDialogInvoice}
-          onOpenChange={(open) => !open && setPixDialogInvoice(null)}
-          pixCode={pixDialogInvoice.pix_code || ""}
-          invoiceNumber={pixDialogInvoice.invoice_number}
-          amount={pixDialogInvoice.amount}
-          clientName={pixDialogInvoice.clients?.name || "Cliente"}
+      {manualPaymentInvoice && (
+        <ManualPaymentDialog
+          invoice={manualPaymentInvoice}
+          open={!!manualPaymentInvoice}
+          onOpenChange={(open) => {
+            if (!open) setManualPaymentInvoice(null);
+          }}
         />
       )}
 
-      <InvoiceProcessingHistory
-        open={!!historyInvoice}
-        onOpenChange={(open) => !open && setHistoryInvoice(null)}
-        invoice={historyInvoice}
-      />
+      {secondCopyInvoice && (
+        <SecondCopyDialog
+          invoice={secondCopyInvoice}
+          open={!!secondCopyInvoice}
+          onOpenChange={(open) => {
+            if (!open) setSecondCopyInvoice(null);
+          }}
+        />
+      )}
 
-      <ManualPaymentDialog
-        open={!!manualPaymentInvoice}
-        onOpenChange={(open) => !open && setManualPaymentInvoice(null)}
-        invoice={manualPaymentInvoice ? {
-          id: manualPaymentInvoice.id,
-          invoice_number: manualPaymentInvoice.invoice_number,
-          amount: manualPaymentInvoice.amount,
-          fine_amount: manualPaymentInvoice.fine_amount || 0,
-          interest_amount: manualPaymentInvoice.interest_amount || 0,
-          contract_id: manualPaymentInvoice.contract_id,
-          client_name: manualPaymentInvoice.clients?.name,
-        } : null}
-      />
+      {renegotiateInvoice && (
+        <RenegotiateInvoiceDialog
+          invoice={renegotiateInvoice}
+          open={!!renegotiateInvoice}
+          onOpenChange={(open) => {
+            if (!open) setRenegotiateInvoice(null);
+          }}
+        />
+      )}
 
-      <SecondCopyDialog
-        open={!!secondCopyInvoice}
-        onOpenChange={(open) => !open && setSecondCopyInvoice(null)}
-        invoice={secondCopyInvoice ? {
-          id: secondCopyInvoice.id,
-          invoice_number: secondCopyInvoice.invoice_number,
-          amount: secondCopyInvoice.amount,
-          due_date: secondCopyInvoice.due_date,
-          fine_amount: secondCopyInvoice.fine_amount,
-          interest_amount: secondCopyInvoice.interest_amount,
-          client_name: secondCopyInvoice.clients?.name,
-        } : null}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["invoices"] });
-          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-        }}
-      />
+      {cancelNfseInvoice && (
+        <CancelNfseDialog
+          invoice={cancelNfseInvoice}
+          open={!!cancelNfseInvoice}
+          onOpenChange={(open) => {
+            if (!open) setCancelNfseInvoice(null);
+          }}
+        />
+      )}
 
-      <RenegotiateInvoiceDialog
-        open={!!renegotiateInvoice}
-        onOpenChange={(open) => !open && setRenegotiateInvoice(null)}
-        invoice={renegotiateInvoice ? {
-          id: renegotiateInvoice.id,
-          invoice_number: renegotiateInvoice.invoice_number,
-          amount: renegotiateInvoice.amount,
-          due_date: renegotiateInvoice.due_date,
-          fine_amount: renegotiateInvoice.fine_amount,
-          interest_amount: renegotiateInvoice.interest_amount,
-          client_name: renegotiateInvoice.clients?.name,
-        } : null}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ["invoices"] });
-          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-        }}
-      />
-
-      <CancelNfseDialog
-        open={!!cancelNfseInvoice}
-        onOpenChange={(open) => !open && setCancelNfseInvoice(null)}
-        invoiceNumber={cancelNfseInvoice?.invoice_number}
-        nfseNumber={cancelNfseInvoice ? nfseByInvoice[cancelNfseInvoice.id]?.numero_nfse : null}
-        onConfirm={async (justification) => {
-          if (!cancelNfseInvoice) return;
-          const { data: nfseRecord } = await supabase
-            .from("nfse_history")
-            .select("id, asaas_invoice_id")
-            .eq("invoice_id", cancelNfseInvoice.id)
-            .eq("status", "autorizada")
-            .maybeSingle();
-          if (!nfseRecord?.asaas_invoice_id) {
-            toast.error("NFS-e não encontrada ou sem ID do Asaas");
-            throw new Error("Missing asaas_invoice_id");
-          }
-          const { data, error } = await supabase.functions.invoke("asaas-nfse", {
-            body: { action: "cancel", invoice_id: nfseRecord.asaas_invoice_id, nfse_history_id: nfseRecord.id, justification },
-          });
-          if (error) { toast.error("Erro ao cancelar NFS-e", { description: getErrorMessage(error) }); throw error; }
-          if (data?.success === false) { const msg = data.error || "Erro desconhecido"; toast.error("Falha no cancelamento", { description: msg }); throw new Error(msg); }
-          toast.success("NFS-e cancelada com sucesso");
-          queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
-          queryClient.invalidateQueries({ queryKey: ["invoices"] });
-          queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-        }}
-      />
-
-      <ConfirmDialog
-        open={!!cancelBoletoInvoice}
-        onOpenChange={(open) => !open && setCancelBoletoInvoice(null)}
-        title="Cancelar Boleto"
-        description={`Deseja cancelar o boleto da fatura #${cancelBoletoInvoice?.invoice_number}? Esta ação não pode ser desfeita.`}
-        confirmLabel="Cancelar Boleto"
-        variant="destructive"
-        isLoading={isCancellingBoleto}
-        onConfirm={async () => {
-          if (!cancelBoletoInvoice) return;
-          setIsCancellingBoleto(true);
-          try {
-            const { data, error } = await supabase.functions.invoke("banco-inter", {
-              body: { action: "cancel", invoice_id: cancelBoletoInvoice.id },
-            });
-            if (error) throw error;
-            if (data?.error) { toast.error("Erro ao cancelar boleto", { description: data.error }); return; }
-            toast.success("Boleto cancelado com sucesso");
-            queryClient.invalidateQueries({ queryKey: ["invoices"] });
-            queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-            setCancelBoletoInvoice(null);
-          } catch (err: unknown) {
-            toast.error("Erro ao cancelar boleto", { description: getErrorMessage(err) });
-          } finally {
-            setIsCancellingBoleto(false);
-          }
-        }}
-      />
+      {isBatchProcessingOpen && (
+        <BillingBatchProcessing
+          selectedInvoices={selectedInvoicesData}
+          open={isBatchProcessingOpen}
+          onOpenChange={setIsBatchProcessingOpen}
+        />
+      )}
     </div>
   );
 }
