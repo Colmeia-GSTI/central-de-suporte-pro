@@ -30,7 +30,7 @@ const invoiceSchema = z.object({
   contract_id: z.string().optional(),
   amount: z.coerce.number().min(0.01, "Valor deve ser maior que zero"),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  billing_provider: z.enum(["", "banco_inter", "asaas"]).optional(),
+  billing_provider: z.enum(["default", "banco_inter", "asaas"]).optional(),
   notes: z.string().optional(),
 });
 
@@ -52,7 +52,7 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       contract_id: "",
       amount: 0,
       due_date: "",
-      billing_provider: "",
+      billing_provider: "default",
       notes: "",
     },
   });
@@ -97,7 +97,7 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const mutation = useMutation({
     mutationFn: async (data: InvoiceFormData) => {
       // Determine billing_provider: use form value if set, otherwise inherit from contract or null
-      let billingProvider = data.billing_provider || null;
+      let billingProvider = data.billing_provider === "default" ? null : (data.billing_provider || null);
       if (!billingProvider && data.contract_id) {
         const contract = contracts.find((c) => c.id === data.contract_id);
         billingProvider = (contract as any)?.billing_provider || null;
@@ -237,7 +237,7 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">Padrão do contrato</SelectItem>
+                  <SelectItem value="default">Padrão do contrato</SelectItem>
                   <SelectItem value="banco_inter">Banco Inter</SelectItem>
                   <SelectItem value="asaas">Asaas</SelectItem>
                 </SelectContent>
