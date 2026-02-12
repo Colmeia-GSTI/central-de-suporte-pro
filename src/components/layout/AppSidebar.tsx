@@ -323,12 +323,12 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t border-sidebar-border bg-sidebar-accent/20">
+      <SidebarFooter className="p-3 border-t border-sidebar-border bg-sidebar-accent/20">
         {profile && (
           <Link
             to="/profile"
             className={cn(
-              "flex items-center gap-3 mb-3 p-3 rounded-lg transition-all duration-300",
+              "flex items-center gap-2 mb-2 p-2 rounded-lg transition-all duration-300",
               "hover:bg-sidebar-accent hover:shadow-sm active:scale-[0.98]",
               "group cursor-pointer"
             )}
@@ -336,10 +336,10 @@ export function AppSidebar() {
           >
             <div className="relative flex-shrink-0">
               <div className={cn(
-                "absolute -inset-0.5 rounded-full opacity-75 blur-sm bg-gradient-to-r",
+                "absolute -inset-0.5 rounded-full opacity-50 blur-[2px] bg-gradient-to-r",
                 getRoleColor()
               )} />
-              <Avatar className="h-10 w-10 relative border-2 border-sidebar-background">
+              <Avatar className="h-8 w-8 relative border-2 border-sidebar-background">
                 <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name} />
                 <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs font-semibold">
                   {getInitials(profile.full_name)}

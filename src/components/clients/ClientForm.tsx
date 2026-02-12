@@ -42,6 +42,7 @@ const clientSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   zip_code: z.string().optional(),
+  state_registration: z.string().optional(),
   notes: z.string().optional(),
   is_active: z.boolean().default(true),
 });
@@ -94,6 +95,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       city: client?.city || "",
       state: client?.state || "",
       zip_code: formatCEP(client?.zip_code) || "",
+      state_registration: (client as any)?.state_registration || "",
       notes: client?.notes || "",
       is_active: client?.is_active ?? true,
     },
@@ -282,6 +284,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         name: data.name,
         trade_name: data.trade_name || null,
         document: data.document || null,
+        state_registration: data.state_registration || null,
         email: data.email || null,
         financial_email: data.financial_email || null,
         phone: data.phone?.replace(/\D/g, "") || null,
@@ -428,7 +431,23 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
             />
           )}
 
-          <FormField
+          {/* Inscrição Estadual - hidden for technicians */}
+          {!isTechnicianOnly && (
+            <FormField
+              control={form.control}
+              name="state_registration"
+              render={({ field }) => (
+                <FormItem className="col-span-2 sm:col-span-1">
+                  <FormLabel>Inscrição Estadual</FormLabel>
+                  <FormControl>
+                    <Input placeholder="000.000.000.000" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
             control={form.control}
             name="name"
             render={({ field }) => (
