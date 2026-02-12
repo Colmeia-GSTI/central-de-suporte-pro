@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Trash2, Package, History } from "lucide-react";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Tooltip,
   TooltipContent,
@@ -75,6 +76,7 @@ export function ContractServicesSection({
   const [services, setServices] = useState<ContractService[]>(initialServices);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
+  const [unitValue, setUnitValue] = useState<number>(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // Keep track of original services for comparison
@@ -131,29 +133,30 @@ export function ContractServicesSection({
     const service = availableServices.find((s) => s.id === selectedServiceId);
     if (!service) return;
 
+    const finalUnitValue = unitValue > 0 ? unitValue : service.base_value * service.multiplier;
+
     // Check if service already exists
     const existingIndex = services.findIndex((s) => s.service_id === selectedServiceId);
     if (existingIndex >= 0) {
-      // Update quantity instead of adding new
       const updated = [...services];
       updated[existingIndex].quantity += quantity;
-      updated[existingIndex].subtotal = updated[existingIndex].quantity * updated[existingIndex].unit_value;
+      updated[existingIndex].unit_value = finalUnitValue;
+      updated[existingIndex].subtotal = updated[existingIndex].quantity * finalUnitValue;
       setServices(updated);
     } else {
-      const unitValue = service.base_value * service.multiplier;
       const newService: ContractService = {
         service_id: service.id,
         service_name: service.name,
         quantity: quantity,
-        unit_value: unitValue,
-        subtotal: unitValue * quantity,
+        unit_value: finalUnitValue,
+        subtotal: finalUnitValue * quantity,
       };
       setServices([...services, newService]);
     }
 
-    // Reset form
     setSelectedServiceId("");
     setQuantity(1);
+    setUnitValue(0);
   };
 
   const handleRemoveService = (serviceId: string) => {
@@ -166,6 +169,16 @@ export function ContractServicesSection({
       services.map((s) =>
         s.service_id === serviceId
           ? { ...s, quantity: newQuantity, subtotal: s.unit_value * newQuantity }
+          : s
+      )
+    );
+  };
+
+  const handleUnitValueChange = (serviceId: string, newValue: number) => {
+    setServices(
+      services.map((s) =>
+        s.service_id === serviceId
+          ? { ...s, unit_value: newValue, subtotal: newValue * s.quantity }
           : s
       )
     );
@@ -254,10 +267,14 @@ export function ContractServicesSection({
       </div>
 
       {/* Add Service Form */}
-      <div className="flex items-end gap-2 p-4 rounded-lg border bg-muted/30">
-        <div className="flex-1">
+      <div className="flex items-end gap-2 p-4 rounded-lg border bg-muted/30 flex-wrap">
+        <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-1 block">Serviço</label>
-          <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+          <Select value={selectedServiceId} onValueChange={(val) => {
+            setSelectedServiceId(val);
+            const svc = availableServices.find((s) => s.id === val);
+            if (svc) setUnitValue(svc.base_value * svc.multiplier);
+          }}>
             <SelectTrigger>
               <SelectValue placeholder="Selecione um serviço" />
             </SelectTrigger>
@@ -277,6 +294,14 @@ export function ContractServicesSection({
             min="1"
             value={quantity}
             onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+          />
+        </div>
+        <div className="w-36">
+          <label className="text-sm font-medium mb-1 block">Valor Unit.</label>
+          <CurrencyInput
+            value={unitValue}
+            onChange={setUnitValue}
+            disabled={!selectedServiceId}
           />
         </div>
         <Button
@@ -317,8 +342,12 @@ export function ContractServicesSection({
                       className="w-20 text-center"
                     />
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {formatCurrencyBRLWithSymbol(service.unit_value)}
+                  <TableCell>
+                    <CurrencyInput
+                      value={service.unit_value}
+                      onChange={(val) => handleUnitValueChange(service.service_id, val)}
+                      className="w-28 text-right"
+                    />
                   </TableCell>
                   <TableCell className="text-right font-mono font-semibold">
                     {formatCurrencyBRLWithSymbol(service.subtotal)}
