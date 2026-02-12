@@ -1,45 +1,31 @@
 
 
-# Ajustes: Perfil na Sidebar + Inscricao Estadual no Cadastro de Clientes
+# Compactar Perfil na Sidebar: Avatar + Nome + Sair em uma unica linha
 
-## 1. Perfil do Usuario na Sidebar (muito grande)
+## Objetivo
+Reduzir drasticamente o espaco do perfil no rodape da sidebar, colocando avatar, nome e botao "Sair" todos na mesma linha.
 
-O bloco do perfil no rodape da sidebar (`SidebarFooter`) ocupa espaco excessivo devido ao padding generoso (`p-4`, `p-3`), o efeito de glow no avatar, e o tamanho do avatar (`h-10 w-10`).
+## Layout Proposto
 
-### Alteracoes em `src/components/layout/AppSidebar.tsx`:
-- Reduzir padding do footer de `p-4` para `p-3`
-- Reduzir padding do link do perfil de `p-3` para `p-2`
-- Reduzir margem inferior de `mb-3` para `mb-2`
-- Reduzir avatar de `h-10 w-10` para `h-8 w-8`
-- Reduzir o efeito de glow (`blur-sm`) para ser mais sutil
-- Manter nome, badge de role e botao Sair funcionais
-
----
-
-## 2. Campo "Inscricao Estadual" no Cadastro de Clientes
-
-Atualmente a tabela `clients` nao possui coluna para Inscricao Estadual. Sera necessario:
-
-### 2a. Migracao de banco de dados
-- Adicionar coluna `state_registration` (TEXT, nullable) na tabela `clients`
-
-### 2b. Alteracoes em `src/components/clients/ClientForm.tsx`:
-- Adicionar `state_registration` ao schema Zod (string opcional)
-- Adicionar valor default no `useForm`
-- Adicionar campo no formulario logo abaixo do CNPJ/CPF
-- Incluir `state_registration` no payload de submit da mutation
-- Preencher automaticamente via consulta CNPJ (se disponivel na API)
-
-### Detalhes tecnicos
-
-**Coluna no banco:**
-```sql
-ALTER TABLE public.clients ADD COLUMN state_registration TEXT;
+```text
+[ Avatar(6) ]  Nome do Usuario  [ Sair icon ]
+               Badge Role
 ```
 
-**Campo no formulario:**
-- Label: "Inscricao Estadual"
-- Placeholder: "000.000.000.000"
-- Posicao: na mesma linha do CNPJ/CPF ou logo abaixo
-- Visibilidade: oculto para tecnicos (mesmo comportamento do CNPJ)
+Tudo em uma unica area compacta, sem o bloco separado do botao "Sair".
+
+## Alteracoes em `src/components/layout/AppSidebar.tsx`
+
+### SidebarFooter (linhas 325-383):
+- Reduzir padding do footer para `p-2`
+- Remover `mb-2` do link do perfil (nao precisa mais de margem pois o botao Sair sera inline)
+- Reduzir avatar para `h-6 w-6` e remover o efeito de glow completamente
+- Mover o botao "Sair" (icone LogOut) para dentro da mesma linha do perfil, alinhado a direita
+- Remover o bloco `SidebarMenu` separado do botao Sair
+- O icone LogOut fica como um botao pequeno no canto direito da linha do perfil
+- Manter o link para `/profile` no avatar e nome
+- O badge de role fica abaixo do nome em tamanho menor
+
+### Resultado esperado:
+O footer passa de ~3 linhas visuais (perfil + espaco + botao sair) para ~1.5 linhas (avatar + nome/badge + icone sair), economizando cerca de 50% do espaco vertical.
 
