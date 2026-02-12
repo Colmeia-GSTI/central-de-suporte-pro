@@ -323,63 +323,52 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="p-3 border-t border-sidebar-border bg-sidebar-accent/20">
+      <SidebarFooter className="p-2 border-t border-sidebar-border bg-sidebar-accent/20">
         {profile && (
-          <Link
-            to="/profile"
-            className={cn(
-              "flex items-center gap-2 mb-2 p-2 rounded-lg transition-all duration-300",
-              "hover:bg-sidebar-accent hover:shadow-sm active:scale-[0.98]",
-              "group cursor-pointer"
-            )}
-            title={`Ir para perfil de ${profile.full_name}`}
-          >
-            <div className="relative flex-shrink-0">
-              <div className={cn(
-                "absolute -inset-0.5 rounded-full opacity-50 blur-[2px] bg-gradient-to-r",
-                getRoleColor()
-              )} />
-              <Avatar className="h-8 w-8 relative border-2 border-sidebar-background">
+          <div className="flex items-center gap-2">
+            <Link
+              to="/profile"
+              className={cn(
+                "flex items-center gap-2 flex-1 min-w-0 p-1.5 rounded-lg transition-all duration-300",
+                "hover:bg-sidebar-accent active:scale-[0.98]",
+                "group cursor-pointer"
+              )}
+              title={`Ir para perfil de ${profile.full_name}`}
+            >
+              <Avatar className="h-6 w-6 flex-shrink-0">
                 <AvatarImage src={profile.avatar_url || undefined} alt={profile.full_name} />
-                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-xs font-semibold">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-primary-foreground text-[10px] font-semibold">
                   {getInitials(profile.full_name)}
                 </AvatarFallback>
               </Avatar>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate group-hover:text-sidebar-primary transition-colors">
-                {profile.full_name}
-              </p>
-              <Badge
-                variant="secondary"
-                className={cn(
-                  "text-[10px] px-2 py-0 h-4 mt-0.5 bg-gradient-to-r text-white border-0",
-                  getRoleColor()
-                )}
-                title={`Função: ${getRoleBadge()}`}
-              >
-                {getRoleBadge()}
-              </Badge>
-            </div>
-          </Link>
-        )}
-
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-sidebar-foreground truncate group-hover:text-sidebar-primary transition-colors">
+                  {profile.full_name}
+                </p>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-[9px] px-1.5 py-0 h-3.5 bg-gradient-to-r text-white border-0",
+                    getRoleColor()
+                  )}
+                  title={`Função: ${getRoleBadge()}`}
+                >
+                  {getRoleBadge()}
+                </Badge>
+              </div>
+            </Link>
+            <button
               onClick={signOut}
               className={cn(
-                "text-destructive hover:text-destructive",
-                "hover:bg-destructive/10 transition-all duration-300",
-                "active:scale-[0.98]"
+                "p-1.5 rounded-md flex-shrink-0 transition-all duration-300",
+                "text-destructive hover:bg-destructive/10 active:scale-[0.95]"
               )}
               title="Sair do sistema"
             >
               <LogOut className="h-4 w-4" />
-              <span>Sair</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+            </button>
+          </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   );
