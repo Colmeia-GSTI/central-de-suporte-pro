@@ -448,6 +448,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
             />
           )}
 
+          <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
