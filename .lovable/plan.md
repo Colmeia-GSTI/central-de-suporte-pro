@@ -1,52 +1,45 @@
 
 
-# Correcao do Erro "Cannot read properties of null (reading 'due_date')"
+# Ajustes: Perfil na Sidebar + Inscricao Estadual no Cadastro de Clientes
 
-## Causa Raiz
+## 1. Perfil do Usuario na Sidebar (muito grande)
 
-O componente `EmitNfseDialog` e renderizado **sempre** no JSX do `BillingInvoicesTab.tsx`, mesmo quando `nfseInvoice` e `null`. Dentro do `EmitNfseDialog` (linha 60), o `useState` tenta acessar `invoice.due_date` imediatamente durante a montagem do componente:
+O bloco do perfil no rodape da sidebar (`SidebarFooter`) ocupa espaco excessivo devido ao padding generoso (`p-4`, `p-3`), o efeito de glow no avatar, e o tamanho do avatar (`h-10 w-10`).
 
-```typescript
-const [competenciaDate, setCompetenciaDate] = useState<Date>(() => {
-  return new Date(invoice.due_date); // CRASH: invoice e null
-});
+### Alteracoes em `src/components/layout/AppSidebar.tsx`:
+- Reduzir padding do footer de `p-4` para `p-3`
+- Reduzir padding do link do perfil de `p-3` para `p-2`
+- Reduzir margem inferior de `mb-3` para `mb-2`
+- Reduzir avatar de `h-10 w-10` para `h-8 w-8`
+- Reduzir o efeito de glow (`blur-sm`) para ser mais sutil
+- Manter nome, badge de role e botao Sair funcionais
+
+---
+
+## 2. Campo "Inscricao Estadual" no Cadastro de Clientes
+
+Atualmente a tabela `clients` nao possui coluna para Inscricao Estadual. Sera necessario:
+
+### 2a. Migracao de banco de dados
+- Adicionar coluna `state_registration` (TEXT, nullable) na tabela `clients`
+
+### 2b. Alteracoes em `src/components/clients/ClientForm.tsx`:
+- Adicionar `state_registration` ao schema Zod (string opcional)
+- Adicionar valor default no `useForm`
+- Adicionar campo no formulario logo abaixo do CNPJ/CPF
+- Incluir `state_registration` no payload de submit da mutation
+- Preencher automaticamente via consulta CNPJ (se disponivel na API)
+
+### Detalhes tecnicos
+
+**Coluna no banco:**
+```sql
+ALTER TABLE public.clients ADD COLUMN state_registration TEXT;
 ```
 
-O Radix Dialog monta o componente filho mesmo com `open={false}`, o que causa o crash fatal.
-
-## Correcao
-
-### Arquivo: `src/components/billing/BillingInvoicesTab.tsx`
-
-Adicionar um guard para nao renderizar o componente quando `nfseInvoice` for null:
-
-**Antes:**
-```tsx
-<EmitNfseDialog
-  invoice={nfseInvoice}
-  open={!!nfseInvoice}
-  onOpenChange={(open) => {
-    if (!open) setNfseInvoice(null);
-  }}
-/>
-```
-
-**Depois:**
-```tsx
-{nfseInvoice && (
-  <EmitNfseDialog
-    invoice={nfseInvoice}
-    open={true}
-    onOpenChange={(open) => {
-      if (!open) setNfseInvoice(null);
-    }}
-  />
-)}
-```
-
-O mesmo padrao sera aplicado a outros dialogs que possam ter o mesmo problema (`PixCodeDialog`, `ManualPaymentDialog`, `SecondCopyDialog`, `RenegotiateInvoiceDialog`, etc.) para prevenir crashes similares.
-
-### Verificacao Adicional
-
-Revisar todos os dialogs renderizados no final do `BillingInvoicesTab` para garantir que nenhum acessa propriedades de objetos potencialmente null durante a montagem.
+**Campo no formulario:**
+- Label: "Inscricao Estadual"
+- Placeholder: "000.000.000.000"
+- Posicao: na mesma linha do CNPJ/CPF ou logo abaixo
+- Visibilidade: oculto para tecnicos (mesmo comportamento do CNPJ)
 
