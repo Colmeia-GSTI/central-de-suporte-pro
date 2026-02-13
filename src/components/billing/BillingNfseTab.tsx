@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -48,10 +48,12 @@ import {
   formatCompetenciaLabel,
   formatDateTime,
   formatElapsedTime,
+  formatNfseErrorMessage,
   statusLabel,
   type NfseStatus,
   ASAAS_STATUS_LABELS,
 } from "@/components/billing/nfse/nfseFormat";
+import { NfseLinkExternalDialog } from "@/components/billing/nfse/NfseLinkExternalDialog";
 import { NfseProcessingStatusCell } from "@/components/billing/nfse/NfseProcessingIndicator";
 
 const ITEMS_PER_PAGE = 15;
@@ -125,6 +127,8 @@ export function BillingNfseTab() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selected, setSelected] = useState<NfseWithRelations | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [linkExternalNfse, setLinkExternalNfse] = useState<NfseWithRelations | null>(null);
 
   const currentYear = new Date().getFullYear();
   const [reportYear, setReportYear] = useState(String(currentYear));
@@ -297,6 +301,30 @@ export function BillingNfseTab() {
       toast.error("Erro ao verificar status", { description: getErrorMessage(e) });
     } finally {
       setCheckingStatus(false);
+    }
+  };
+
+  const handleQuickReprocess = async (nfse: NfseWithRelations) => {
+    setReprocessingId(nfse.id);
+    try {
+      // Update local status to "processando"
+      await supabase.from("nfse_history").update({ status: "processando" }).eq("id", nfse.id);
+
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+        body: {
+          action: "emit",
+          nfse_history_id: nfse.id,
+          invoice_id: nfse.invoice_id,
+        },
+      });
+      if (error) throw error;
+      toast.success("NFS-e reenviada para processamento");
+      queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro ao reprocessar NFS-e", { description: getErrorMessage(e) });
+    } finally {
+      setReprocessingId(null);
     }
   };
 
@@ -532,22 +560,27 @@ export function BillingNfseTab() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  nfseList.map((n) => (
-                    <TableRow
-                      key={n.id}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setSelected(n);
-                        setDetailsOpen(true);
-                      }}
-                    >
-                      <TableCell className="font-mono font-medium">{n.numero_nfse || "-"}</TableCell>
-                      <TableCell>{n.clients?.name || "-"}</TableCell>
-                      <TableCell>{n.contracts?.name || "-"}</TableCell>
-                      <TableCell>{formatCompetenciaLabel(n.competencia)}</TableCell>
-                      <TableCell className="text-right">{formatCurrencyBRL(n.valor_servico)}</TableCell>
-                      <TableCell>{statusBadge(n.status as NfseStatus, n)}</TableCell>
-                      <TableCell>{formatDateTime(n.data_emissao)}</TableCell>
+                  nfseList.map((n) => {
+                    const hasError = (n.status === "erro" || n.status === "rejeitada") && n.mensagem_retorno;
+                    const parsed = hasError ? formatNfseErrorMessage(n.mensagem_retorno) : null;
+                    const isReprocessing = reprocessingId === n.id;
+
+                    return (
+                      <React.Fragment key={n.id}>
+                        <TableRow
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setSelected(n);
+                            setDetailsOpen(true);
+                          }}
+                        >
+                          <TableCell className="font-mono font-medium">{n.numero_nfse || "-"}</TableCell>
+                          <TableCell>{n.clients?.name || "-"}</TableCell>
+                          <TableCell>{n.contracts?.name || "-"}</TableCell>
+                          <TableCell>{formatCompetenciaLabel(n.competencia)}</TableCell>
+                          <TableCell className="text-right">{formatCurrencyBRL(n.valor_servico)}</TableCell>
+                          <TableCell>{statusBadge(n.status as NfseStatus, n)}</TableCell>
+                          <TableCell>{formatDateTime(n.data_emissao)}</TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1">
                           <TooltipProvider>
@@ -622,7 +655,60 @@ export function BillingNfseTab() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
+
+                        {/* Inline error row */}
+                        {hasError && parsed && (
+                          <TableRow className="bg-destructive/5 hover:bg-destructive/10 border-b border-destructive/20">
+                            <TableCell colSpan={8} className="py-2 px-4">
+                              <div className="flex items-start gap-3">
+                                <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-destructive">{parsed.title}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{parsed.description}</p>
+                                  {parsed.action && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">{parsed.action}</p>
+                                  )}
+                                </div>
+                                <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelected(n);
+                                      setDetailsOpen(true);
+                                    }}
+                                  >
+                                    Editar e Corrigir
+                                  </Button>
+                                  {parsed.showLinkButton ? (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => setLinkExternalNfse(n)}
+                                    >
+                                      Vincular Nota
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleQuickReprocess(n)}
+                                      disabled={isReprocessing}
+                                    >
+                                      {isReprocessing ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                      ) : (
+                                        <RefreshCw className="h-4 w-4 mr-1" />
+                                      )}
+                                      Reprocessar
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -867,6 +953,19 @@ export function BillingNfseTab() {
           }
         }}
       />
+
+      {linkExternalNfse && (
+        <NfseLinkExternalDialog
+          nfseId={linkExternalNfse.id}
+          open={!!linkExternalNfse}
+          onOpenChange={(open) => {
+            if (!open) {
+              setLinkExternalNfse(null);
+              queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

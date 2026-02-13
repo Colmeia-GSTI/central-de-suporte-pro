@@ -7,6 +7,7 @@ interface InvoiceInlineActionsProps {
     id: string;
     status: string;
     boleto_url: string | null;
+    boleto_barcode?: string | null;
     pix_code: string | null;
     contract_id: string | null;
     billing_provider: string | null;
@@ -62,10 +63,11 @@ export function InvoiceInlineActions({
   }
   const isSendBlocked = sendBlockedReasons.length > 0;
 
-  // Boleto status color
+  // Boleto status color - consider barcode as well as URL
+  const hasBoletoReady = !!invoice.boleto_url || !!invoice.boleto_barcode;
   const boletoColor = invoice.boleto_error_msg
     ? "text-destructive"
-    : invoice.boleto_url
+    : hasBoletoReady
       ? "text-emerald-500"
       : "text-muted-foreground";
 
@@ -141,7 +143,7 @@ export function InvoiceInlineActions({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {invoice.boleto_url ? "Boleto gerado" : invoice.boleto_error_msg ? "Erro no boleto" : "Boleto pendente"}
+          {hasBoletoReady ? "Boleto gerado" : invoice.boleto_error_msg ? "Erro no boleto" : "Boleto pendente"}
         </TooltipContent>
       </Tooltip>
 
