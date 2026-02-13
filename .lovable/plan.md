@@ -1,132 +1,150 @@
 
-# Melhorias 3-6: Adicionais, Retry, Monitoramento e Conciliacao
+# Melhorias 7-12: Checklist, Retencao Fiscal, Testes, Relatorios, UX NFS-e e SLA
 
-Estas quatro melhorias serao implementadas em sequencia, abrangendo frontend, edge functions e banco de dados.
-
----
-
-## 3. UI para Cadastro e Gestao de Adicionais Pontuais
-
-### Situacao Atual
-- O componente `ContractAdditionalChargeDialog` ja existe com formulario de cadastro e listagem
-- Porem **nao e usado em nenhum lugar** (nunca importado)
-- A edge function `generate-monthly-invoices` ja consome `contract_additional_charges` e marca como `applied`
-- Falta: botao na listagem de contratos, validacao de duplicidade, preview de impacto, auditoria (campo `created_by` ja existe)
-
-### Alteracoes
-
-**`src/pages/contracts/ContractsPage.tsx`**
-- Adicionar estado `additionalChargeDialog` (similar aos outros dialogs)
-- Adicionar botao de acao "Adicionais" (icone `Receipt`) na coluna de acoes de cada contrato
-- Importar e renderizar `ContractAdditionalChargeDialog`
-- Incluir badge com contagem de adicionais pendentes no botao (query leve por contrato)
-
-**`src/components/contracts/ContractAdditionalChargeDialog.tsx`**
-- Adicionar validacao de duplicidade: ao tentar adicionar, verificar se ja existe registro com mesma `reference_month` + `description` para o contrato
-- Adicionar preview de impacto: exibir um resumo "Na proxima fatura (competencia X), o valor sera: R$ valor_mensal + R$ total_pendente = R$ total"
-- Exibir nome do criador (`created_by`) na tabela consultando `profiles` (join ou query separada)
-- Adicionar filtro por competencia (Select com meses disponiveis)
-- Melhorar layout responsivo do formulario (stack em mobile)
-
-**Migracao SQL**
-- Indice unico parcial em `contract_additional_charges` para evitar duplicidade: `CREATE UNIQUE INDEX ... ON contract_additional_charges (contract_id, reference_month, description) WHERE applied = false`
+Este plano cobre seis melhorias complementares que abrangem documentacao operacional, conformidade fiscal, testes, relatorios financeiros, UX de reemissao e gestao de incidentes.
 
 ---
 
-## 4. Padronizar Retries e Backoff para Envios e Integracoes
+## 7. Checklist Operacional e Playbook de Implantacao
 
-### Situacao Atual
-- Nenhuma biblioteca centralizada de retry
-- Cada edge function faz sua propria logica de tentativas (ou nenhuma)
-- Sem registro de contagem de tentativas
+### O que sera feito
+Criar um documento Markdown completo (`DEPLOYMENT_PLAYBOOK.md`) com passo a passo para implantacao, cobrindo:
 
-### Alteracoes
+**Conteudo do documento:**
+- Pre-requisitos (secrets, certificados, DNS)
+- Configuracao de integracoes (Banco Inter, Asaas, SMTP, Evolution API, Telegram, CheckMK, Tactical RMM)
+- Configuracao de CRONs (`pg_cron` jobs)
+- Testes de validacao pos-deploy (checklist com comandos curl para edge functions)
+- Runbook de troubleshooting para erros comuns
+- Procedimento de onboarding de novo cliente (cadastro, contrato, primeiro faturamento)
+- Treinamento basico para time financeiro e suporte
 
-**`supabase/functions/_shared/retry-utils.ts`** (novo arquivo auxiliar -- sera copiado inline pois edge functions nao suportam imports de pasta compartilhada; em vez disso, criar como funcao utilitaria inline em cada function que precise)
-
-Na pratica, criar uma funcao `withRetry` que sera copiada para as functions que precisam:
-
-```text
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  options: { maxAttempts: 3, delays: [60000, 300000, 1200000], label: string }
-): Promise<{ result?: T; attempts: number; success: boolean; lastError?: string }>
-```
-
-**Edge functions a atualizar:**
-- `send-email-smtp/index.ts` -- envolver chamada SMTP com `withRetry` (3 tentativas, delays 1m/5m/20m)
-- `send-whatsapp/index.ts` -- envolver chamada Evolution API
-- `send-nfse-notification/index.ts` -- envolver envio de email/whatsapp
-- `resend-payment-notification/index.ts` -- envolver envios
-
-**Registro de metricas:**
-- Apos cada execucao com retry, inserir em `application_logs` com `module: "retry"`, incluindo `attempts`, `success`, `label` e `duration_ms`
-
-**Nota:** Como edge functions Deno nao suportam `import` entre pastas, a funcao `withRetry` sera definida como utility dentro de cada function. Para manter DRY ao maximo, sera um bloco de ~30 linhas copiado nas 4 functions afetadas.
+**Arquivo:** `DEPLOYMENT_PLAYBOOK.md` (novo, raiz do projeto)
 
 ---
 
-## 5. Monitoramento, Alertas e Dashboards de Falhas
+## 8. Politica de Retencao e Backup de Arquivos Fiscais
 
-### Situacao Atual
-- `MessageMetricsDashboard` mostra metricas de mensagens (email/whatsapp/telegram)
-- `useBillingCounters` mostra contadores de faturas vencidas, boletos pendentes, NFS-e pendentes
-- Nao existe dashboard de latencia de integradores ou alertas automaticos
+### O que sera feito
+Implementar lifecycle rules e documentar politica de retencao para o bucket `nfse-files`.
 
-### Alteracoes
+**Migracao SQL:**
+- Criar tabela `storage_retention_policies` com campos: `bucket_name`, `retention_days` (default 2555 = 7 anos), `backup_enabled`, `last_audit_at`
+- Inserir registro para bucket `nfse-files` com retencao de 7 anos
+- Criar funcao RPC `audit_storage_retention` que verifica arquivos antigos e registra em `audit_logs`
 
-**`src/components/billing/IntegrationHealthDashboard.tsx`** (novo)
-- Card "Boletos Pendentes > 1h" -- query `invoices` com `boleto_status = 'pendente'` e `created_at < now() - 1h`
-- Card "NFS-e Processando > 2h" -- query `nfse_history` com status `processando` e `created_at < now() - 2h`
-- Card "Tempo Medio de Retorno Banco" -- RPC ou query calculando `avg(boleto_updated_at - created_at)` para faturas com boleto_status = 'registrado'
-- Card "Taxa de Falha Ultimas 24h" -- query `application_logs` com level = 'error' e module in ('billing', 'nfse', 'banco_inter')
-- Grafico de barras: falhas por hora nas ultimas 24h (dados de `application_logs`)
+**Documentacao:**
+- Adicionar secao "Politica de Retencao Fiscal" ao `DEPLOYMENT_PLAYBOOK.md`
+- Descrever SLA de disponibilidade (99.9% via Supabase Storage)
+- Procedimento de restauracao: URLs assinadas, re-download via Asaas API
 
-**`src/pages/billing/BillingPage.tsx`**
-- Adicionar nova aba "Saude" (icone `Activity`) ao `BILLING_TABS`
-- Renderizar `IntegrationHealthDashboard` nesta aba
-
-**Migracao SQL**
-- Criar funcao RPC `get_integration_health_stats` que retorna as metricas agregadas em uma unica chamada (boletos pendentes, NFS-e lentas, taxa de falha, tempo medio)
+**Frontend:**
+- Adicionar card "Retencao Fiscal" no `IntegrationHealthDashboard.tsx` mostrando:
+  - Total de arquivos no bucket `nfse-files`
+  - Arquivo mais antigo
+  - Status de compliance (verde se todos < 7 anos)
 
 ---
 
-## 6. Automacao e Regras de Conciliacao Bancaria
+## 9. Ambiente de Homologacao e Testes E2E Fiscais
 
-### Situacao Atual
-- `BankReconciliationTab` e puramente visual/read-only
-- Tabela `bank_reconciliation` tem campos `invoice_id`, `matched_at`, `matched_by` mas nenhuma logica de matching
-- Nenhuma funcao de matching automatico existe
+### O que sera feito
+Criar mocks e fixtures para testes de integracao das edge functions fiscais.
 
-### Alteracoes
+**Arquivos de teste (novos):**
 
-**Migracao SQL**
-- Criar funcao RPC `auto_reconcile_bank_entries` que:
-  1. Para cada entrada `bank_reconciliation` com status `pending`
-  2. Busca faturas com `amount` igual a `bank_amount` (tolerancia de R$ 0.01)
-  3. Cruza por `bank_reference` contendo `invoice_number` ou `boleto_barcode`
-  4. Atribui score: valor exato = 50pts, referencia match = 40pts, data proxima (+/-3 dias) = 10pts
-  5. Se score >= 90: auto-match (status = 'matched', invoice_id vinculado)
-  6. Se score 50-89: status = 'suggested' (novo status)
-  7. Retorna contagem de matched e suggested
+`supabase/functions/asaas-nfse/asaas-nfse_test.ts`
+- Mock de respostas Asaas (emit, status, cancel)
+- Teste: emissao com sucesso retorna `invoice_id`
+- Teste: polling retorna status `autorizada` com PDF/XML
+- Teste: erro E0014 (DPS duplicada) retorna mensagem formatada
+- Teste: cancelamento com motivo obrigatorio
 
-**Migracao SQL adicional**
-- Adicionar status `suggested` ao campo `status` de `bank_reconciliation` (CHECK constraint ou validacao)
-- Adicionar coluna `match_score` (integer) e `match_candidates` (jsonb) para armazenar sugestoes
+`supabase/functions/banco-inter/banco-inter_test.ts`
+- Mock de OAuth token exchange
+- Teste: geracao de boleto retorna `codigoSolicitacao`
+- Teste: polling com `readToken` retorna barcode e PDF URL
+- Teste: fallback de escopo combinado
 
-**`src/components/billing/BankReconciliationTab.tsx`**
-- Adicionar botao "Conciliar Automaticamente" que chama a RPC
-- Adicionar status `suggested` ao `statusConfig` (cor azul, icone `Sparkles`)
-- Para entradas com status `suggested`: exibir botoes "Aprovar" e "Rejeitar" inline
-- "Aprovar" atualiza para `matched` e vincula `invoice_id`
-- "Rejeitar" atualiza para `unmatched`
-- Exibir `match_score` como badge no tooltip
-- Adicionar acoes manuais: selecionar fatura para vincular manualmente (combobox com faturas pendentes/pagas)
+**Nota:** Estes testes usam `Deno.test()` e podem ser executados via `supabase--test-edge-functions`. Usam fetch mocks para simular respostas das APIs externas sem chamadas reais.
 
-**`src/components/billing/ReconciliationMatchDialog.tsx`** (novo)
-- Dialog para match manual: busca faturas por numero, valor ou cliente
-- Permite selecionar fatura e confirmar vinculacao
-- Atualiza `bank_reconciliation` com `invoice_id`, `matched_by`, `matched_at`, `status = 'matched'`
+---
+
+## 10. Relatorios e KPIs para Adicionais e Notas Avulsas
+
+### O que sera feito
+Adicionar aba "Adicionais" ao `ReportsPage.tsx` com metricas de adicionais pontuais e notas avulsas.
+
+**Migracao SQL:**
+Criar RPC `get_additional_charges_report(start_date, end_date)` que retorna:
+- Total de adicionais por cliente (nome, quantidade, valor total)
+- Total de notas avulsas por cliente
+- Comparativo mensal (adicionais vs receita recorrente)
+- Clientes com mais de 3 avulsas no periodo (candidatos a contrato)
+
+**Frontend:**
+- Adicionar aba "Adicionais" ao `TabsList` em `ReportsPage.tsx`
+- Card: "Total de Adicionais no Periodo" (valor e quantidade)
+- Card: "Total de Notas Avulsas" (valor e quantidade)
+- Tabela: ranking de clientes por valor de adicionais
+- Alerta visual: clientes com muitos avulsos (icone `TrendingUp` + sugestao de migrar para contrato)
+- Grafico de barras: adicionais por mes (ultimos 6 meses)
+
+---
+
+## 11. UX de Reemissao e Vinculacao de NFS-e (E0014)
+
+### O que sera feito
+Melhorar o fluxo existente de vinculacao de notas externas no `NfseDetailsSheet.tsx`.
+
+**Alteracoes em `NfseDetailsSheet.tsx`:**
+- No dialog de "Vincular Nota Existente", adicionar campo de busca por CPF/CNPJ do cliente (pre-preenchido)
+- Adicionar campo opcional para numero do RPS
+- Exibir alerta explicativo sobre o que e o erro E0014 e por que a vinculacao e necessaria
+- Adicionar campo de justificativa obrigatoria (para auditoria) ao vincular
+- Registrar evento `vinculacao_manual` em `nfse_event_logs` com justificativa
+
+**Alteracoes na edge function `asaas-nfse/index.ts`:**
+- Na action `link_external`: alem de atualizar status para `autorizada`, registrar na `nfse_event_logs` com tipo `vinculacao_manual` e incluir justificativa recebida
+- Tentar consultar dados da nota no Asaas pelo numero externo para preencher `pdf_url` e `xml_url` automaticamente
+
+**Novo componente `src/components/billing/nfse/NfseLinkExternalDialog.tsx`:**
+- Extrair o dialog de vinculacao do `NfseDetailsSheet` para componente independente
+- Formulario com: numero da nota, CPF/CNPJ (readonly), justificativa (obrigatoria, min 15 chars)
+- Preview dos dados que serao atualizados antes de confirmar
+- Reutilizavel tanto no Sheet quanto na listagem de NFS-e
+
+---
+
+## 12. SLA e Processo de Tratamento de Incidentes Financeiros
+
+### O que sera feito
+Criar runbook de incidentes e integrar com o sistema de tickets e alertas.
+
+**Documentacao (`DEPLOYMENT_PLAYBOOK.md` - secao nova):**
+- SLAs definidos:
+  - Falha de emissao NFS-e: resolucao em 4h uteis
+  - Falha de geracao de boleto: resolucao em 2h uteis
+  - Falha de envio ao cliente: resolucao em 24h
+  - Erro E0014 (duplicidade): resolucao em 48h
+- Playbook de escalonamento: financeiro -> admin -> desenvolvedor
+- Templates de comunicacao para cada tipo de incidente
+
+**Migracao SQL:**
+Criar tabela `financial_incident_slas` com:
+- `incident_type` (enum: nfse_failure, boleto_failure, send_failure, e0014)
+- `resolution_hours` (integer)
+- `escalation_role` (text)
+- `notification_template` (text)
+- `is_active` (boolean)
+- Inserir registros iniciais com SLAs padrao
+
+**Frontend (`src/components/billing/IntegrationHealthDashboard.tsx`):**
+- Adicionar secao "Incidentes Abertos" que cruza:
+  - Faturas com `boleto_status = 'erro'` ou `nfse_status = 'erro'` nas ultimas 48h
+  - Tempo desde a falha vs SLA definido
+  - Badge vermelho se SLA estourado, amarelo se proximo do limite
+- Botao "Criar Ticket" que abre formulario pre-preenchido com dados do incidente
 
 ---
 
@@ -134,22 +152,21 @@ async function withRetry<T>(
 
 | Arquivo | Acao |
 |---------|------|
-| `src/pages/contracts/ContractsPage.tsx` | Adicionar botao e dialog de adicionais |
-| `src/components/contracts/ContractAdditionalChargeDialog.tsx` | Validacao duplicidade, preview impacto, filtro, auditoria |
-| `supabase/functions/send-email-smtp/index.ts` | Adicionar `withRetry` |
-| `supabase/functions/send-whatsapp/index.ts` | Adicionar `withRetry` |
-| `supabase/functions/send-nfse-notification/index.ts` | Adicionar `withRetry` |
-| `supabase/functions/resend-payment-notification/index.ts` | Adicionar `withRetry` |
-| `src/components/billing/IntegrationHealthDashboard.tsx` | Novo dashboard de saude |
-| `src/pages/billing/BillingPage.tsx` | Adicionar aba "Saude" |
-| `src/components/billing/BankReconciliationTab.tsx` | Matching automatico, sugestoes, acoes |
-| `src/components/billing/ReconciliationMatchDialog.tsx` | Novo dialog de match manual |
-| Migracoes SQL | Indice unico adicionais, RPC health stats, RPC auto-reconcile, coluna match_score |
+| `DEPLOYMENT_PLAYBOOK.md` | Novo - checklist completo de implantacao |
+| `src/components/billing/IntegrationHealthDashboard.tsx` | Adicionar cards de retencao fiscal e incidentes SLA |
+| `src/pages/reports/ReportsPage.tsx` | Adicionar aba "Adicionais" com KPIs |
+| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Melhorar dialog de vinculacao E0014 |
+| `src/components/billing/nfse/NfseLinkExternalDialog.tsx` | Novo - dialog de vinculacao independente |
+| `supabase/functions/asaas-nfse/index.ts` | Melhorar action `link_external` com auditoria |
+| `supabase/functions/asaas-nfse/asaas-nfse_test.ts` | Novo - testes E2E com mocks |
+| `supabase/functions/banco-inter/banco-inter_test.ts` | Novo - testes E2E com mocks |
+| Migracoes SQL | `storage_retention_policies`, `get_additional_charges_report` RPC, `financial_incident_slas` |
 
 ## Ordem de Implementacao
 
-1. Migracoes SQL (indice unico, novas colunas, RPCs)
-2. Adicionais pontuais (item 3) -- frontend puro
-3. Retry centralizado (item 4) -- edge functions
-4. Dashboard de saude (item 5) -- frontend + RPC
-5. Conciliacao automatica (item 6) -- RPC + frontend
+1. Migracoes SQL (tabelas e RPCs)
+2. `DEPLOYMENT_PLAYBOOK.md` (documentacao completa)
+3. Relatorios de adicionais (item 10) - RPC + frontend
+4. UX de vinculacao NFS-e (item 11) - componente + edge function
+5. Dashboard de incidentes SLA (item 12) - frontend
+6. Testes E2E (item 9) - edge function tests
