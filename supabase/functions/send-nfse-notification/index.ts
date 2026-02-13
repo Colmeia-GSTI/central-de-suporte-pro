@@ -130,7 +130,7 @@ serve(async (req) => {
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "nfse").single(),
       supabase.from("nfse_history").select(`
-        id, numero_nfse, pdf_url, valor_servico, competencia, client_id,
+        id, numero_nfse, pdf_url, xml_url, valor_servico, competencia, client_id,
         clients (name, email, whatsapp, financial_email)
       `).eq("id", nfse_history_id).maybeSingle(),
     ]);
@@ -154,8 +154,31 @@ serve(async (req) => {
     }
 
     if (!nfse.pdf_url) {
+      await supabase.from("nfse_event_logs").insert({
+        nfse_history_id,
+        event_type: "envio_bloqueado",
+        event_data: { motivo: "pdf_ausente", checked_at: new Date().toISOString() },
+      });
       return new Response(
-        JSON.stringify({ error: "NFS-e não possui PDF disponível" }),
+        JSON.stringify({ error: "NFS-e não possui PDF disponível", blocked: true, blocked_reason: "pdf_ausente" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!nfse.xml_url) {
+      await supabase.from("nfse_event_logs").insert({
+        nfse_history_id,
+        event_type: "envio_bloqueado",
+        event_data: { motivo: "xml_ausente", checked_at: new Date().toISOString() },
+      });
+      await supabase.from("application_logs").insert({
+        module: "billing_notification",
+        level: "warn",
+        message: "Envio de NFS-e bloqueado: XML não disponível",
+        context: { nfse_history_id, blocked_artifacts: ["xml"] },
+      });
+      return new Response(
+        JSON.stringify({ error: "NFS-e não possui XML disponível. Aguarde o processamento completo.", blocked: true, blocked_reason: "xml_ausente" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Clock, Download, File, Mail } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Download, File, Lock, Mail } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
@@ -10,9 +10,14 @@ interface InvoiceActionIndicatorsProps {
   nfseStatus?: "pendente" | "gerada" | "erro" | null;
   nfseUrl?: string | null;
   nfseError?: string | null;
+  nfsePdfUrl?: string | null;
+  nfseXmlUrl?: string | null;
 
   emailStatus?: "pendente" | "enviado" | "erro" | null;
   emailError?: string | null;
+
+  sendBlocked?: boolean;
+  sendBlockedReason?: string;
 
   onBoletoClick?: () => void;
   onNfseClick?: () => void;
@@ -28,8 +33,12 @@ export function InvoiceActionIndicators({
   nfseStatus,
   nfseUrl,
   nfseError,
+  nfsePdfUrl,
+  nfseXmlUrl,
   emailStatus,
   emailError,
+  sendBlocked,
+  sendBlockedReason,
   onBoletoClick,
   onNfseClick,
   onEmailClick,
@@ -248,11 +257,32 @@ export function InvoiceActionIndicators({
     );
   };
 
+  const renderBlockedIndicator = () => {
+    if (!sendBlocked) return null;
+    const baseClass = "cursor-default transition-all";
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`${baseClass} text-status-warning`}>
+            <Lock size={iconSize} />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div className="max-w-xs">
+            <p className="font-semibold">Envio bloqueado</p>
+            <p className="text-sm">{sendBlockedReason || "Artefatos incompletos"}</p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
   return (
     <div className="flex gap-1.5">
       {renderBoletoIndicator()}
       {renderNfseIndicator()}
       {renderEmailIndicator()}
+      {renderBlockedIndicator()}
     </div>
   );
 }

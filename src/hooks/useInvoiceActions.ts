@@ -24,7 +24,7 @@ interface InvoiceForActions {
 }
 
 interface NfseByInvoice {
-  [invoiceId: string]: { status: string; numero_nfse: string | null };
+  [invoiceId: string]: { status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null };
 }
 
 export function useInvoiceActions() {
@@ -109,10 +109,55 @@ export function useInvoiceActions() {
     }
   };
 
+  /**
+   * Verifica artefatos antes de enviar notificação.
+   * Retorna array de motivos de bloqueio (vazio = OK).
+   */
+  const checkArtifactReadiness = (
+    invoice: { boleto_url: string | null; pix_code: string | null; boleto_barcode?: string | null; boleto_status?: string | null },
+    nfseInfo?: { status: string; pdf_url?: string | null; xml_url?: string | null }
+  ): string[] => {
+    const reasons: string[] = [];
+
+    // NFS-e vinculada mas incompleta
+    if (nfseInfo && nfseInfo.status === "autorizada") {
+      if (!nfseInfo.pdf_url || !nfseInfo.xml_url) {
+        const missing = [];
+        if (!nfseInfo.pdf_url) missing.push("PDF");
+        if (!nfseInfo.xml_url) missing.push("XML");
+        reasons.push(`NFS-e incompleta: ${missing.join(" e ")} ausente(s)`);
+      }
+    }
+
+    // Boleto em processamento sem dados
+    const hasBoleto = !!invoice.boleto_url || !!invoice.boleto_barcode;
+    const hasPix = !!invoice.pix_code;
+    const boletoProcessando = invoice.boleto_status === "pendente" || invoice.boleto_status === "processando";
+    if (boletoProcessando && !hasBoleto && !hasPix) {
+      reasons.push("Boleto em processamento");
+    }
+
+    return reasons;
+  };
+
   const handleResendNotification = async (
     invoiceId: string,
-    channels: ("email" | "whatsapp")[]
+    channels: ("email" | "whatsapp")[],
+    nfseInfo?: { status: string; pdf_url?: string | null; xml_url?: string | null },
+    invoiceData?: { boleto_url: string | null; pix_code: string | null; boleto_barcode?: string | null; boleto_status?: string | null }
   ) => {
+    // Validação frontend antes de chamar backend
+    if (invoiceData && nfseInfo) {
+      const blockReasons = checkArtifactReadiness(invoiceData, nfseInfo);
+      if (blockReasons.length > 0) {
+        toast.warning("Envio bloqueado", {
+          description: blockReasons.join(". "),
+          duration: 6000,
+        });
+        return;
+      }
+    }
+
     setSendingNotification(`${invoiceId}-${channels.join("-")}`);
     try {
       const { data, error } = await supabase.functions.invoke("resend-payment-notification", {
@@ -120,6 +165,15 @@ export function useInvoiceActions() {
       });
 
       if (error) throw error;
+
+      // Handle blocked response from backend
+      if (data.blocked) {
+        toast.warning("Envio bloqueado", {
+          description: data.blocked_reasons?.join(". ") || data.error,
+          duration: 6000,
+        });
+        return;
+      }
 
       if (data.success) {
         const channelNames = channels
@@ -237,14 +291,52 @@ export function useInvoiceActions() {
         }
       }
 
-      // 4. Notifications
+      // 4. Recarregar dados antes de notificar
+      const { data: freshInvoice } = await supabase
+        .from("invoices")
+        .select("boleto_url, boleto_barcode, pix_code, boleto_status")
+        .eq("id", invoice.id)
+        .single();
+
+      const { data: freshNfse } = await supabase
+        .from("nfse_history")
+        .select("status, pdf_url, xml_url")
+        .eq("invoice_id", invoice.id)
+        .eq("status", "autorizada")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const blockReasons = checkArtifactReadiness(
+        {
+          boleto_url: freshInvoice?.boleto_url ?? null,
+          pix_code: freshInvoice?.pix_code ?? null,
+          boleto_barcode: freshInvoice?.boleto_barcode ?? null,
+          boleto_status: freshInvoice?.boleto_status ?? null,
+        },
+        freshNfse ? { status: freshNfse.status, pdf_url: freshNfse.pdf_url, xml_url: freshNfse.xml_url } : undefined
+      );
+
+      if (blockReasons.length > 0) {
+        steps.push(`Notificação bloqueada: ${blockReasons.join(", ")}`);
+        toast.warning("Fatura processada parcialmente", {
+          description: steps.join(" • "),
+          duration: 8000,
+        });
+        invalidateAll();
+        return;
+      }
+
+      // Send notifications
       const { data: notifData, error: notifError } = await supabase.functions.invoke(
         "resend-payment-notification",
         { body: { invoice_id: invoice.id, channels: ["email", "whatsapp"] } }
       );
 
       if (notifError) throw notifError;
-      if (notifData.success) {
+      if (notifData.blocked) {
+        steps.push(`Notificação bloqueada: ${notifData.blocked_reasons?.join(", ") || notifData.error}`);
+      } else if (notifData.success) {
         steps.push("Notificações enviadas");
       } else {
         const results = notifData.results as NotificationResult[] | undefined;
@@ -276,5 +368,6 @@ export function useInvoiceActions() {
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,
+    checkArtifactReadiness,
   };
 }
