@@ -1,110 +1,78 @@
 
+# Corrigir Clique no Boleto e Resolver NFS-e do Comercial
 
-# Melhorar Detecao e Tratamento de Erros em NFS-e e Faturas
+## Problema 1: Clique no boleto abre tela de PIX
 
-## Contexto
+O icone de boleto (Barcode) na listagem de faturas sempre executa `setPixDialogInvoice(invoice)`, que abre o dialogo de PIX independentemente de a fatura ter boleto ou PIX. O comportamento correto deve ser:
 
-O sistema ja possui mecanismos de edicao, reenvio e validacao de NFS-e no `NfseDetailsSheet` e `NfseActionsMenu`. Porem, na listagem principal (`BillingNfseTab`), as notas com erro nao exibem o motivo do erro nem oferecem acoes rapidas -- o usuario precisa clicar na nota para descobrir o que aconteceu. Alem disso, os indicadores de boleto e NFS-e na aba de faturas (`BillingInvoicesTab`) estao mostrando status incorretos (boleto "pendente" quando ja existe barcode, e NFS-e "erro" quando ja existe uma autorizada).
+- Se tem `boleto_url` (PDF): abrir o PDF em nova aba
+- Se tem `boleto_barcode` mas nao tem `boleto_url`: exibir o codigo de barras para copia
+- Se tem `pix_code` e nao tem boleto: abrir o dialogo PIX
+- Se nao tem nada: nao fazer nada (ou mostrar aviso)
 
-## Mudancas
+### Mudancas
 
-### 1. Linha expandida com erro na tabela de NFS-e
+**Arquivo: `src/components/billing/BillingInvoicesTab.tsx`**
 
-**Arquivo:** `src/components/billing/BillingNfseTab.tsx`
-
-Quando uma nota tem status `erro` ou `rejeitada`, exibir imediatamente abaixo da linha um alerta compacto com:
-
-- Mensagem de erro formatada (usando `parseNfseError` de `nfseFormat.ts`)
-- Acao sugerida (ex: "Verifique os dados do prestador")
-- Dois botoes inline: **Editar e Corrigir** (abre o sheet com edicao) e **Reprocessar** (reenvia direto)
-- Para erros E0014, mostrar o botao **Vincular Nota** em vez de Reprocessar
-
-Isso sera implementado como uma segunda `TableRow` condicional logo apos cada linha com erro:
-
+Substituir a linha 450:
 ```text
-{(n.status === "erro" || n.status === "rejeitada") && n.mensagem_retorno && (
-  <TableRow className="bg-destructive/5 hover:bg-destructive/10">
-    <TableCell colSpan={8} className="py-2 px-4">
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-destructive">{parsed.title}</p>
-          <p className="text-xs text-muted-foreground truncate">{parsed.description}</p>
-          {parsed.action && <p className="text-xs text-muted-foreground mt-0.5">{parsed.action}</p>}
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Button size="sm" variant="outline" onClick={() => { setSelected(n); setDetailsOpen(true); }}>
-            Editar e Corrigir
-          </Button>
-          <Button size="sm" onClick={() => handleQuickReprocess(n)}>
-            Reprocessar
-          </Button>
-        </div>
-      </div>
-    </TableCell>
-  </TableRow>
-)}
+onBoletoClick={() => setPixDialogInvoice(invoice)}
 ```
 
-### 2. Funcao de reprocessamento rapido
+Por uma funcao inteligente `handleBoletoClick(invoice)` que:
 
-**Arquivo:** `src/components/billing/BillingNfseTab.tsx`
+1. Se `invoice.boleto_url` existe, abre `window.open(invoice.boleto_url, "_blank")`
+2. Se `invoice.boleto_barcode` existe (sem URL), copia o barcode para a area de transferencia e exibe toast "Codigo de barras copiado!"
+3. Se so tem `invoice.pix_code`, abre o dialogo PIX (comportamento atual)
+4. Se nao tem nenhum, exibe toast informativo "Nenhum boleto ou PIX gerado"
 
-Adicionar uma funcao `handleQuickReprocess` que chama `asaas-nfse` com `action: "emit"` diretamente, sem precisar abrir o sheet. Inclui:
+**Arquivo: `src/components/billing/InvoiceInlineActions.tsx`**
 
-- Atualizar o status local para "processando" antes de chamar a API
-- Chamar a edge function com os dados da nota
-- Mostrar toast de sucesso/erro
-- Invalidar queries para atualizar a listagem
+Atualizar o tooltip do boleto para ser mais descritivo:
+- Com URL: "Abrir PDF do boleto"
+- Com barcode sem URL: "Copiar codigo de barras"
+- Sem nada: "Boleto pendente"
 
-### 3. Corrigir indicador de Boleto na listagem de faturas
+---
 
-**Arquivo:** `src/components/billing/InvoiceInlineActions.tsx`
+## Problema 2: NFS-e do Comercial com erro E0014
 
-Alterar a logica de cor do boleto (linhas 66-70) para considerar `boleto_barcode`:
+A fatura #9 do Clube Comercial tem uma unica entrada em `nfse_history` com status "erro" e codigo E0014 (DPS duplicada -- a nota ja foi emitida na prefeitura mas o sistema nao tem o registro como "autorizada"). A prioridade do reduce funciona corretamente, mas nao existe um registro "autorizada" para priorizar.
 
-| Campo na interface | Antes | Depois |
-|--------------------|-------|--------|
-| Props | Nao inclui `boleto_barcode` | Inclui `boleto_barcode?: string \| null` |
-| Logica de cor | Verifica apenas `boleto_url` | Verifica `boleto_url \|\| boleto_barcode` |
-| Tooltip | "Boleto pendente" se nao tem URL | "Boleto gerado" se tem barcode ou URL |
+A solucao ja implementada na `BillingNfseTab` (linha expandida com erro + botao "Vincular Nota") permite ao usuario vincular a nota externa. No entanto, na aba de Faturas o indicador de NFS-e aparece vermelho sem explicacao.
 
-### 4. Corrigir priorizacao de NFS-e na listagem de faturas
+### Mudancas
 
-**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx`
+**Arquivo: `src/components/billing/BillingInvoicesTab.tsx`**
 
-Alterar o `reduce` do `nfseByInvoice` (linhas 144-147) para priorizar "autorizada" sobre "erro":
+Melhorar o `onNfseClick` para que, quando o status for "erro", abra diretamente a aba de NFS-e com filtro de erro, em vez de abrir o dialogo de emissao de NFS-e. Atualmente (linha 451):
 
 ```text
-const statusPriority: Record<string, number> = {
-  autorizada: 0, processando: 1, pendente: 2, erro: 3, rejeitada: 4, cancelada: 5,
-};
-return (data || []).reduce<NfseByInvoice>((acc, n) => {
-  if (!n.invoice_id) return acc;
-  const existing = acc[n.invoice_id];
-  const existingPriority = existing ? (statusPriority[existing.status] ?? 99) : 99;
-  const newPriority = statusPriority[n.status] ?? 99;
-  if (newPriority < existingPriority) {
-    acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse };
-  }
-  return acc;
-}, {});
+onNfseClick={() => setNfseInvoice(invoice)}
 ```
 
-## Arquivos Alterados
+Alterar para: se a NFS-e tem status "erro" ou "rejeitada", navegar para `/billing?tab=nfse` para que o usuario veja o erro expandido e as acoes de correcao. Se nao tem NFS-e ou esta pendente, manter o comportamento de abrir o dialogo de emissao.
+
+**Arquivo: `src/components/billing/InvoiceInlineActions.tsx`**
+
+Atualizar o tooltip da NFS-e para incluir a mensagem de erro quando disponivel:
+- Status "erro": "NFS-e com erro - clique para ver detalhes"
+- Status "autorizada": "NFS-e autorizada"
+
+---
+
+## Resumo de Arquivos
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/billing/BillingNfseTab.tsx` | Linha expandida com erro + funcao de reprocessamento rapido |
-| `src/components/billing/InvoiceInlineActions.tsx` | Considerar `boleto_barcode` no indicador de boleto |
-| `src/components/billing/BillingInvoicesTab.tsx` | Priorizar NFS-e autorizada sobre erro no reduce |
+| `src/components/billing/BillingInvoicesTab.tsx` | Funcao `handleBoletoClick` inteligente + `onNfseClick` com redirecionamento para erros |
+| `src/components/billing/InvoiceInlineActions.tsx` | Tooltips atualizados para boleto e NFS-e |
 
 ## Resultado
 
-- Notas com erro mostram o motivo diretamente na listagem, sem precisar abrir detalhes
-- O usuario pode reprocessar ou editar com 1 clique a partir da tabela
-- Erros E0014 (DPS duplicada) oferecem a opcao de vincular nota existente
-- Indicadores de boleto e NFS-e mostram o status correto na aba de faturas
-- Design responsivo com suporte a dark mode (usando classes Tailwind existentes)
-- Nenhuma mudanca no banco de dados
-
+| Cenario | Antes | Depois |
+|---------|-------|--------|
+| Clicar boleto com PDF | Abre PIX | Abre PDF em nova aba |
+| Clicar boleto com barcode sem PDF | Abre PIX | Copia barcode |
+| Clicar boleto com PIX apenas | Abre PIX | Abre PIX (mantido) |
+| Clicar NFS-e com erro | Abre dialogo emissao | Navega para aba NFS-e com detalhes do erro |
