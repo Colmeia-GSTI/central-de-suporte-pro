@@ -19,7 +19,10 @@ import {
   FileKey,
   ShieldCheck,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Webhook,
+  RefreshCw,
+  Link2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -51,6 +54,13 @@ interface ScopeStatus {
   pixError?: string;
 }
 
+interface WebhookStatus {
+  state: "unknown" | "checking" | "registered" | "not_registered" | "error";
+  webhookUrl?: string;
+  criacao?: string;
+  error?: string;
+}
+
 export function BancoInterConfigForm() {
   const [settings, setSettings] = useState<InterSettings>(defaultSettings);
   const [isActive, setIsActive] = useState(false);
@@ -62,6 +72,9 @@ export function BancoInterConfigForm() {
     boleto: "unknown",
     pix: "unknown",
   });
+  const [webhookStatus, setWebhookStatus] = useState<WebhookStatus>({ state: "unknown" });
+  const [checkingWebhook, setCheckingWebhook] = useState(false);
+  const [registeringWebhook, setRegisteringWebhook] = useState(false);
   
   const crtInputRef = useRef<HTMLInputElement>(null);
   const keyInputRef = useRef<HTMLInputElement>(null);
@@ -152,6 +165,52 @@ export function BancoInterConfigForm() {
     } finally {
       setUploadingKey(false);
       if (keyInputRef.current) keyInputRef.current.value = "";
+    }
+  };
+
+  const handleCheckWebhook = async () => {
+    setCheckingWebhook(true);
+    setWebhookStatus({ state: "checking" });
+    try {
+      const { data, error } = await supabase.functions.invoke("banco-inter", {
+        body: { action: "check_webhook" },
+      });
+      if (error || data?.error) {
+        setWebhookStatus({ state: "error", error: data?.error || getErrorMessage(error) });
+        toast.error("Erro ao verificar webhook", { description: data?.error || getErrorMessage(error) });
+      } else if (data?.registered) {
+        setWebhookStatus({ state: "registered", webhookUrl: data.webhookUrl, criacao: data.criacao });
+        toast.success("Webhook cadastrado!", { description: data.webhookUrl });
+      } else {
+        setWebhookStatus({ state: "not_registered" });
+        toast.warning("Webhook não cadastrado no Banco Inter");
+      }
+    } catch (err) {
+      setWebhookStatus({ state: "error", error: getErrorMessage(err) });
+      toast.error("Erro: " + getErrorMessage(err));
+    } finally {
+      setCheckingWebhook(false);
+    }
+  };
+
+  const handleRegisterWebhook = async () => {
+    setRegisteringWebhook(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("banco-inter", {
+        body: { action: "register_webhook" },
+      });
+      if (error || data?.error) {
+        toast.error("Erro ao registrar webhook", { description: data?.error || getErrorMessage(error) });
+        setWebhookStatus({ state: "error", error: data?.error || getErrorMessage(error) });
+      } else {
+        setWebhookStatus({ state: "registered", webhookUrl: data.webhookUrl });
+        toast.success("Webhook registrado com sucesso!", { description: data.webhookUrl });
+      }
+    } catch (err) {
+      toast.error("Erro: " + getErrorMessage(err));
+      setWebhookStatus({ state: "error", error: getErrorMessage(err) });
+    } finally {
+      setRegisteringWebhook(false);
     }
   };
 
@@ -594,6 +653,77 @@ export function BancoInterConfigForm() {
             )}
           </div>
         )}
+
+        {/* Webhook Management Section */}
+        <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-muted-foreground" />
+            <Label className="font-medium">Webhook de Notificações</Label>
+            {webhookStatus.state === "registered" && (
+              <Badge variant="default" className="bg-status-success text-status-success-foreground">
+                <Check className="h-3 w-3 mr-1" />
+                Cadastrado
+              </Badge>
+            )}
+            {webhookStatus.state === "not_registered" && (
+              <Badge variant="destructive">
+                <X className="h-3 w-3 mr-1" />
+                Não cadastrado
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            O webhook permite receber atualizações de status de boletos e PIX em tempo real.
+            O registro é feito automaticamente via API do Banco Inter.
+          </p>
+
+          {webhookStatus.state === "registered" && webhookStatus.webhookUrl && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-status-success/10 border border-status-success/30 rounded-md">
+              <Link2 className="h-4 w-4 text-status-success shrink-0" />
+              <span className="text-xs text-muted-foreground font-mono truncate">
+                {webhookStatus.webhookUrl}
+              </span>
+            </div>
+          )}
+
+          {webhookStatus.state === "error" && webhookStatus.error && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-status-danger/10 border border-status-danger/30 rounded-md">
+              <AlertTriangle className="h-4 w-4 text-status-danger shrink-0 mt-0.5" />
+              <span className="text-xs text-status-danger">{webhookStatus.error}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCheckWebhook}
+              disabled={checkingWebhook || !settings.client_id || !hasCertificates}
+            >
+              {checkingWebhook ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-3 w-3 mr-1" />
+              )}
+              Verificar
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handleRegisterWebhook}
+              disabled={registeringWebhook || !settings.client_id || !hasCertificates || webhookStatus.state === "registered"}
+            >
+              {registeringWebhook ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Webhook className="h-3 w-3 mr-1" />
+              )}
+              Registrar Webhook
+            </Button>
+          </div>
+        </div>
 
         <div className="flex items-center justify-between border-t pt-4">
           <Button 
