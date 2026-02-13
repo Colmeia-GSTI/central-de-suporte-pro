@@ -9,7 +9,7 @@ const corsHeaders = {
 interface BoletoRequest {
   invoice_id?: string;
   payment_type?: "boleto" | "pix";
-  action?: "test" | "cancel";
+  action?: "test" | "cancel" | "register_webhook" | "check_webhook";
   motivo_cancelamento?: string;
 }
 
@@ -276,6 +276,112 @@ serve(async (req) => {
           pix_error: pixError,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Register webhook action - register our webhook URL with Banco Inter API
+    if (action === "register_webhook") {
+      console.log("[BANCO-INTER] Registrando webhook no Banco Inter...");
+      
+      const tokenResult = await tryGetTokenWithFallback(
+        "boleto-cobranca.write",
+        "boleto-cobranca.read boleto-cobranca.write"
+      );
+
+      if (!tokenResult.access_token) {
+        return new Response(
+          JSON.stringify({ 
+            error: `Falha ao autenticar para registrar webhook: ${tokenResult.error}`,
+            hint: "Habilite o escopo boleto-cobranca.write no portal do Banco Inter." 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook-banco-inter`;
+
+      const response = await mtlsFetch(`${baseUrl}/cobranca/v3/cobrancas/webhook`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${tokenResult.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ webhookUrl }),
+      });
+
+      if (!response.ok && response.status !== 204) {
+        const errorText = await response.text();
+        console.error("[BANCO-INTER] Erro ao registrar webhook:", errorText);
+        return new Response(
+          JSON.stringify({ error: "Erro ao registrar webhook: " + errorText }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Consume body if any
+      if (response.status !== 204) {
+        await response.text();
+      }
+
+      console.log("[BANCO-INTER] Webhook registrado com sucesso:", webhookUrl);
+      return new Response(
+        JSON.stringify({ success: true, webhookUrl }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check webhook action - verify if webhook is registered
+    if (action === "check_webhook") {
+      console.log("[BANCO-INTER] Verificando webhook cadastrado...");
+
+      const tokenResult = await tryGetTokenWithFallback(
+        "boleto-cobranca.read",
+        "boleto-cobranca.read boleto-cobranca.write"
+      );
+
+      if (!tokenResult.access_token) {
+        return new Response(
+          JSON.stringify({ 
+            error: `Falha ao autenticar para verificar webhook: ${tokenResult.error}` 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const response = await mtlsFetch(`${baseUrl}/cobranca/v3/cobrancas/webhook`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${tokenResult.access_token}`,
+        },
+      });
+
+      if (response.status === 404) {
+        await response.text();
+        console.log("[BANCO-INTER] Nenhum webhook cadastrado");
+        return new Response(
+          JSON.stringify({ registered: false }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[BANCO-INTER] Erro ao verificar webhook:", errorText);
+        return new Response(
+          JSON.stringify({ error: "Erro ao verificar webhook: " + errorText }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const data = await response.json();
+      console.log("[BANCO-INTER] Webhook cadastrado:", JSON.stringify(data));
+      return new Response(
+        JSON.stringify({ 
+          registered: true, 
+          webhookUrl: data.webhookUrl, 
+          criacao: data.criacao 
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
