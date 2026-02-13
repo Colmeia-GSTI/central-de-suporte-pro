@@ -624,10 +624,55 @@ serve(async (req) => {
       if (!boletoResponse.ok) {
         const errorText = await boletoResponse.text();
         console.error("[BANCO-INTER] Boleto error:", errorText);
-        throw new Error("Erro ao gerar boleto: " + errorText);
-      }
 
-      result = await boletoResponse.json();
+        // Detectar erro de duplicidade do Banco Inter
+        const isDuplicate = errorText.toLowerCase().includes("existe uma cobran") 
+          || errorText.toLowerCase().includes("codigo de solicitacao")
+          || errorText.toLowerCase().includes("código de solicitação");
+
+        if (isDuplicate) {
+          console.log("[BANCO-INTER] Boleto duplicado detectado, verificando dados existentes...");
+
+          // Verificar se a fatura ja tem boleto_barcode
+          const { data: currentInv } = await supabase
+            .from("invoices")
+            .select("boleto_barcode, boleto_status, notes")
+            .eq("id", invoice_id)
+            .single();
+
+          if (currentInv?.boleto_barcode) {
+            console.log("[BANCO-INTER] Boleto ja existe com barcode, retornando sucesso");
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                duplicate: true,
+                message: "Boleto ja gerado anteriormente" 
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // Se nao tem barcode, tentar extrair codigoSolicitacao da mensagem de erro
+          const match = errorText.match(/c[oó]digo de solicita[cç][aã]o[:\s]*([a-f0-9-]+)/i);
+          if (match?.[1]) {
+            console.log("[BANCO-INTER] Extraido codigoSolicitacao da duplicidade:", match[1]);
+            result = { codigoSolicitacao: match[1] };
+          } else {
+            // Tentar recuperar do notes da fatura
+            const notesMatch = currentInv?.notes?.match(/codigoSolicitacao:([a-f0-9-]+)/i);
+            if (notesMatch?.[1]) {
+              console.log("[BANCO-INTER] Recuperado codigoSolicitacao do notes:", notesMatch[1]);
+              result = { codigoSolicitacao: notesMatch[1] };
+            } else {
+              throw new Error("Erro ao gerar boleto (duplicado sem codigo recuperavel): " + errorText);
+            }
+          }
+        } else {
+          throw new Error("Erro ao gerar boleto: " + errorText);
+        }
+      } else {
+        result = await boletoResponse.json();
+      }
       console.log("[BANCO-INTER] Boleto gerado:", JSON.stringify(result));
 
       // Update invoice with boleto info
