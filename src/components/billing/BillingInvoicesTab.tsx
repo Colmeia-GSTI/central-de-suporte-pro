@@ -36,7 +36,7 @@ import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
-import { BillingBatchProcessing } from "@/components/billing/BillingBatchProcessing";
+import { useBatchProcessing } from "@/hooks/useBatchProcessing";
 import { InvoiceProcessingHistory } from "@/components/billing/InvoiceProcessingHistory";
 import { ManualPaymentDialog } from "@/components/billing/ManualPaymentDialog";
 import { SecondCopyDialog } from "@/components/billing/SecondCopyDialog";
@@ -79,7 +79,9 @@ export function BillingInvoicesTab() {
   const [pixDialogInvoice, setPixDialogInvoice] = useState<InvoiceWithClient | null>(null);
   const [isNfseAvulsaOpen, setIsNfseAvulsaOpen] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
-  const [isBatchProcessingOpen, setIsBatchProcessingOpen] = useState(false);
+  const { processBatch, isProcessing: isBatchProcessing } = useBatchProcessing({
+    onComplete: () => setSelectedInvoices(new Set()),
+  });
   const [historyInvoice, setHistoryInvoice] = useState<InvoiceWithClient | null>(null);
   const [manualPaymentInvoice, setManualPaymentInvoice] = useState<InvoiceWithClient | null>(null);
   const [secondCopyInvoice, setSecondCopyInvoice] = useState<InvoiceWithClient | null>(null);
@@ -604,8 +606,8 @@ export function BillingInvoicesTab() {
           <Button
             size="sm"
             className="bg-primary hover:bg-primary/90"
-            disabled={!hasSelected}
-            onClick={() => setIsBatchProcessingOpen(true)}
+            disabled={!hasSelected || isBatchProcessing}
+            onClick={() => processBatch(selectedInvoicesData.map(inv => inv.id))}
           >
             <Zap className="mr-1.5 h-4 w-4" />
             Faturar Agora
@@ -689,18 +691,6 @@ export function BillingInvoicesTab() {
         />
       )}
 
-      {isBatchProcessingOpen && (
-        <BillingBatchProcessing
-          selectedInvoiceIds={selectedInvoicesData.map(inv => inv.id)}
-          selectedInvoiceCount={selectedInvoicesData.length}
-          open={isBatchProcessingOpen}
-          onOpenChange={setIsBatchProcessingOpen}
-          onProcessingComplete={() => {
-            setSelectedInvoices(new Set());
-            queryClient.invalidateQueries({ queryKey: ["invoices"] });
-          }}
-        />
-      )}
     </div>
   );
 }
