@@ -117,7 +117,8 @@ serve(async (req) => {
     });
 
     if (!tokenResponse.ok) {
-      throw new Error("Erro ao autenticar: " + await tokenResponse.text());
+      const errBody = await tokenResponse.text();
+      throw new Error(`Erro ao autenticar (HTTP ${tokenResponse.status}): ${errBody || "(empty body)"}`);
     }
 
     const { access_token } = await tokenResponse.json();
