@@ -1,87 +1,91 @@
 
+# Tratar Duplicidade de Boleto no Banco Inter como Sucesso
 
-# Salvar Dados de NFS-e na Fatura Avulsa e Recuperar no Dialog de Emissão
+## Diagnostico
 
-## Problema
+A fatura #9 do Clube Comercial de Passo Fundo (ID `2b6c2740...`) **ja possui boleto gerado** (codigo de barras `0779000116...`, codigo de solicitacao `4d188f59...`). Quando voce clicou "Faturar Agora" novamente, o Banco Inter rejeitou com a mensagem:
 
-Quando o usuario cria uma fatura avulsa pelo `NfseAvulsaDialog` (com a opcao "Gerar fatura junto"), os dados de NFS-e (codigo de servico, CNAE, aliquota, descricao, tributacao) sao usados apenas para a emissao imediata, mas **nao sao salvos na fatura**. Se o usuario precisar reemitir ou consultar, esses dados se perdem.
+> "Existe uma cobranca emitida ha poucos minutos com os mesmos dados com a situacao 'a receber'"
 
-Alem disso, o `EmitNfseDialog` bloqueia completamente faturas sem contrato, mesmo quando os dados ja foram preenchidos na origem.
+O sistema interpreta qualquer erro HTTP do Banco Inter como falha, mas nesse caso especifico, o boleto ja existe e esta ativo. O comportamento correto e detectar a duplicidade e tratar como sucesso.
 
 ## Solucao
 
-### 1. Salvar metadados NFS-e ao criar fatura avulsa
+### Arquivo: `supabase/functions/banco-inter/index.ts` (linhas 624-628)
 
-**Arquivo:** `src/components/billing/nfse/NfseAvulsaDialog.tsx` (linha ~196-209)
-
-Ao inserir a fatura na tabela `invoices`, incluir os dados de NFS-e no campo `processing_metadata` (jsonb, ja existe na tabela):
+Atualmente o codigo faz:
 
 ```text
-.insert({
-  client_id: clientId,
-  contract_id: null,
-  amount: valor,
-  due_date: format(dataVencimento, "yyyy-MM-dd"),
-  status: "pending",
-  description: descricao,
-  processing_metadata: {
-    nfse_origin: "avulsa",
-    service_code: serviceCode.codigo_tributacao,
-    cnae: serviceCode.cnae_principal,
-    aliquota: aliquotaIss,
-    service_description: descricao,
-    tributacao: {
-      iss_retido: tributacao.issRetido,
-      aliquota_iss: aliquotaIss,
-      valor_pis: tributacao.valorPis,
-      valor_cofins: tributacao.valorCofins,
-      valor_csll: tributacao.valorCsll,
-      valor_irrf: tributacao.valorIrrf,
-      valor_inss: tributacao.valorInss,
+if (!boletoResponse.ok) {
+  const errorText = await boletoResponse.text();
+  console.error("[BANCO-INTER] Boleto error:", errorText);
+  throw new Error("Erro ao gerar boleto: " + errorText);
+}
+```
+
+**Mudanca**: Antes de lancar o erro, verificar se a mensagem contem indicadores de duplicidade (ex: "existe uma cobranca emitida" ou "codigo de solicitacao"). Se sim:
+
+1. Extrair o `codigoSolicitacao` da mensagem de erro do Inter
+2. Verificar se a fatura ja possui `boleto_barcode` preenchido no banco
+3. Se ja tiver, retornar sucesso com os dados existentes em vez de lancar erro
+4. Se nao tiver, usar o `codigoSolicitacao` retornado para fazer polling e obter os dados do boleto
+
+```text
+if (!boletoResponse.ok) {
+  const errorText = await boletoResponse.text();
+  console.error("[BANCO-INTER] Boleto error:", errorText);
+
+  // Detectar erro de duplicidade do Banco Inter
+  const isDuplicate = errorText.includes("existe uma cobrança emitida") 
+    || errorText.includes("existe uma cobranca emitida")
+    || errorText.includes("código de solicitação");
+
+  if (isDuplicate) {
+    console.log("[BANCO-INTER] Boleto duplicado detectado, verificando dados existentes...");
+
+    // Verificar se a fatura ja tem boleto_barcode
+    const { data: currentInv } = await supabase
+      .from("invoices")
+      .select("boleto_barcode, boleto_status, notes")
+      .eq("id", invoice_id)
+      .single();
+
+    if (currentInv?.boleto_barcode) {
+      console.log("[BANCO-INTER] Boleto ja existe com barcode, retornando sucesso");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          duplicate: true,
+          message: "Boleto ja gerado anteriormente" 
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    // Se nao tem barcode mas tem codigoSolicitacao, extrair e fazer polling
+    const match = errorText.match(/código de solicitação:\s*([a-f0-9-]+)/i)
+      || errorText.match(/codigo de solicitação:\s*([a-f0-9-]+)/i);
+    if (match?.[1]) {
+      // Continuar com polling usando o codigo extraido
+      result = { codigoSolicitacao: match[1] };
+      // (segue o fluxo normal de polling que ja existe no codigo)
+    } else {
+      throw new Error("Erro ao gerar boleto: " + errorText);
+    }
+  } else {
+    throw new Error("Erro ao gerar boleto: " + errorText);
   }
-})
+}
 ```
 
-### 2. Adaptar EmitNfseDialog para faturas sem contrato
+### Arquivo: `supabase/functions/batch-process-invoices/index.ts`
 
-**Arquivo:** `src/components/financial/EmitNfseDialog.tsx`
+Nenhuma mudanca necessaria. A funcao batch ja trata o retorno da edge function corretamente -- se `banco-inter` retornar 200, o batch registra como sucesso.
 
-Mudancas:
+## Resumo
 
-| Aspecto | Atual | Novo |
-|---------|-------|------|
-| Validacao de contrato | Bloqueia se nao tem `contract_id` | Permite se tem `processing_metadata.nfse_origin === "avulsa"` |
-| Codigo de servico | Vem do contrato | Vem do contrato OU de `processing_metadata` |
-| Descricao | Fallback do contrato | Fallback de `processing_metadata.service_description` |
-| Aliquota ISS | Do contrato | Do contrato OU de `processing_metadata.aliquota` |
-| Tributacao inicial | Zerada | Pre-preenchida com valores de `processing_metadata.tributacao` |
-| `canEmit` | `isConfigured && hasContract && isAsaasConfigured` | `isConfigured && isAsaasConfigured && (hasContract \|\| isStandaloneNfse)` |
-| Action na API | Sempre `emit` | `emit` (com contrato) ou `emit_standalone` (avulsa) |
-| Alerta de contrato | Sempre mostra para avulsas | Mostra apenas se nao e avulsa e nao tem contrato |
-
-A logica de leitura dos metadados:
-
-```text
-const metadata = invoice.processing_metadata as any;
-const isStandaloneNfse = metadata?.nfse_origin === "avulsa";
-
-// Se avulsa, usar dados salvos
-const serviceCode = isStandaloneNfse ? metadata.service_code : contract?.nfse_service_code;
-const cnae = isStandaloneNfse ? metadata.cnae : contract?.nfse_cnae;
-const aliquotaIss = isStandaloneNfse ? (metadata.aliquota ?? 0) : (contract?.nfse_service_codes?.aliquota_sugerida ?? 0);
-```
-
-### Arquivos Alterados
-
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/components/billing/nfse/NfseAvulsaDialog.tsx` | Salvar `processing_metadata` com dados NFS-e ao criar fatura |
-| `src/components/financial/EmitNfseDialog.tsx` | Ler `processing_metadata` como fallback, remover bloqueio para avulsas, ajustar mutation para usar `emit_standalone` |
-
-### Beneficios
-- Dados preenchidos na origem sao preservados e reutilizados
-- Nenhuma mudanca no banco de dados (usa campo `processing_metadata` existente)
-- Compativel com faturas com contrato (comportamento atual mantido)
-- Fluxo de reemissao funciona sem retrabalho manual
-
+| Cenario | Antes | Depois |
+|---------|-------|--------|
+| Boleto duplicado com barcode ja salvo | Erro 500 | Retorna 200 com flag `duplicate: true` |
+| Boleto duplicado sem barcode salvo | Erro 500 | Extrai codigo e faz polling para obter barcode |
+| Outros erros do Banco Inter | Erro 500 | Mantido (sem mudanca) |
