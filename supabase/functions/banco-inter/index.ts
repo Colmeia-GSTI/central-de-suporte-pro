@@ -636,7 +636,7 @@ serve(async (req) => {
           // Verificar se a fatura ja tem boleto_barcode
           const { data: currentInv } = await supabase
             .from("invoices")
-            .select("boleto_barcode, boleto_status, notes")
+            .select("boleto_barcode, boleto_url, boleto_status, notes")
             .eq("id", invoice_id)
             .single();
 
@@ -646,7 +646,9 @@ serve(async (req) => {
               JSON.stringify({ 
                 success: true, 
                 duplicate: true,
-                message: "Boleto ja gerado anteriormente" 
+                message: "Boleto ja gerado anteriormente",
+                boleto_barcode: currentInv.boleto_barcode,
+                boleto_url: currentInv.boleto_url || null,
               }),
               { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
