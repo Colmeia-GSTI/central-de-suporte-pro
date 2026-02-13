@@ -1,54 +1,87 @@
 
 
-# Melhorias de UX: Ações Rápidas e Botão Atualizar no Faturamento
+# Salvar Dados de NFS-e na Fatura Avulsa e Recuperar no Dialog de Emissão
 
-## 1. Ações Rápidas (QuickActionsFAB)
+## Problema
 
-O FAB ja esta posicionado no canto inferior direito da tela (`fixed bottom-6 right-6`). No entanto, o layout atual expande os botoes verticalmente para cima. Nenhuma mudanca de posicao e necessaria, pois ja atende ao requisito de estar na parte inferior.
+Quando o usuario cria uma fatura avulsa pelo `NfseAvulsaDialog` (com a opcao "Gerar fatura junto"), os dados de NFS-e (codigo de servico, CNAE, aliquota, descricao, tributacao) sao usados apenas para a emissao imediata, mas **nao sao salvos na fatura**. Se o usuario precisar reemitir ou consultar, esses dados se perdem.
 
-**Melhoria proposta**: Adicionar uma barra de fundo semi-transparente (backdrop) por tras dos botoes expandidos para melhor visibilidade em dark mode, e garantir que no mobile o FAB nao sobreponha elementos criticos.
+Alem disso, o `EmitNfseDialog` bloqueia completamente faturas sem contrato, mesmo quando os dados ja foram preenchidos na origem.
 
-## 2. Botao "Atualizar" na Secao de Faturas
+## Solucao
 
-Adicionar um botao de refresh na toolbar de faturas que:
-- Invalida as queries `invoices`, `billing-counters` e `nfse-history` para buscar dados atualizados
-- Mostra um icone de loading girando enquanto os dados sao recarregados
-- Exibe um toast discreto "Dados atualizados" ao concluir
-- Fica ao lado do botao "Inadimplencia" na toolbar
+### 1. Salvar metadados NFS-e ao criar fatura avulsa
 
-### Arquivos a Alterar
+**Arquivo:** `src/components/billing/nfse/NfseAvulsaDialog.tsx` (linha ~196-209)
+
+Ao inserir a fatura na tabela `invoices`, incluir os dados de NFS-e no campo `processing_metadata` (jsonb, ja existe na tabela):
+
+```text
+.insert({
+  client_id: clientId,
+  contract_id: null,
+  amount: valor,
+  due_date: format(dataVencimento, "yyyy-MM-dd"),
+  status: "pending",
+  description: descricao,
+  processing_metadata: {
+    nfse_origin: "avulsa",
+    service_code: serviceCode.codigo_tributacao,
+    cnae: serviceCode.cnae_principal,
+    aliquota: aliquotaIss,
+    service_description: descricao,
+    tributacao: {
+      iss_retido: tributacao.issRetido,
+      aliquota_iss: aliquotaIss,
+      valor_pis: tributacao.valorPis,
+      valor_cofins: tributacao.valorCofins,
+      valor_csll: tributacao.valorCsll,
+      valor_irrf: tributacao.valorIrrf,
+      valor_inss: tributacao.valorInss,
+    }
+  }
+})
+```
+
+### 2. Adaptar EmitNfseDialog para faturas sem contrato
+
+**Arquivo:** `src/components/financial/EmitNfseDialog.tsx`
+
+Mudancas:
+
+| Aspecto | Atual | Novo |
+|---------|-------|------|
+| Validacao de contrato | Bloqueia se nao tem `contract_id` | Permite se tem `processing_metadata.nfse_origin === "avulsa"` |
+| Codigo de servico | Vem do contrato | Vem do contrato OU de `processing_metadata` |
+| Descricao | Fallback do contrato | Fallback de `processing_metadata.service_description` |
+| Aliquota ISS | Do contrato | Do contrato OU de `processing_metadata.aliquota` |
+| Tributacao inicial | Zerada | Pre-preenchida com valores de `processing_metadata.tributacao` |
+| `canEmit` | `isConfigured && hasContract && isAsaasConfigured` | `isConfigured && isAsaasConfigured && (hasContract \|\| isStandaloneNfse)` |
+| Action na API | Sempre `emit` | `emit` (com contrato) ou `emit_standalone` (avulsa) |
+| Alerta de contrato | Sempre mostra para avulsas | Mostra apenas se nao e avulsa e nao tem contrato |
+
+A logica de leitura dos metadados:
+
+```text
+const metadata = invoice.processing_metadata as any;
+const isStandaloneNfse = metadata?.nfse_origin === "avulsa";
+
+// Se avulsa, usar dados salvos
+const serviceCode = isStandaloneNfse ? metadata.service_code : contract?.nfse_service_code;
+const cnae = isStandaloneNfse ? metadata.cnae : contract?.nfse_cnae;
+const aliquotaIss = isStandaloneNfse ? (metadata.aliquota ?? 0) : (contract?.nfse_service_codes?.aliquota_sugerida ?? 0);
+```
+
+### Arquivos Alterados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/billing/BillingInvoicesTab.tsx` | Adicionar botao "Atualizar" na toolbar (linha ~283). O botao usara `queryClient.invalidateQueries` para refresh de `invoices`, `billing-counters`. Mostra icone `RefreshCw` com animacao `animate-spin` durante o loading. |
+| `src/components/billing/nfse/NfseAvulsaDialog.tsx` | Salvar `processing_metadata` com dados NFS-e ao criar fatura |
+| `src/components/financial/EmitNfseDialog.tsx` | Ler `processing_metadata` como fallback, remover bloqueio para avulsas, ajustar mutation para usar `emit_standalone` |
 
-### Implementacao do Botao
-
-Na toolbar, antes do link de Inadimplencia (linha 283), inserir:
-
-```text
-<Button
-  variant="outline"
-  size="sm"
-  className="h-9"
-  disabled={isLoading || isFetching}
-  onClick={() => {
-    queryClient.invalidateQueries({ queryKey: ["invoices"] });
-    queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-    toast.success("Dados atualizados");
-  }}
->
-  <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isFetching && "animate-spin")} />
-  Atualizar
-</Button>
-```
-
-Para detectar o estado de fetching, extrair `isFetching` da query de invoices existente (useQuery ja retorna esse valor).
-
-### Notas Tecnicas
-- O `RefreshCw` ja esta importado no arquivo (linha 23)
-- O `cn` ja esta disponivel via `@/lib/utils`
-- Sera necessario extrair `isFetching` do retorno do `useQuery` de faturas
-- Compativel com dark mode por usar classes semanticas do design system (variant="outline")
-- Responsivo: o botao se adapta ao layout flex existente
+### Beneficios
+- Dados preenchidos na origem sao preservados e reutilizados
+- Nenhuma mudanca no banco de dados (usa campo `processing_metadata` existente)
+- Compativel com faturas com contrato (comportamento atual mantido)
+- Fluxo de reemissao funciona sem retrabalho manual
 
