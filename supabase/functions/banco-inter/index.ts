@@ -544,21 +544,34 @@ serve(async (req) => {
         
         const existingNotes = currentInvoice?.notes || "";
         
+        // Obter token de LEITURA para polling (escopo boleto-cobranca.read)
+        const readTokenResult = await tryGetTokenWithFallback(
+          "boleto-cobranca.read",
+          "boleto-cobranca.read boleto-cobranca.write"
+        );
+        
+        const readToken = readTokenResult.access_token;
+        if (!readToken) {
+          console.warn("[BANCO-INTER] Não foi possível obter token de leitura para polling:", readTokenResult.error);
+          console.warn("[BANCO-INTER] Confiando no fallback poll-boleto-status para atualizar dados do boleto");
+        }
+
         let boletoCompleto = false;
         const maxTentativas = 6; // 30 segundos (5 segundos cada) - webhook/poll-services cuida do resto
         
-        for (let tentativa = 1; tentativa <= maxTentativas && !boletoCompleto; tentativa++) {
-          await new Promise(r => setTimeout(r, 5000)); // Aguarda 5 segundos
-          console.log(`[BANCO-INTER] Polling tentativa ${tentativa}/${maxTentativas}...`);
-          
-          try {
-            const detailsResponse = await mtlsFetch(
-              `${baseUrl}/cobranca/v3/cobrancas/${result.codigoSolicitacao}`,
-              { 
-                method: "GET",
-                headers: { Authorization: `Bearer ${access_token}` }
-              }
-            );
+        if (readToken) {
+          for (let tentativa = 1; tentativa <= maxTentativas && !boletoCompleto; tentativa++) {
+            await new Promise(r => setTimeout(r, 5000)); // Aguarda 5 segundos
+            console.log(`[BANCO-INTER] Polling tentativa ${tentativa}/${maxTentativas}...`);
+            
+            try {
+              const detailsResponse = await mtlsFetch(
+                `${baseUrl}/cobranca/v3/cobrancas/${result.codigoSolicitacao}`,
+                { 
+                  method: "GET",
+                  headers: { Authorization: `Bearer ${readToken}` }
+                }
+              );
             
             if (detailsResponse.ok) {
               const details = await detailsResponse.json();
@@ -582,7 +595,8 @@ serve(async (req) => {
           } catch (pollError) {
             console.warn(`[BANCO-INTER] Polling tentativa ${tentativa} falhou:`, pollError);
           }
-        }
+          }
+        } // end if (readToken)
         
         if (!boletoCompleto) {
           // Se não conseguiu dados após polling, salvar codigoSolicitacao e status pendente
