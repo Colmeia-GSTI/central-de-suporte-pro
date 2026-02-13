@@ -132,26 +132,62 @@ serve(async (req) => {
     const client = clientData;
     const hasBoleto = !!invoice.boleto_barcode || !!invoice.boleto_url;
     const hasPix = !!invoice.pix_code;
-    // CORREÇÃO: Considerar boleto em processamento (ainda aguardando dados do Banco Inter)
     const boletoEmProcessamento = invoice.boleto_status === "pendente" || invoice.boleto_status === "processando";
 
-    if (!hasBoleto && !hasPix && !boletoEmProcessamento) {
+    // === BLOQUEIO DE ARTEFATOS ===
+    const blockedReasons: string[] = [];
+
+    // Verificar NFS-e vinculada
+    const { data: linkedNfse } = await supabase
+      .from("nfse_history")
+      .select("id, status, pdf_url, xml_url")
+      .eq("invoice_id", invoice_id)
+      .eq("status", "autorizada")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (linkedNfse) {
+      if (!linkedNfse.pdf_url || !linkedNfse.xml_url) {
+        const missing = [];
+        if (!linkedNfse.pdf_url) missing.push("pdf");
+        if (!linkedNfse.xml_url) missing.push("xml");
+        blockedReasons.push(`NFS-e incompleta - ${missing.join(" e ")} ausente(s)`);
+      }
+    }
+
+    // Verificar boleto
+    if (boletoEmProcessamento && !hasBoleto) {
+      blockedReasons.push("Boleto em processamento - aguarde a geração");
+    }
+
+    if (blockedReasons.length > 0) {
+      // Log de bloqueio
+      await supabase.from("application_logs").insert({
+        module: "billing_notification",
+        level: "warn",
+        message: `Envio bloqueado: ${blockedReasons.join("; ")}`,
+        context: { invoice_id, blocked_artifacts: blockedReasons },
+      });
+
       return new Response(
-        JSON.stringify({ 
-          error: "Esta fatura não tem boleto ou PIX gerado e não está em processamento",
-          details: {
-            has_boleto: hasBoleto,
-            has_pix: hasPix,
-            boleto_status: invoice.boleto_status
-          }
+        JSON.stringify({
+          error: "Envio bloqueado: artefatos incompletos",
+          blocked: true,
+          blocked_reasons: blockedReasons,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Se boleto está em processamento mas sem dados, avisar no log
-    if (boletoEmProcessamento && !hasBoleto) {
-      console.log(`[RESEND] Boleto em processamento (status=${invoice.boleto_status}) - enviando notificação com aviso`);
+    if (!hasBoleto && !hasPix && !boletoEmProcessamento) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Esta fatura não tem boleto ou PIX gerado e não está em processamento",
+          details: { has_boleto: hasBoleto, has_pix: hasPix, boleto_status: invoice.boleto_status }
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

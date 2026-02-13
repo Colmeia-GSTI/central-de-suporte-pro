@@ -163,6 +163,27 @@ serve(async (req) => {
         continue;
       }
 
+      // Verificar NFS-e vinculada - se existe mas XML não disponível, pular
+      const { data: linkedNfse } = await supabase
+        .from("nfse_history")
+        .select("id, status, pdf_url, xml_url")
+        .eq("invoice_id", invoice.id)
+        .eq("status", "autorizada")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (linkedNfse && !linkedNfse.xml_url) {
+        console.log(`[NOTIFY-DUE] Skipping invoice #${invoice.invoice_number} - NFS-e XML not available yet`);
+        await supabase.from("application_logs").insert({
+          module: "billing_notification",
+          level: "warn",
+          message: `Lembrete bloqueado: NFS-e sem XML para fatura #${invoice.invoice_number}`,
+          context: { invoice_id: invoice.id, nfse_id: linkedNfse.id, blocked_artifacts: ["xml"] },
+        });
+        continue;
+      }
+
       const dueDate = new Date(invoice.due_date);
       const daysUntilDue = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
       const dueDateFormatted = dueDate.toLocaleDateString('pt-BR');

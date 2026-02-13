@@ -205,44 +205,77 @@ async function processInvoices(
         result.nfse_status = "skipped";
       }
 
-      // 4. ENVIAR NOTIFICAÇÕES
+      // 4. ENVIAR NOTIFICAÇÕES (com validação de artefatos)
       if (req.send_email || req.send_whatsapp) {
         try {
-          const channels = [];
-          if (req.send_email) channels.push("email");
-          if (req.send_whatsapp) channels.push("whatsapp");
+          // Recarregar dados atualizados da fatura
+          const { data: freshInvoice } = await supabase
+            .from("invoices")
+            .select("boleto_url, boleto_barcode, pix_code, boleto_status")
+            .eq("id", invoiceId)
+            .single();
 
-          console.log(`[batch-process] Sending notifications (${channels.join(", ")}) for ${invoiceId}`);
-          const { data, error: notificationError } = await supabase.functions.invoke(
-            "resend-payment-notification",
-            {
-              body: {
-                invoice_id: invoiceId,
-                channels,
-              },
-            }
-          );
+          // Verificar NFS-e vinculada
+          const { data: linkedNfse } = await supabase
+            .from("nfse_history")
+            .select("id, status, pdf_url, xml_url")
+            .eq("invoice_id", invoiceId)
+            .eq("status", "autorizada")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-          if (notificationError) {
+          const blockedArtifacts: string[] = [];
+          if (linkedNfse && (!linkedNfse.pdf_url || !linkedNfse.xml_url)) {
+            if (!linkedNfse.pdf_url) blockedArtifacts.push("nfse_pdf");
+            if (!linkedNfse.xml_url) blockedArtifacts.push("nfse_xml");
+          }
+          const hasBoleto = !!freshInvoice?.boleto_url || !!freshInvoice?.boleto_barcode;
+          const hasPix = !!freshInvoice?.pix_code;
+          const boletoProcessando = freshInvoice?.boleto_status === "pendente" || freshInvoice?.boleto_status === "processando";
+          if (boletoProcessando && !hasBoleto && !hasPix) {
+            blockedArtifacts.push("boleto_pendente");
+          }
+
+          if (blockedArtifacts.length > 0) {
             result.email_status = "error";
-            result.email_error = notificationError.message;
-            console.error(`[batch-process] Error sending notifications for ${invoiceId}:`, notificationError);
-          } else if (!data?.success) {
-            result.email_status = "error";
-            result.email_error = data?.error || "Notification failed";
-            console.error(`[batch-process] Notification API error for ${invoiceId}:`, data?.error);
+            result.email_error = `Envio bloqueado: ${blockedArtifacts.join(", ")}`;
+            console.warn(`[batch-process] Notification blocked for ${invoiceId}: ${blockedArtifacts.join(", ")}`);
+
+            // Registrar bloqueio
+            await supabase.from("application_logs").insert({
+              module: "billing_notification",
+              level: "warn",
+              message: `Envio bloqueado em lote: ${blockedArtifacts.join(", ")}`,
+              context: { invoice_id: invoiceId, blocked_artifacts: blockedArtifacts },
+            });
+
+            // Marcar email como bloqueado
+            await supabase.from("invoices").update({ email_status: "erro", email_error_msg: `Bloqueado: ${blockedArtifacts.join(", ")}` }).eq("id", invoiceId);
           } else {
-            result.email_status = "success";
-            console.log(`[batch-process] Notifications sent successfully for ${invoiceId}`);
+            const channels = [];
+            if (req.send_email) channels.push("email");
+            if (req.send_whatsapp) channels.push("whatsapp");
 
-            // Atualizar status no banco
-            await supabase
-              .from("invoices")
-              .update({
-                email_status: "enviado",
-                email_sent_at: new Date().toISOString(),
-              })
-              .eq("id", invoiceId);
+            console.log(`[batch-process] Sending notifications (${channels.join(", ")}) for ${invoiceId}`);
+            const { data, error: notificationError } = await supabase.functions.invoke(
+              "resend-payment-notification",
+              { body: { invoice_id: invoiceId, channels } }
+            );
+
+            if (notificationError) {
+              result.email_status = "error";
+              result.email_error = notificationError.message;
+              console.error(`[batch-process] Error sending notifications for ${invoiceId}:`, notificationError);
+            } else if (!data?.success) {
+              result.email_status = "error";
+              result.email_error = data?.error || "Notification failed";
+              console.error(`[batch-process] Notification API error for ${invoiceId}:`, data?.error);
+            } else {
+              result.email_status = "success";
+              console.log(`[batch-process] Notifications sent successfully for ${invoiceId}`);
+              await supabase.from("invoices").update({ email_status: "enviado", email_sent_at: new Date().toISOString() }).eq("id", invoiceId);
+            }
           }
         } catch (error) {
           result.email_status = "error";

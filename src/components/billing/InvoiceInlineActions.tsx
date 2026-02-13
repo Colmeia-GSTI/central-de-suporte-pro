@@ -1,4 +1,4 @@
-import { Eye, Zap, Barcode, FileText, Mail, DollarSign, Loader2, RefreshCw } from "lucide-react";
+import { Eye, Zap, Barcode, FileText, Mail, DollarSign, Loader2, RefreshCw, Lock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
@@ -16,7 +16,7 @@ interface InvoiceInlineActionsProps {
     email_error_msg?: string | null;
     email_status?: string | null;
   };
-  nfseInfo?: { status: string; numero_nfse: string | null };
+  nfseInfo?: { status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null };
   processingComplete: string | null;
   generatingPayment: string | null;
   sendingNotification: string | null;
@@ -45,6 +45,22 @@ export function InvoiceInlineActions({
   const isProcessing = processingComplete === invoice.id;
   const isGenerating = generatingPayment?.startsWith(invoice.id);
   const isSending = sendingNotification?.startsWith(invoice.id);
+
+  // Check if send is blocked due to incomplete artifacts
+  const sendBlockedReasons: string[] = [];
+  if (nfseInfo && nfseInfo.status === "autorizada" && (!nfseInfo.pdf_url || !nfseInfo.xml_url)) {
+    const missing = [];
+    if (!nfseInfo.pdf_url) missing.push("PDF");
+    if (!nfseInfo.xml_url) missing.push("XML");
+    sendBlockedReasons.push(`NFS-e: ${missing.join(" e ")} ausente(s)`);
+  }
+  const hasBoletoData = !!invoice.boleto_url;
+  const boletoProcessando = invoice.boleto_error_msg === null && !hasBoletoData && invoice.status !== "paid";
+  // Only block if boleto was expected but not ready (no URL and no pix fallback)
+  if (boletoProcessando && !invoice.pix_code && invoice.billing_provider) {
+    // Don't block - this is just informational
+  }
+  const isSendBlocked = sendBlockedReasons.length > 0;
 
   // Boleto status color
   const boletoColor = invoice.boleto_error_msg
@@ -153,18 +169,20 @@ export function InvoiceInlineActions({
             variant="ghost" 
             size="sm" 
             onClick={onEmailClick}
-            disabled={isSending}
+            disabled={isSending || isSendBlocked}
             className="h-7 w-7 p-0 hover:bg-muted"
           >
             {isSending ? (
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : isSendBlocked ? (
+              <Lock className={`${iconClass} text-amber-500`} />
             ) : (
               <Mail className={`${iconClass} ${emailColor}`} />
             )}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {emailSent ? "Email enviado" : emailError ? "Erro no email" : "Enviar email"}
+          {isSendBlocked ? `Envio bloqueado: ${sendBlockedReasons.join(". ")}` : emailSent ? "Email enviado" : emailError ? "Erro no email" : "Enviar email"}
         </TooltipContent>
       </Tooltip>
 
