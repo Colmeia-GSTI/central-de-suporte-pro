@@ -148,13 +148,17 @@ serve(async (req) => {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`[BANCO-INTER] Token error for scope "${scope}":`, errorText);
+          console.error(`[BANCO-INTER] Token error for scope "${scope}" (HTTP ${response.status}):`, errorText || "(empty body)");
+          
+          if (response.status === 429) {
+            return { error: `Rate limit atingido (HTTP 429). Aguarde antes de tentar novamente.` };
+          }
           
           if (errorText.includes("No registered scope value")) {
             return { error: `Escopo "${scope}" não está habilitado para este Client ID no portal do Banco Inter.` };
           }
           
-          return { error: errorText };
+          return { error: `HTTP ${response.status}: ${errorText || "resposta vazia"}` };
         }
 
         const data = await response.json();
