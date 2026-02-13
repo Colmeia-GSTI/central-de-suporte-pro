@@ -146,24 +146,79 @@ serve(async (req) => {
     
     console.log(`[send-whatsapp] Sending to Evolution API: ${evolutionUrl}`);
 
-    const response = await fetchWithTimeout(evolutionUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": settings.api_key,
-      },
-      body: JSON.stringify({
-        number: cleanNumber,
-        text: sanitizedMessage,
-      }),
-    });
+    // Retry logic for Evolution API call
+    let response: Response | null = null;
+    let responseData: any = null;
+    let lastError = "";
+    const maxAttempts = 3;
+    const retryDelaysMs = [0, 3000, 10000];
 
-    const responseData = await response.json();
-    
-    // Log response for debugging (without sensitive data)
-    console.log(`[send-whatsapp] Response status: ${response.status}`);
-    if (!response.ok) {
-      console.error(`[send-whatsapp] Error response:`, JSON.stringify(responseData));
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        console.log(`[send-whatsapp] Retry attempt ${attempt + 1}/${maxAttempts}`);
+        await new Promise(r => setTimeout(r, retryDelaysMs[attempt]));
+      }
+
+      try {
+        response = await fetchWithTimeout(evolutionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": settings.api_key,
+          },
+          body: JSON.stringify({
+            number: cleanNumber,
+            text: sanitizedMessage,
+          }),
+        });
+
+        responseData = await response.json();
+        console.log(`[send-whatsapp] Response status: ${response.status} (attempt ${attempt + 1})`);
+
+        if (response.ok) {
+          // Log retry metrics if retried
+          if (attempt > 0) {
+            await supabase.from("application_logs").insert({
+              module: "retry",
+              level: "info",
+              message: `WhatsApp enviado após ${attempt + 1} tentativas`,
+              action: "send-whatsapp",
+              context: { attempts: attempt + 1, success: true, label: "evolution_api" },
+            }).then(() => {});
+          }
+          break;
+        }
+
+        lastError = responseData?.message || responseData?.error || `Status ${response.status}`;
+        // Only retry on 5xx or network errors
+        if (response.status < 500) break;
+      } catch (err: unknown) {
+        const isTimeout = err instanceof Error && err.name === "AbortError";
+        lastError = isTimeout ? "Request timeout" : (err instanceof Error ? err.message : "Unknown error");
+        console.error(`[send-whatsapp] Error (attempt ${attempt + 1}):`, lastError);
+        if (attempt === maxAttempts - 1) {
+          // Log retry exhaustion
+          await supabase.from("application_logs").insert({
+            module: "retry",
+            level: "error",
+            message: `WhatsApp falhou após ${maxAttempts} tentativas: ${lastError}`,
+            action: "send-whatsapp",
+            context: { attempts: maxAttempts, success: false, label: "evolution_api" },
+          }).then(() => {});
+
+          return new Response(
+            JSON.stringify({ error: isTimeout ? "Timeout ao enviar mensagem" : "Erro interno" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+    }
+
+    if (!response || !responseData) {
+      return new Response(
+        JSON.stringify({ error: "Falha ao conectar com a Evolution API" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
     
     // Safe logging - only log success/failure and message ID

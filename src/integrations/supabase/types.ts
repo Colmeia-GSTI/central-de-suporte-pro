@@ -250,6 +250,8 @@ export type Database = {
           financial_entry_id: string | null
           id: string
           invoice_id: string | null
+          match_candidates: Json | null
+          match_score: number | null
           matched_at: string | null
           matched_by: string | null
           notes: string | null
@@ -265,6 +267,8 @@ export type Database = {
           financial_entry_id?: string | null
           id?: string
           invoice_id?: string | null
+          match_candidates?: Json | null
+          match_score?: number | null
           matched_at?: string | null
           matched_by?: string | null
           notes?: string | null
@@ -280,6 +284,8 @@ export type Database = {
           financial_entry_id?: string | null
           id?: string
           invoice_id?: string | null
+          match_candidates?: Json | null
+          match_score?: number | null
           matched_at?: string | null
           matched_by?: string | null
           notes?: string | null
@@ -4080,6 +4086,7 @@ export type Database = {
       }
     }
     Functions: {
+      auto_reconcile_bank_entries: { Args: never; Returns: Json }
       calculate_penalties: {
         Args: {
           p_amount: number
@@ -4113,6 +4120,7 @@ export type Database = {
       }
       get_certificate_password: { Args: { cert_id: string }; Returns: string }
       get_company_certificate_password: { Args: never; Returns: string }
+      get_integration_health_stats: { Args: never; Returns: Json }
       get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
       get_license_key: { Args: { license_id: string }; Returns: string }
       get_technician_ranking: {
