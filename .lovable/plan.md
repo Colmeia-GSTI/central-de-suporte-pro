@@ -1,91 +1,48 @@
 
-# Tratar Duplicidade de Boleto no Banco Inter como Sucesso
 
-## Diagnostico
+# Retornar Dados do Boleto Existente na Resposta de Duplicidade
 
-A fatura #9 do Clube Comercial de Passo Fundo (ID `2b6c2740...`) **ja possui boleto gerado** (codigo de barras `0779000116...`, codigo de solicitacao `4d188f59...`). Quando voce clicou "Faturar Agora" novamente, o Banco Inter rejeitou com a mensagem:
+## Problema
 
-> "Existe uma cobranca emitida ha poucos minutos com os mesmos dados com a situacao 'a receber'"
-
-O sistema interpreta qualquer erro HTTP do Banco Inter como falha, mas nesse caso especifico, o boleto ja existe e esta ativo. O comportamento correto e detectar a duplicidade e tratar como sucesso.
+Quando o sistema detecta um boleto duplicado e a fatura ja possui `boleto_barcode`, a resposta atual retorna apenas `{ success: true, duplicate: true }` sem incluir o barcode nem a URL do PDF. Isso impede o reenvio do boleto ao cliente.
 
 ## Solucao
 
-### Arquivo: `supabase/functions/banco-inter/index.ts` (linhas 624-628)
+### Arquivo: `supabase/functions/banco-inter/index.ts`
 
-Atualmente o codigo faz:
+**1. Incluir `boleto_url` na query** (linha 639):
 
+Alterar o select de:
 ```text
-if (!boletoResponse.ok) {
-  const errorText = await boletoResponse.text();
-  console.error("[BANCO-INTER] Boleto error:", errorText);
-  throw new Error("Erro ao gerar boleto: " + errorText);
-}
+.select("boleto_barcode, boleto_status, notes")
+```
+Para:
+```text
+.select("boleto_barcode, boleto_url, boleto_status, notes")
 ```
 
-**Mudanca**: Antes de lancar o erro, verificar se a mensagem contem indicadores de duplicidade (ex: "existe uma cobranca emitida" ou "codigo de solicitacao"). Se sim:
+**2. Retornar os dados na resposta** (linhas 645-652):
 
-1. Extrair o `codigoSolicitacao` da mensagem de erro do Inter
-2. Verificar se a fatura ja possui `boleto_barcode` preenchido no banco
-3. Se ja tiver, retornar sucesso com os dados existentes em vez de lancar erro
-4. Se nao tiver, usar o `codigoSolicitacao` retornado para fazer polling e obter os dados do boleto
+Alterar o JSON de retorno para incluir barcode e PDF:
 
 ```text
-if (!boletoResponse.ok) {
-  const errorText = await boletoResponse.text();
-  console.error("[BANCO-INTER] Boleto error:", errorText);
-
-  // Detectar erro de duplicidade do Banco Inter
-  const isDuplicate = errorText.includes("existe uma cobrança emitida") 
-    || errorText.includes("existe uma cobranca emitida")
-    || errorText.includes("código de solicitação");
-
-  if (isDuplicate) {
-    console.log("[BANCO-INTER] Boleto duplicado detectado, verificando dados existentes...");
-
-    // Verificar se a fatura ja tem boleto_barcode
-    const { data: currentInv } = await supabase
-      .from("invoices")
-      .select("boleto_barcode, boleto_status, notes")
-      .eq("id", invoice_id)
-      .single();
-
-    if (currentInv?.boleto_barcode) {
-      console.log("[BANCO-INTER] Boleto ja existe com barcode, retornando sucesso");
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          duplicate: true,
-          message: "Boleto ja gerado anteriormente" 
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Se nao tem barcode mas tem codigoSolicitacao, extrair e fazer polling
-    const match = errorText.match(/código de solicitação:\s*([a-f0-9-]+)/i)
-      || errorText.match(/codigo de solicitação:\s*([a-f0-9-]+)/i);
-    if (match?.[1]) {
-      // Continuar com polling usando o codigo extraido
-      result = { codigoSolicitacao: match[1] };
-      // (segue o fluxo normal de polling que ja existe no codigo)
-    } else {
-      throw new Error("Erro ao gerar boleto: " + errorText);
-    }
-  } else {
-    throw new Error("Erro ao gerar boleto: " + errorText);
-  }
-}
+return new Response(
+  JSON.stringify({ 
+    success: true, 
+    duplicate: true,
+    message: "Boleto ja gerado anteriormente",
+    boleto_barcode: currentInv.boleto_barcode,
+    boleto_url: currentInv.boleto_url || null,
+  }),
+  { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+);
 ```
-
-### Arquivo: `supabase/functions/batch-process-invoices/index.ts`
-
-Nenhuma mudanca necessaria. A funcao batch ja trata o retorno da edge function corretamente -- se `banco-inter` retornar 200, o batch registra como sucesso.
 
 ## Resumo
 
-| Cenario | Antes | Depois |
-|---------|-------|--------|
-| Boleto duplicado com barcode ja salvo | Erro 500 | Retorna 200 com flag `duplicate: true` |
-| Boleto duplicado sem barcode salvo | Erro 500 | Extrai codigo e faz polling para obter barcode |
-| Outros erros do Banco Inter | Erro 500 | Mantido (sem mudanca) |
+| Campo | Antes | Depois |
+|-------|-------|--------|
+| `boleto_barcode` | Nao retornado | Retornado |
+| `boleto_url` (PDF) | Nao retornado | Retornado |
+| Comportamento do caller | Sabe que deu certo mas nao tem dados | Pode reenviar o boleto ao cliente |
+
