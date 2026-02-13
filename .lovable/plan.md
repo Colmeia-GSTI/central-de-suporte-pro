@@ -1,114 +1,155 @@
 
+# Melhorias 3-6: Adicionais, Retry, Monitoramento e Conciliacao
 
-# Bloqueio de Envio: Validacao de Artefatos Completos (NFS-e + Boleto)
+Estas quatro melhorias serao implementadas em sequencia, abrangendo frontend, edge functions e banco de dados.
 
-## Resumo
+---
 
-Implementar duas camadas de protecao no envio de documentos ao cliente:
-1. **NFS-e**: so envia quando PDF **e** XML estiverem armazenados
-2. **Cobranca**: quando a fatura possui NFS-e vinculada, so envia quando boleto (PDF+barcode) **e** NFS-e (PDF+XML) estiverem completos
+## 3. UI para Cadastro e Gestao de Adicionais Pontuais
 
-## Arquivos Afetados
+### Situacao Atual
+- O componente `ContractAdditionalChargeDialog` ja existe com formulario de cadastro e listagem
+- Porem **nao e usado em nenhum lugar** (nunca importado)
+- A edge function `generate-monthly-invoices` ja consome `contract_additional_charges` e marca como `applied`
+- Falta: botao na listagem de contratos, validacao de duplicidade, preview de impacto, auditoria (campo `created_by` ja existe)
 
-### 1. `supabase/functions/send-nfse-notification/index.ts`
-**Validacao de XML obrigatoria antes do envio**
+### Alteracoes
 
-Atualmente (linha 156) so valida `pdf_url`. Alterar para:
-- Incluir `xml_url` na query do `nfse_history` (linha 132-135)
-- Adicionar validacao: se `xml_url` estiver ausente, retornar erro 400 com mensagem clara
-- Registrar evento no `nfse_event_logs` com tipo `envio_bloqueado` e motivo `xml_ausente`
+**`src/pages/contracts/ContractsPage.tsx`**
+- Adicionar estado `additionalChargeDialog` (similar aos outros dialogs)
+- Adicionar botao de acao "Adicionais" (icone `Receipt`) na coluna de acoes de cada contrato
+- Importar e renderizar `ContractAdditionalChargeDialog`
+- Incluir badge com contagem de adicionais pendentes no botao (query leve por contrato)
 
-### 2. `supabase/functions/resend-payment-notification/index.ts`
-**Bloqueio conjunto: NFS-e + Boleto devem estar completos**
+**`src/components/contracts/ContractAdditionalChargeDialog.tsx`**
+- Adicionar validacao de duplicidade: ao tentar adicionar, verificar se ja existe registro com mesma `reference_month` + `description` para o contrato
+- Adicionar preview de impacto: exibir um resumo "Na proxima fatura (competencia X), o valor sera: R$ valor_mensal + R$ total_pendente = R$ total"
+- Exibir nome do criador (`created_by`) na tabela consultando `profiles` (join ou query separada)
+- Adicionar filtro por competencia (Select com meses disponiveis)
+- Melhorar layout responsivo do formulario (stack em mobile)
 
-Apos buscar a fatura (linha 100-103):
-- Consultar `nfse_history` vinculada a fatura (pelo `invoice_id`)
-- Se existe NFS-e autorizada MAS sem `pdf_url` ou `xml_url`: bloquear envio e retornar erro detalhado
-- Se boleto esta em processamento (`boleto_status = pendente/processando`) sem `boleto_url` e sem `boleto_barcode`: bloquear envio
-- Retornar campo `blocked_reason` com o motivo exato do bloqueio
+**Migracao SQL**
+- Indice unico parcial em `contract_additional_charges` para evitar duplicidade: `CREATE UNIQUE INDEX ... ON contract_additional_charges (contract_id, reference_month, description) WHERE applied = false`
 
-### 3. `supabase/functions/batch-process-invoices/index.ts`
-**Validacao antes do passo 4 (notificacoes)**
+---
 
-Antes de enviar notificacoes (linha 209-254):
-- Buscar dados atualizados da fatura (boleto_url, boleto_barcode, pix_code)
-- Buscar NFS-e vinculada e verificar `pdf_url` + `xml_url`
-- Se artefatos incompletos: registrar `email_status = "blocked"` ao inves de enviar
-- Continuar o processamento sem erro, mas reportando o bloqueio no resultado
+## 4. Padronizar Retries e Backoff para Envios e Integracoes
 
-### 4. `supabase/functions/notify-due-invoices/index.ts`
-**Validacao no lembrete automatico (CRON)**
+### Situacao Atual
+- Nenhuma biblioteca centralizada de retry
+- Cada edge function faz sua propria logica de tentativas (ou nenhuma)
+- Sem registro de contagem de tentativas
 
-Antes de enviar cada notificacao (dentro do loop, linha 149):
-- Consultar se a fatura tem NFS-e vinculada via `nfse_history`
-- Se NFS-e existe mas XML nao disponivel: pular envio e registrar no log
-- Lembretes de vencimento NAO dependem de boleto estar pronto (sao avisos previos)
+### Alteracoes
 
-### 5. `src/hooks/useInvoiceActions.ts`
-**Validacao no frontend antes de disparar notificacoes**
+**`supabase/functions/_shared/retry-utils.ts`** (novo arquivo auxiliar -- sera copiado inline pois edge functions nao suportam imports de pasta compartilhada; em vez disso, criar como funcao utilitaria inline em cada function que precise)
 
-Na funcao `handleResendNotification` (linha 107):
-- Antes de chamar a edge function, verificar localmente se os artefatos basicos existem
-- Se boleto ausente e NFS-e ausente: mostrar toast de aviso explicando o bloqueio
-- Se so NFS-e ausente: permitir envio da cobranca (boleto) mas avisar que a nota nao sera anexada
-
-Na funcao `handleEmitComplete` (passo 4, linha 237):
-- Apos gerar boleto e NFS-e, recarregar dados da fatura antes de enviar notificacoes
-- Se algum artefato falhou nos passos anteriores, pular notificacao e informar no resultado
-
-### 6. `src/components/billing/InvoiceActionIndicators.tsx`
-**Indicador visual de bloqueio**
-
-Adicionar um novo estado visual:
-- Quando o envio esta bloqueado por falta de artefatos, exibir icone de cadeado (`Lock`) em amarelo
-- Tooltip explicando o motivo: "Envio bloqueado: XML da NFS-e nao disponivel" ou "Envio bloqueado: Boleto em processamento"
-
-### 7. `src/components/billing/InvoiceInlineActions.tsx`
-**Desabilitar botao de envio quando bloqueado**
-
-- Verificar presenca de `pdf_url`, `xml_url` (NFS-e) e `boleto_url`/`boleto_barcode` (boleto)
-- Quando incompleto: desabilitar acoes de envio e exibir tooltip com razao
-
-## Fluxo de Decisao para Envio
+Na pratica, criar uma funcao `withRetry` que sera copiada para as functions que precisam:
 
 ```text
-Fatura pronta para envio?
-|
-+-- Tem NFS-e vinculada (nfse_history)?
-|   |
-|   +-- SIM: pdf_url E xml_url presentes?
-|   |   |
-|   |   +-- SIM: NFS-e OK
-|   |   +-- NAO: BLOQUEADO (motivo: "NFS-e incompleta - PDF ou XML ausente")
-|   |
-|   +-- NAO: NFS-e nao aplicavel, prosseguir
-|
-+-- Tem boleto vinculado (boleto_status != null)?
-|   |
-|   +-- SIM: boleto_url OU boleto_barcode presentes?
-|   |   |
-|   |   +-- SIM: Boleto OK
-|   |   +-- NAO: BLOQUEADO (motivo: "Boleto em processamento")
-|   |
-|   +-- NAO: Verificar pix_code como alternativa
-|
-+-- Todos artefatos OK? -> ENVIAR
-+-- Algum bloqueado? -> BLOQUEAR com motivo detalhado
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: { maxAttempts: 3, delays: [60000, 300000, 1200000], label: string }
+): Promise<{ result?: T; attempts: number; success: boolean; lastError?: string }>
 ```
 
-## Registro de Metricas de Falha
+**Edge functions a atualizar:**
+- `send-email-smtp/index.ts` -- envolver chamada SMTP com `withRetry` (3 tentativas, delays 1m/5m/20m)
+- `send-whatsapp/index.ts` -- envolver chamada Evolution API
+- `send-nfse-notification/index.ts` -- envolver envio de email/whatsapp
+- `resend-payment-notification/index.ts` -- envolver envios
 
-Na tabela `application_logs`, registrar eventos de bloqueio com:
-- `module`: `billing_notification`
-- `level`: `warn`
-- `message`: motivo do bloqueio
-- `metadata`: `{ invoice_id, blocked_artifacts: ["xml", "boleto_pdf"], correlation_id }`
+**Registro de metricas:**
+- Apos cada execucao com retry, inserir em `application_logs` com `module: "retry"`, incluindo `attempts`, `success`, `label` e `duration_ms`
 
-Isso permite consultar posteriormente o tempo medio entre emissao da NFS-e e disponibilizacao do XML, e a taxa de bloqueios por periodo.
+**Nota:** Como edge functions Deno nao suportam `import` entre pastas, a funcao `withRetry` sera definida como utility dentro de cada function. Para manter DRY ao maximo, sera um bloco de ~30 linhas copiado nas 4 functions afetadas.
 
-## Pontos Importantes
+---
 
-- O bloqueio e **soft**: o usuario pode forcar o envio manualmente se desejar (via confirmacao)
-- Envios automaticos (CRON) respeitam o bloqueio sem excecao
-- Processamento em lote (`batch-process-invoices`) registra o bloqueio mas nao interrompe o processamento das demais faturas
-- A validacao e aplicada em **todos** os pontos de envio (4 edge functions + 1 hook frontend)
+## 5. Monitoramento, Alertas e Dashboards de Falhas
+
+### Situacao Atual
+- `MessageMetricsDashboard` mostra metricas de mensagens (email/whatsapp/telegram)
+- `useBillingCounters` mostra contadores de faturas vencidas, boletos pendentes, NFS-e pendentes
+- Nao existe dashboard de latencia de integradores ou alertas automaticos
+
+### Alteracoes
+
+**`src/components/billing/IntegrationHealthDashboard.tsx`** (novo)
+- Card "Boletos Pendentes > 1h" -- query `invoices` com `boleto_status = 'pendente'` e `created_at < now() - 1h`
+- Card "NFS-e Processando > 2h" -- query `nfse_history` com status `processando` e `created_at < now() - 2h`
+- Card "Tempo Medio de Retorno Banco" -- RPC ou query calculando `avg(boleto_updated_at - created_at)` para faturas com boleto_status = 'registrado'
+- Card "Taxa de Falha Ultimas 24h" -- query `application_logs` com level = 'error' e module in ('billing', 'nfse', 'banco_inter')
+- Grafico de barras: falhas por hora nas ultimas 24h (dados de `application_logs`)
+
+**`src/pages/billing/BillingPage.tsx`**
+- Adicionar nova aba "Saude" (icone `Activity`) ao `BILLING_TABS`
+- Renderizar `IntegrationHealthDashboard` nesta aba
+
+**Migracao SQL**
+- Criar funcao RPC `get_integration_health_stats` que retorna as metricas agregadas em uma unica chamada (boletos pendentes, NFS-e lentas, taxa de falha, tempo medio)
+
+---
+
+## 6. Automacao e Regras de Conciliacao Bancaria
+
+### Situacao Atual
+- `BankReconciliationTab` e puramente visual/read-only
+- Tabela `bank_reconciliation` tem campos `invoice_id`, `matched_at`, `matched_by` mas nenhuma logica de matching
+- Nenhuma funcao de matching automatico existe
+
+### Alteracoes
+
+**Migracao SQL**
+- Criar funcao RPC `auto_reconcile_bank_entries` que:
+  1. Para cada entrada `bank_reconciliation` com status `pending`
+  2. Busca faturas com `amount` igual a `bank_amount` (tolerancia de R$ 0.01)
+  3. Cruza por `bank_reference` contendo `invoice_number` ou `boleto_barcode`
+  4. Atribui score: valor exato = 50pts, referencia match = 40pts, data proxima (+/-3 dias) = 10pts
+  5. Se score >= 90: auto-match (status = 'matched', invoice_id vinculado)
+  6. Se score 50-89: status = 'suggested' (novo status)
+  7. Retorna contagem de matched e suggested
+
+**Migracao SQL adicional**
+- Adicionar status `suggested` ao campo `status` de `bank_reconciliation` (CHECK constraint ou validacao)
+- Adicionar coluna `match_score` (integer) e `match_candidates` (jsonb) para armazenar sugestoes
+
+**`src/components/billing/BankReconciliationTab.tsx`**
+- Adicionar botao "Conciliar Automaticamente" que chama a RPC
+- Adicionar status `suggested` ao `statusConfig` (cor azul, icone `Sparkles`)
+- Para entradas com status `suggested`: exibir botoes "Aprovar" e "Rejeitar" inline
+- "Aprovar" atualiza para `matched` e vincula `invoice_id`
+- "Rejeitar" atualiza para `unmatched`
+- Exibir `match_score` como badge no tooltip
+- Adicionar acoes manuais: selecionar fatura para vincular manualmente (combobox com faturas pendentes/pagas)
+
+**`src/components/billing/ReconciliationMatchDialog.tsx`** (novo)
+- Dialog para match manual: busca faturas por numero, valor ou cliente
+- Permite selecionar fatura e confirmar vinculacao
+- Atualiza `bank_reconciliation` com `invoice_id`, `matched_by`, `matched_at`, `status = 'matched'`
+
+---
+
+## Resumo de Arquivos
+
+| Arquivo | Acao |
+|---------|------|
+| `src/pages/contracts/ContractsPage.tsx` | Adicionar botao e dialog de adicionais |
+| `src/components/contracts/ContractAdditionalChargeDialog.tsx` | Validacao duplicidade, preview impacto, filtro, auditoria |
+| `supabase/functions/send-email-smtp/index.ts` | Adicionar `withRetry` |
+| `supabase/functions/send-whatsapp/index.ts` | Adicionar `withRetry` |
+| `supabase/functions/send-nfse-notification/index.ts` | Adicionar `withRetry` |
+| `supabase/functions/resend-payment-notification/index.ts` | Adicionar `withRetry` |
+| `src/components/billing/IntegrationHealthDashboard.tsx` | Novo dashboard de saude |
+| `src/pages/billing/BillingPage.tsx` | Adicionar aba "Saude" |
+| `src/components/billing/BankReconciliationTab.tsx` | Matching automatico, sugestoes, acoes |
+| `src/components/billing/ReconciliationMatchDialog.tsx` | Novo dialog de match manual |
+| Migracoes SQL | Indice unico adicionais, RPC health stats, RPC auto-reconcile, coluna match_score |
+
+## Ordem de Implementacao
+
+1. Migracoes SQL (indice unico, novas colunas, RPCs)
+2. Adicionais pontuais (item 3) -- frontend puro
+3. Retry centralizado (item 4) -- edge functions
+4. Dashboard de saude (item 5) -- frontend + RPC
+5. Conciliacao automatica (item 6) -- RPC + frontend
