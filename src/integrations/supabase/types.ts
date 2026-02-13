@@ -1504,6 +1504,39 @@ export type Database = {
           },
         ]
       }
+      financial_incident_slas: {
+        Row: {
+          created_at: string
+          escalation_role: string
+          id: string
+          incident_type: Database["public"]["Enums"]["incident_type_enum"]
+          is_active: boolean
+          notification_template: string | null
+          resolution_hours: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          escalation_role?: string
+          id?: string
+          incident_type: Database["public"]["Enums"]["incident_type_enum"]
+          is_active?: boolean
+          notification_template?: string | null
+          resolution_hours: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          escalation_role?: string
+          id?: string
+          incident_type?: Database["public"]["Enums"]["incident_type_enum"]
+          is_active?: boolean
+          notification_template?: string | null
+          resolution_hours?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gamification_goals: {
         Row: {
           created_at: string
@@ -3075,6 +3108,36 @@ export type Database = {
         }
         Relationships: []
       }
+      storage_retention_policies: {
+        Row: {
+          backup_enabled: boolean
+          bucket_name: string
+          created_at: string
+          id: string
+          last_audit_at: string | null
+          retention_days: number
+          updated_at: string
+        }
+        Insert: {
+          backup_enabled?: boolean
+          bucket_name: string
+          created_at?: string
+          id?: string
+          last_audit_at?: string | null
+          retention_days?: number
+          updated_at?: string
+        }
+        Update: {
+          backup_enabled?: boolean
+          bucket_name?: string
+          created_at?: string
+          id?: string
+          last_audit_at?: string | null
+          retention_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       technician_badges: {
         Row: {
           badge_id: string
@@ -4111,6 +4174,10 @@ export type Database = {
         Args: { p_bucket: string; p_expires_in?: number; p_path: string }
         Returns: string
       }
+      get_additional_charges_report: {
+        Args: { end_date: string; start_date: string }
+        Returns: Json
+      }
       get_calendar_tokens: {
         Args: { user_uuid: string }
         Returns: {
@@ -4215,6 +4282,11 @@ export type Database = {
         | "unavailable"
         | "personal"
         | "billing_reminder"
+      incident_type_enum:
+        | "nfse_failure"
+        | "boleto_failure"
+        | "send_failure"
+        | "e0014"
       invoice_status: "pending" | "paid" | "overdue" | "cancelled"
       nfse_processing_status: "pendente" | "gerada" | "erro"
       support_model: "ticket" | "hours_bank" | "unlimited"
@@ -4389,6 +4461,12 @@ export const Constants = {
         "unavailable",
         "personal",
         "billing_reminder",
+      ],
+      incident_type_enum: [
+        "nfse_failure",
+        "boleto_failure",
+        "send_failure",
+        "e0014",
       ],
       invoice_status: ["pending", "paid", "overdue", "cancelled"],
       nfse_processing_status: ["pendente", "gerada", "erro"],
