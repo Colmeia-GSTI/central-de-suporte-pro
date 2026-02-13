@@ -1,150 +1,143 @@
 
-# Melhorias 7-12: Checklist, Retencao Fiscal, Testes, Relatorios, UX NFS-e e SLA
 
-Este plano cobre seis melhorias complementares que abrangem documentacao operacional, conformidade fiscal, testes, relatorios financeiros, UX de reemissao e gestao de incidentes.
+# Registro Automático de Webhook do Banco Inter via API
 
----
+## Descoberta
 
-## 7. Checklist Operacional e Playbook de Implantacao
+O portal do desenvolvedor do Banco Inter (developers.inter.co) é apenas documentação -- **não tem painel para registrar webhooks manualmente**. O registro é feito **programaticamente via API**:
 
-### O que sera feito
-Criar um documento Markdown completo (`DEPLOYMENT_PLAYBOOK.md`) com passo a passo para implantacao, cobrindo:
+- **PUT** `/cobranca/v3/cobrancas/webhook` -- Criar/editar webhook
+- **GET** `/cobranca/v3/cobrancas/webhook` -- Consultar webhook cadastrado
+- **DELETE** `/cobranca/v3/cobrancas/webhook` -- Excluir webhook
+- Escopo requerido: `boleto-cobranca.write`
+- O body e simplesmente: `{ "webhookUrl": "https://..." }`
+- Retentativas automaticas do Inter: 4 tentativas em 20, 30, 60 e 120 minutos
 
-**Conteudo do documento:**
-- Pre-requisitos (secrets, certificados, DNS)
-- Configuracao de integracoes (Banco Inter, Asaas, SMTP, Evolution API, Telegram, CheckMK, Tactical RMM)
-- Configuracao de CRONs (`pg_cron` jobs)
-- Testes de validacao pos-deploy (checklist com comandos curl para edge functions)
-- Runbook de troubleshooting para erros comuns
-- Procedimento de onboarding de novo cliente (cadastro, contrato, primeiro faturamento)
-- Treinamento basico para time financeiro e suporte
+## Payload de Callback
 
-**Arquivo:** `DEPLOYMENT_PLAYBOOK.md` (novo, raiz do projeto)
+Quando o Inter envia callbacks, o formato e:
+```text
+[{
+  "codigoSolicitacao": "string",
+  "seuNumero": "string",
+  "situacao": "RECEBIDO",
+  "dataHoraSituacao": "2019-08-24T14:15:22Z",
+  "valorTotalRecebido": "string",
+  "origemRecebimento": "BOLETO",
+  "nossoNumero": "string",
+  "codigoBarras": "...",
+  "linhaDigitavel": "...",
+  "txid": "string",
+  "pixCopiaECola": "string"
+}]
+```
 
----
-
-## 8. Politica de Retencao e Backup de Arquivos Fiscais
-
-### O que sera feito
-Implementar lifecycle rules e documentar politica de retencao para o bucket `nfse-files`.
-
-**Migracao SQL:**
-- Criar tabela `storage_retention_policies` com campos: `bucket_name`, `retention_days` (default 2555 = 7 anos), `backup_enabled`, `last_audit_at`
-- Inserir registro para bucket `nfse-files` com retencao de 7 anos
-- Criar funcao RPC `audit_storage_retention` que verifica arquivos antigos e registra em `audit_logs`
-
-**Documentacao:**
-- Adicionar secao "Politica de Retencao Fiscal" ao `DEPLOYMENT_PLAYBOOK.md`
-- Descrever SLA de disponibilidade (99.9% via Supabase Storage)
-- Procedimento de restauracao: URLs assinadas, re-download via Asaas API
-
-**Frontend:**
-- Adicionar card "Retencao Fiscal" no `IntegrationHealthDashboard.tsx` mostrando:
-  - Total de arquivos no bucket `nfse-files`
-  - Arquivo mais antigo
-  - Status de compliance (verde se todos < 7 anos)
+**Observacao importante:** O callback vem como **array**, nao objeto simples. O `webhook-banco-inter` atual espera um objeto -- precisa ser ajustado.
 
 ---
 
-## 9. Ambiente de Homologacao e Testes E2E Fiscais
+## Plano de Implementacao
 
-### O que sera feito
-Criar mocks e fixtures para testes de integracao das edge functions fiscais.
+### 1. Adicionar action `register_webhook` na edge function `banco-inter/index.ts`
 
-**Arquivos de teste (novos):**
+Nova action que:
+- Autentica com escopo `boleto-cobranca.write`
+- Chama `PUT /cobranca/v3/cobrancas/webhook` com a URL do nosso endpoint
+- Body: `{ "webhookUrl": "https://silefpsayliwqtoskkdz.supabase.co/functions/v1/webhook-banco-inter" }`
+- Retorna sucesso (204) ou erro
 
-`supabase/functions/asaas-nfse/asaas-nfse_test.ts`
-- Mock de respostas Asaas (emit, status, cancel)
-- Teste: emissao com sucesso retorna `invoice_id`
-- Teste: polling retorna status `autorizada` com PDF/XML
-- Teste: erro E0014 (DPS duplicada) retorna mensagem formatada
-- Teste: cancelamento com motivo obrigatorio
+### 2. Adicionar action `check_webhook` na edge function `banco-inter/index.ts`
 
-`supabase/functions/banco-inter/banco-inter_test.ts`
-- Mock de OAuth token exchange
-- Teste: geracao de boleto retorna `codigoSolicitacao`
-- Teste: polling com `readToken` retorna barcode e PDF URL
-- Teste: fallback de escopo combinado
+Nova action que:
+- Autentica com escopo `boleto-cobranca.read`
+- Chama `GET /cobranca/v3/cobrancas/webhook` para verificar se ja esta cadastrado
+- Retorna a URL cadastrada ou "nenhum webhook cadastrado"
 
-**Nota:** Estes testes usam `Deno.test()` e podem ser executados via `supabase--test-edge-functions`. Usam fetch mocks para simular respostas das APIs externas sem chamadas reais.
+### 3. Ajustar `webhook-banco-inter/index.ts` para aceitar payload como array
 
----
+O callback do Inter envia um **array de objetos**, nao um objeto simples. Ajustar o handler para:
+- Verificar se o payload e array ou objeto
+- Se array, iterar sobre cada item
+- Processar cada item individualmente (boleto ou PIX)
 
-## 10. Relatorios e KPIs para Adicionais e Notas Avulsas
+### 4. Adicionar botao "Registrar Webhook" no `BancoInterConfigForm.tsx`
 
-### O que sera feito
-Adicionar aba "Adicionais" ao `ReportsPage.tsx` com metricas de adicionais pontuais e notas avulsas.
+Na tela de configuracao do Banco Inter:
+- Botao "Verificar Webhook" -- chama action `check_webhook` e mostra status
+- Botao "Registrar Webhook" -- chama action `register_webhook`
+- Indicador visual: verde se webhook cadastrado, vermelho se nao
+- Executar automaticamente ao testar conexao (action `test`)
 
-**Migracao SQL:**
-Criar RPC `get_additional_charges_report(start_date, end_date)` que retorna:
-- Total de adicionais por cliente (nome, quantidade, valor total)
-- Total de notas avulsas por cliente
-- Comparativo mensal (adicionais vs receita recorrente)
-- Clientes com mais de 3 avulsas no periodo (candidatos a contrato)
+### 5. Registro automatico no fluxo de teste
 
-**Frontend:**
-- Adicionar aba "Adicionais" ao `TabsList` em `ReportsPage.tsx`
-- Card: "Total de Adicionais no Periodo" (valor e quantidade)
-- Card: "Total de Notas Avulsas" (valor e quantidade)
-- Tabela: ranking de clientes por valor de adicionais
-- Alerta visual: clientes com muitos avulsos (icone `TrendingUp` + sugestao de migrar para contrato)
-- Grafico de barras: adicionais por mes (ultimos 6 meses)
+Quando o usuario clica "Testar Conexao" (action `test`):
+- Apos validar escopos, verificar se webhook esta cadastrado
+- Se nao estiver, registrar automaticamente
+- Informar no resultado: "Webhook registrado com sucesso" ou "Webhook ja cadastrado"
 
 ---
 
-## 11. UX de Reemissao e Vinculacao de NFS-e (E0014)
+## Detalhes Tecnicos
 
-### O que sera feito
-Melhorar o fluxo existente de vinculacao de notas externas no `NfseDetailsSheet.tsx`.
+### `supabase/functions/banco-inter/index.ts` -- Novas actions
 
-**Alteracoes em `NfseDetailsSheet.tsx`:**
-- No dialog de "Vincular Nota Existente", adicionar campo de busca por CPF/CNPJ do cliente (pre-preenchido)
-- Adicionar campo opcional para numero do RPS
-- Exibir alerta explicativo sobre o que e o erro E0014 e por que a vinculacao e necessaria
-- Adicionar campo de justificativa obrigatoria (para auditoria) ao vincular
-- Registrar evento `vinculacao_manual` em `nfse_event_logs` com justificativa
+```text
+// Action: register_webhook
+if (action === "register_webhook") {
+  const token = await tryGetTokenWithFallback("boleto-cobranca.write", "boleto-cobranca.read boleto-cobranca.write");
+  
+  const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook-banco-inter`;
+  
+  const response = await mtlsFetch(`${baseUrl}/cobranca/v3/cobrancas/webhook`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ webhookUrl }),
+  });
+  
+  // 204 = sucesso
+  return Response 200: { success: true, webhookUrl }
+}
 
-**Alteracoes na edge function `asaas-nfse/index.ts`:**
-- Na action `link_external`: alem de atualizar status para `autorizada`, registrar na `nfse_event_logs` com tipo `vinculacao_manual` e incluir justificativa recebida
-- Tentar consultar dados da nota no Asaas pelo numero externo para preencher `pdf_url` e `xml_url` automaticamente
+// Action: check_webhook
+if (action === "check_webhook") {
+  const token = await tryGetTokenWithFallback("boleto-cobranca.read", "boleto-cobranca.read boleto-cobranca.write");
+  
+  const response = await mtlsFetch(`${baseUrl}/cobranca/v3/cobrancas/webhook`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token.access_token}` },
+  });
+  
+  if (response.status === 404) return { registered: false }
+  const data = await response.json();
+  return { registered: true, webhookUrl: data.webhookUrl, criacao: data.criacao }
+}
+```
 
-**Novo componente `src/components/billing/nfse/NfseLinkExternalDialog.tsx`:**
-- Extrair o dialog de vinculacao do `NfseDetailsSheet` para componente independente
-- Formulario com: numero da nota, CPF/CNPJ (readonly), justificativa (obrigatoria, min 15 chars)
-- Preview dos dados que serao atualizados antes de confirmar
-- Reutilizavel tanto no Sheet quanto na listagem de NFS-e
+### `supabase/functions/webhook-banco-inter/index.ts` -- Suporte a array
 
----
+```text
+// ANTES:
+const payload: InterWebhookPayload = JSON.parse(rawPayload);
 
-## 12. SLA e Processo de Tratamento de Incidentes Financeiros
+// DEPOIS:
+const parsed = JSON.parse(rawPayload);
+const payloads: InterWebhookPayload[] = Array.isArray(parsed) ? parsed : [parsed];
 
-### O que sera feito
-Criar runbook de incidentes e integrar com o sistema de tickets e alertas.
+for (const payload of payloads) {
+  // processar cada item...
+}
+```
 
-**Documentacao (`DEPLOYMENT_PLAYBOOK.md` - secao nova):**
-- SLAs definidos:
-  - Falha de emissao NFS-e: resolucao em 4h uteis
-  - Falha de geracao de boleto: resolucao em 2h uteis
-  - Falha de envio ao cliente: resolucao em 24h
-  - Erro E0014 (duplicidade): resolucao em 48h
-- Playbook de escalonamento: financeiro -> admin -> desenvolvedor
-- Templates de comunicacao para cada tipo de incidente
+### `src/components/settings/integrations/BancoInterConfigForm.tsx`
 
-**Migracao SQL:**
-Criar tabela `financial_incident_slas` com:
-- `incident_type` (enum: nfse_failure, boleto_failure, send_failure, e0014)
-- `resolution_hours` (integer)
-- `escalation_role` (text)
-- `notification_template` (text)
-- `is_active` (boolean)
-- Inserir registros iniciais com SLAs padrao
-
-**Frontend (`src/components/billing/IntegrationHealthDashboard.tsx`):**
-- Adicionar secao "Incidentes Abertos" que cruza:
-  - Faturas com `boleto_status = 'erro'` ou `nfse_status = 'erro'` nas ultimas 48h
-  - Tempo desde a falha vs SLA definido
-  - Badge vermelho se SLA estourado, amarelo se proximo do limite
-- Botao "Criar Ticket" que abre formulario pre-preenchido com dados do incidente
+Adicionar secao "Webhook" com:
+- Badge de status (Cadastrado/Nao cadastrado)
+- Botao "Verificar" que chama `check_webhook`
+- Botao "Registrar" que chama `register_webhook`
+- URL do webhook exibida (readonly)
 
 ---
 
@@ -152,21 +145,14 @@ Criar tabela `financial_incident_slas` com:
 
 | Arquivo | Acao |
 |---------|------|
-| `DEPLOYMENT_PLAYBOOK.md` | Novo - checklist completo de implantacao |
-| `src/components/billing/IntegrationHealthDashboard.tsx` | Adicionar cards de retencao fiscal e incidentes SLA |
-| `src/pages/reports/ReportsPage.tsx` | Adicionar aba "Adicionais" com KPIs |
-| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Melhorar dialog de vinculacao E0014 |
-| `src/components/billing/nfse/NfseLinkExternalDialog.tsx` | Novo - dialog de vinculacao independente |
-| `supabase/functions/asaas-nfse/index.ts` | Melhorar action `link_external` com auditoria |
-| `supabase/functions/asaas-nfse/asaas-nfse_test.ts` | Novo - testes E2E com mocks |
-| `supabase/functions/banco-inter/banco-inter_test.ts` | Novo - testes E2E com mocks |
-| Migracoes SQL | `storage_retention_policies`, `get_additional_charges_report` RPC, `financial_incident_slas` |
+| `supabase/functions/banco-inter/index.ts` | Adicionar actions `register_webhook` e `check_webhook` |
+| `supabase/functions/webhook-banco-inter/index.ts` | Ajustar para aceitar payload como array |
+| `src/components/settings/integrations/BancoInterConfigForm.tsx` | Adicionar secao de gerenciamento de webhook |
 
 ## Ordem de Implementacao
 
-1. Migracoes SQL (tabelas e RPCs)
-2. `DEPLOYMENT_PLAYBOOK.md` (documentacao completa)
-3. Relatorios de adicionais (item 10) - RPC + frontend
-4. UX de vinculacao NFS-e (item 11) - componente + edge function
-5. Dashboard de incidentes SLA (item 12) - frontend
-6. Testes E2E (item 9) - edge function tests
+1. Ajustar `webhook-banco-inter` para aceitar array (correcao critica)
+2. Adicionar actions `register_webhook` e `check_webhook` no `banco-inter`
+3. Adicionar UI de gerenciamento no `BancoInterConfigForm`
+4. Deploy e teste
+
