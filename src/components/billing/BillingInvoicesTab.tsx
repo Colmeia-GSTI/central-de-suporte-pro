@@ -691,9 +691,14 @@ export function BillingInvoicesTab() {
 
       {isBatchProcessingOpen && (
         <BillingBatchProcessing
-          selectedInvoices={selectedInvoicesData}
+          selectedInvoiceIds={selectedInvoicesData.map(inv => inv.id)}
+          selectedInvoiceCount={selectedInvoicesData.length}
           open={isBatchProcessingOpen}
           onOpenChange={setIsBatchProcessingOpen}
+          onProcessingComplete={() => {
+            setSelectedInvoices(new Set());
+            queryClient.invalidateQueries({ queryKey: ["invoices"] });
+          }}
         />
       )}
     </div>
