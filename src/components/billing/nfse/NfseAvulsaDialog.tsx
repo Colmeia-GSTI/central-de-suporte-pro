@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format, addDays, differenceInDays } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FileText, Loader2, Receipt, ShieldAlert, CalendarIcon, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,7 +66,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
   const [tributacao, setTributacao] = useState<TributacaoData>(createInitialTributacao());
 
   const [gerarFatura, setGerarFatura] = useState(false);
-  const [vencimentoDias, setVencimentoDias] = useState<number>(30);
+  const [dataVencimento, setDataVencimento] = useState<Date | undefined>(undefined);
 
   const { data: asaasConfig } = useQuery({
     queryKey: ["asaas-active-for-nfse"],
@@ -150,7 +150,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
   // Alíquota: usa a editada se maior que 0, senão a sugerida do código de serviço
   const aliquotaIss = tributacao.aliquotaIss > 0 ? tributacao.aliquotaIss : (serviceCode?.aliquota_sugerida ?? 0);
 
-  const canEmit = asaasAvailable && isCompanyConfigured && !!clientId && !clientMissingFields && !!serviceCode && valor > 0 && descricao.trim().length > 0;
+  const canEmit = asaasAvailable && isCompanyConfigured && !!clientId && !clientMissingFields && !!serviceCode && valor > 0 && descricao.trim().length > 0 && (!gerarFatura || !!dataVencimento);
 
   const reset = () => {
     setClientId("");
@@ -160,7 +160,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
     setDescricao("");
     setTributacao(createInitialTributacao());
     setGerarFatura(false);
-    setVencimentoDias(30);
+    setDataVencimento(undefined);
   };
 
   // Atualiza a alíquota quando o código de serviço muda
@@ -192,14 +192,14 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
 
       let invoiceId: string | null = null;
       if (gerarFatura) {
-        const due = addDays(new Date(), vencimentoDias);
+        if (!dataVencimento) throw new Error("Selecione a data de vencimento");
         const { data, error } = await supabase
           .from("invoices")
           .insert({
             client_id: clientId,
             contract_id: null,
             amount: valor,
-            due_date: format(due, "yyyy-MM-dd"),
+            due_date: format(dataVencimento, "yyyy-MM-dd"),
             status: "pending",
             description: descricao,
           })
@@ -408,23 +408,33 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
             </div>
 
             {gerarFatura && (
-              <div className="flex items-center gap-2 pt-1">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">Vencimento:</Label>
-                <Select value={String(vencimentoDias)} onValueChange={(v) => setVencimentoDias(Number(v))}>
-                  <SelectTrigger className="h-8 w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7">7 dias</SelectItem>
-                    <SelectItem value="15">15 dias</SelectItem>
-                    <SelectItem value="30">30 dias</SelectItem>
-                    <SelectItem value="45">45 dias</SelectItem>
-                    <SelectItem value="60">60 dias</SelectItem>
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted-foreground">
-                  ({format(addDays(new Date(), vencimentoDias), "dd/MM/yyyy")})
-                </span>
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs text-muted-foreground">Data de vencimento *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal h-9",
+                        !dataVencimento && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dataVencimento ? format(dataVencimento, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data de vencimento"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dataVencimento}
+                      onSelect={setDataVencimento}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                      locale={ptBR}
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
           </div>
