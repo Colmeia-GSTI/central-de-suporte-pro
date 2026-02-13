@@ -29,6 +29,7 @@ import {
 import { subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { TimeReportTab } from "@/components/reports/TimeReportTab";
+import { AdditionalChargesReportTab } from "@/components/reports/AdditionalChargesReportTab";
 import { format } from "date-fns";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
@@ -189,6 +190,7 @@ export default function ReportsPage() {
             <TabsTrigger value="financial">Financeiro</TabsTrigger>
             <TabsTrigger value="services">Serviços</TabsTrigger>
             <TabsTrigger value="performance">Desempenho</TabsTrigger>
+            <TabsTrigger value="additionals">Adicionais</TabsTrigger>
           </TabsList>
 
           <TabsContent value="tickets" className="space-y-4">
@@ -421,6 +423,10 @@ export default function ReportsPage() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="additionals" className="space-y-4">
+            <AdditionalChargesReportTab startDate={startDate} />
           </TabsContent>
         </Tabs>
       </div>

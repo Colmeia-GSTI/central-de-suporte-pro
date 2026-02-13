@@ -1366,10 +1366,10 @@ Deno.serve(async (req) => {
       }
 
       case "link_external": {
-        // New action: Link an externally emitted NFS-e to a local record
-        const { nfse_history_id, numero_nfse, data_autorizacao, codigo_verificacao } = params;
+        // Link an externally emitted NFS-e to a local record with audit trail
+        const { nfse_history_id, numero_nfse, data_autorizacao, codigo_verificacao, justificativa, rps_numero } = params;
         
-        log(correlationId, "info", "Vinculando nota externa", { nfse_history_id, numero_nfse });
+        log(correlationId, "info", "Vinculando nota externa", { nfse_history_id, numero_nfse, justificativa: justificativa?.slice(0, 50) });
         
         if (!nfse_history_id) {
           throw new AsaasApiError("ID do registro é obrigatório", 400, "MISSING_HISTORY_ID");
@@ -1408,10 +1408,15 @@ Deno.serve(async (req) => {
           throw new AsaasApiError("Erro ao atualizar registro", 500, "UPDATE_FAILED", { db_error: updateError.message });
         }
         
-        // Log event
-        await logNfseEvent(supabase, nfse_history_id, "linked_external", "info",
+        // Log vinculacao_manual event with justificativa for audit
+        await logNfseEvent(supabase, nfse_history_id, "vinculacao_manual", "info",
           `Nota vinculada manualmente ao número ${numero_nfse} do Portal Nacional`,
-          correlationId, { numero_nfse, data_autorizacao });
+          correlationId, {
+            numero_nfse,
+            data_autorizacao,
+            justificativa: justificativa || "Não informada",
+            rps_numero: rps_numero || null,
+          });
         
         log(correlationId, "info", "Nota externa vinculada com sucesso", { numero_nfse });
         

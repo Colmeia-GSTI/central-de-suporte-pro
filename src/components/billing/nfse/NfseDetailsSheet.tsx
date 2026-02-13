@@ -39,6 +39,7 @@ import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asa
 import { NfseEventLogsDialog } from "./NfseEventLogsDialog";
 import { NfseProcessingIndicator } from "./NfseProcessingIndicator";
 import { NfseShareMenu } from "./NfseShareMenu";
+import { NfseLinkExternalDialog } from "./NfseLinkExternalDialog";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
   clients: {
@@ -1069,64 +1070,14 @@ export function NfseDetailsSheet(props: {
       </Dialog>
 
       {/* Link External NFS-e Dialog */}
-      <Dialog open={linkExternalOpen} onOpenChange={(open) => {
-        setLinkExternalOpen(open);
-        if (!open) setNumeroExterno("");
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Link2 className="h-5 w-5 text-amber-600" />
-              Vincular Nota Existente
-            </DialogTitle>
-            <DialogDescription>
-              Se esta nota já foi emitida no Portal Nacional, informe o número para sincronizar o registro.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/30">
-              <AlertTriangle className="h-4 w-4 text-amber-700" />
-              <AlertDescription className="text-amber-900 dark:text-amber-200">
-                Use esta opção apenas se você verificou no Portal Nacional que a nota existe e está autorizada.
-              </AlertDescription>
-            </Alert>
-            
-            <div className="space-y-2">
-              <Label htmlFor="numero-externo">Número da NFS-e *</Label>
-              <Input
-                id="numero-externo"
-                placeholder="Ex: 77"
-                value={numeroExterno}
-                onChange={(e) => setNumeroExterno(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Informe o número da nota autorizada no Portal Nacional.
-              </p>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setLinkExternalOpen(false);
-              setNumeroExterno("");
-            }}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => linkExternalMutation.mutate()}
-              disabled={!numeroExterno.trim() || linkExternalMutation.isPending}
-            >
-              {linkExternalMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Link2 className="h-4 w-4 mr-2" />
-              )}
-              Vincular Nota
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NfseLinkExternalDialog
+        open={linkExternalOpen}
+        onOpenChange={setLinkExternalOpen}
+        nfseHistoryId={nfse.id}
+        clientDocument={nfse.clients?.document}
+        clientName={nfse.clients?.name}
+        onLinked={() => props.onChanged?.()}
+      />
     </>
   );
 }

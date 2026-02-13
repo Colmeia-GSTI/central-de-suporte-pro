@@ -1,13 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Clock, Activity, TrendingDown } from "lucide-react";
+import { AlertTriangle, Clock, Activity, TrendingDown, ShieldCheck, ShieldAlert, Ticket } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { format } from "date-fns";
+import { format, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 
 export function IntegrationHealthDashboard() {
+  const navigate = useNavigate();
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ["integration-health-stats"],
     queryFn: async () => {
@@ -21,7 +26,115 @@ export function IntegrationHealthDashboard() {
         failures_by_hour: { hour: string; count: number }[];
       };
     },
-    refetchInterval: 60_000, // refresh every minute
+    refetchInterval: 60_000,
+  });
+
+  // Fetch SLA definitions
+  const { data: slaDefinitions } = useQuery({
+    queryKey: ["financial-incident-slas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_incident_slas")
+        .select("*")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch open incidents (invoices with errors in last 48h)
+  const { data: openIncidents } = useQuery({
+    queryKey: ["open-financial-incidents"],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      
+      const { data: boletoErrors, error: e1 } = await supabase
+        .from("invoices")
+        .select("id, invoice_number, client:clients(name), updated_at, boleto_status")
+        .eq("boleto_status", "erro")
+        .gte("updated_at", since)
+        .limit(20);
+      
+      const { data: nfseErrors, error: e2 } = await supabase
+        .from("nfse_history")
+        .select("id, numero_nfse, clients(name), updated_at, status, mensagem_retorno")
+        .in("status", ["erro", "rejeitada"])
+        .gte("updated_at", since)
+        .limit(20);
+
+      const incidents: {
+        id: string;
+        type: string;
+        label: string;
+        client: string;
+        since: string;
+        hoursElapsed: number;
+        slaHours: number;
+        slaBreached: boolean;
+        slaWarning: boolean;
+      }[] = [];
+
+      const getSlaHours = (type: string) => {
+        const sla = slaDefinitions?.find(s => s.incident_type === type);
+        return sla?.resolution_hours || 24;
+      };
+
+      if (!e1 && boletoErrors) {
+        for (const inv of boletoErrors) {
+          const hrs = differenceInHours(new Date(), new Date(inv.updated_at));
+          const slaHrs = getSlaHours("boleto_failure");
+          incidents.push({
+            id: inv.id,
+            type: "boleto_failure",
+            label: `Fatura #${inv.invoice_number}`,
+            client: (inv.client as any)?.name || "—",
+            since: inv.updated_at,
+            hoursElapsed: hrs,
+            slaHours: slaHrs,
+            slaBreached: hrs > slaHrs,
+            slaWarning: hrs > slaHrs * 0.75 && hrs <= slaHrs,
+          });
+        }
+      }
+
+      if (!e2 && nfseErrors) {
+        for (const nf of nfseErrors) {
+          const hrs = differenceInHours(new Date(), new Date(nf.updated_at));
+          const isE0014 = nf.mensagem_retorno?.includes("E0014");
+          const type = isE0014 ? "e0014" : "nfse_failure";
+          const slaHrs = getSlaHours(type);
+          incidents.push({
+            id: nf.id,
+            type,
+            label: `NFS-e ${nf.numero_nfse || nf.id.slice(0, 8)}`,
+            client: (nf.clients as any)?.name || "—",
+            since: nf.updated_at,
+            hoursElapsed: hrs,
+            slaHours: slaHrs,
+            slaBreached: hrs > slaHrs,
+            slaWarning: hrs > slaHrs * 0.75 && hrs <= slaHrs,
+          });
+        }
+      }
+
+      return incidents.sort((a, b) => (a.slaBreached ? -1 : 1) - (b.slaBreached ? -1 : 1));
+    },
+    enabled: !!slaDefinitions,
+    refetchInterval: 60_000,
+  });
+
+  // Retention compliance
+  const { data: retentionData } = useQuery({
+    queryKey: ["retention-compliance"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("storage_retention_policies")
+        .select("*")
+        .eq("bucket_name", "nfse-files")
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
   });
 
   if (isLoading) {
@@ -79,7 +192,7 @@ export function IntegrationHealthDashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-blue-500" />
+              <TrendingDown className="h-4 w-4 text-primary" />
               Tempo Médio Banco
             </CardTitle>
           </CardHeader>
@@ -106,6 +219,80 @@ export function IntegrationHealthDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Retention Compliance Card */}
+      {retentionData && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-status-success" />
+              Retenção Fiscal
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Bucket</p>
+                <p className="font-mono font-medium">{retentionData.bucket_name}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Retenção</p>
+                <p className="font-medium">{Math.round(retentionData.retention_days / 365)} anos</p>
+              </div>
+              <Badge variant="secondary" className="ml-auto">
+                <ShieldCheck className="h-3 w-3 mr-1" />
+                Política ativa
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Open Incidents / SLA Section */}
+      {openIncidents && openIncidents.length > 0 && (
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-destructive" />
+              Incidentes Abertos
+              <Badge variant="destructive" className="ml-2">{openIncidents.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {openIncidents.slice(0, 10).map(inc => (
+                <div key={inc.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {inc.slaBreached ? (
+                      <Badge variant="destructive" className="text-xs shrink-0">SLA estourado</Badge>
+                    ) : inc.slaWarning ? (
+                      <Badge className="bg-status-warning text-white text-xs shrink-0">Atenção</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs shrink-0">Dentro do SLA</Badge>
+                    )}
+                    <span className="font-medium truncate">{inc.label}</span>
+                    <span className="text-muted-foreground truncate">{inc.client}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">
+                      {inc.hoursElapsed}h / {inc.slaHours}h
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => navigate("/tickets/new")}
+                    >
+                      <Ticket className="h-3 w-3 mr-1" />
+                      Ticket
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Failures by Hour Chart */}
       <Card>
