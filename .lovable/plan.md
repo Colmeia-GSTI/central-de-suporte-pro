@@ -1,51 +1,54 @@
 
-# Simplificar UX de Batch Processing de Faturas
 
-## Situação Atual
-- Ao clicar "Faturar Agora", abre um **Dialog modal grande** que monopoliza a tela
-- Dialog apresenta: seleção de provedor, checkboxes de ações, barra de progresso
-- Bloqueia o usuário de interagir com o resto do sistema
+# Melhorias de UX: Ações Rápidas e Botão Atualizar no Faturamento
 
-## Proposta: Fluxo Discreto com Toasts
+## 1. Ações Rápidas (QuickActionsFAB)
 
-### Mudanças Propostas
+O FAB ja esta posicionado no canto inferior direito da tela (`fixed bottom-6 right-6`). No entanto, o layout atual expande os botoes verticalmente para cima. Nenhuma mudanca de posicao e necessaria, pois ja atende ao requisito de estar na parte inferior.
 
-**1. Remover o Dialog modal de `BillingBatchProcessing.tsx`**
-   - O componente atualmente é um dialog cheio de opções
-   - Será simplificado para apenas processar com padrões pré-configurados
-   - As opções de seleção (boleto, PIX, NFS-e, email, whatsapp) serão removidas do fluxo direto
+**Melhoria proposta**: Adicionar uma barra de fundo semi-transparente (backdrop) por tras dos botoes expandidos para melhor visibilidade em dark mode, e garantir que no mobile o FAB nao sobreponha elementos criticos.
 
-**2. Usar Toast Sonner para feedback não-intrusivo**
-   - **Iniciar**: Toast de "Processando X faturas..." (duration curta ou indefinida com ação "Cancelar")
-   - **Progresso**: Opcionalmente manter um toast de progresso discreto no canto
-   - **Sucesso**: Toast verde com "✓ X faturas processadas com sucesso"
-   - **Erro**: Toast vermelho com detalhes do erro
+## 2. Botao "Atualizar" na Secao de Faturas
 
-**3. Fluxo Simplificado (sem dialog)**
-   - Clica "Faturar Agora"
-   - Toast aparece no canto inferior: "Processando 3 faturas..."
-   - Sistema continua respondendo (o usuário pode navegar, não fica preso)
-   - Toast de conclusão ao final
-   - Tabela se atualiza automaticamente via `queryClient.invalidateQueries`
-
-**4. Configurações Padrão**
-   - `generateBoleto: true`
-   - `generatePix: false`
-   - `emitNfse: true`
-   - `sendEmail: true`
-   - `sendWhatsapp: false`
-   - `billingProvider: "banco_inter"`
+Adicionar um botao de refresh na toolbar de faturas que:
+- Invalida as queries `invoices`, `billing-counters` e `nfse-history` para buscar dados atualizados
+- Mostra um icone de loading girando enquanto os dados sao recarregados
+- Exibe um toast discreto "Dados atualizados" ao concluir
+- Fica ao lado do botao "Inadimplencia" na toolbar
 
 ### Arquivos a Alterar
 
-| Arquivo | Mudança |
+| Arquivo | Mudanca |
 |---------|---------|
-| `src/components/billing/BillingBatchProcessing.tsx` | Remover Dialog e opções de UI. Manter apenas a lógica de mutation com toasts. Pode se tornar um hook customizado ou ser integrado diretamente no tab. |
-| `src/components/billing/BillingInvoicesTab.tsx` | Remover chamada para `<BillingBatchProcessing dialog>`. Chamar a mutation diretamente ao clicar "Faturar Agora". |
+| `src/components/billing/BillingInvoicesTab.tsx` | Adicionar botao "Atualizar" na toolbar (linha ~283). O botao usara `queryClient.invalidateQueries` para refresh de `invoices`, `billing-counters`. Mostra icone `RefreshCw` com animacao `animate-spin` durante o loading. |
 
-### Benefícios
-✅ Não atrapalha fluxo do usuário  
-✅ Menos cliques (direto para ação)  
-✅ Sistema continua responsivo  
-✅ Feedback claro mas discreto via toasts  
-✅ Melhor UX para processamento em background
+### Implementacao do Botao
+
+Na toolbar, antes do link de Inadimplencia (linha 283), inserir:
+
+```text
+<Button
+  variant="outline"
+  size="sm"
+  className="h-9"
+  disabled={isLoading || isFetching}
+  onClick={() => {
+    queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    toast.success("Dados atualizados");
+  }}
+>
+  <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", isFetching && "animate-spin")} />
+  Atualizar
+</Button>
+```
+
+Para detectar o estado de fetching, extrair `isFetching` da query de invoices existente (useQuery ja retorna esse valor).
+
+### Notas Tecnicas
+- O `RefreshCw` ja esta importado no arquivo (linha 23)
+- O `cn` ja esta disponivel via `@/lib/utils`
+- Sera necessario extrair `isFetching` do retorno do `useQuery` de faturas
+- Compativel com dark mode por usar classes semanticas do design system (variant="outline")
+- Responsivo: o botao se adapta ao layout flex existente
+
