@@ -1,41 +1,51 @@
 
+# Simplificar Seleção de Data de Vencimento: Remover Opção por Dias
 
-# Permitir Valor Manual por Servico na Secao de Servicos do Contrato
+## Objetivo
+Simplificar a interface de seleção de vencimento da fatura, removendo completamente as opções pré-definidas "7/15/30/45/60 dias" e mantendo apenas um calendário para seleção manual de data.
 
-## Problema
-Atualmente, ao adicionar um servico ao contrato, o valor unitario e calculado automaticamente (`base_value * multiplier`) e nao pode ser alterado. Porem, valores podem variar de cliente para cliente.
+## Alterações em `src/components/billing/nfse/NfseAvulsaDialog.tsx`
 
-## Solucao
+### 1. Remover Estado `vencimentoDias`
+- Deletar a linha 69: `const [vencimentoDias, setVencimentoDias] = useState<number>(30);`
+- Adicionar novo estado `dataVencimentoManual` para armazenar a data selecionada via calendário
 
-### Alteracoes em `src/components/contracts/ContractServicesSection.tsx`
+### 2. Simplificar a Lógica de Cálculo de Vencimento
+- Na função `reset()` (linha 155-164): remover a linha que reseta `vencimentoDias`
+- Na função `emitMutation` (linha 195): substituir a lógica de cálculo de vencimento:
+  - De: `const due = addDays(new Date(), vencimentoDias);`
+  - Para: usar diretamente `dataVencimentoManual` se selecionada, ou usar `new Date()` como fallback
 
-**1. Adicionar campo de valor unitario editavel no formulario de adicao:**
-- Incluir um campo `CurrencyInput` ao lado do seletor de servico e quantidade
-- Quando o usuario selecionar um servico, o campo de valor sera preenchido automaticamente com o valor padrao (`base_value * multiplier`), mas o usuario podera alterar manualmente
+### 3. Refatorar a Seção "Gerar Fatura"
+- Substituir o bloco de linhas 410-429 por:
+  - Manter a label "Gerar fatura junto" com o `Switch`
+  - Quando `gerarFatura` é true, exibir um `Popover` + `Calendar` para seleção de data
+  - Exibir a data selecionada em formato legível abaixo do calendário
+  - Usar `CalendarIcon` como no seletor de "Competência" (linhas 303-327)
 
-**2. Tornar o valor unitario editavel na tabela de servicos ja adicionados:**
-- Substituir a celula de "Valor Unit." (atualmente apenas texto) por um `CurrencyInput` editavel
-- Ao alterar o valor, recalcular o subtotal automaticamente (`unit_value * quantity`)
+### 4. Estrutura da Nova Seção "Gerar Fatura"
 
-### Detalhes tecnicos
-
-**Estado adicional no formulario de adicao:**
-- Novo state `unitValue` inicializado como `0`
-- Ao selecionar um servico no Select, preencher `unitValue` com `service.base_value * service.multiplier`
-- O usuario pode sobrescrever esse valor antes de clicar "Adicionar"
-
-**Nova funcao `handleUnitValueChange`:**
-- Recebe `serviceId` e `newValue`
-- Atualiza o `unit_value` do servico e recalcula o `subtotal`
-
-**Campo de adicao (formulario superior):**
-```text
-[ Servico (select) ] [ Quantidade ] [ Valor Unit. (R$) ] [ Adicionar ]
+```
+┌─ Gerar fatura junto [Toggle] ─────────────────┐
+│                                                │
+│ Quando ativado:                               │
+│ Data de vencimento:                           │
+│ [ Calendário para seleção da data ]           │
+│ Data selecionada: DD/MM/YYYY                  │
+│                                                │
+└────────────────────────────────────────────────┘
 ```
 
-**Tabela de servicos:**
-- Coluna "Valor Unit." passa de texto para `CurrencyInput` editavel
-- Subtotal recalcula automaticamente
+### 5. Validação
+- Garantir que quando `gerarFatura` é true, `dataVencimentoManual` é obrigatoriamente selecionada
+- Na função `canEmit`, adicionar validação: `(gerarFatura && dataVencimentoManual) || !gerarFatura`
 
-Nenhuma alteracao de banco de dados e necessaria -- a tabela `contract_services` ja possui a coluna `unit_value`.
+## Componentes Utilizados
+- `Popover` + `Calendar` (já importados e existentes no arquivo)
+- `Switch` (já existente)
+- `format` de `date-fns` para exibir a data selecionada
 
+## Benefícios
+- Interface mais simples e clara
+- Flexibilidade total para selecionar qualquer data de vencimento
+- Remove limites pré-definidos que não se adequam a todos os cenários
