@@ -1,51 +1,43 @@
 
-# Simplificar Seleção de Data de Vencimento: Remover Opção por Dias
+# Corrigir Polling do Boleto: Token com Escopo Correto
 
-## Objetivo
-Simplificar a interface de seleção de vencimento da fatura, removendo completamente as opções pré-definidas "7/15/30/45/60 dias" e mantendo apenas um calendário para seleção manual de data.
+## Problema Raiz
+O boleto e criado com sucesso no Banco Inter (escopo `boleto-cobranca.write`), mas o polling que busca os dados completos (barcode, PDF) usa o mesmo token. O endpoint GET de consulta exige o escopo `boleto-cobranca.read`, causando erro "requested scope is not registered for this client" em todas as tentativas de polling.
 
-## Alterações em `src/components/billing/nfse/NfseAvulsaDialog.tsx`
+O mesmo problema afeta a funcao `poll-boleto-status` (fallback), que ja usa o escopo correto `boleto-cobranca.read` -- mas como so processa registros com mais de 1 hora, nao resolve o problema imediato.
 
-### 1. Remover Estado `vencimentoDias`
-- Deletar a linha 69: `const [vencimentoDias, setVencimentoDias] = useState<number>(30);`
-- Adicionar novo estado `dataVencimentoManual` para armazenar a data selecionada via calendário
+## Solucao
 
-### 2. Simplificar a Lógica de Cálculo de Vencimento
-- Na função `reset()` (linha 155-164): remover a linha que reseta `vencimentoDias`
-- Na função `emitMutation` (linha 195): substituir a lógica de cálculo de vencimento:
-  - De: `const due = addDays(new Date(), vencimentoDias);`
-  - Para: usar diretamente `dataVencimentoManual` se selecionada, ou usar `new Date()` como fallback
+### Alteracao em `supabase/functions/banco-inter/index.ts`
 
-### 3. Refatorar a Seção "Gerar Fatura"
-- Substituir o bloco de linhas 410-429 por:
-  - Manter a label "Gerar fatura junto" com o `Switch`
-  - Quando `gerarFatura` é true, exibir um `Popover` + `Calendar` para seleção de data
-  - Exibir a data selecionada em formato legível abaixo do calendário
-  - Usar `CalendarIcon` como no seletor de "Competência" (linhas 303-327)
+**Obter um segundo token com escopo `boleto-cobranca.read` antes do loop de polling (linhas 548-585):**
 
-### 4. Estrutura da Nova Seção "Gerar Fatura"
+1. Antes do loop de polling (apos linha 547), solicitar um novo token com escopo `boleto-cobranca.read`
+2. Usar esse token de leitura nas requisicoes GET do polling
+3. Se o token de leitura falhar, registrar o aviso e confiar no fallback (`poll-boleto-status`)
 
+### Codigo proposto (pseudocodigo):
+
+```text
+// Apos criar o boleto com sucesso (codigoSolicitacao)
+
+// Obter token de LEITURA para polling
+readTokenResult = tryGetToken("boleto-cobranca.read")
+  OU tryGetToken("boleto-cobranca.read boleto-cobranca.write")
+
+if (readToken obtido) {
+  // Loop de polling usando readToken
+  for (tentativa 1..6) {
+    GET /cobranca/v3/cobrancas/{codigoSolicitacao}
+    Authorization: Bearer {readToken}  // <-- token correto
+  }
+} else {
+  // Log warning e confiar no poll-boleto-status fallback
+}
 ```
-┌─ Gerar fatura junto [Toggle] ─────────────────┐
-│                                                │
-│ Quando ativado:                               │
-│ Data de vencimento:                           │
-│ [ Calendário para seleção da data ]           │
-│ Data selecionada: DD/MM/YYYY                  │
-│                                                │
-└────────────────────────────────────────────────┘
-```
 
-### 5. Validação
-- Garantir que quando `gerarFatura` é true, `dataVencimentoManual` é obrigatoriamente selecionada
-- Na função `canEmit`, adicionar validação: `(gerarFatura && dataVencimentoManual) || !gerarFatura`
-
-## Componentes Utilizados
-- `Popover` + `Calendar` (já importados e existentes no arquivo)
-- `Switch` (já existente)
-- `format` de `date-fns` para exibir a data selecionada
-
-## Benefícios
-- Interface mais simples e clara
-- Flexibilidade total para selecionar qualquer data de vencimento
-- Remove limites pré-definidos que não se adequam a todos os cenários
+### Detalhes tecnicos:
+- Reutilizar a funcao `tryGetTokenWithFallback` ja existente no arquivo
+- O token de leitura sera solicitado apenas quando necessario (apos criacao async do boleto)
+- Fallback para escopo combinado caso o individual falhe
+- Nenhuma alteracao de banco de dados necessaria
