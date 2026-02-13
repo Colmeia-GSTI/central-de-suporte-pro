@@ -407,86 +407,123 @@ serve(async (req) => {
     console.log(`[send-email-smtp] Sending to ${emailValidation.emails.length} recipient(s)`);
 
     let sendErrorMsg = "";
+    let retryAttempts = 0;
+    const maxAttempts = 3;
+    const retryDelaysMs = [0, 3000, 10000]; // immediate, 3s, 10s (within edge function timeout)
 
-    try {
-      const fromValue = `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      retryAttempts = attempt + 1;
+      if (attempt > 0) {
+        console.log(`[send-email-smtp] Retry attempt ${retryAttempts}/${maxAttempts}`);
+        await new Promise(r => setTimeout(r, retryDelaysMs[attempt]));
+      }
 
-      await smtpSend({
-        host: settings.host,
-        port,
-        username: settings.username,
-        password: settings.password,
-        useTls: settings.use_tls !== false,
-        fromHeader: fromValue,
-        to: emailValidation.emails,
-        subject: sanitizedSubject,
-        text: sanitizedText,
-        html: sanitizedHtml,
-      });
-
-      console.log("[send-email-smtp] Email sent successfully");
-
-      // Log each recipient in message_logs for auditability
       try {
-        for (const recipient of emailValidation.emails) {
-          await supabase.from("message_logs").insert({
-            channel: "email",
-            recipient: recipient,
-            message: sanitizedHtml.slice(0, 500),
-            status: "sent",
-            error_message: null,
-            sent_at: new Date().toISOString(),
-          });
+        const fromValue = `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`;
+
+        await smtpSend({
+          host: settings.host,
+          port,
+          username: settings.username,
+          password: settings.password,
+          useTls: settings.use_tls !== false,
+          fromHeader: fromValue,
+          to: emailValidation.emails,
+          subject: sanitizedSubject,
+          text: sanitizedText,
+          html: sanitizedHtml,
+        });
+
+        console.log(`[send-email-smtp] Email sent successfully (attempt ${retryAttempts})`);
+
+        // Log retry metrics
+        if (retryAttempts > 1) {
+          await supabase.from("application_logs").insert({
+            module: "retry",
+            level: "info",
+            message: `Email enviado após ${retryAttempts} tentativas`,
+            action: "send-email-smtp",
+            context: { attempts: retryAttempts, success: true, label: "smtp_send" },
+          }).then(() => {});
         }
-      } catch (logError) {
-        console.warn("[send-email-smtp] Failed to log message:", logError);
-        // Don't fail the email send if logging fails
-      }
 
-      return new Response(
-        JSON.stringify({ success: true, message: "Email enviado com sucesso" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    } catch (sendError: unknown) {
-      sendErrorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
-      console.error("[send-email-smtp] Send error:", sendErrorMsg);
-
-      // Log failed send attempt for auditability
-      try {
-        for (const recipient of emailValidation.emails) {
-          await supabase.from("message_logs").insert({
-            channel: "email",
-            recipient: recipient,
-            message: sanitizedHtml.slice(0, 500),
-            status: "failed",
-            error_message: sendErrorMsg.slice(0, 500),
-            sent_at: null,
-          });
+        // Log each recipient in message_logs for auditability
+        try {
+          for (const recipient of emailValidation.emails) {
+            await supabase.from("message_logs").insert({
+              channel: "email",
+              recipient: recipient,
+              message: sanitizedHtml.slice(0, 500),
+              status: "sent",
+              error_message: null,
+              sent_at: new Date().toISOString(),
+            });
+          }
+        } catch (logError) {
+          console.warn("[send-email-smtp] Failed to log message:", logError);
         }
-      } catch (logError) {
-        console.warn("[send-email-smtp] Failed to log error message:", logError);
+
+        return new Response(
+          JSON.stringify({ success: true, message: "Email enviado com sucesso" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (sendError: unknown) {
+        sendErrorMsg = sendError instanceof Error ? sendError.message : "Unknown send error";
+        console.error(`[send-email-smtp] Send error (attempt ${retryAttempts}):`, sendErrorMsg);
+
+        // Only retry on transient errors (connection, timeout)
+        const isTransient = sendErrorMsg.includes("connect") || sendErrorMsg.includes("timeout") || sendErrorMsg.includes("AbortError") || sendErrorMsg.includes("datamode") || sendErrorMsg.includes("connection");
+        if (!isTransient || attempt === maxAttempts - 1) {
+          // Final failure - log and return error
+          break;
+        }
       }
-
-      // Determine user-friendly message based on error
-      let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
-
-      if (sendErrorMsg.includes("datamode") || sendErrorMsg.includes("connection not recoverable")) {
-        userMessage = "A conexão SMTP foi interrompida durante o envio. Isso pode indicar que o servidor rejeitou o email ou há um problema de rede.";
-      } else if (sendErrorMsg.includes("554") || sendErrorMsg.includes("policy") || sendErrorMsg.includes("relay") || sendErrorMsg.includes("Rejected")) {
-        userMessage = "O servidor SMTP rejeitou o email. Isso pode ocorrer quando o servidor não permite envio para domínios externos. Verifique as configurações de relay do seu provedor SMTP.";
-      } else if (sendErrorMsg.includes("connect")) {
-        userMessage = "Não foi possível conectar ao servidor SMTP. Verifique host e porta.";
-      } else if (sendErrorMsg.includes("auth") || sendErrorMsg.includes("credentials")) {
-        userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
-      } else if (sendErrorMsg.includes("certificate") || sendErrorMsg.includes("TLS")) {
-        userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
-      }
-
-      return new Response(
-        JSON.stringify({ error: userMessage, details: sendErrorMsg }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
+
+    // All retries exhausted - log metrics and return error
+    await supabase.from("application_logs").insert({
+      module: "retry",
+      level: "error",
+      message: `Email falhou após ${retryAttempts} tentativas: ${sendErrorMsg}`,
+      action: "send-email-smtp",
+      context: { attempts: retryAttempts, success: false, label: "smtp_send" },
+    }).then(() => {});
+
+    // Log failed send attempt for auditability
+    try {
+      for (const recipient of emailValidation.emails) {
+        await supabase.from("message_logs").insert({
+          channel: "email",
+          recipient: recipient,
+          message: sanitizedHtml.slice(0, 500),
+          status: "failed",
+          error_message: sendErrorMsg.slice(0, 500),
+          sent_at: null,
+        });
+      }
+    } catch (logError) {
+      console.warn("[send-email-smtp] Failed to log error message:", logError);
+    }
+
+    // Determine user-friendly message based on error
+    let userMessage = "Erro ao enviar email. Verifique as configurações SMTP.";
+
+    if (sendErrorMsg.includes("datamode") || sendErrorMsg.includes("connection not recoverable")) {
+      userMessage = "A conexão SMTP foi interrompida durante o envio. Isso pode indicar que o servidor rejeitou o email ou há um problema de rede.";
+    } else if (sendErrorMsg.includes("554") || sendErrorMsg.includes("policy") || sendErrorMsg.includes("relay") || sendErrorMsg.includes("Rejected")) {
+      userMessage = "O servidor SMTP rejeitou o email. Isso pode ocorrer quando o servidor não permite envio para domínios externos. Verifique as configurações de relay do seu provedor SMTP.";
+    } else if (sendErrorMsg.includes("connect")) {
+      userMessage = "Não foi possível conectar ao servidor SMTP. Verifique host e porta.";
+    } else if (sendErrorMsg.includes("auth") || sendErrorMsg.includes("credentials")) {
+      userMessage = "Falha na autenticação SMTP. Verifique usuário e senha.";
+    } else if (sendErrorMsg.includes("certificate") || sendErrorMsg.includes("TLS")) {
+      userMessage = "Erro de certificado SSL/TLS. Verifique as configurações de segurança.";
+    }
+
+    return new Response(
+      JSON.stringify({ error: userMessage, details: sendErrorMsg }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[send-email-smtp] Unexpected error:", errorMsg);

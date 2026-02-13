@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ContractAdditionalChargeDialog } from "@/components/contracts/ContractAdditionalChargeDialog";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -20,7 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2 } from "lucide-react";
+import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -74,6 +75,10 @@ export default function ContractsPage() {
     contract: null,
   });
   const [generateInvoiceConfirm, setGenerateInvoiceConfirm] = useState<{ open: boolean; contract: ContractWithClient | null }>({
+    open: false,
+    contract: null,
+  });
+  const [additionalChargeDialog, setAdditionalChargeDialog] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
     contract: null,
   });
@@ -340,6 +345,23 @@ export default function ContractsPage() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    onClick={() => setAdditionalChargeDialog({ open: true, contract })}
+                                    disabled={contract.status !== "active"}
+                                  >
+                                    <PackagePlus className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Adicionais pontuais</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
                                     onClick={() => setGenerateInvoiceConfirm({ open: true, contract })}
                                     disabled={contract.status !== "active" || generateInvoiceMutation.isPending}
                                   >
@@ -432,6 +454,17 @@ export default function ContractsPage() {
         onConfirm={handleGenerateInvoice}
         isLoading={generateInvoiceMutation.isPending}
       />
+
+      {/* Additional Charges Dialog */}
+      {additionalChargeDialog.contract && (
+        <ContractAdditionalChargeDialog
+          open={additionalChargeDialog.open}
+          onOpenChange={(open) => setAdditionalChargeDialog({ ...additionalChargeDialog, open })}
+          contractId={additionalChargeDialog.contract.id}
+          contractName={additionalChargeDialog.contract.name}
+          contractMonthlyValue={additionalChargeDialog.contract.monthly_value}
+        />
+      )}
     </AppLayout>
   );
 }

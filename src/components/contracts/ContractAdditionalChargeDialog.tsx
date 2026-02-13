@@ -17,6 +17,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -25,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
-import { PlusCircle, Trash2, Receipt, Check } from "lucide-react";
+import { PlusCircle, Trash2, Receipt, Check, Info } from "lucide-react";
 import { format, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -34,6 +41,7 @@ interface ContractAdditionalChargeDialogProps {
   onOpenChange: (open: boolean) => void;
   contractId: string;
   contractName: string;
+  contractMonthlyValue?: number;
 }
 
 interface AdditionalCharge {
@@ -44,6 +52,7 @@ interface AdditionalCharge {
   applied: boolean;
   applied_invoice_id: string | null;
   created_at: string;
+  created_by: string | null;
 }
 
 export function ContractAdditionalChargeDialog({
@@ -51,6 +60,7 @@ export function ContractAdditionalChargeDialog({
   onOpenChange,
   contractId,
   contractName,
+  contractMonthlyValue = 0,
 }: ContractAdditionalChargeDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -61,6 +71,7 @@ export function ContractAdditionalChargeDialog({
   const [referenceMonth, setReferenceMonth] = useState(
     format(addMonths(new Date(), 1), "yyyy-MM")
   );
+  const [filterMonth, setFilterMonth] = useState("all");
 
   const { data: charges = [], isLoading } = useQuery({
     queryKey: ["contract-additional-charges", contractId],
@@ -76,6 +87,24 @@ export function ContractAdditionalChargeDialog({
     enabled: open,
   });
 
+  // Fetch creator names
+  const creatorIds = [...new Set(charges.filter(c => c.created_by).map(c => c.created_by!))];
+  const { data: creators = [] } = useQuery({
+    queryKey: ["profiles-creators", creatorIds],
+    queryFn: async () => {
+      if (creatorIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", creatorIds);
+      if (error) throw error;
+      return data as { id: string; full_name: string | null }[];
+    },
+    enabled: open && creatorIds.length > 0,
+  });
+
+  const creatorMap = new Map(creators.map(c => [c.id, c.full_name || "Usuário"]));
+
   const addMutation = useMutation({
     mutationFn: async () => {
       if (!description.trim()) throw new Error("Informe uma descrição");
@@ -89,7 +118,12 @@ export function ContractAdditionalChargeDialog({
         created_by: user?.id,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          throw new Error("Já existe um adicional com mesma descrição e competência para este contrato");
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contract-additional-charges", contractId] });
@@ -128,26 +162,33 @@ export function ContractAdditionalChargeDialog({
     },
   });
 
-  const handleAdd = () => {
-    addMutation.mutate();
-  };
-
-  const handleDelete = (chargeId: string) => {
-    deleteMutation.mutate(chargeId);
-  };
-
   const formatMonth = (monthStr: string) => {
     const [year, month] = monthStr.split("-");
     return format(new Date(parseInt(year), parseInt(month) - 1), "MMM/yyyy", { locale: ptBR });
   };
 
+  // Available months for filter
+  const availableMonths = [...new Set(charges.map(c => c.reference_month))].sort().reverse();
+
+  // Filtered charges
+  const filteredCharges = filterMonth === "all"
+    ? charges
+    : charges.filter(c => c.reference_month === filterMonth);
+
+  // Impact preview: pending charges for the selected reference month
+  const pendingForMonth = charges
+    .filter(c => !c.applied && c.reference_month === referenceMonth)
+    .reduce((sum, c) => sum + c.amount, 0);
+
   const pendingTotal = charges
     .filter((c) => !c.applied)
     .reduce((sum, c) => sum + c.amount, 0);
 
+  const projectedTotal = contractMonthlyValue + pendingForMonth + amount;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-primary" />
@@ -166,7 +207,7 @@ export function ContractAdditionalChargeDialog({
               Adicionar Cobrança Pontual
             </h4>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Mês de Competência</Label>
                 <Input
@@ -195,8 +236,23 @@ export function ContractAdditionalChargeDialog({
               </div>
             </div>
 
+            {/* Impact Preview */}
+            {amount > 0 && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-3 text-sm">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-blue-800 dark:text-blue-300">Preview do impacto na fatura ({formatMonth(referenceMonth)})</p>
+                    <p className="text-blue-700 dark:text-blue-400 mt-1">
+                      Valor mensal: {formatCurrencyBRLWithSymbol(contractMonthlyValue)} + Adicionais pendentes: {formatCurrencyBRLWithSymbol(pendingForMonth)} + Novo: {formatCurrencyBRLWithSymbol(amount)} = <strong>{formatCurrencyBRLWithSymbol(projectedTotal)}</strong>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Button
-              onClick={handleAdd}
+              onClick={() => addMutation.mutate()}
               disabled={addMutation.isPending || !description || amount <= 0}
               className="w-full"
             >
@@ -206,18 +262,33 @@ export function ContractAdditionalChargeDialog({
 
           {/* Existing Charges List */}
           <div className="space-y-3">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <h4 className="font-medium">Cobranças Registradas</h4>
-              {pendingTotal > 0 && (
-                <Badge variant="outline" className="bg-warning/10 text-warning-foreground">
-                  Pendente: {formatCurrencyBRLWithSymbol(pendingTotal)}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {pendingTotal > 0 && (
+                  <Badge variant="outline" className="bg-status-warning/10 text-status-warning border-status-warning/30">
+                    Pendente: {formatCurrencyBRLWithSymbol(pendingTotal)}
+                  </Badge>
+                )}
+                {availableMonths.length > 0 && (
+                  <Select value={filterMonth} onValueChange={setFilterMonth}>
+                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                      <SelectValue placeholder="Competência" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {availableMonths.map(m => (
+                        <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
 
             {isLoading ? (
               <div className="text-center py-4 text-muted-foreground">Carregando...</div>
-            ) : charges.length === 0 ? (
+            ) : filteredCharges.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
                 <Receipt className="mx-auto h-12 w-12 opacity-50 mb-2" />
                 <p>Nenhum valor adicional registrado</p>
@@ -231,22 +302,23 @@ export function ContractAdditionalChargeDialog({
                       <TableHead>Descrição</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-center">Status</TableHead>
+                      <TableHead>Criado por</TableHead>
                       <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {charges.map((charge) => (
+                    {filteredCharges.map((charge) => (
                       <TableRow key={charge.id}>
-                        <TableCell className="font-mono">
+                        <TableCell className="font-mono text-sm">
                           {formatMonth(charge.reference_month)}
                         </TableCell>
-                        <TableCell>{charge.description}</TableCell>
-                        <TableCell className="text-right font-mono">
+                        <TableCell className="text-sm">{charge.description}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">
                           {formatCurrencyBRLWithSymbol(charge.amount)}
                         </TableCell>
                         <TableCell className="text-center">
                           {charge.applied ? (
-                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            <Badge variant="secondary" className="bg-status-success/20 text-status-success">
                               <Check className="h-3 w-3 mr-1" />
                               Aplicado
                             </Badge>
@@ -254,12 +326,15 @@ export function ContractAdditionalChargeDialog({
                             <Badge variant="outline">Pendente</Badge>
                           )}
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {charge.created_by ? (creatorMap.get(charge.created_by) || "—") : "—"}
+                        </TableCell>
                         <TableCell>
                           {!charge.applied && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDelete(charge.id)}
+                              onClick={() => deleteMutation.mutate(charge.id)}
                               disabled={deleteMutation.isPending}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
