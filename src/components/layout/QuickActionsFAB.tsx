@@ -98,6 +98,14 @@ export function QuickActionsFAB() {
   return (
     <TooltipProvider delayDuration={0}>
       <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-center gap-3">
+        {/* Backdrop for dark mode visibility */}
+        {isOpen && (
+          <div
+            className="fixed inset-0 bg-background/60 backdrop-blur-sm -z-10"
+            onClick={() => setIsOpen(false)}
+            aria-hidden="true"
+          />
+        )}
         {/* Action buttons */}
         {actions.map((action) => (
           <Tooltip key={action.path}>
