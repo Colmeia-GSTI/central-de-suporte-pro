@@ -202,6 +202,22 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
             due_date: format(dataVencimento, "yyyy-MM-dd"),
             status: "pending",
             description: descricao,
+            processing_metadata: {
+              nfse_origin: "avulsa",
+              service_code: serviceCode.codigo_tributacao,
+              cnae: serviceCode.cnae_principal,
+              aliquota: aliquotaIss,
+              service_description: descricao,
+              tributacao: {
+                iss_retido: tributacao.issRetido,
+                aliquota_iss: aliquotaIss,
+                valor_pis: tributacao.valorPis,
+                valor_cofins: tributacao.valorCofins,
+                valor_csll: tributacao.valorCsll,
+                valor_irrf: tributacao.valorIrrf,
+                valor_inss: tributacao.valorInss,
+              },
+            },
           })
           .select("id")
           .single();

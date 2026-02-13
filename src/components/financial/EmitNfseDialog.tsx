@@ -60,7 +60,21 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     return new Date(invoice.due_date);
   });
   const [descricao, setDescricao] = useState("");
-  const [tributacao, setTributacao] = useState<TributacaoData>(initialTributacao);
+  const [tributacao, setTributacao] = useState<TributacaoData>(() => {
+    const meta = invoice.processing_metadata as any;
+    if (meta?.nfse_origin === "avulsa" && meta?.tributacao) {
+      return {
+        issRetido: meta.tributacao.iss_retido ?? false,
+        aliquotaIss: meta.tributacao.aliquota_iss ?? 0,
+        valorPis: meta.tributacao.valor_pis ?? 0,
+        valorCofins: meta.tributacao.valor_cofins ?? 0,
+        valorCsll: meta.tributacao.valor_csll ?? 0,
+        valorIrrf: meta.tributacao.valor_irrf ?? 0,
+        valorInss: meta.tributacao.valor_inss ?? 0,
+      };
+    }
+    return initialTributacao;
+  });
 
   // Check if Asaas integration is active
   const { data: asaasConfig, isLoading: isLoadingAsaas } = useQuery({
@@ -123,13 +137,29 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
 
   const isAsaasConfigured = !!asaasConfig?.api_key;
 
-  // Alíquota do código de serviço do contrato
-  const aliquotaIss = (contract as any)?.nfse_service_codes?.aliquota_sugerida ?? 0;
+  // Detect standalone NFS-e invoice (created from NfseAvulsaDialog)
+  const metadata = invoice.processing_metadata as any;
+  const isStandaloneNfse = metadata?.nfse_origin === "avulsa";
+
+  // Alíquota: do contrato ou dos metadados da fatura avulsa
+  const aliquotaIss = isStandaloneNfse
+    ? (metadata?.aliquota ?? 0)
+    : ((contract as any)?.nfse_service_codes?.aliquota_sugerida ?? 0);
+
+  // Service code and CNAE: from contract or standalone metadata
+  const effectiveServiceCode = isStandaloneNfse
+    ? metadata?.service_code
+    : contract?.nfse_service_code;
+  const effectiveCnae = isStandaloneNfse
+    ? metadata?.cnae
+    : ((contract as any)?.nfse_service_codes?.cnae_principal || contract?.nfse_cnae);
 
   // Computed final description for preview
   const finalDescription = useMemo(() => {
-    return descricao || contract?.nfse_descricao_customizada || contract?.description || `Prestação de serviços - ${contract?.name}`;
-  }, [descricao, contract]);
+    if (descricao) return descricao;
+    if (isStandaloneNfse) return metadata?.service_description || invoice.description || "Prestação de serviços";
+    return contract?.nfse_descricao_customizada || contract?.description || `Prestação de serviços - ${contract?.name}`;
+  }, [descricao, contract, isStandaloneNfse, metadata, invoice.description]);
 
   // Calcular retenções
   const retencoes = useMemo(() => {
@@ -145,9 +175,10 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     });
   }, [invoice.amount, aliquotaIss, tributacao]);
 
+
   const emitMutation = useMutation({
     mutationFn: async () => {
-      if (!invoice.contract_id) {
+      if (!invoice.contract_id && !isStandaloneNfse) {
         throw new Error("Fatura não possui contrato vinculado");
       }
 
@@ -155,15 +186,20 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
         throw new Error("Integração Asaas não está configurada. Configure em Configurações → Integrações.");
       }
 
+      const isStandalone = isStandaloneNfse || !invoice.contract_id;
+
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
-          action: "emit",
+          action: isStandalone ? "emit_standalone" : "emit",
           client_id: invoice.client_id,
           invoice_id: invoice.id,
-          contract_id: invoice.contract_id,
+          contract_id: invoice.contract_id || undefined,
           value: invoice.amount,
-          service_description: descricao || contract?.nfse_descricao_customizada || contract?.description || `Prestação de serviços - ${contract?.name}`,
-          municipal_service_code: contract?.nfse_service_code,
+          service_description: finalDescription,
+          service_code: isStandalone ? effectiveServiceCode : undefined,
+          municipal_service_code: !isStandalone ? contract?.nfse_service_code : undefined,
+          cnae: isStandalone ? effectiveCnae : undefined,
+          aliquota: isStandalone ? aliquotaIss : undefined,
           effective_date: competencia + "-01",
           competencia,
           // Tributos Nacional 2026
@@ -197,7 +233,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
 
   const isConfigured = companyConfig?.cnpj && companyConfig?.inscricao_municipal;
   const hasContract = !!invoice.contract_id;
-  const canEmit = isConfigured && hasContract && isAsaasConfigured;
+  const canEmit = isConfigured && isAsaasConfigured && (hasContract || isStandaloneNfse);
 
   // Competência formatada para API (yyyy-MM)
   const competencia = format(competenciaDate, "yyyy-MM");
@@ -286,11 +322,11 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
               </Alert>
             )}
 
-            {!hasContract && (
+            {!hasContract && !isStandaloneNfse && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Esta fatura não possui contrato vinculado. Vincule um contrato para emitir NFS-e.
+                  Esta fatura não possui contrato vinculado. Vincule um contrato ou emita uma NFS-e avulsa.
                 </AlertDescription>
               </Alert>
             )}
@@ -336,7 +372,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
                     rows={3}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Se vazio, será usada a descrição padrão do contrato
+                    {isStandaloneNfse ? "Se vazio, será usada a descrição salva na emissão avulsa" : "Se vazio, será usada a descrição padrão do contrato"}
                   </p>
                 </div>
 
@@ -424,14 +460,14 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
               </div>
             </div>
 
-            {contract && (
+            {(contract || isStandaloneNfse) && (
               <div className="space-y-1">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Hash className="h-3 w-3" />
                   Código Tributação / CNAE
                 </div>
                 <div className="text-sm">
-                  {(contract as any)?.nfse_service_codes?.codigo_tributacao || contract.nfse_service_code || "-"} / {(contract as any)?.nfse_service_codes?.cnae_principal || contract.nfse_cnae || "-"}
+                  {effectiveServiceCode || "-"} / {effectiveCnae || "-"}
                 </div>
               </div>
             )}
