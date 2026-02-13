@@ -102,7 +102,7 @@ export function BillingInvoicesTab() {
     handleEmitComplete,
   } = useInvoiceActions();
 
-  const { data: invoices = [], isLoading } = useQuery({
+  const { data: invoices = [], isLoading, isFetching } = useQuery({
     queryKey: ["invoices", statusFilter],
     queryFn: async () => {
       let query = supabase
@@ -281,6 +281,21 @@ export function BillingInvoicesTab() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            disabled={isLoading || isFetching}
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["invoices"] });
+              queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+              queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
+              toast.success("Dados atualizados");
+            }}
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
           <Link to="/billing/delinquency">
             <Button variant="outline" size="sm" className="h-9">
               <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
