@@ -35,7 +35,7 @@ import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialo
 import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useBatchProcessing } from "@/hooks/useBatchProcessing";
 import { InvoiceProcessingHistory } from "@/components/billing/InvoiceProcessingHistory";
 import { ManualPaymentDialog } from "@/components/billing/ManualPaymentDialog";
@@ -71,6 +71,7 @@ const statusColors: Record<Enums<"invoice_status">, string> = {
 const ITEMS_PER_PAGE = 15;
 
 export function BillingInvoicesTab() {
+  const [, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -447,8 +448,26 @@ export function BillingInvoicesTab() {
                           sendingNotification={sendingNotification}
                           onViewHistory={() => setHistoryInvoice(invoice)}
                           onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                          onBoletoClick={() => setPixDialogInvoice(invoice)}
-                          onNfseClick={() => setNfseInvoice(invoice)}
+                          onBoletoClick={() => {
+                            if (invoice.boleto_url) {
+                              window.open(invoice.boleto_url, "_blank");
+                            } else if (invoice.boleto_barcode) {
+                              navigator.clipboard.writeText(invoice.boleto_barcode);
+                              toast.success("Código de barras copiado!");
+                            } else if (invoice.pix_code) {
+                              setPixDialogInvoice(invoice);
+                            } else {
+                              toast.info("Nenhum boleto ou PIX gerado para esta fatura");
+                            }
+                          }}
+                          onNfseClick={() => {
+                            const status = nfseInfo?.status;
+                            if (status === "erro" || status === "rejeitada") {
+                              setSearchParams({ tab: "nfse" });
+                            } else {
+                              setNfseInvoice(invoice);
+                            }
+                          }}
                           onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
                           onManualPayment={() => setManualPaymentInvoice(invoice)}
                         />

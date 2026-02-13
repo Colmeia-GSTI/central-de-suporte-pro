@@ -143,7 +143,7 @@ export function InvoiceInlineActions({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {hasBoletoReady ? "Boleto gerado" : invoice.boleto_error_msg ? "Erro no boleto" : "Boleto pendente"}
+          {invoice.boleto_url ? "Abrir PDF do boleto" : invoice.boleto_barcode ? "Copiar código de barras" : invoice.boleto_error_msg ? "Erro no boleto" : "Boleto pendente"}
         </TooltipContent>
       </Tooltip>
 
@@ -160,7 +160,11 @@ export function InvoiceInlineActions({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="top">
-          {nfseInfo ? `NFS-e: ${nfseInfo.status}` : "NFS-e pendente"}
+          {nfseInfo?.status === "erro" || nfseInfo?.status === "rejeitada"
+            ? "NFS-e com erro - clique para ver detalhes"
+            : nfseInfo?.status === "autorizada"
+              ? "NFS-e autorizada"
+              : nfseInfo ? `NFS-e: ${nfseInfo.status}` : "NFS-e pendente"}
         </TooltipContent>
       </Tooltip>
 
