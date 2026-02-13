@@ -141,8 +141,17 @@ export function BillingInvoicesTab() {
         .select("invoice_id, status, numero_nfse")
         .in("invoice_id", invoiceIds);
       if (error) throw error;
+      const statusPriority: Record<string, number> = {
+        autorizada: 0, processando: 1, pendente: 2, erro: 3, rejeitada: 4, cancelada: 5,
+      };
       return (data || []).reduce<NfseByInvoice>((acc, n) => {
-        if (n.invoice_id) acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse };
+        if (!n.invoice_id) return acc;
+        const existing = acc[n.invoice_id];
+        const existingPriority = existing ? (statusPriority[existing.status] ?? 99) : 99;
+        const newPriority = statusPriority[n.status] ?? 99;
+        if (newPriority < existingPriority) {
+          acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse };
+        }
         return acc;
       }, {});
     },
