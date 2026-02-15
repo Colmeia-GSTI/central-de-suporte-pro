@@ -1,106 +1,194 @@
 
-# Pagina de Faturamento - Experiencia Mobile Imersiva (App-Like)
+# Correcao Definitiva: Garantir municipal_service_code em TODAS as Emissoes de NFS-e
 
-## Problemas Atuais no Mobile
+## Diagnostico Completo
 
-- Header "Faturamento" ocupa espaco desnecessario com titulo grande e subtitulo
-- Tabs aparecem como icones pequenos sem labels, dificeis de identificar (grid-cols-8 comprimido)
-- Tabela desktop (colunas CLIENTE, FATURAMENTO, VENCIMENTO, etc.) nao funciona bem em telas pequenas -- texto truncado e scroll horizontal
-- Summary chips (A Receber, Vencido, Recebido) cortados horizontalmente
-- Padding de 24px (p-6) no conteudo principal desperdi espaco no mobile
-- Barra de acoes em lote no rodape compete com o FAB
+Existem **11 pontos no codigo** que invocam `asaas-nfse` com action `emit`. Desses, **5 NAO passam o `municipal_service_code`**:
 
-## Solucao: Layout App-Like para Mobile
+| Arquivo | Passa codigo? |
+|---------|---------------|
+| `generate-monthly-invoices/index.ts` | SIM (corrigido recentemente) |
+| `batch-process-invoices/index.ts` | SIM |
+| `EmitNfseDialog.tsx` | SIM |
+| `NfseDetailsSheet.tsx` | SIM |
+| **`manual-payment/index.ts`** | NAO |
+| **`webhook-asaas-nfse/index.ts`** | NAO |
+| **`useInvoiceActions.ts` (emitComplete)** | NAO |
+| **`BillingNfseTab.tsx` (quickReprocess)** | NAO |
+| **`NfseActionsMenu.tsx` (resend)** | NAO |
 
-### 1. Header Compacto no Mobile
+Corrigir cada chamador individualmente e fragil -- qualquer nova chamada no futuro pode repetir o erro. A solucao correta e fazer a funcao `asaas-nfse` resolver o codigo automaticamente a partir do contrato quando nao for fornecido.
 
-**Arquivo: `src/pages/billing/BillingPage.tsx`**
+## Solucao: Auto-resolve no `asaas-nfse`
 
-- Reduzir titulo de `text-3xl` para `text-xl` no mobile (`text-xl md:text-3xl`)
-- Esconder subtitulo no mobile (`hidden md:block`)
-- Reduzir espacamento geral de `space-y-6` para `space-y-3 md:space-y-6`
+### Mudanca 1 (principal): `supabase/functions/asaas-nfse/index.ts`
 
-### 2. Tabs como Scroll Horizontal (App-Like)
-
-**Arquivo: `src/pages/billing/BillingPage.tsx`**
-
-Substituir o `grid grid-cols-8` por um scroll horizontal no mobile:
-
-```text
-<TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-8 md:w-auto">
-```
-
-Cada tab mostra icone + label compacto no mobile, com scroll natural como em apps nativos. Adicionar classe CSS `no-scrollbar` para esconder a barra de scroll.
-
-### 3. Cards de Fatura no Mobile (substituir tabela)
-
-**Arquivo: `src/components/billing/BillingInvoicesTab.tsx`**
-
-A mudanca principal: no mobile, substituir a tabela por cards empilhados. Usar `useIsMobile()` para alternar:
-
-- **Desktop**: manter tabela atual sem mudancas
-- **Mobile**: renderizar cada fatura como um card compacto com:
-  - Linha 1: Nome do cliente (bold) + Badge de status
-  - Linha 2: Numero da fatura + Valor (alinhado a direita, destaque)
-  - Linha 3: Datas (emissao e vencimento) + icones de acao inline
-  - Swipe-friendly, sem scroll horizontal
-
-Exemplo de estrutura do card mobile:
+No bloco `case "emit"`, entre o passo 1 (ensureCustomerSync) e o passo 2 (resolve municipal service ID), adicionar logica de fallback:
 
 ```text
-<div className="rounded-lg border p-3 space-y-2">
-  <div className="flex items-center justify-between">
-    <span className="font-medium text-sm truncate">{clientName}</span>
-    <Badge>{status}</Badge>
-  </div>
-  <div className="flex items-center justify-between">
-    <span className="text-xs text-muted-foreground">#{invoiceNumber}</span>
-    <span className="text-sm font-semibold">{amount}</span>
-  </div>
-  <div className="flex items-center justify-between">
-    <span className="text-xs text-muted-foreground">Venc: {dueDate}</span>
-    <InvoiceInlineActions ... />
-  </div>
-</div>
+// AUTO-RESOLVE: Se municipal_service_code nao foi fornecido,
+// buscar do contrato vinculado (contract_id ou via invoice_id)
+let effectiveServiceCode = municipal_service_code;
+
+if (!effectiveServiceCode && !municipal_service_id) {
+  // Tentar via contract_id direto
+  if (contract_id) {
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("nfse_service_code")
+      .eq("id", contract_id)
+      .single();
+    if (contract?.nfse_service_code) {
+      effectiveServiceCode = contract.nfse_service_code;
+      log(correlationId, "info", "municipal_service_code resolvido do contrato", {
+        contract_id, code: effectiveServiceCode
+      });
+    }
+  }
+
+  // Tentar via invoice -> contract
+  if (!effectiveServiceCode && invoice_id) {
+    const { data: invoice } = await supabase
+      .from("invoices")
+      .select("contract_id, contracts(nfse_service_code)")
+      .eq("id", invoice_id)
+      .single();
+    if (invoice?.contracts?.nfse_service_code) {
+      effectiveServiceCode = invoice.contracts.nfse_service_code;
+      log(correlationId, "info", "municipal_service_code resolvido via fatura->contrato", {
+        invoice_id, code: effectiveServiceCode
+      });
+    }
+  }
+
+  // Tentar via nfse_history -> contract
+  if (!effectiveServiceCode && nfse_history_id) {
+    const { data: history } = await supabase
+      .from("nfse_history")
+      .select("contract_id, codigo_tributacao")
+      .eq("id", nfse_history_id)
+      .single();
+    if (history?.codigo_tributacao) {
+      effectiveServiceCode = history.codigo_tributacao;
+    } else if (history?.contract_id) {
+      const { data: c } = await supabase
+        .from("contracts")
+        .select("nfse_service_code")
+        .eq("id", history.contract_id)
+        .single();
+      if (c?.nfse_service_code) effectiveServiceCode = c.nfse_service_code;
+    }
+  }
+}
 ```
 
-### 4. Summary Chips Responsivos
+Depois, substituir todas as referencias a `municipal_service_code` no restante do bloco por `effectiveServiceCode`.
 
-**Arquivo: `src/components/billing/BillingInvoicesTab.tsx`**
+Isso garante que **qualquer chamador** -- atual ou futuro -- que passe `contract_id`, `invoice_id` ou `nfse_history_id` tera o codigo resolvido automaticamente.
 
-- Chips financeiros em `grid grid-cols-3` no mobile (ocupam largura total) em vez de `flex flex-wrap`
-- Texto mais compacto no mobile
+### Mudanca 2 (retry): `supabase/functions/generate-monthly-invoices/index.ts`
 
-### 5. Padding Reduzido no Mobile
-
-**Arquivo: `src/components/layout/AppLayout.tsx`**
-
-- Alterar padding do conteudo de `p-6` para `p-3 md:p-6`
-
-### 6. CSS para Scroll sem Barra
-
-**Arquivo: `src/index.css`**
-
-Adicionar utilitario:
+Adicionar bloco de retry apos o loop de geracao de faturas:
 
 ```text
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+// RETRY: Reemitir NFS-e para faturas do mes com nfse_status = 'erro'
+const { data: failedNfseInvoices } = await supabase
+  .from("invoices")
+  .select("id, client_id, contract_id, amount, contracts(nfse_service_code, ...)")
+  .eq("reference_month", referenceMonth)
+  .eq("nfse_status", "erro")
+  .not("contract_id", "is", null);
+
+for (const inv of failedNfseInvoices) {
+  // Marcar nfse_history antigos sem asaas_invoice_id como 'substituida'
+  await supabase.from("nfse_history")
+    .update({ status: "substituida" })
+    .eq("invoice_id", inv.id)
+    .is("asaas_invoice_id", null)
+    .eq("status", "erro");
+
+  // Reemitir (o auto-resolve da Mudanca 1 cuida do codigo)
+  await supabase.functions.invoke("asaas-nfse", {
+    body: {
+      action: "emit",
+      client_id: inv.client_id,
+      invoice_id: inv.id,
+      contract_id: inv.contract_id,
+      value: inv.amount,
+      municipal_service_code: inv.contracts?.nfse_service_code,
+    }
+  });
+
+  // Atualizar status da fatura
+  await supabase.from("invoices")
+    .update({ nfse_status: "processando" })
+    .eq("id", inv.id);
+}
 ```
+
+### Mudanca 3 (correcao pontual): `supabase/functions/webhook-asaas-nfse/index.ts`
+
+Na auto-emissao de NFS-e apos pagamento (linha 378), adicionar `municipal_service_code`:
+
+```text
+// Antes (faltava):
+body: {
+  action: "emit",
+  client_id: ...,
+  // sem municipal_service_code
+}
+
+// Depois:
+body: {
+  action: "emit",
+  client_id: ...,
+  municipal_service_code: contract.nfse_service_code,  // JA buscado na query
+}
+```
+
+### Mudanca 4 (correcao pontual): `supabase/functions/manual-payment/index.ts`
+
+Adicionar `nfse_service_code` ao select do contrato e passar no body:
+
+```text
+// Select: adicionar nfse_service_code
+.select("name, description, nfse_descricao_customizada, nfse_service_code")
+
+// Body: adicionar
+municipal_service_code: contract?.nfse_service_code,
+```
+
+### Mudanca 5 (frontend): `src/hooks/useInvoiceActions.ts`
+
+Adicionar `nfse_service_code` ao select do contrato e passar no body da emissao NFS-e no fluxo "emitComplete".
+
+### Mudanca 6 (frontend): `src/components/nfse/NfseActionsMenu.tsx`
+
+Na mutation de resend, passar `municipal_service_code` usando `nfse.codigo_tributacao`.
+
+### Mudanca 7 (frontend): `src/components/billing/BillingNfseTab.tsx`
+
+No `handleQuickReprocess`, passar `municipal_service_code` a partir do registro de NFS-e ou contrato vinculado.
 
 ## Arquivos Alterados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/pages/billing/BillingPage.tsx` | Header compacto + tabs scroll horizontal no mobile |
-| `src/components/billing/BillingInvoicesTab.tsx` | Cards mobile para faturas + summary chips responsivos |
-| `src/components/layout/AppLayout.tsx` | Padding reduzido no mobile (p-3 md:p-6) |
-| `src/index.css` | Classe utilitaria no-scrollbar |
+| `supabase/functions/asaas-nfse/index.ts` | Auto-resolve de municipal_service_code via contract/invoice/history |
+| `supabase/functions/generate-monthly-invoices/index.ts` | Bloco de retry para NFS-e com erro |
+| `supabase/functions/webhook-asaas-nfse/index.ts` | Passar municipal_service_code na auto-emissao |
+| `supabase/functions/manual-payment/index.ts` | Passar municipal_service_code |
+| `src/hooks/useInvoiceActions.ts` | Passar municipal_service_code no emitComplete |
+| `src/components/nfse/NfseActionsMenu.tsx` | Passar codigo_tributacao no resend |
+| `src/components/billing/BillingNfseTab.tsx` | Passar codigo no quickReprocess |
 
 ## Resultado
 
-- Tabs navegaveis por scroll horizontal (como apps de banco)
-- Faturas em cards empilhados no mobile (sem tabela)
-- Espacamento otimizado para telas pequenas
-- Sem mudancas visuais no desktop -- todas as alteracoes sao condicionais via breakpoints ou hook `useIsMobile()`
-- Suporte a dark mode mantido (usa classes existentes do design system)
+| Cenario | Antes | Depois |
+|---------|-------|--------|
+| Qualquer chamador sem codigo | Erro MISSING_MUNICIPAL_SERVICE_CODE | Auto-resolve do contrato |
+| Pagamento manual com NFS-e | Falha silenciosa | Codigo resolvido automaticamente |
+| Webhook de pagamento + auto-NFS-e | Codigo nao enviado | Codigo passado do contrato |
+| Reprocessamento rapido | Falha por falta de codigo | Resolve via nfse_history ou contrato |
+| Notas presas com erro | Ficam presas eternamente | Retry automatico no proximo CRON |
+| Futuras chamadas | Precisam lembrar de passar | Auto-resolve como safety net |
