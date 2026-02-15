@@ -208,7 +208,9 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
           value: nfse.valor_servico,
           service_description: nfse.descricao_servico,
           nfse_history_id: nfse.id,
+          contract_id: nfse.contract_id || undefined,
           competencia: parseCompetencia(nfse.competencia),
+          municipal_service_code: nfse.codigo_tributacao || undefined,
         },
       });
       

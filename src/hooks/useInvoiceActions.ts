@@ -266,7 +266,7 @@ export function useInvoiceActions() {
         if (!existingNfse || !["autorizada", "processando"].includes(existingNfse.status)) {
           const { data: contract } = await supabase
             .from("contracts")
-            .select("name, description, nfse_descricao_customizada")
+            .select("name, description, nfse_descricao_customizada, nfse_service_code")
             .eq("id", invoice.contract_id)
             .single();
 
@@ -281,6 +281,7 @@ export function useInvoiceActions() {
                 contract?.nfse_descricao_customizada ||
                 contract?.description ||
                 `Prestação de serviços - ${contract?.name}`,
+              municipal_service_code: contract?.nfse_service_code || undefined,
             },
           });
           if (error) throw error;

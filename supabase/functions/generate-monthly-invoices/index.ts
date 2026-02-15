@@ -650,8 +650,81 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ============ RETRY: Re-emitir NFS-e para faturas com erro no mês corrente ============
+    let nfseRetried = 0;
+    try {
+      const { data: failedNfseInvoices } = await supabase
+        .from("invoices")
+        .select("id, client_id, contract_id, amount, invoice_number")
+        .eq("reference_month", referenceMonth)
+        .eq("nfse_status", "erro")
+        .not("contract_id", "is", null);
+
+      if (failedNfseInvoices && failedNfseInvoices.length > 0) {
+        console.log(`[GEN-INVOICES] RETRY: ${failedNfseInvoices.length} fatura(s) com NFS-e em erro para reprocessar`);
+
+        for (const inv of failedNfseInvoices) {
+          try {
+            // Buscar código de serviço do contrato
+            const { data: retryContract } = await supabase
+              .from("contracts")
+              .select("nfse_service_code, nfse_descricao_customizada, description, name, nfse_enabled")
+              .eq("id", inv.contract_id!)
+              .single();
+
+            if (!retryContract?.nfse_enabled) {
+              console.log(`[GEN-INVOICES] RETRY: Contrato ${inv.contract_id} não tem NFS-e habilitada, pulando`);
+              continue;
+            }
+
+            // Marcar nfse_history antigos sem asaas_invoice_id como 'substituida'
+            await supabase
+              .from("nfse_history")
+              .update({ status: "substituida", updated_at: new Date().toISOString() })
+              .eq("invoice_id", inv.id)
+              .is("asaas_invoice_id", null)
+              .eq("status", "erro");
+
+            const serviceDescription = retryContract.nfse_descricao_customizada
+              || retryContract.description
+              || `Prestação de serviços - ${retryContract.name}`;
+
+            // Reemitir (o auto-resolve da asaas-nfse cuida do código caso não tenha)
+            const { error: retryError } = await supabase.functions.invoke("asaas-nfse", {
+              body: {
+                action: "emit",
+                client_id: inv.client_id,
+                invoice_id: inv.id,
+                contract_id: inv.contract_id,
+                value: inv.amount,
+                service_description: serviceDescription,
+                municipal_service_code: retryContract.nfse_service_code || undefined,
+              },
+            });
+
+            if (!retryError) {
+              await supabase
+                .from("invoices")
+                .update({ nfse_status: "processando", nfse_error_msg: null })
+                .eq("id", inv.id);
+              nfseRetried++;
+              console.log(`[GEN-INVOICES] RETRY: NFS-e reemitida para fatura #${inv.invoice_number}`);
+            } else {
+              console.error(`[GEN-INVOICES] RETRY: Erro ao reemitir NFS-e para fatura #${inv.invoice_number}:`, retryError);
+            }
+          } catch (retryErr) {
+            console.error(`[GEN-INVOICES] RETRY: Exceção ao reprocessar fatura ${inv.id}:`, retryErr);
+          }
+        }
+
+        console.log(`[GEN-INVOICES] RETRY: ${nfseRetried} NFS-e(s) reemitida(s) com sucesso`);
+      }
+    } catch (retryBlockError) {
+      console.error("[GEN-INVOICES] RETRY: Erro no bloco de retry:", retryBlockError);
+    }
+
     const totalDuration = Date.now() - startTime;
-    console.log(`[GEN-INVOICES] Concluído - Geradas: ${generated}, Ignoradas: ${skipped}, Falhas: ${failed}`);
+    console.log(`[GEN-INVOICES] Concluído - Geradas: ${generated}, Ignoradas: ${skipped}, Falhas: ${failed}, NFS-e Retry: ${nfseRetried}`);
 
     // Log final result
     await logToDatabase(

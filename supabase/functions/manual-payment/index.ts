@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
         
         const { data: contract } = await supabase
           .from("contracts")
-          .select("name, description, nfse_descricao_customizada")
+          .select("name, description, nfse_descricao_customizada, nfse_service_code")
           .eq("id", invoice.contract_id)
           .single();
 
@@ -154,6 +154,7 @@ Deno.serve(async (req) => {
             contract_id: invoice.contract_id,
             value: paid_amount,
             service_description: contract?.nfse_descricao_customizada || contract?.description || `Prestação de serviços - ${contract?.name}`,
+            municipal_service_code: contract?.nfse_service_code || undefined,
           },
         });
 

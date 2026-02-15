@@ -651,15 +651,80 @@ Deno.serve(async (req) => {
         // This prevents "E-mail/Endereço/CEP incompleto" errors from Asaas
         const { customerId, client } = await ensureCustomerSync(supabase, settings, client_id, correlationId);
 
+        // ============ AUTO-RESOLVE: municipal_service_code ============
+        // Safety net: se o chamador não enviou o código, resolver automaticamente
+        // a partir do contrato vinculado (contract_id, invoice_id ou nfse_history_id)
+        let effectiveServiceCode = municipal_service_code;
+
+        if (!effectiveServiceCode && !municipal_service_id) {
+          // Tentar via contract_id direto
+          if (contract_id) {
+            const { data: contractForCode } = await supabase
+              .from("contracts")
+              .select("nfse_service_code")
+              .eq("id", contract_id)
+              .maybeSingle();
+            if (contractForCode?.nfse_service_code) {
+              effectiveServiceCode = contractForCode.nfse_service_code;
+              log(correlationId, "info", "municipal_service_code resolvido do contrato", {
+                contract_id, code: effectiveServiceCode,
+              });
+            }
+          }
+
+          // Tentar via invoice -> contract
+          if (!effectiveServiceCode && invoice_id) {
+            const { data: invoiceForCode } = await supabase
+              .from("invoices")
+              .select("contract_id, contracts(nfse_service_code)")
+              .eq("id", invoice_id)
+              .maybeSingle();
+            const contractData = invoiceForCode?.contracts as { nfse_service_code: string | null } | null;
+            if (contractData?.nfse_service_code) {
+              effectiveServiceCode = contractData.nfse_service_code;
+              log(correlationId, "info", "municipal_service_code resolvido via fatura->contrato", {
+                invoice_id, code: effectiveServiceCode,
+              });
+            }
+          }
+
+          // Tentar via nfse_history -> codigo_tributacao ou contract
+          if (!effectiveServiceCode && nfse_history_id) {
+            const { data: historyForCode } = await supabase
+              .from("nfse_history")
+              .select("contract_id, codigo_tributacao")
+              .eq("id", nfse_history_id)
+              .maybeSingle();
+            if (historyForCode?.codigo_tributacao) {
+              effectiveServiceCode = historyForCode.codigo_tributacao;
+              log(correlationId, "info", "municipal_service_code resolvido via nfse_history.codigo_tributacao", {
+                nfse_history_id, code: effectiveServiceCode,
+              });
+            } else if (historyForCode?.contract_id) {
+              const { data: cForCode } = await supabase
+                .from("contracts")
+                .select("nfse_service_code")
+                .eq("id", historyForCode.contract_id)
+                .maybeSingle();
+              if (cForCode?.nfse_service_code) {
+                effectiveServiceCode = cForCode.nfse_service_code;
+                log(correlationId, "info", "municipal_service_code resolvido via nfse_history->contrato", {
+                  contract_id: historyForCode.contract_id, code: effectiveServiceCode,
+                });
+              }
+            }
+          }
+        }
+
         // 2. Resolve municipal service ID if only code provided
         let resolvedMunicipalServiceId = municipal_service_id;
-        if (!resolvedMunicipalServiceId && municipal_service_code) {
-          log(correlationId, "info", `Buscando municipalServiceId para código ${municipal_service_code}`);
+        if (!resolvedMunicipalServiceId && effectiveServiceCode) {
+          log(correlationId, "info", `Buscando municipalServiceId para código ${effectiveServiceCode}`);
           try {
             const servicesResponse = await asaasRequest(settings, "/invoices/municipalServices", "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
             const matchedService = services.find(
-              (s: { code: string; id: string }) => s.code === municipal_service_code
+              (s: { code: string; id: string }) => s.code === effectiveServiceCode
             );
             if (matchedService) {
               resolvedMunicipalServiceId = matchedService.id;
@@ -729,11 +794,11 @@ Deno.serve(async (req) => {
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
           log(correlationId, "info", `Usando municipalServiceId resolvido: ${resolvedMunicipalServiceId}`);
-        } else if (municipal_service_code) {
+        } else if (effectiveServiceCode) {
           // Use the LC 116 code as externalId (formato: "01.01" ou "0101" ou "010701")
-          invoicePayload.municipalServiceExternalId = municipal_service_code;
+          invoicePayload.municipalServiceExternalId = effectiveServiceCode;
           invoicePayload.municipalServiceName = service_description || "Serviços de TI";
-          log(correlationId, "info", `Usando municipalServiceExternalId do contrato: ${municipal_service_code}`);
+          log(correlationId, "info", `Usando municipalServiceExternalId: ${effectiveServiceCode}`);
         } else {
           // CORREÇÃO CRÍTICA: NÃO usar fallback - rejeitar se não houver código de serviço
           const errorMsg = "Código de serviço municipal (LC 116) não fornecido. Configure o código de serviço no contrato antes de emitir NFS-e.";
