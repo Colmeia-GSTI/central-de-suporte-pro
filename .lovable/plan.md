@@ -1,78 +1,106 @@
 
-# Corrigir Clique no Boleto e Resolver NFS-e do Comercial
+# Pagina de Faturamento - Experiencia Mobile Imersiva (App-Like)
 
-## Problema 1: Clique no boleto abre tela de PIX
+## Problemas Atuais no Mobile
 
-O icone de boleto (Barcode) na listagem de faturas sempre executa `setPixDialogInvoice(invoice)`, que abre o dialogo de PIX independentemente de a fatura ter boleto ou PIX. O comportamento correto deve ser:
+- Header "Faturamento" ocupa espaco desnecessario com titulo grande e subtitulo
+- Tabs aparecem como icones pequenos sem labels, dificeis de identificar (grid-cols-8 comprimido)
+- Tabela desktop (colunas CLIENTE, FATURAMENTO, VENCIMENTO, etc.) nao funciona bem em telas pequenas -- texto truncado e scroll horizontal
+- Summary chips (A Receber, Vencido, Recebido) cortados horizontalmente
+- Padding de 24px (p-6) no conteudo principal desperdi espaco no mobile
+- Barra de acoes em lote no rodape compete com o FAB
 
-- Se tem `boleto_url` (PDF): abrir o PDF em nova aba
-- Se tem `boleto_barcode` mas nao tem `boleto_url`: exibir o codigo de barras para copia
-- Se tem `pix_code` e nao tem boleto: abrir o dialogo PIX
-- Se nao tem nada: nao fazer nada (ou mostrar aviso)
+## Solucao: Layout App-Like para Mobile
 
-### Mudancas
+### 1. Header Compacto no Mobile
+
+**Arquivo: `src/pages/billing/BillingPage.tsx`**
+
+- Reduzir titulo de `text-3xl` para `text-xl` no mobile (`text-xl md:text-3xl`)
+- Esconder subtitulo no mobile (`hidden md:block`)
+- Reduzir espacamento geral de `space-y-6` para `space-y-3 md:space-y-6`
+
+### 2. Tabs como Scroll Horizontal (App-Like)
+
+**Arquivo: `src/pages/billing/BillingPage.tsx`**
+
+Substituir o `grid grid-cols-8` por um scroll horizontal no mobile:
+
+```text
+<TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-8 md:w-auto">
+```
+
+Cada tab mostra icone + label compacto no mobile, com scroll natural como em apps nativos. Adicionar classe CSS `no-scrollbar` para esconder a barra de scroll.
+
+### 3. Cards de Fatura no Mobile (substituir tabela)
 
 **Arquivo: `src/components/billing/BillingInvoicesTab.tsx`**
 
-Substituir a linha 450:
+A mudanca principal: no mobile, substituir a tabela por cards empilhados. Usar `useIsMobile()` para alternar:
+
+- **Desktop**: manter tabela atual sem mudancas
+- **Mobile**: renderizar cada fatura como um card compacto com:
+  - Linha 1: Nome do cliente (bold) + Badge de status
+  - Linha 2: Numero da fatura + Valor (alinhado a direita, destaque)
+  - Linha 3: Datas (emissao e vencimento) + icones de acao inline
+  - Swipe-friendly, sem scroll horizontal
+
+Exemplo de estrutura do card mobile:
+
 ```text
-onBoletoClick={() => setPixDialogInvoice(invoice)}
+<div className="rounded-lg border p-3 space-y-2">
+  <div className="flex items-center justify-between">
+    <span className="font-medium text-sm truncate">{clientName}</span>
+    <Badge>{status}</Badge>
+  </div>
+  <div className="flex items-center justify-between">
+    <span className="text-xs text-muted-foreground">#{invoiceNumber}</span>
+    <span className="text-sm font-semibold">{amount}</span>
+  </div>
+  <div className="flex items-center justify-between">
+    <span className="text-xs text-muted-foreground">Venc: {dueDate}</span>
+    <InvoiceInlineActions ... />
+  </div>
+</div>
 ```
 
-Por uma funcao inteligente `handleBoletoClick(invoice)` que:
-
-1. Se `invoice.boleto_url` existe, abre `window.open(invoice.boleto_url, "_blank")`
-2. Se `invoice.boleto_barcode` existe (sem URL), copia o barcode para a area de transferencia e exibe toast "Codigo de barras copiado!"
-3. Se so tem `invoice.pix_code`, abre o dialogo PIX (comportamento atual)
-4. Se nao tem nenhum, exibe toast informativo "Nenhum boleto ou PIX gerado"
-
-**Arquivo: `src/components/billing/InvoiceInlineActions.tsx`**
-
-Atualizar o tooltip do boleto para ser mais descritivo:
-- Com URL: "Abrir PDF do boleto"
-- Com barcode sem URL: "Copiar codigo de barras"
-- Sem nada: "Boleto pendente"
-
----
-
-## Problema 2: NFS-e do Comercial com erro E0014
-
-A fatura #9 do Clube Comercial tem uma unica entrada em `nfse_history` com status "erro" e codigo E0014 (DPS duplicada -- a nota ja foi emitida na prefeitura mas o sistema nao tem o registro como "autorizada"). A prioridade do reduce funciona corretamente, mas nao existe um registro "autorizada" para priorizar.
-
-A solucao ja implementada na `BillingNfseTab` (linha expandida com erro + botao "Vincular Nota") permite ao usuario vincular a nota externa. No entanto, na aba de Faturas o indicador de NFS-e aparece vermelho sem explicacao.
-
-### Mudancas
+### 4. Summary Chips Responsivos
 
 **Arquivo: `src/components/billing/BillingInvoicesTab.tsx`**
 
-Melhorar o `onNfseClick` para que, quando o status for "erro", abra diretamente a aba de NFS-e com filtro de erro, em vez de abrir o dialogo de emissao de NFS-e. Atualmente (linha 451):
+- Chips financeiros em `grid grid-cols-3` no mobile (ocupam largura total) em vez de `flex flex-wrap`
+- Texto mais compacto no mobile
+
+### 5. Padding Reduzido no Mobile
+
+**Arquivo: `src/components/layout/AppLayout.tsx`**
+
+- Alterar padding do conteudo de `p-6` para `p-3 md:p-6`
+
+### 6. CSS para Scroll sem Barra
+
+**Arquivo: `src/index.css`**
+
+Adicionar utilitario:
 
 ```text
-onNfseClick={() => setNfseInvoice(invoice)}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 ```
 
-Alterar para: se a NFS-e tem status "erro" ou "rejeitada", navegar para `/billing?tab=nfse` para que o usuario veja o erro expandido e as acoes de correcao. Se nao tem NFS-e ou esta pendente, manter o comportamento de abrir o dialogo de emissao.
-
-**Arquivo: `src/components/billing/InvoiceInlineActions.tsx`**
-
-Atualizar o tooltip da NFS-e para incluir a mensagem de erro quando disponivel:
-- Status "erro": "NFS-e com erro - clique para ver detalhes"
-- Status "autorizada": "NFS-e autorizada"
-
----
-
-## Resumo de Arquivos
+## Arquivos Alterados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/billing/BillingInvoicesTab.tsx` | Funcao `handleBoletoClick` inteligente + `onNfseClick` com redirecionamento para erros |
-| `src/components/billing/InvoiceInlineActions.tsx` | Tooltips atualizados para boleto e NFS-e |
+| `src/pages/billing/BillingPage.tsx` | Header compacto + tabs scroll horizontal no mobile |
+| `src/components/billing/BillingInvoicesTab.tsx` | Cards mobile para faturas + summary chips responsivos |
+| `src/components/layout/AppLayout.tsx` | Padding reduzido no mobile (p-3 md:p-6) |
+| `src/index.css` | Classe utilitaria no-scrollbar |
 
 ## Resultado
 
-| Cenario | Antes | Depois |
-|---------|-------|--------|
-| Clicar boleto com PDF | Abre PIX | Abre PDF em nova aba |
-| Clicar boleto com barcode sem PDF | Abre PIX | Copia barcode |
-| Clicar boleto com PIX apenas | Abre PIX | Abre PIX (mantido) |
-| Clicar NFS-e com erro | Abre dialogo emissao | Navega para aba NFS-e com detalhes do erro |
+- Tabs navegaveis por scroll horizontal (como apps de banco)
+- Faturas em cards empilhados no mobile (sem tabela)
+- Espacamento otimizado para telas pequenas
+- Sem mudancas visuais no desktop -- todas as alteracoes sao condicionais via breakpoints ou hook `useIsMobile()`
+- Suporte a dark mode mantido (usa classes existentes do design system)
