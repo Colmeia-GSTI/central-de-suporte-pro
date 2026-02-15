@@ -383,6 +383,7 @@ async function processPaymentWebhook(
                   contract_id: updatedInvoice.contract_id,
                   value: updatedInvoice.amount,
                   service_description: contract.nfse_descricao_customizada || contract.description || `Prestação de serviços - ${contract.name}`,
+                  municipal_service_code: contract.nfse_service_code || undefined,
                 },
               });
               
