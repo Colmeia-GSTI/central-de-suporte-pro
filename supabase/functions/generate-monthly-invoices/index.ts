@@ -484,6 +484,7 @@ Deno.serve(async (req) => {
                 contract_id: contract.id,
                 value: totalAmount,
                 service_description: serviceDescription,
+                municipal_service_code: contract.nfse_service_code || undefined,
               },
             });
 
