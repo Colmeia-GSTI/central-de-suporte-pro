@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,7 @@ const statusColors: Record<Enums<"invoice_status">, string> = {
 const ITEMS_PER_PAGE = 15;
 
 export function BillingInvoicesTab() {
+  const isMobile = useIsMobile();
   const [, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -335,7 +337,7 @@ export function BillingInvoicesTab() {
       </div>
 
       {/* Summary Chips */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center md:gap-3">
         <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
           <span className="text-xs text-muted-foreground">A Receber</span>
           <span className="text-sm font-semibold text-emerald-400">{formatCurrency(totalPending)}</span>
@@ -350,7 +352,7 @@ export function BillingInvoicesTab() {
         </div>
 
         {hasSelected && (
-          <div className="ml-auto flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5">
+          <div className="col-span-3 md:col-span-1 md:ml-auto flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5">
             <span className="text-xs font-medium">{selectedInvoices.size} selecionada(s)</span>
             <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setSelectedInvoices(new Set())}>
               <X className="h-3 w-3" />
@@ -359,213 +361,286 @@ export function BillingInvoicesTab() {
         )}
       </div>
 
-      {/* Dense Table */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden flex-1 flex flex-col">
-        <div className="overflow-x-auto flex-1">
-          <Table>
-            <TableHeader className="bg-card sticky top-0 z-10">
-              <TableRow className="hover:bg-transparent border-b">
-                <TableHead className="w-10 px-2 py-2">
-                  <Checkbox
-                    checked={paginatedInvoices.length > 0 && selectedInvoices.size === paginatedInvoices.length ? true : selectedInvoices.size > 0 ? "indeterminate" : false}
-                    onCheckedChange={toggleSelectAll}
-                    disabled={paginatedInvoices.length === 0}
-                  />
-                </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Cliente</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Faturamento</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Vencimento</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Situação</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-right py-2">Valor (R$)</TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-center py-2">Ações</TableHead>
-                <TableHead className="w-10 py-2"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <TableRow key={i} className="border-b hover:bg-muted/30">
-                    <TableCell className="px-2 py-2"><Skeleton className="h-4 w-4" /></TableCell>
-                    <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="py-2"><Skeleton className="h-5 w-16" /></TableCell>
-                    <TableCell className="py-2 text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
-                    <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell className="py-2"><Skeleton className="h-4 w-4" /></TableCell>
-                  </TableRow>
-                ))
-              ) : paginatedInvoices.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    Nenhuma fatura encontrada
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedInvoices.map((invoice) => {
-                  const nfseInfo = nfseByInvoice[invoice.id];
-                  return (
-                    <TableRow key={invoice.id} className="border-b hover:bg-muted/30 py-1">
-                      <TableCell className="px-2 py-2">
-                        <Checkbox
-                          checked={selectedInvoices.has(invoice.id)}
-                          onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
-                        />
-                      </TableCell>
-                      <TableCell className="py-2">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-medium text-sm">{invoice.clients?.name || "Sem cliente"}</span>
-                          <span className="text-xs text-muted-foreground">{invoice.invoice_number}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-2 text-xs">
-                        {invoice.issued_date ? (() => { const [y,m,d] = invoice.issued_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
-                      </TableCell>
-                      <TableCell className="py-2 text-xs">
-                        {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
-                      </TableCell>
-                      <TableCell className="py-2">
-                        <div className="flex items-center gap-1">
-                          <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
-                            {statusLabels[invoice.status]}
-                          </Badge>
-                          {nfseInfo && (
-                            <Badge variant="outline" className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/40">
-                              NFS-e
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-2 text-right text-sm font-medium">
-                        {formatCurrency(invoice.amount)}
-                      </TableCell>
-                      <TableCell className="py-2">
-                        <InvoiceInlineActions
-                          invoice={invoice}
-                          nfseInfo={nfseInfo}
-                          processingComplete={processingComplete}
-                          generatingPayment={generatingPayment}
-                          sendingNotification={sendingNotification}
-                          onViewHistory={() => setHistoryInvoice(invoice)}
-                          onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                          onBoletoClick={() => {
-                            if (invoice.boleto_url) {
-                              window.open(invoice.boleto_url, "_blank");
-                            } else if (invoice.boleto_barcode) {
-                              navigator.clipboard.writeText(invoice.boleto_barcode);
-                              toast.success("Código de barras copiado!");
-                            } else if (invoice.pix_code) {
-                              setPixDialogInvoice(invoice);
-                            } else {
-                              toast.info("Nenhum boleto ou PIX gerado para esta fatura");
-                            }
-                          }}
-                          onNfseClick={() => {
-                            const status = nfseInfo?.status;
-                            if (status === "erro" || status === "rejeitada") {
-                              setSearchParams({ tab: "nfse" });
-                            } else {
-                              setNfseInvoice(invoice);
-                            }
-                          }}
-                          onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
-                          onManualPayment={() => setManualPaymentInvoice(invoice)}
-                        />
-                      </TableCell>
-                      <TableCell className="py-2 w-10">
-                        <InvoiceActionsPopover
-                          invoice={invoice}
-                          nfseInfo={nfseInfo}
-                          generatingPayment={generatingPayment}
-                          processingComplete={processingComplete}
-                          sendingNotification={sendingNotification}
-                          onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                          onGeneratePayment={handleGeneratePayment}
-                          onManualPayment={() => setManualPaymentInvoice(invoice)}
-                          onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
-                          onSecondCopy={() => setSecondCopyInvoice(invoice)}
-                          onRenegotiate={() => setRenegotiateInvoice(invoice)}
-                          onResendNotification={handleResendNotification}
-                          onEmitNfse={() => setNfseInvoice(invoice)}
-                          onCancelBoleto={() => {
-                            setIsCancellingBoleto(true);
-                            toast.info("Cancelando boleto...");
-                          }}
-                          onCancelNfse={() => setCancelNfseInvoice(invoice)}
-                          onViewHistory={() => setHistoryInvoice(invoice)}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Pagination Footer */}
-        {!isLoading && paginatedInvoices.length > 0 && (
-          <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
-            <span className="text-xs text-muted-foreground">
-              {filteredInvoices.length > 0 ? (
-                <>
-                  {(currentPage - 1) * ITEMS_PER_PAGE + 1} a{" "}
-                  {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} de{" "}
-                  {filteredInvoices.length}
-                </>
-              ) : (
-                "Nenhum resultado"
-              )}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="h-7 px-2"
-              >
-                <ChevronsLeft className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                disabled={currentPage === 1}
-                className="h-7 px-2"
-              >
-                <ChevronLeft className="h-3 w-3" />
-              </Button>
-
-              <div className="flex items-center gap-1 px-2 text-xs text-muted-foreground">
-                {currentPage} de {totalPages}
+      {/* Mobile Card View */}
+      {isMobile ? (
+        <div className="flex-1 flex flex-col gap-2">
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-border bg-card p-3 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20" />
               </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="h-7 px-2"
-              >
-                <ChevronRight className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="h-7 px-2"
-              >
-                <ChevronsRight className="h-3 w-3" />
-              </Button>
+            ))
+          ) : paginatedInvoices.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              Nenhuma fatura encontrada
             </div>
+          ) : (
+            paginatedInvoices.map((invoice) => {
+              const nfseInfo = nfseByInvoice[invoice.id];
+              return (
+                <div key={invoice.id} className="rounded-lg border border-border bg-card p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-sm truncate flex-1">
+                      {invoice.clients?.name || "Sem cliente"}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
+                        {statusLabels[invoice.status]}
+                      </Badge>
+                      {nfseInfo && (
+                        <Badge variant="outline" className="text-xs bg-info/20 text-info border-info/40">
+                          NFS-e
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">#{invoice.invoice_number}</span>
+                    <span className="text-sm font-semibold">{formatCurrency(invoice.amount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      Venc: {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                    </span>
+                    <InvoiceInlineActions
+                      invoice={invoice}
+                      nfseInfo={nfseInfo}
+                      processingComplete={processingComplete}
+                      generatingPayment={generatingPayment}
+                      sendingNotification={sendingNotification}
+                      onViewHistory={() => setHistoryInvoice(invoice)}
+                      onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                      onBoletoClick={() => {
+                        if (invoice.boleto_url) {
+                          window.open(invoice.boleto_url, "_blank");
+                        } else if (invoice.boleto_barcode) {
+                          navigator.clipboard.writeText(invoice.boleto_barcode);
+                          toast.success("Código de barras copiado!");
+                        } else if (invoice.pix_code) {
+                          setPixDialogInvoice(invoice);
+                        } else {
+                          toast.info("Nenhum boleto ou PIX gerado para esta fatura");
+                        }
+                      }}
+                      onNfseClick={() => {
+                        const status = nfseInfo?.status;
+                        if (status === "erro" || status === "rejeitada") {
+                          setSearchParams({ tab: "nfse" });
+                        } else {
+                          setNfseInvoice(invoice);
+                        }
+                      }}
+                      onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
+                      onManualPayment={() => setManualPaymentInvoice(invoice)}
+                    />
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {/* Mobile Pagination */}
+          {!isLoading && paginatedInvoices.length > 0 && (
+            <div className="flex items-center justify-between gap-2 px-1 py-2">
+              <span className="text-xs text-muted-foreground">
+                {currentPage} de {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1} className="h-7 px-2">
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="h-7 px-2">
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Desktop Table */
+        <div className="rounded-lg border border-border bg-card overflow-hidden flex-1 flex flex-col">
+          <div className="overflow-x-auto flex-1">
+            <Table>
+              <TableHeader className="bg-card sticky top-0 z-10">
+                <TableRow className="hover:bg-transparent border-b">
+                  <TableHead className="w-10 px-2 py-2">
+                    <Checkbox
+                      checked={paginatedInvoices.length > 0 && selectedInvoices.size === paginatedInvoices.length ? true : selectedInvoices.size > 0 ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAll}
+                      disabled={paginatedInvoices.length === 0}
+                    />
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Cliente</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Faturamento</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Vencimento</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Situação</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-right py-2">Valor (R$)</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-center py-2">Ações</TableHead>
+                  <TableHead className="w-10 py-2"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <TableRow key={i} className="border-b hover:bg-muted/30">
+                      <TableCell className="px-2 py-2"><Skeleton className="h-4 w-4" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-5 w-16" /></TableCell>
+                      <TableCell className="py-2 text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-4" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : paginatedInvoices.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      Nenhuma fatura encontrada
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedInvoices.map((invoice) => {
+                    const nfseInfo = nfseByInvoice[invoice.id];
+                    return (
+                      <TableRow key={invoice.id} className="border-b hover:bg-muted/30 py-1">
+                        <TableCell className="px-2 py-2">
+                          <Checkbox
+                            checked={selectedInvoices.has(invoice.id)}
+                            onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-sm">{invoice.clients?.name || "Sem cliente"}</span>
+                            <span className="text-xs text-muted-foreground">{invoice.invoice_number}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {invoice.issued_date ? (() => { const [y,m,d] = invoice.issued_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
+                              {statusLabels[invoice.status]}
+                            </Badge>
+                            {nfseInfo && (
+                              <Badge variant="outline" className="text-xs bg-info/20 text-info border-info/40">
+                                NFS-e
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-right text-sm font-medium">
+                          {formatCurrency(invoice.amount)}
+                        </TableCell>
+                        <TableCell className="py-2">
+                          <InvoiceInlineActions
+                            invoice={invoice}
+                            nfseInfo={nfseInfo}
+                            processingComplete={processingComplete}
+                            generatingPayment={generatingPayment}
+                            sendingNotification={sendingNotification}
+                            onViewHistory={() => setHistoryInvoice(invoice)}
+                            onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                            onBoletoClick={() => {
+                              if (invoice.boleto_url) {
+                                window.open(invoice.boleto_url, "_blank");
+                              } else if (invoice.boleto_barcode) {
+                                navigator.clipboard.writeText(invoice.boleto_barcode);
+                                toast.success("Código de barras copiado!");
+                              } else if (invoice.pix_code) {
+                                setPixDialogInvoice(invoice);
+                              } else {
+                                toast.info("Nenhum boleto ou PIX gerado para esta fatura");
+                              }
+                            }}
+                            onNfseClick={() => {
+                              const status = nfseInfo?.status;
+                              if (status === "erro" || status === "rejeitada") {
+                                setSearchParams({ tab: "nfse" });
+                              } else {
+                                setNfseInvoice(invoice);
+                              }
+                            }}
+                            onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
+                            onManualPayment={() => setManualPaymentInvoice(invoice)}
+                          />
+                        </TableCell>
+                        <TableCell className="py-2 w-10">
+                          <InvoiceActionsPopover
+                            invoice={invoice}
+                            nfseInfo={nfseInfo}
+                            generatingPayment={generatingPayment}
+                            processingComplete={processingComplete}
+                            sendingNotification={sendingNotification}
+                            onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                            onGeneratePayment={handleGeneratePayment}
+                            onManualPayment={() => setManualPaymentInvoice(invoice)}
+                            onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                            onSecondCopy={() => setSecondCopyInvoice(invoice)}
+                            onRenegotiate={() => setRenegotiateInvoice(invoice)}
+                            onResendNotification={handleResendNotification}
+                            onEmitNfse={() => setNfseInvoice(invoice)}
+                            onCancelBoleto={() => {
+                              setIsCancellingBoleto(true);
+                              toast.info("Cancelando boleto...");
+                            }}
+                            onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                            onViewHistory={() => setHistoryInvoice(invoice)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </div>
-        )}
-      </div>
+
+          {/* Pagination Footer */}
+          {!isLoading && paginatedInvoices.length > 0 && (
+            <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-4 py-2">
+              <span className="text-xs text-muted-foreground">
+                {filteredInvoices.length > 0 ? (
+                  <>
+                    {(currentPage - 1) * ITEMS_PER_PAGE + 1} a{" "}
+                    {Math.min(currentPage * ITEMS_PER_PAGE, filteredInvoices.length)} de{" "}
+                    {filteredInvoices.length}
+                  </>
+                ) : (
+                  "Nenhum resultado"
+                )}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="h-7 px-2">
+                  <ChevronsLeft className="h-3 w-3" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1} className="h-7 px-2">
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <div className="flex items-center gap-1 px-2 text-xs text-muted-foreground">
+                  {currentPage} de {totalPages}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="h-7 px-2">
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="h-7 px-2">
+                  <ChevronsRight className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Fixed Action Footer */}
-      <div className="border-t bg-muted/50 px-4 py-3 flex items-center justify-between rounded-lg">
+      <div className="border-t bg-muted/50 px-4 py-3 hidden md:flex items-center justify-between rounded-lg">
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

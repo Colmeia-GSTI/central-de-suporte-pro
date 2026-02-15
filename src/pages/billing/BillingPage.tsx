@@ -116,18 +116,18 @@ export default function BillingPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-3 md:space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Faturamento</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl md:text-3xl font-bold tracking-tight">Faturamento</h1>
+          <p className="text-muted-foreground hidden md:block">
             Central de gestão financeira e fiscal
           </p>
         </div>
 
         {/* Tabs */}
-        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-grid">
+        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-3 md:space-y-6">
+          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-8 md:w-auto">
             {BILLING_TABS.map((tab) => {
               // Services and tax-codes require edit permission
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {

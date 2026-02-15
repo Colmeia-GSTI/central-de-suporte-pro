@@ -464,3 +464,7 @@
 .animate-float-delayed { animation: float 8s ease-in-out infinite 2s; }
 .animate-hexagon-pulse { animation: hexagon-pulse 4s ease-in-out infinite; }
 */
+
+/* No-scrollbar utility for horizontal scroll tabs */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
