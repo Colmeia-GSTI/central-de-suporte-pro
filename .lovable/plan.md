@@ -1,73 +1,32 @@
 
-# Criar `src/utils/invoiceIndicators.ts` - Logica Centralizada de Indicadores
+# Correcao de Erros de Build em Edge Functions
 
-## Objetivo
+## Erros Identificados e Correcoes
 
-Extrair toda a logica duplicada de determinacao de status/cor/tooltip de boleto, NFS-e e email que hoje vive espalhada em `InvoiceInlineActions.tsx` e `InvoiceActionIndicators.tsx` para um unico arquivo utilitario com funcoes puras e tipadas.
+### 1. `generate-second-copy/index.ts` e `renegotiate-invoice/index.ts`
+**Erro**: `Cannot find module 'npm:@supabase/functions-js/edge-runtime.d.ts'` + `'err' is of type 'unknown'`
+**Correcao**: Remover a linha `import "npm:@supabase/functions-js/edge-runtime.d.ts"` (nao necessaria) e tipar o catch como `catch (err: unknown)` usando `err instanceof Error ? err.message : "Unknown error"`.
 
-## Tipos Exportados
+### 2. `asaas-nfse/index.ts` (linha 682)
+**Erro**: Cast de array para objeto -- `contracts` retorna array quando usado via foreign key join sem `.single()`.
+**Correcao**: Usar cast intermediario: `as unknown as { nfse_service_code: string | null } | null`.
 
-```text
-BoletoIndicatorInput {
-  boleto_url: string | null;
-  boleto_barcode?: string | null;
-  boleto_error_msg?: string | null;
-  status?: string;
-  billing_provider?: string | null;
-  pix_code?: string | null;
-}
+### 3. `validate-invoice-numbering/index.ts` (linha 172)
+**Erro**: `SequenceGap` nao e assignable a `Record<string, unknown>`.
+**Correcao**: Cast explicito: `result = await detectSequenceGaps(client_id) as unknown as Record<string, unknown>`.
 
-NfseIndicatorInput {
-  status: string;
-  numero_nfse: string | null;
-  pdf_url?: string | null;
-  xml_url?: string | null;
-}
+### 4. `webhook-banco-inter/index.ts` (multiplos erros)
+**Erro**: Tipo generico do `createClient` nao alinha com a tipagem local. `insert`, `update` e acesso a `.id` falham.
+**Correcao**: 
+- Tipar `supabase` como `any` no parametro de `processPayload` para evitar conflito de generics.
+- Alternativa: usar `createClient<any>` na criacao.
 
-EmailIndicatorInput {
-  email_sent_at?: string | null;
-  email_error_msg?: string | null;
-  email_status?: string | null;
-}
+## Arquivos Alterados
 
-IndicatorResult {
-  color: string;           // classe CSS (text-destructive, text-emerald-500, etc.)
-  tooltip: string;         // texto do tooltip
-  level: "success" | "error" | "warning" | "processing" | "pending";
-}
-
-SendBlockResult {
-  blocked: boolean;
-  reasons: string[];
-}
-```
-
-## Funcoes Exportadas
-
-| Funcao | Entrada | Saida | Descricao |
-|--------|---------|-------|-----------|
-| `getBoletoIndicator` | `BoletoIndicatorInput` | `IndicatorResult` | Retorna cor/tooltip considerando `boleto_url` E `boleto_barcode` (conforme regra de "boleto ready") |
-| `getNfseIndicator` | `NfseIndicatorInput ou undefined` | `IndicatorResult` | Retorna cor/tooltip para status autorizada/erro/rejeitada/processando/pendente |
-| `getEmailIndicator` | `EmailIndicatorInput` | `IndicatorResult` | Retorna cor/tooltip baseado em email_sent_at, email_status e email_error_msg |
-| `getSendBlockedStatus` | `{ nfseInfo?: NfseIndicatorInput; ... }` | `SendBlockResult` | Verifica se envio esta bloqueado (NFS-e autorizada sem PDF/XML) |
-| `isBoletoReady` | `{ boleto_url, boleto_barcode }` | `boolean` | Helper: `true` se tem URL ou barcode |
-
-## Logica Principal
-
-**`getBoletoIndicator`**: Prioridade: erro > pronto (url OU barcode) > pendente. Tooltip diferencia entre "Abrir PDF", "Copiar codigo de barras", "Erro no boleto" e "Boleto pendente".
-
-**`getNfseIndicator`**: Prioridade: autorizada (sucesso) > erro/rejeitada (erro) > processando (azul) > pendente (muted).
-
-**`getEmailIndicator`**: Prioridade: erro (email_error_msg ou email_status=erro) > enviado (email_sent_at ou email_status=enviado) > pendente.
-
-**`getSendBlockedStatus`**: Verifica se NFS-e esta autorizada mas sem PDF ou XML -- unico cenario que bloqueia envio.
-
-## Arquivo a Criar
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/utils/invoiceIndicators.ts` | Funcoes puras + tipos TypeScript para indicadores de fatura |
-
-## Consumidores Futuros
-
-Apos a criacao, `InvoiceInlineActions.tsx` e `InvoiceActionIndicators.tsx` poderao ser refatorados para usar essas funcoes, eliminando duplicacao. Essa refatoracao pode ser feita em um passo seguinte.
+| Arquivo | Mudanca |
+|---------|---------|
+| `supabase/functions/generate-second-copy/index.ts` | Remover import desnecessario, tipar catch |
+| `supabase/functions/renegotiate-invoice/index.ts` | Remover import desnecessario, tipar catch |
+| `supabase/functions/asaas-nfse/index.ts` | Fix cast na linha 682 |
+| `supabase/functions/validate-invoice-numbering/index.ts` | Cast explicito na linha 172 |
+| `supabase/functions/webhook-banco-inter/index.ts` | Tipar supabase como `any` em processPayload, usar `createClient<any>` |
