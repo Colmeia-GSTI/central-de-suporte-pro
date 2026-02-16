@@ -166,13 +166,13 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "validate_sequence":
-        result = await validateSequence(client_id);
+        result = await validateSequence(client_id) as unknown as Record<string, unknown>;
         break;
       case "detect_gaps":
-        result = await detectSequenceGaps(client_id);
+        result = await detectSequenceGaps(client_id) as unknown as Record<string, unknown>;
         break;
       case "suggest_recovery":
-        result = await suggestRecovery(client_id);
+        result = await suggestRecovery(client_id) as unknown as Record<string, unknown>;
         break;
       default:
         return new Response(
