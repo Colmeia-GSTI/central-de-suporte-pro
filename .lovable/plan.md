@@ -1,194 +1,73 @@
 
-# Correcao Definitiva: Garantir municipal_service_code em TODAS as Emissoes de NFS-e
+# Criar `src/utils/invoiceIndicators.ts` - Logica Centralizada de Indicadores
 
-## Diagnostico Completo
+## Objetivo
 
-Existem **11 pontos no codigo** que invocam `asaas-nfse` com action `emit`. Desses, **5 NAO passam o `municipal_service_code`**:
+Extrair toda a logica duplicada de determinacao de status/cor/tooltip de boleto, NFS-e e email que hoje vive espalhada em `InvoiceInlineActions.tsx` e `InvoiceActionIndicators.tsx` para um unico arquivo utilitario com funcoes puras e tipadas.
 
-| Arquivo | Passa codigo? |
-|---------|---------------|
-| `generate-monthly-invoices/index.ts` | SIM (corrigido recentemente) |
-| `batch-process-invoices/index.ts` | SIM |
-| `EmitNfseDialog.tsx` | SIM |
-| `NfseDetailsSheet.tsx` | SIM |
-| **`manual-payment/index.ts`** | NAO |
-| **`webhook-asaas-nfse/index.ts`** | NAO |
-| **`useInvoiceActions.ts` (emitComplete)** | NAO |
-| **`BillingNfseTab.tsx` (quickReprocess)** | NAO |
-| **`NfseActionsMenu.tsx` (resend)** | NAO |
-
-Corrigir cada chamador individualmente e fragil -- qualquer nova chamada no futuro pode repetir o erro. A solucao correta e fazer a funcao `asaas-nfse` resolver o codigo automaticamente a partir do contrato quando nao for fornecido.
-
-## Solucao: Auto-resolve no `asaas-nfse`
-
-### Mudanca 1 (principal): `supabase/functions/asaas-nfse/index.ts`
-
-No bloco `case "emit"`, entre o passo 1 (ensureCustomerSync) e o passo 2 (resolve municipal service ID), adicionar logica de fallback:
+## Tipos Exportados
 
 ```text
-// AUTO-RESOLVE: Se municipal_service_code nao foi fornecido,
-// buscar do contrato vinculado (contract_id ou via invoice_id)
-let effectiveServiceCode = municipal_service_code;
+BoletoIndicatorInput {
+  boleto_url: string | null;
+  boleto_barcode?: string | null;
+  boleto_error_msg?: string | null;
+  status?: string;
+  billing_provider?: string | null;
+  pix_code?: string | null;
+}
 
-if (!effectiveServiceCode && !municipal_service_id) {
-  // Tentar via contract_id direto
-  if (contract_id) {
-    const { data: contract } = await supabase
-      .from("contracts")
-      .select("nfse_service_code")
-      .eq("id", contract_id)
-      .single();
-    if (contract?.nfse_service_code) {
-      effectiveServiceCode = contract.nfse_service_code;
-      log(correlationId, "info", "municipal_service_code resolvido do contrato", {
-        contract_id, code: effectiveServiceCode
-      });
-    }
-  }
+NfseIndicatorInput {
+  status: string;
+  numero_nfse: string | null;
+  pdf_url?: string | null;
+  xml_url?: string | null;
+}
 
-  // Tentar via invoice -> contract
-  if (!effectiveServiceCode && invoice_id) {
-    const { data: invoice } = await supabase
-      .from("invoices")
-      .select("contract_id, contracts(nfse_service_code)")
-      .eq("id", invoice_id)
-      .single();
-    if (invoice?.contracts?.nfse_service_code) {
-      effectiveServiceCode = invoice.contracts.nfse_service_code;
-      log(correlationId, "info", "municipal_service_code resolvido via fatura->contrato", {
-        invoice_id, code: effectiveServiceCode
-      });
-    }
-  }
+EmailIndicatorInput {
+  email_sent_at?: string | null;
+  email_error_msg?: string | null;
+  email_status?: string | null;
+}
 
-  // Tentar via nfse_history -> contract
-  if (!effectiveServiceCode && nfse_history_id) {
-    const { data: history } = await supabase
-      .from("nfse_history")
-      .select("contract_id, codigo_tributacao")
-      .eq("id", nfse_history_id)
-      .single();
-    if (history?.codigo_tributacao) {
-      effectiveServiceCode = history.codigo_tributacao;
-    } else if (history?.contract_id) {
-      const { data: c } = await supabase
-        .from("contracts")
-        .select("nfse_service_code")
-        .eq("id", history.contract_id)
-        .single();
-      if (c?.nfse_service_code) effectiveServiceCode = c.nfse_service_code;
-    }
-  }
+IndicatorResult {
+  color: string;           // classe CSS (text-destructive, text-emerald-500, etc.)
+  tooltip: string;         // texto do tooltip
+  level: "success" | "error" | "warning" | "processing" | "pending";
+}
+
+SendBlockResult {
+  blocked: boolean;
+  reasons: string[];
 }
 ```
 
-Depois, substituir todas as referencias a `municipal_service_code` no restante do bloco por `effectiveServiceCode`.
+## Funcoes Exportadas
 
-Isso garante que **qualquer chamador** -- atual ou futuro -- que passe `contract_id`, `invoice_id` ou `nfse_history_id` tera o codigo resolvido automaticamente.
+| Funcao | Entrada | Saida | Descricao |
+|--------|---------|-------|-----------|
+| `getBoletoIndicator` | `BoletoIndicatorInput` | `IndicatorResult` | Retorna cor/tooltip considerando `boleto_url` E `boleto_barcode` (conforme regra de "boleto ready") |
+| `getNfseIndicator` | `NfseIndicatorInput ou undefined` | `IndicatorResult` | Retorna cor/tooltip para status autorizada/erro/rejeitada/processando/pendente |
+| `getEmailIndicator` | `EmailIndicatorInput` | `IndicatorResult` | Retorna cor/tooltip baseado em email_sent_at, email_status e email_error_msg |
+| `getSendBlockedStatus` | `{ nfseInfo?: NfseIndicatorInput; ... }` | `SendBlockResult` | Verifica se envio esta bloqueado (NFS-e autorizada sem PDF/XML) |
+| `isBoletoReady` | `{ boleto_url, boleto_barcode }` | `boolean` | Helper: `true` se tem URL ou barcode |
 
-### Mudanca 2 (retry): `supabase/functions/generate-monthly-invoices/index.ts`
+## Logica Principal
 
-Adicionar bloco de retry apos o loop de geracao de faturas:
+**`getBoletoIndicator`**: Prioridade: erro > pronto (url OU barcode) > pendente. Tooltip diferencia entre "Abrir PDF", "Copiar codigo de barras", "Erro no boleto" e "Boleto pendente".
 
-```text
-// RETRY: Reemitir NFS-e para faturas do mes com nfse_status = 'erro'
-const { data: failedNfseInvoices } = await supabase
-  .from("invoices")
-  .select("id, client_id, contract_id, amount, contracts(nfse_service_code, ...)")
-  .eq("reference_month", referenceMonth)
-  .eq("nfse_status", "erro")
-  .not("contract_id", "is", null);
+**`getNfseIndicator`**: Prioridade: autorizada (sucesso) > erro/rejeitada (erro) > processando (azul) > pendente (muted).
 
-for (const inv of failedNfseInvoices) {
-  // Marcar nfse_history antigos sem asaas_invoice_id como 'substituida'
-  await supabase.from("nfse_history")
-    .update({ status: "substituida" })
-    .eq("invoice_id", inv.id)
-    .is("asaas_invoice_id", null)
-    .eq("status", "erro");
+**`getEmailIndicator`**: Prioridade: erro (email_error_msg ou email_status=erro) > enviado (email_sent_at ou email_status=enviado) > pendente.
 
-  // Reemitir (o auto-resolve da Mudanca 1 cuida do codigo)
-  await supabase.functions.invoke("asaas-nfse", {
-    body: {
-      action: "emit",
-      client_id: inv.client_id,
-      invoice_id: inv.id,
-      contract_id: inv.contract_id,
-      value: inv.amount,
-      municipal_service_code: inv.contracts?.nfse_service_code,
-    }
-  });
+**`getSendBlockedStatus`**: Verifica se NFS-e esta autorizada mas sem PDF ou XML -- unico cenario que bloqueia envio.
 
-  // Atualizar status da fatura
-  await supabase.from("invoices")
-    .update({ nfse_status: "processando" })
-    .eq("id", inv.id);
-}
-```
+## Arquivo a Criar
 
-### Mudanca 3 (correcao pontual): `supabase/functions/webhook-asaas-nfse/index.ts`
+| Arquivo | Descricao |
+|---------|-----------|
+| `src/utils/invoiceIndicators.ts` | Funcoes puras + tipos TypeScript para indicadores de fatura |
 
-Na auto-emissao de NFS-e apos pagamento (linha 378), adicionar `municipal_service_code`:
+## Consumidores Futuros
 
-```text
-// Antes (faltava):
-body: {
-  action: "emit",
-  client_id: ...,
-  // sem municipal_service_code
-}
-
-// Depois:
-body: {
-  action: "emit",
-  client_id: ...,
-  municipal_service_code: contract.nfse_service_code,  // JA buscado na query
-}
-```
-
-### Mudanca 4 (correcao pontual): `supabase/functions/manual-payment/index.ts`
-
-Adicionar `nfse_service_code` ao select do contrato e passar no body:
-
-```text
-// Select: adicionar nfse_service_code
-.select("name, description, nfse_descricao_customizada, nfse_service_code")
-
-// Body: adicionar
-municipal_service_code: contract?.nfse_service_code,
-```
-
-### Mudanca 5 (frontend): `src/hooks/useInvoiceActions.ts`
-
-Adicionar `nfse_service_code` ao select do contrato e passar no body da emissao NFS-e no fluxo "emitComplete".
-
-### Mudanca 6 (frontend): `src/components/nfse/NfseActionsMenu.tsx`
-
-Na mutation de resend, passar `municipal_service_code` usando `nfse.codigo_tributacao`.
-
-### Mudanca 7 (frontend): `src/components/billing/BillingNfseTab.tsx`
-
-No `handleQuickReprocess`, passar `municipal_service_code` a partir do registro de NFS-e ou contrato vinculado.
-
-## Arquivos Alterados
-
-| Arquivo | Mudanca |
-|---------|---------|
-| `supabase/functions/asaas-nfse/index.ts` | Auto-resolve de municipal_service_code via contract/invoice/history |
-| `supabase/functions/generate-monthly-invoices/index.ts` | Bloco de retry para NFS-e com erro |
-| `supabase/functions/webhook-asaas-nfse/index.ts` | Passar municipal_service_code na auto-emissao |
-| `supabase/functions/manual-payment/index.ts` | Passar municipal_service_code |
-| `src/hooks/useInvoiceActions.ts` | Passar municipal_service_code no emitComplete |
-| `src/components/nfse/NfseActionsMenu.tsx` | Passar codigo_tributacao no resend |
-| `src/components/billing/BillingNfseTab.tsx` | Passar codigo no quickReprocess |
-
-## Resultado
-
-| Cenario | Antes | Depois |
-|---------|-------|--------|
-| Qualquer chamador sem codigo | Erro MISSING_MUNICIPAL_SERVICE_CODE | Auto-resolve do contrato |
-| Pagamento manual com NFS-e | Falha silenciosa | Codigo resolvido automaticamente |
-| Webhook de pagamento + auto-NFS-e | Codigo nao enviado | Codigo passado do contrato |
-| Reprocessamento rapido | Falha por falta de codigo | Resolve via nfse_history ou contrato |
-| Notas presas com erro | Ficam presas eternamente | Retry automatico no proximo CRON |
-| Futuras chamadas | Precisam lembrar de passar | Auto-resolve como safety net |
+Apos a criacao, `InvoiceInlineActions.tsx` e `InvoiceActionIndicators.tsx` poderao ser refatorados para usar essas funcoes, eliminando duplicacao. Essa refatoracao pode ser feita em um passo seguinte.
