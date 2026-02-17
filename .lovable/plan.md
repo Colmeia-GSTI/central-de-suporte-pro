@@ -1,134 +1,127 @@
 
+# Varredura E2E Completa -- Problemas Adicionais Descobertos
 
-# Plano Revisado e Completo -- Correcoes do Faturamento
-
-O plano anterior cobre 3 dos 5 problemas reais. Esta revisao adiciona os cenarios que estavam faltando para garantir cobertura total em todos os fluxos (contrato, avulsa, retry, polling).
-
----
-
-## Problemas Descobertos (Alem dos 4 Originais)
-
-### Problema 5: `emit_standalone` tem o mesmo bug de match exato no codigo de servico
-A linha 949 do `asaas-nfse/index.ts` faz `s.code === service_code` -- identico ao bug da linha 727. Se o Asaas retorna `01.07.01` e o sistema envia `010701`, nao encontra match.
-
-### Problema 6: `emit` e `emit_standalone` usam campos diferentes no payload
-- `emit` usa `municipalServiceExternalId` (linha 799)
-- `emit_standalone` usa `municipalServiceCode` (linha 1022)
-- Essa inconsistencia causa comportamentos diferentes de erro entre os dois fluxos
-
-### Problema 7: `emit` nao salva `codigo_tributacao` no `nfse_history`
-O `emit_standalone` salva (linha 974), mas o `emit` nao. Isso quebra a cadeia de auto-resolve em retries, pois `nfse_history.codigo_tributacao` estara NULL para notas de contrato.
-
-### Problema 8: Retry so cobre NFS-e de contratos
-A query de retry (linha 661) usa `.not("contract_id", "is", null)`, ignorando faturas avulsas com NFS-e em erro.
-
-### Problema 9: `poll-services` nao captura boletos com status `overdue`
-Faturas que transicionaram para `overdue` antes de ter o barcode preenchido ficam permanentemente orfas.
+Alem dos 5 itens do plano original (painel de erros, historico com acoes, filtro "com erro", acoes no dashboard de saude, edicao inline de codigo de servico), esta varredura revelou **7 problemas adicionais** que precisam ser corrigidos ANTES de implementar o painel de recuperacao.
 
 ---
 
-## Plano Completo de Correcoes (9 itens)
+## Problemas Descobertos na Varredura
 
-### Correcao 1: Normalizar match de codigo de servico (CRITICO)
-**Arquivo:** `supabase/functions/asaas-nfse/index.ts`
-**Linhas:** 726-728 (emit) e 949-951 (emit_standalone)
+### Problema A: Botao "Cancelar Boleto/Pix" nao faz nada (CRITICO)
 
-Criar funcao utilitaria `normalizeServiceCode(code)` que remove pontos, espacos e zeros a esquerda. Usar em ambos os fluxos:
-```text
-function normalizeServiceCode(code: string): string {
-  return code.replace(/[.\s-]/g, "").replace(/^0+/, "");
-}
+**Arquivo:** `src/components/billing/BillingInvoicesTab.tsx` (linhas 697-712)
 
-// Match: comparar normalizado de ambos os lados
-const matchedService = services.find(s => 
-  normalizeServiceCode(s.code) === normalizeServiceCode(effectiveServiceCode)
-);
-```
+O botao de cancelamento em lote de boletos na barra de acoes inferior so exibe um `toast.info("Cancelando boletos selecionados...")` mas nao executa nenhuma acao real. Nao chama a edge function `banco-inter` com `action: "cancel"`. Isso pode dar ao usuario a impressao de que os boletos foram cancelados quando nada aconteceu.
 
-Se nenhum match for encontrado, logar todos os codigos disponiveis para diagnostico.
+**Correcao:** Implementar o cancelamento real iterando sobre as faturas selecionadas e chamando `banco-inter` com `action: "cancel"` (mesmo padrao da `BillingBoletosTab.handleBatchCancel`).
 
-### Correcao 2: Nao sobrescrever `boleto_status` prematuramente (ALTO)
-**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts`
-**Linha:** 453
+### Problema B: `mapBoletoStatus` nao trata status "registrado" e "processando" (MEDIO)
 
-Mudar de `boleto_status: "gerado"` para condicional:
-- Se o `banco-inter` ja definiu o status (via update anterior), nao sobrescrever
-- Alterar para `boleto_status: "processando"` (status intermediario que o `poll-services` captura)
+**Arquivo:** `src/components/billing/InvoiceProcessingHistory.tsx` (linhas 80-85)
 
-### Correcao 3: `poll-services` capturar boletos orfaos (ALTO)
-**Arquivo:** `supabase/functions/poll-services/index.ts`
-**Linhas:** 135-142
+A funcao `mapBoletoStatus` so reconhece `pendente`, `gerado`, `enviado` e `erro`. O enum `boleto_processing_status` tambem inclui `processando` e `registrado`. Ambos sao mapeados para `pending` pelo fallback, mas `registrado` deveria ser mapeado para `success` (o boleto ja foi aceito pelo banco).
 
-Ajustar query para incluir:
-- `boleto_barcode IS NULL`
-- `status IN ('pending', 'overdue')` (ao inves de so `pending`)
-- Remover filtro por `boleto_status` -- confiar apenas em `boleto_barcode IS NULL`
+**Correcao:** Adicionar `if (status === "registrado") return "success"` e `if (status === "processando") return "pending"` explicitamente.
 
-### Correcao 4: Padronizar campo do payload entre `emit` e `emit_standalone` (MEDIO)
-**Arquivo:** `supabase/functions/asaas-nfse/index.ts`
-**Linhas:** 793-801 (emit) e 1017-1024 (emit_standalone)
+### Problema C: `useBillingCounters` nao conta faturas com erro (MEDIO)
 
-Ambos devem usar a mesma logica:
-1. Se tem `municipalServiceId` resolvido --> usar `municipalServiceId`
-2. Se nao tem --> rejeitar com erro claro (MISSING_MUNICIPAL_SERVICE_CODE)
+**Arquivo:** `src/hooks/useBillingCounters.ts`
 
-Nao usar `municipalServiceExternalId` nem `municipalServiceCode` como fallback -- esses campos causam rejeicao silenciosa pela API Asaas.
+O hook retorna 3 contadores: `overdueInvoices`, `processingBoletos`, `pendingNfse`. Nao inclui um contador de erros (boleto_status = 'erro' OU nfse com status 'erro'/'rejeitada' OU email_status = 'erro'). Sem esse dado, a aba "Erros" no `BillingPage` nao teria um badge com contagem.
 
-### Correcao 5: Salvar `codigo_tributacao` no `nfse_history` para o fluxo `emit` (MEDIO)
-**Arquivo:** `supabase/functions/asaas-nfse/index.ts`
-**Linha:** ~743 (dentro do insert de nfse_history no emit)
+**Correcao:** Adicionar um quarto contador `errorCount` que consolida faturas com qualquer tipo de erro.
 
-Adicionar `codigo_tributacao: effectiveServiceCode || null` ao insert, garantindo que retries futuros possam resolver o codigo via historico.
+### Problema D: `InvoiceProcessingHistory` nao exibe status "processando" do boleto corretamente (BAIXO)
 
-### Correcao 6: Retry incluir faturas avulsas (MEDIO)
-**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts`
-**Linha:** 661
+**Arquivo:** `src/components/billing/InvoiceProcessingHistory.tsx` (linhas 104-117)
 
-Remover `.not("contract_id", "is", null)` e ajustar a logica de retry para:
-- Se tem `contract_id` --> buscar codigo do contrato (logica atual)
-- Se nao tem `contract_id` --> buscar codigo do `processing_metadata` ou do `nfse_history.codigo_tributacao`
+A descricao do step de boleto usa `boleto_url` para determinar se foi gerado, mas nao verifica `boleto_barcode`. Um boleto pode ter barcode sem URL (caso do Banco Inter onde a URL e separada). A descricao ficaria incorreta mostrando "Aguardando geracao" quando o boleto ja tem barcode.
 
-### Correcao 7: `banco-inter` migrar para `Deno.serve` (BAIXO)
-**Arquivo:** `supabase/functions/banco-inter/index.ts`
-Substituir `serve()` por `Deno.serve()`.
+**Correcao:** Verificar `invoice.boleto_url || invoice.boleto_barcode` para determinar se o boleto foi gerado.
 
-### Correcao 8: `poll-services` migrar para `Deno.serve` (BAIXO)
-**Arquivo:** `supabase/functions/poll-services/index.ts`
-Substituir `serve()` por `Deno.serve()`.
+### Problema E: `BillingBoletosTab` so mostra boletos do Banco Inter (MEDIO)
 
-### Correcao 9: Log de diagnostico quando match falha (BAIXO)
-**Arquivo:** `supabase/functions/asaas-nfse/index.ts`
+**Arquivo:** `src/components/billing/BillingBoletosTab.tsx` (linha 182)
 
-Quando `matchedService` for null, logar a lista completa de codigos retornados pela API para facilitar troubleshooting futuro:
-```text
-log(correlationId, "warn", "Nenhum match encontrado para codigo de servico", {
-  codigo_enviado: effectiveServiceCode,
-  codigos_disponiveis: services.map(s => s.code).slice(0, 20),
-});
-```
+A query filtra por `payment_method = 'boleto'`, o que e correto. Porem, a verificacao de integracao no topo da pagina (linhas 98-173) so verifica o Banco Inter. Se o provedor for Asaas, o usuario ve o banner "Banco Inter nao configurado" mesmo que boletos Asaas estejam funcionando.
+
+**Correcao:** Verificar ambos os provedores (Banco Inter e Asaas) e mostrar o banner adequado. Usar o campo `billing_provider` das faturas para contextualizar.
+
+### Problema F: `handleQuickReprocess` na aba NFS-e passa `action: "emit"` sem `contract_id` para avulsas (BAIXO)
+
+**Arquivo:** `src/components/billing/BillingNfseTab.tsx` (linhas 307-333)
+
+O reprocessamento rapido envia `contract_id: nfse.contract_id || undefined`. Para NFS-e avulsas, `contract_id` sera `null/undefined`, mas a action continua sendo `"emit"` (fluxo de contrato). O correto seria enviar `action: "emit_standalone"` quando nao ha contrato.
+
+**Correcao:** Verificar `nfse.contract_id`: se existir, usar `action: "emit"`; se nao, usar `action: "emit_standalone"`.
+
+### Problema G: Tab badge "Erros" ausente no `BillingPage` (INTEGRAÇÃO)
+
+**Arquivo:** `src/pages/billing/BillingPage.tsx`
+
+O `getTabBadge` (linhas 96-115) so retorna badges para `invoices`, `boletos` e `nfse`. A nova aba "Erros" precisara de um badge vermelho com a contagem de erros totais (do contador adicional do Problema C).
 
 ---
 
-## Resumo de Arquivos Alterados
+## Plano de Implementacao Revisado (12 itens totais)
 
-| Arquivo | Correcoes |
+### Fase 1: Correcoes de bugs existentes (antes do painel)
+
+| # | Correcao | Arquivo | Prioridade |
+|---|----------|---------|------------|
+| A | Implementar cancelamento real de boleto em lote | `BillingInvoicesTab.tsx` | CRITICO |
+| B | Mapear status `registrado` e `processando` corretamente | `InvoiceProcessingHistory.tsx` | MEDIO |
+| D | Verificar `boleto_barcode` alem de `boleto_url` no historico | `InvoiceProcessingHistory.tsx` | BAIXO |
+| F | Usar `emit_standalone` para reprocessar NFS-e avulsa | `BillingNfseTab.tsx` | BAIXO |
+
+### Fase 2: Infraestrutura para o painel de erros
+
+| # | Correcao | Arquivo | Prioridade |
+|---|----------|---------|------------|
+| C | Adicionar contador de erros ao `useBillingCounters` | `useBillingCounters.ts` | MEDIO |
+| G | Adicionar badge de erros na aba do `BillingPage` | `BillingPage.tsx` | BAIXO |
+
+### Fase 3: Implementar o painel de erros (plano original)
+
+| # | Item | Arquivo | Prioridade |
+|---|------|---------|------------|
+| 1 | Criar `BillingErrorsPanel` centralizado | `BillingErrorsPanel.tsx` (NOVO) | ALTO |
+| 2 | Adicionar botoes de acao no `InvoiceProcessingHistory` | `InvoiceProcessingHistory.tsx` | ALTO |
+| 3 | Adicionar filtro "Com Erros" na listagem de faturas | `BillingInvoicesTab.tsx` | MEDIO |
+| 4 | Adicionar nova aba "Erros" no `BillingPage` | `BillingPage.tsx` | MEDIO |
+| 5 | Adicionar acoes nos incidentes do dashboard de saude | `IntegrationHealthDashboard.tsx` | MEDIO |
+| E | Verificar provedor (Inter/Asaas) na aba Boletos | `BillingBoletosTab.tsx` | BAIXO |
+
+---
+
+## Resumo de Arquivos a Alterar
+
+| Arquivo | Alteracoes |
 |---------|-----------|
-| `supabase/functions/asaas-nfse/index.ts` | #1 (normalizar match), #4 (padronizar payload), #5 (salvar codigo_tributacao), #9 (log diagnostico) |
-| `supabase/functions/generate-monthly-invoices/index.ts` | #2 (boleto_status), #6 (retry avulsas) |
-| `supabase/functions/poll-services/index.ts` | #3 (query orfaos), #8 (Deno.serve) |
-| `supabase/functions/banco-inter/index.ts` | #7 (Deno.serve) |
+| `src/components/billing/BillingErrorsPanel.tsx` | NOVO -- Painel centralizado de erros |
+| `src/components/billing/BillingInvoicesTab.tsx` | Fix cancelamento boleto em lote + filtro "Com Erros" |
+| `src/components/billing/InvoiceProcessingHistory.tsx` | Fix mapeamento de status + botoes de acao + check barcode |
+| `src/components/billing/BillingNfseTab.tsx` | Fix reprocessamento de NFS-e avulsa (emit_standalone) |
+| `src/components/billing/BillingBoletosTab.tsx` | Verificar ambos provedores (Inter + Asaas) |
+| `src/components/billing/IntegrationHealthDashboard.tsx` | Botoes de acao nos incidentes |
+| `src/hooks/useBillingCounters.ts` | Adicionar contador `errorCount` |
+| `src/pages/billing/BillingPage.tsx` | Aba "Erros" + badge |
 
-## Cobertura de Cenarios
+## Cobertura Completa de Cenarios
 
-| Cenario | Coberto? |
-|---------|----------|
-| NFS-e de contrato -- emissao | Sim (correcoes 1, 4, 5, 9) |
-| NFS-e avulsa -- emissao | Sim (correcoes 1, 4, 9) |
-| NFS-e de contrato -- retry | Sim (correcoes 1, 5) |
-| NFS-e avulsa -- retry | Sim (correcao 6) |
-| Boleto de contrato -- emissao | Sim (correcao 2) |
-| Boleto de contrato -- polling | Sim (correcao 3) |
-| Boleto avulso -- polling | Sim (correcao 3) |
-| Boleto com status overdue -- polling | Sim (correcao 3) |
-| Diagnostico de erros futuros | Sim (correcao 9) |
-
+| Cenario | Coberto? | Onde? |
+|---------|----------|-------|
+| Boleto com erro de API (Inter) | Sim | Painel Erros + Historico + Regenerar |
+| Boleto com erro de API (Asaas) | Sim | Painel Erros + Historico + Regenerar |
+| Boleto orfao (sem barcode) | Sim | Painel Erros + Forcar Polling |
+| Cancelamento de boleto em lote | Sim | Fix A (bug atual corrigido) |
+| NFS-e contrato com erro de codigo | Sim | Painel Erros + Edicao inline |
+| NFS-e avulsa com erro | Sim | Painel Erros + Fix F (emit_standalone) |
+| NFS-e duplicada (E0014) | Sim | Painel Erros + Vincular Nota |
+| NFS-e rejeitada pela prefeitura | Sim | Painel Erros + Editar e Corrigir |
+| Email nao enviado | Sim | Painel Erros + Reenviar |
+| WhatsApp nao enviado | Sim | Painel Erros + Reenviar |
+| Status `registrado` no historico | Sim | Fix B (mapeamento correto) |
+| Boleto com barcode sem URL | Sim | Fix D (verificacao dupla) |
+| Aba Boletos com provedor Asaas | Sim | Fix E (verificar ambos) |
+| Contador de erros na badge | Sim | Fix C + G |
