@@ -1,39 +1,58 @@
 
-# Correções Definitivas - IMPLEMENTADAS E VALIDADAS
+# Reprocessamento das NFS-e Pendentes (RUARO e CVR)
 
-## Status: ✅ COMPLETO (2026-02-17)
+## Diagnostico
 
-Todas as 6 fases foram implementadas, deployadas e validadas com testes reais.
+Os registros de NFS-e da RUARO e CVR estao com status `pendente` porque:
 
-## Correções Aplicadas
+1. Falharam as 11:00 UTC com o codigo antigo (antes do deploy da correcao)
+2. A migracao de limpeza (14:59 UTC) resetou o status para `pendente` e limpou os erros
+3. Nao existe mecanismo automatico para reprocessar registros `pendente` -- eles ficam parados
 
-### Fase 1: ✅ Fix municipalServiceId (asaas-nfse) - BUG CRÍTICO
-- `tryResolve` e `tryResolveStandalone`: extraem código via `s.description.match(/^(\d{2}\.\d{2}\.\d{2})/)` em vez de `s.code` (que não existe na API Asaas)
-- Log `codigos_disponiveis` corrigido para extrair de `description`
+A correcao no codigo esta **validada e funcionando**: o teste real de `list_services` retorna `municipalServiceId: 527787` para o codigo `01.07.01` em Passo Fundo.
 
-### Fase 2: ✅ Asaas create_payment - campos obrigatórios
-- Adicionado `payment_method: "boleto"`, `boleto_status: "enviado"`, `boleto_sent_at`
-- Adicionado `payment_method: "pix"` para PIX
-- Busca `identificationField` via `GET /payments/{id}/identificationField` (endpoint separado conforme docs Asaas)
+As faturas #14 e #15 ainda mostram `nfse_status: erro` com a mensagem antiga. Precisam ser atualizadas tambem.
 
-### Fase 3: ✅ Banco Inter - billing_provider, acesso correto, PDF base64
-- Adicionado `billing_provider: "banco_inter"` no updateData
-- Adicionado `boleto_sent_at` quando boleto completo
-- Corrigido acesso: `details.boleto.codigoBarras` / `details.boleto.linhaDigitavel`
-- PDF obtido via `GET /cobranca/v3/cobrancas/{id}/pdf` (retorna base64), decodificado e salvo no Storage
+## Plano de Correcao
 
-### Fase 4: ✅ poll-boleto-status - acesso correto, PDF base64
-- Prioridade de leitura: `boleto.*` antes de `cobranca.*`
-- PDF via endpoint `/pdf` (base64) salvo no Storage
-- Adicionado `boleto_status: "enviado"` e `boleto_sent_at` no update
+### Fase 1: Limpar estado das faturas e reprocessar
 
-### Fase 5: ✅ webhook-banco-inter - sem alterações necessárias
-- O webhook recebe payload direto do Inter com estrutura flat (não aninhada), diferente do GET consulta
+**SQL direto no banco:**
+- Atualizar `nfse_status` e `nfse_error_msg` das faturas #14 e #15 para permitir reprocessamento
+- Marcar os registros `pendente` orfaos antigos (de 13/02) como `cancelada` para evitar duplicidade
 
-### Fase 6: ✅ batch-process-invoices - removida sobrescrita
-- Removido update redundante de `boleto_status: "enviado"` e `boleto_sent_at` (linhas 96-104)
-- Edge functions já cuidam do status internamente
+### Fase 2: Disparar reprocessamento via Edge Function
 
-## Validação
-- Teste real `list_services` para "PASSO FUNDO" confirmou que a API retorna `description: "01.07.01 - ..."` com `id: "527787"` e SEM campo `code`
-- Todas as 5 edge functions deployadas com sucesso
+Chamar a edge function `asaas-nfse` com action `emit` para cada fatura, usando o novo codigo corrigido que:
+- Busca a cidade do emitente (`PASSO FUNDO`)
+- Filtra servicos municipais por cidade
+- Extrai o codigo de `description` (nao de `code`)
+- Resolve `municipalServiceId: 527787`
+
+### Fase 3: Adicionar mecanismo de auto-retry para NFS-e pendentes
+
+**Problema estrutural:** Nao existe job automatico que reprocesse NFS-e com status `pendente`. Registros resetados ficam parados indefinidamente.
+
+**Solucao:** Adicionar logica no `poll-asaas-nfse-status` (que ja roda como cron) para detectar registros `pendente` sem `asaas_invoice_id` com mais de 30 minutos e disparar reemissao automatica.
+
+**Arquivo:** `supabase/functions/poll-asaas-nfse-status/index.ts`
+
+Adicionar bloco apos o orphan detection existente:
+- Buscar registros com `status = 'pendente'` e `asaas_invoice_id IS NULL` e `created_at < 30 min atras`
+- Para cada um, chamar internamente a logica de emissao via `asaas-nfse`
+- Limitar a 5 retries por execucao para nao sobrecarregar
+
+## Resumo de Alteracoes
+
+| Acao | Detalhe |
+|------|---------|
+| SQL | Limpar `nfse_status`/`nfse_error_msg` das faturas #14 e #15 |
+| SQL | Cancelar registros orfaos antigos de 13/02 |
+| Edge Function call | Reprocessar NFS-e da CVR e RUARO |
+| `poll-asaas-nfse-status` | Adicionar auto-retry para NFS-e pendentes sem `asaas_invoice_id` |
+
+## Resultado Esperado
+
+1. NFS-e da CVR e RUARO serao emitidas com `municipalServiceId: 527787` (Passo Fundo, 01.07.01)
+2. Faturas #14 e #15 terao `nfse_status` atualizado apos emissao
+3. No futuro, NFS-e que ficarem presas em `pendente` serao automaticamente reprocessadas pelo cron
