@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 /**
@@ -137,7 +136,7 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
     .select("id, invoice_number, notes, amount, client_id")
     .eq("payment_method", "boleto")
     .is("boleto_barcode", null)
-    .eq("status", "pending")
+    .in("status", ["pending", "overdue"])
     .lt("created_at", twoHoursAgo)
     .limit(10);
 
@@ -323,7 +322,7 @@ async function pollNfseNacional(supabase: SupabaseClient): Promise<{ processed: 
 
 // ============ MAIN HANDLER ============
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
