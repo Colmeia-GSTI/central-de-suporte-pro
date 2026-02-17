@@ -1,109 +1,93 @@
 
+# Correcoes Definitivas Validadas por Testes
 
-# Correcoes Definitivas: NFS-e e Boletos no Padrao Asaas
+## Resultados dos Testes
 
-O usuario tem razao -- as correcoes anteriores nao resolveram os problemas de raiz. Esta varredura identificou que os bugs persistem porque as correcoes aplicadas foram paliativas, nao definitivas. O plano abaixo corrige TUDO na origem.
+Os testes revelaram que o plano anterior **NAO resolveria o problema de NFS-e** porque continha um bug critico nao detectado antes. Alem disso, confirmaram problemas no Banco Inter.
 
----
+### BUG CRITICO DESCOBERTO: Campo `code` nao existe na API Asaas
 
-## Diagnostico Final
+A chamada real `POST /asaas-nfse { action: "list_services", city: "PASSO FUNDO" }` retornou:
 
-### Problema 1: NFS-e rejeitada com `invalid_municipalServiceExternalId` (CRITICO)
+```text
+{ "description": "01.07.01 - Suporte tecnico...", "id": "527787", "issTax": 0 }
+```
 
-**Causa raiz confirmada no banco:**
-- Contratos CVR e RUARO tem `nfse_service_code: '010701'`
-- A funcao `normalizeServiceCode("010701")` remove zeros a esquerda, resultando em `"10701"`
-- A busca em `GET /invoices/municipalServices` retorna servicos de TODAS as cidades do Brasil
-- O match encontra um `municipalServiceId` de outra cidade (nao de Passo Fundo)
-- A API Asaas rejeita com `invalid_municipalServiceExternalId`
-- `codigo_tributacao` fica `null` no historico porque o auto-resolve falha antes de popular
+A API Asaas **NAO retorna campo `code`**. Retorna apenas `description`, `id` e `issTax`. O codigo do servico esta embutido no inicio do campo `description` (ex: `"01.07.01"`).
 
-**Correcao definitiva:**
-1. Buscar a cidade do emitente em `company_settings.endereco_cidade` (valor atual: `PASSO FUNDO`)
-2. Filtrar os servicos municipais pela cidade: `GET /invoices/municipalServices?description=&city=PASSO FUNDO`
-3. NAO remover zeros a esquerda na normalizacao -- `010701` deve ser comparado como `010701`
-4. Se mesmo assim nao encontrar, enviar erro claro com os codigos disponiveis para aquela cidade
+O codigo atual faz `s.code` que e `undefined`, portanto o match **NUNCA funciona** -- esta e a causa raiz real de TODAS as falhas de NFS-e.
 
-### Problema 2: Icone do boleto vermelho para faturas resetadas (MEDIO)
+### Estado Atual das Faturas #14 e #15
 
-**Causa raiz confirmada no banco:**
-- Faturas #14 e #15 tem `boleto_status: 'pendente'` + `boleto_error_msg: 'Resetado: boleto orfao...'`
-- O `boleto_error_msg` deveria ter sido limpo na correcao anterior, mas NAO foi
-- A funcao `getBoletoIndicator` prioriza `boleto_error_msg` sobre o status, mostrando vermelho
+| Campo | Valor | Status |
+|-------|-------|--------|
+| boleto_status | pendente | OK |
+| boleto_error_msg | null | OK (limpo) |
+| payment_method | null | FALTA |
+| billing_provider | banco_inter | OK |
+| boleto_sent_at | null | FALTA |
+| boleto_barcode | null | FALTA |
+| boleto_url | null | FALTA |
+| nfse municipal_service_id | null | FALHOU |
 
-**Correcao definitiva:**
-1. Corrigir `getBoletoIndicator` para ignorar mensagens informativas (que contem "Resetado")
-2. Limpar o `boleto_error_msg` das faturas resetadas via SQL
-3. O `InvoiceInlineActions` ja usa logica duplicada (nao importa de `invoiceIndicators.ts`) -- unificar
+### Confirmacao: MunicipalServiceId correto
 
-### Problema 3: Boleto PDF nao salvo no Storage S3 (BAIXO)
-
-**Estado atual:**
-- NFS-e PDFs sao salvos no bucket `nfse-files` pelo webhook
-- Boletos Asaas tem `boleto_url` apontando para URL externa (bankSlipUrl)
-- Boletos Inter tambem apontam para URL externa
-- Nao existe bucket para documentos de fatura
-
-**Correcao definitiva:**
-- No `create_payment` do Asaas: apos receber `bankSlipUrl`, baixar o PDF e salvar no Storage
-- Criar bucket `invoice-documents` para armazenar PDFs de boletos
-- Manter `boleto_url` apontando para o path no Storage (consistente com `nfse-files`)
+Para o codigo `010701` (normalizado: `010701`) em Passo Fundo, o `municipalServiceId` correto e `527787`.
 
 ---
 
-## Plano de Correcoes
+## Correcoes Necessarias
 
-### Fase 1: Corrigir resolucao do `municipalServiceId` (CRITICO)
+### Fase 1: Fix critico na resolucao de municipalServiceId (Asaas NFS-e)
 
 **Arquivo:** `supabase/functions/asaas-nfse/index.ts`
 
-Alteracoes na funcao `normalizeServiceCode`:
-- Remover o `.replace(/^0+/, "")` que elimina zeros a esquerda
-- Manter apenas a remocao de pontos e espacos
+O match precisa extrair o codigo do campo `description` em vez de ler o campo `code` (que nao existe).
 
-Alteracoes na resolucao do `municipalServiceId` (2 locais: `emit` e `emit_standalone`):
-- Buscar `endereco_cidade` de `company_settings` para usar como filtro
-- Passar `?city=PASSO+FUNDO` na chamada `GET /invoices/municipalServices`
-- Comparar os codigos SEM remover zeros a esquerda
-- Se nenhum match for encontrado, tentar novamente SEM filtro de cidade como fallback
-- Em caso de falha `invalid_municipalServiceExternalId`, retry automatico com `municipalServiceCode` em vez de `municipalServiceId`
+Alterar a funcao `tryResolve` (2 locais: `emit` e `emit_standalone`) para:
+- Extrair o codigo do inicio de `s.description` usando regex: `/^(\d{2}\.\d{2}\.\d{2})/`
+- Normalizar o codigo extraido (remover pontos) e comparar com o target
+- Exemplo: `"01.07.01 - Suporte tecnico..."` -> extrai `"01.07.01"` -> normaliza para `"010701"` -> match com `"010701"`
 
-Alteracao na criacao do historico:
-- Garantir que `codigo_tributacao` e populado ANTES de criar o registro, usando o `effectiveServiceCode` resolvido
+Tambem corrigir o log `codigos_disponiveis` que faz `s.code` (undefined) -> usar `s.description.match(...)` 
 
-### Fase 2: Corrigir indicador visual do boleto (MEDIO)
+### Fase 2: Asaas `create_payment` - campos faltantes
 
-**Arquivo:** `src/utils/invoiceIndicators.ts`
+**Arquivo:** `supabase/functions/asaas-nfse/index.ts`
 
-Alterar `getBoletoIndicator`:
-- Se `boleto_error_msg` contem "Resetado", tratar como `pending` (cinza) e nao `error` (vermelho)
-- Tooltip: "Boleto resetado - aguardando nova geracao"
+No update da fatura apos criar cobranca (linhas ~1833-1890):
+- Para BOLETO: adicionar `payment_method: "boleto"`, `boleto_status: "enviado"`, `boleto_sent_at: new Date().toISOString()`
+- Para PIX: adicionar `payment_method: "pix"`
+- Buscar `identificationField` via `GET /payments/{id}/identificationField` (endpoint separado conforme documentacao Asaas)
 
-**Arquivo:** `src/components/billing/InvoiceInlineActions.tsx`
+### Fase 3: Banco Inter - campos faltantes e acesso correto
 
-Unificar logica de cores do boleto:
-- Importar e usar `getBoletoIndicator` de `invoiceIndicators.ts` em vez de logica inline duplicada
-- Remover as linhas 67-72 (calculo manual de `boletoColor`) e usar a funcao centralizada
+**Arquivo:** `supabase/functions/banco-inter/index.ts`
 
-**SQL:** Limpar `boleto_error_msg` das faturas resetadas (execucao direta no banco)
+1. Adicionar `billing_provider: "banco_inter"` no updateData (linha ~681)
+2. Adicionar `boleto_sent_at: new Date().toISOString()` quando boleto completo
+3. Corrigir acesso no polling: `details.boleto.codigoBarras` e `details.boleto.linhaDigitavel` em vez de `details.codigoBarras`
+4. Obter PDF via endpoint dedicado `GET /cobranca/v3/cobrancas/{id}/pdf` (retorna base64) e salvar no bucket `invoice-documents`
 
-### Fase 3: Armazenar PDF do boleto no Storage (BAIXO)
+### Fase 4: Banco Inter polling fallback
 
-**Migracao SQL:**
-- Criar bucket `invoice-documents` com RLS
+**Arquivo:** `supabase/functions/poll-boleto-status/index.ts`
 
-**Arquivo:** `supabase/functions/asaas-nfse/index.ts` (action `create_payment`)
+1. Corrigir acesso aos dados: usar `boletoData.boleto.codigoBarras` / `boletoData.boleto.linhaDigitavel` como fonte primaria
+2. Obter PDF via endpoint `/pdf` (base64) em vez de URL
+3. Salvar PDF no Storage
 
-Apos receber `bankSlipUrl` da API Asaas:
-- Fazer `fetch(bankSlipUrl)` para baixar o PDF
-- Upload para `invoice-documents/boletos/{invoice_id}.pdf`
-- Salvar o path do Storage em `boleto_url` (nao a URL externa)
+### Fase 5: Webhook Banco Inter
 
-### Fase 4: Limpar dados orfaos no banco
+**Arquivo:** `supabase/functions/webhook-banco-inter/index.ts`
 
-**SQL direto:**
-- Limpar `boleto_error_msg` das faturas #14 e #15
-- Limpar registros de `nfse_history` orfaos (sem `codigo_tributacao`) para permitir reprocessamento limpo
+O webhook recebe payload direto do Banco Inter com estrutura diferente. Verificar e alinhar acesso aos campos de boleto.
+
+### Fase 6: Batch processing - remover sobrescrita
+
+**Arquivo:** `supabase/functions/batch-process-invoices/index.ts`
+
+Remover linhas 96-104 que sobrescrevem `boleto_status: "enviado"` apos chamar a edge function. A edge function ja cuida do status internamente.
 
 ---
 
@@ -111,16 +95,15 @@ Apos receber `bankSlipUrl` da API Asaas:
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `supabase/functions/asaas-nfse/index.ts` | Fix normalizeServiceCode + filtro por cidade + storage do boleto PDF |
-| `src/utils/invoiceIndicators.ts` | Tratar "Resetado" como pendente |
-| `src/components/billing/InvoiceInlineActions.tsx` | Unificar com invoiceIndicators (remover logica duplicada) |
-| Migracao SQL | Criar bucket `invoice-documents` + limpar dados orfaos |
+| `supabase/functions/asaas-nfse/index.ts` | Fix match via `description` (nao `code`), campos no `create_payment` |
+| `supabase/functions/banco-inter/index.ts` | `billing_provider`, acesso correto boleto, PDF via `/pdf` (base64) |
+| `supabase/functions/poll-boleto-status/index.ts` | Acesso correto boleto, PDF base64 |
+| `supabase/functions/webhook-banco-inter/index.ts` | Alinhar campos |
+| `supabase/functions/batch-process-invoices/index.ts` | Remover update redundante |
 
 ## Resultado Esperado
 
-Apos estas correcoes:
-1. NFS-e de CVR e RUARO serao emitidas com o `municipalServiceId` correto de Passo Fundo
-2. Icones de boleto resetados aparecerao cinza (pendente) e nao vermelho (erro)
-3. PDFs de boleto Asaas serao salvos no Storage S3 do sistema
-4. Toda a logica de indicadores visuais usara um unico ponto centralizado (`invoiceIndicators.ts`)
-
+1. NFS-e para CVR e RUARO emitidas com `municipalServiceId: 527787` (Passo Fundo, 01.07.01)
+2. Boletos com todos os campos preenchidos (`payment_method`, `boleto_status`, `boleto_sent_at`)
+3. PDFs de boleto salvos no Storage S3 interno
+4. Polling e webhook do Banco Inter acessando campos na estrutura correta da API v3
