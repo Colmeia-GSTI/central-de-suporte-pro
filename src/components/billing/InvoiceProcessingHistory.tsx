@@ -192,9 +192,12 @@ export function InvoiceProcessingHistory({
   const handleRegenerateBoleto = async () => {
     setActionLoading("boleto");
     try {
-      const { error } = await supabase.functions.invoke("banco-inter", {
-        body: { action: "generate", invoice_id: invoice.id },
-      });
+      const provider = (invoice as any).billing_provider || "banco_inter";
+      const fnName = provider === "asaas" ? "asaas-nfse" : "banco-inter";
+      const body = provider === "asaas"
+        ? { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" }
+        : { action: "generate", invoice_id: invoice.id };
+      const { error } = await supabase.functions.invoke(fnName, { body });
       if (error) throw error;
       toast.success("Boleto reenviado para geração");
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -213,6 +216,8 @@ export function InvoiceProcessingHistory({
         body: {
           action: invoice.contract_id ? "emit" : "emit_standalone",
           invoice_id: invoice.id,
+          client_id: (invoice as any).client_id || undefined,
+          value: invoice.amount,
           ...(invoice.contract_id ? { contract_id: invoice.contract_id } : {}),
         },
       });
@@ -231,7 +236,7 @@ export function InvoiceProcessingHistory({
     setActionLoading("email");
     try {
       const { error } = await supabase.functions.invoke("resend-payment-notification", {
-        body: { invoice_id: invoice.id, channel: "email" },
+        body: { invoice_id: invoice.id, channels: ["email"] },
       });
       if (error) throw error;
       toast.success("Notificação reenviada");

@@ -42,6 +42,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { formatCurrency } from "@/lib/currency";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -222,8 +223,6 @@ export function BillingBoletosTab() {
     },
   });
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
