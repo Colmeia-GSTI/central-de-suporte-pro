@@ -63,6 +63,11 @@ const ERROR_CODES = {
   DPS_DUPLICADA: "DPS duplicada - NFS-e já existe no Portal Nacional",
 } as const;
 
+// ============ NORMALIZE SERVICE CODE ============
+function normalizeServiceCode(code: string): string {
+  return code.replace(/[.\s\-]/g, "").replace(/^0+/, "");
+}
+
 // ============ KNOWN PREFEITURA ERRORS ============
 interface KnownError {
   code: string;
@@ -723,12 +728,19 @@ Deno.serve(async (req) => {
           try {
             const servicesResponse = await asaasRequest(settings, "/invoices/municipalServices", "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
+            const normalizedTarget = normalizeServiceCode(effectiveServiceCode);
             const matchedService = services.find(
-              (s: { code: string; id: string }) => s.code === effectiveServiceCode
+              (s: { code: string; id: string }) => normalizeServiceCode(s.code) === normalizedTarget
             );
             if (matchedService) {
               resolvedMunicipalServiceId = matchedService.id;
-              log(correlationId, "info", `MunicipalServiceId encontrado: ${resolvedMunicipalServiceId}`);
+              log(correlationId, "info", `MunicipalServiceId encontrado: ${resolvedMunicipalServiceId}`, { matched_code: matchedService.code });
+            } else {
+              log(correlationId, "warn", "Nenhum match encontrado para código de serviço", {
+                codigo_enviado: effectiveServiceCode,
+                codigo_normalizado: normalizedTarget,
+                codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+              });
             }
           } catch (e) {
             log(correlationId, "warn", "Não foi possível buscar serviços municipais", { error: String(e) });
@@ -750,6 +762,7 @@ Deno.serve(async (req) => {
               provider: "asaas",
               status: "processando",
               ambiente: settings.environment === "production" ? "producao" : "homologacao",
+              codigo_tributacao: effectiveServiceCode || null,
               aliquota: iss_rate || null,
               // NFS-e Nacional 2026 - Retenções
               iss_retido: retain_iss || false,
@@ -790,15 +803,10 @@ Deno.serve(async (req) => {
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires municipalServiceId OR (municipalServiceCode + municipalServiceName) OR municipalServiceExternalId
+        // Asaas requires municipalServiceId - fallbacks with externalId/code causam rejeição silenciosa
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
           log(correlationId, "info", `Usando municipalServiceId resolvido: ${resolvedMunicipalServiceId}`);
-        } else if (effectiveServiceCode) {
-          // Use the LC 116 code as externalId (formato: "01.01" ou "0101" ou "010701")
-          invoicePayload.municipalServiceExternalId = effectiveServiceCode;
-          invoicePayload.municipalServiceName = service_description || "Serviços de TI";
-          log(correlationId, "info", `Usando municipalServiceExternalId: ${effectiveServiceCode}`);
         } else {
           // CORREÇÃO CRÍTICA: NÃO usar fallback - rejeitar se não houver código de serviço
           const errorMsg = "Código de serviço municipal (LC 116) não fornecido. Configure o código de serviço no contrato antes de emitir NFS-e.";
@@ -946,11 +954,19 @@ Deno.serve(async (req) => {
           try {
             const servicesResponse = await asaasRequest(settings, "/invoices/municipalServices", "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
+            const normalizedTarget = normalizeServiceCode(service_code);
             const matchedService = services.find(
-              (s: { code: string; id: string }) => s.code === service_code
+              (s: { code: string; id: string }) => normalizeServiceCode(s.code) === normalizedTarget
             );
             if (matchedService) {
               municipalServiceId = matchedService.id;
+              log(correlationId, "info", `MunicipalServiceId encontrado (avulsa): ${municipalServiceId}`, { matched_code: matchedService.code });
+            } else {
+              log(correlationId, "warn", "Nenhum match encontrado para código de serviço (avulsa)", {
+                codigo_enviado: service_code,
+                codigo_normalizado: normalizedTarget,
+                codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+              });
             }
           } catch (e) {
             log(correlationId, "warn", "Erro ao buscar serviços municipais", { error: String(e) });
@@ -1014,13 +1030,20 @@ Deno.serve(async (req) => {
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires either municipalServiceId OR municipalServiceCode + municipalServiceName
+        // Asaas requires municipalServiceId - fallbacks com code/externalId causam rejeição silenciosa
         if (municipalServiceId) {
           invoicePayload.municipalServiceId = municipalServiceId;
         } else if (service_code) {
-          // When we don't have the Asaas internal ID, use external code approach
-          invoicePayload.municipalServiceCode = service_code;
-          invoicePayload.municipalServiceName = service_description || "Serviços de TI";
+          // Sem municipalServiceId resolvido - rejeitar com erro claro
+          const errorMsg = `Código de serviço '${service_code}' não foi encontrado na API Asaas. Verifique o cadastro do código de serviço municipal.`;
+          log(correlationId, "error", errorMsg);
+          await logNfseEvent(supabase, historyRecord.id, "validation_error", "error",
+            errorMsg, correlationId, { reason: "MISSING_MUNICIPAL_SERVICE_CODE", service_code });
+          await supabase.from("nfse_history").update({
+            status: "erro", mensagem_retorno: errorMsg, codigo_retorno: "MISSING_MUNICIPAL_SERVICE_CODE",
+            updated_at: new Date().toISOString(),
+          }).eq("id", historyRecord.id);
+          throw new AsaasApiError(errorMsg, 400, "MISSING_MUNICIPAL_SERVICE_CODE");
         }
 
         // NFS-e Nacional 2026 - Tributos
