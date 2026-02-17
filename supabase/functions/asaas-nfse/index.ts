@@ -725,6 +725,7 @@ Deno.serve(async (req) => {
 
         // 2. Resolve municipal service ID if only code provided
         let resolvedMunicipalServiceId = municipal_service_id;
+        let resolvedMunicipalServiceName: string | null = null;
         if (!resolvedMunicipalServiceId && effectiveServiceCode) {
           log(correlationId, "info", `Buscando municipalServiceId para código ${effectiveServiceCode}`);
           
@@ -745,7 +746,7 @@ Deno.serve(async (req) => {
           const normalizedTarget = normalizeServiceCode(effectiveServiceCode);
           
           // Tentar com filtro de cidade primeiro
-          const tryResolve = async (city?: string): Promise<string | null> => {
+          const tryResolve = async (city?: string): Promise<{ id: string; description: string } | null> => {
             const endpoint = city
               ? `/invoices/municipalServices?description=&city=${encodeURIComponent(city)}`
               : "/invoices/municipalServices";
@@ -765,7 +766,7 @@ Deno.serve(async (req) => {
               log(correlationId, "info", `MunicipalServiceId encontrado${city ? ` (cidade: ${city})` : ""}: ${matchedService.id}`, {
                 matched_code: extractedCode,
               });
-              return matchedService.id;
+              return { id: matchedService.id, description: matchedService.description };
             }
             log(correlationId, "warn", `Nenhum match${city ? ` para cidade ${city}` : ""}`, {
               codigo_enviado: effectiveServiceCode,
@@ -779,13 +780,18 @@ Deno.serve(async (req) => {
           };
           
           try {
+            let resolved: { id: string; description: string } | null = null;
             // 1. Tentar com filtro de cidade
             if (emitenteCidade) {
-              resolvedMunicipalServiceId = await tryResolve(emitenteCidade);
+              resolved = await tryResolve(emitenteCidade);
             }
             // 2. Fallback sem filtro de cidade
-            if (!resolvedMunicipalServiceId) {
-              resolvedMunicipalServiceId = await tryResolve();
+            if (!resolved) {
+              resolved = await tryResolve();
+            }
+            if (resolved) {
+              resolvedMunicipalServiceId = resolved.id;
+              resolvedMunicipalServiceName = resolved.description;
             }
           } catch (e) {
             log(correlationId, "warn", "Não foi possível buscar serviços municipais", { error: String(e) });
@@ -848,10 +854,15 @@ Deno.serve(async (req) => {
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires municipalServiceId - fallbacks with externalId/code causam rejeição silenciosa
+        // Asaas requires municipalServiceId AND municipalServiceName
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
-          log(correlationId, "info", `Usando municipalServiceId resolvido: ${resolvedMunicipalServiceId}`);
+          if (resolvedMunicipalServiceName) {
+            invoicePayload.municipalServiceName = resolvedMunicipalServiceName;
+          }
+          log(correlationId, "info", `Usando municipalServiceId resolvido: ${resolvedMunicipalServiceId}`, {
+            municipalServiceName: resolvedMunicipalServiceName,
+          });
         } else {
           // CORREÇÃO CRÍTICA: NÃO usar fallback - rejeitar se não houver código de serviço
           const errorMsg = "Código de serviço municipal (LC 116) não fornecido. Configure o código de serviço no contrato antes de emitir NFS-e.";
@@ -995,6 +1006,7 @@ Deno.serve(async (req) => {
 
         // 2. Try to resolve municipal service ID
         let municipalServiceId: string | null = null;
+        let municipalServiceName: string | null = null;
         if (service_code) {
           // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
           let emitenteCidade: string | null = null;
@@ -1011,7 +1023,7 @@ Deno.serve(async (req) => {
           
           const normalizedTarget = normalizeServiceCode(service_code);
           
-          const tryResolveStandalone = async (city?: string): Promise<string | null> => {
+          const tryResolveStandalone = async (city?: string): Promise<{ id: string; description: string } | null> => {
             const endpoint = city
               ? `/invoices/municipalServices?description=&city=${encodeURIComponent(city)}`
               : "/invoices/municipalServices";
@@ -1031,7 +1043,7 @@ Deno.serve(async (req) => {
               log(correlationId, "info", `MunicipalServiceId encontrado (avulsa)${city ? ` (cidade: ${city})` : ""}: ${matchedService.id}`, {
                 matched_code: extractedCode,
               });
-              return matchedService.id;
+              return { id: matchedService.id, description: matchedService.description };
             }
             log(correlationId, "warn", `Nenhum match (avulsa)${city ? ` para cidade ${city}` : ""}`, {
               codigo_enviado: service_code,
@@ -1045,11 +1057,16 @@ Deno.serve(async (req) => {
           };
           
           try {
+            let resolved: { id: string; description: string } | null = null;
             if (emitenteCidade) {
-              municipalServiceId = await tryResolveStandalone(emitenteCidade);
+              resolved = await tryResolveStandalone(emitenteCidade);
             }
-            if (!municipalServiceId) {
-              municipalServiceId = await tryResolveStandalone();
+            if (!resolved) {
+              resolved = await tryResolveStandalone();
+            }
+            if (resolved) {
+              municipalServiceId = resolved.id;
+              municipalServiceName = resolved.description;
             }
           } catch (e) {
             log(correlationId, "warn", "Erro ao buscar serviços municipais", { error: String(e) });
@@ -1113,9 +1130,12 @@ Deno.serve(async (req) => {
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires municipalServiceId - fallbacks com code/externalId causam rejeição silenciosa
+        // Asaas requires municipalServiceId AND municipalServiceName
         if (municipalServiceId) {
           invoicePayload.municipalServiceId = municipalServiceId;
+          if (municipalServiceName) {
+            invoicePayload.municipalServiceName = municipalServiceName;
+          }
         } else if (service_code) {
           // Sem municipalServiceId resolvido - rejeitar com erro claro
           const errorMsg = `Código de serviço '${service_code}' não foi encontrado na API Asaas. Verifique o cadastro do código de serviço municipal.`;
