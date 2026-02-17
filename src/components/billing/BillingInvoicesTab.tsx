@@ -114,7 +114,9 @@ export function BillingInvoicesTab() {
         .order("due_date", { ascending: false })
         .limit(500);
 
-      if (statusFilter !== "all") {
+      if (statusFilter === "with_errors") {
+        query = query.or("boleto_status.eq.erro,nfse_status.eq.erro,email_status.eq.erro");
+      } else if (statusFilter !== "all") {
         query = query.eq("status", statusFilter as Enums<"invoice_status">);
       }
 
@@ -283,6 +285,7 @@ export function BillingInvoicesTab() {
             <SelectItem value="paid">Pago</SelectItem>
             <SelectItem value="overdue">Vencido</SelectItem>
             <SelectItem value="cancelled">Cancelado</SelectItem>
+            <SelectItem value="with_errors">⚠ Com Erros</SelectItem>
           </SelectContent>
         </Select>
 
@@ -697,17 +700,41 @@ export function BillingInvoicesTab() {
           <Button
             variant="destructive"
             size="sm"
-            disabled={!hasSelected}
-            onClick={() => {
-              const withBoleto = selectedInvoicesData.some((inv) => !!inv.boleto_url);
-              if (withBoleto) {
-                toast.info("Cancelando boletos selecionados...");
-              } else {
+            disabled={!hasSelected || isCancellingBoleto}
+            onClick={async () => {
+              const withBoleto = selectedInvoicesData.filter((inv) => !!inv.boleto_url || !!inv.boleto_barcode);
+              if (withBoleto.length === 0) {
                 toast.error("Nenhum boleto para cancelar");
+                return;
               }
+              setIsCancellingBoleto(true);
+              let successCount = 0;
+              let errorCount = 0;
+              for (const inv of withBoleto) {
+                try {
+                  const { data, error } = await supabase.functions.invoke("banco-inter", {
+                    body: { action: "cancel", invoice_id: inv.id, motivo_cancelamento: "ACERTOS" },
+                  });
+                  if (error || data?.error) errorCount++;
+                  else successCount++;
+                } catch {
+                  errorCount++;
+                }
+              }
+              if (successCount > 0) {
+                toast.success(`${successCount} boleto(s) cancelado(s)`, {
+                  description: errorCount > 0 ? `${errorCount} falha(s)` : undefined,
+                });
+              } else {
+                toast.error(`Falha ao cancelar ${errorCount} boleto(s)`);
+              }
+              queryClient.invalidateQueries({ queryKey: ["invoices"] });
+              queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+              setSelectedInvoices(new Set());
+              setIsCancellingBoleto(false);
             }}
           >
-            <Ban className="mr-1.5 h-4 w-4" />
+            {isCancellingBoleto ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Ban className="mr-1.5 h-4 w-4" />}
             Cancelar Boleto/Pix
           </Button>
 

@@ -102,63 +102,98 @@ export function BillingBoletosTab() {
   const checkIntegrationStatus = async () => {
     setIntegrationStatus(prev => ({ ...prev, checking: true }));
     try {
-      const { data: settings } = await supabase
+      // Check Banco Inter
+      const { data: interSettings } = await supabase
         .from("integration_settings")
         .select("settings, is_active")
         .eq("integration_type", "banco_inter")
         .maybeSingle();
 
-      if (!settings) {
+      // Check Asaas
+      const { data: asaasSettings } = await supabase
+        .from("integration_settings")
+        .select("settings, is_active")
+        .eq("integration_type", "asaas")
+        .maybeSingle();
+
+      const interConfigured = !!interSettings;
+      const asaasConfigured = !!asaasSettings;
+
+      // If neither is configured
+      if (!interConfigured && !asaasConfigured) {
         setIntegrationStatus({
           configured: false,
           active: false,
           hasBoletoScope: false,
           hasPixScope: false,
           checking: false,
-          error: "Banco Inter não configurado",
+          error: "Nenhum provedor de boleto configurado (Banco Inter ou Asaas)",
         });
         return;
       }
 
-      if (!settings.is_active) {
+      // If at least one is active
+      const interActive = interConfigured && interSettings?.is_active;
+      const asaasActive = asaasConfigured && asaasSettings?.is_active;
+
+      if (!interActive && !asaasActive) {
         setIntegrationStatus({
           configured: true,
           active: false,
           hasBoletoScope: false,
           hasPixScope: false,
           checking: false,
-          error: "Integração desativada",
+          error: "Integrações desativadas",
         });
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("banco-inter", {
-        body: { action: "test" },
-      });
+      // If Inter is active, test connection
+      if (interActive) {
+        try {
+          const { data, error } = await supabase.functions.invoke("banco-inter", {
+            body: { action: "test" },
+          });
 
-      if (error) {
+          if (!error && !data?.error) {
+            const availableScopes = data?.available_scopes || [];
+            const hasBoleto = availableScopes.some((s: string) => s.includes("boleto"));
+            const hasPix = availableScopes.some((s: string) => s.includes("cob"));
+
+            setIntegrationStatus({
+              configured: true,
+              active: true,
+              hasBoletoScope: hasBoleto,
+              hasPixScope: hasPix,
+              checking: false,
+              error: data?.error,
+            });
+            return;
+          }
+        } catch {
+          // Inter test failed, try Asaas fallback
+        }
+      }
+
+      // Asaas is active (fallback or primary)
+      if (asaasActive) {
         setIntegrationStatus({
           configured: true,
           active: true,
-          hasBoletoScope: false,
-          hasPixScope: false,
+          hasBoletoScope: true,
+          hasPixScope: true,
           checking: false,
-          error: "Erro ao testar conexão",
         });
         return;
       }
-
-      const availableScopes = data?.available_scopes || [];
-      const hasBoleto = availableScopes.some((s: string) => s.includes("boleto"));
-      const hasPix = availableScopes.some((s: string) => s.includes("cob"));
 
       setIntegrationStatus({
         configured: true,
         active: true,
-        hasBoletoScope: hasBoleto,
-        hasPixScope: hasPix,
+        hasBoletoScope: false,
+        hasPixScope: false,
         checking: false,
-        error: data?.error,
+        error: "Erro ao testar conexão",
       });
     } catch (err: unknown) {
       setIntegrationStatus({
@@ -451,9 +486,9 @@ export function BillingBoletosTab() {
       ) : !integrationStatus.configured ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Banco Inter não configurado</AlertTitle>
+          <AlertTitle>Nenhum provedor de boleto configurado</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
-            <span>Configure a integração para gerar boletos automaticamente.</span>
+            <span>Configure Banco Inter ou Asaas em Configurações → Integrações.</span>
             <Link to="/settings">
               <Button variant="outline" size="sm" className="ml-4">
                 <Settings className="h-4 w-4 mr-2" />

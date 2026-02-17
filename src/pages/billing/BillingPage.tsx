@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity } from "lucide-react";
+import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBillingCounters } from "@/hooks/useBillingCounters";
 import { BillingInvoicesTab } from "@/components/billing/BillingInvoicesTab";
@@ -13,6 +13,7 @@ import { BillingTaxCodesTab } from "@/components/billing/BillingTaxCodesTab";
 import { BankReconciliationTab } from "@/components/billing/BankReconciliationTab";
 import { FiscalReportTab } from "@/components/billing/FiscalReportTab";
 import { IntegrationHealthDashboard } from "@/components/billing/IntegrationHealthDashboard";
+import { BillingErrorsPanel } from "@/components/billing/BillingErrorsPanel";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface TabBadgeProps {
@@ -45,6 +46,7 @@ const BILLING_TABS = [
   { id: "invoices", label: "Faturas", icon: Receipt },
   { id: "boletos", label: "Boletos", icon: Barcode },
   { id: "nfse", label: "NFS-e", icon: FileText },
+  { id: "errors", label: "Erros", icon: AlertTriangle },
   { id: "reconciliation", label: "Conciliação", icon: ArrowRightLeft },
   { id: "fiscal", label: "Fiscal", icon: Scale },
   { id: "health", label: "Saúde", icon: Activity },
@@ -60,11 +62,9 @@ export default function BillingPage() {
   const { data: counters } = useBillingCounters();
   const { can } = usePermissions();
   
-  // Managers can only view (read-only), admin/financial can manage
   const canManage = can("financial", "edit");
   const canManageServices = can("services", "edit");
 
-  // Validate tab access - redirect to invoices if trying to access restricted tab without permission
   const currentTab = (() => {
     if ((rawTab === "services" || rawTab === "tax-codes") && !canManageServices) {
       return "invoices";
@@ -72,7 +72,6 @@ export default function BillingPage() {
     return rawTab;
   })();
 
-  // Sync URL if tab was corrected
   useEffect(() => {
     if (rawTab !== currentTab) {
       if (currentTab === "invoices") {
@@ -109,6 +108,10 @@ export default function BillingPage() {
         return counters.pendingNfse > 0 ? (
           <TabBadge count={counters.pendingNfse} variant="info" />
         ) : null;
+      case "errors":
+        return counters.errorCount > 0 ? (
+          <TabBadge count={counters.errorCount} variant="danger" />
+        ) : null;
       default:
         return null;
     }
@@ -117,7 +120,6 @@ export default function BillingPage() {
   return (
     <AppLayout>
       <div className="space-y-3 md:space-y-6">
-        {/* Header */}
         <div>
           <h1 className="text-xl md:text-3xl font-bold tracking-tight">Faturamento</h1>
           <p className="text-muted-foreground hidden md:block">
@@ -125,11 +127,9 @@ export default function BillingPage() {
           </p>
         </div>
 
-        {/* Tabs */}
         <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-3 md:space-y-6">
-          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-8 md:w-auto">
+          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-9 md:w-auto">
             {BILLING_TABS.map((tab) => {
-              // Services and tax-codes require edit permission
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {
                 return null;
               }
@@ -157,6 +157,10 @@ export default function BillingPage() {
 
           <TabsContent value="nfse" className="mt-6">
             <BillingNfseTab />
+          </TabsContent>
+
+          <TabsContent value="errors" className="mt-6">
+            <BillingErrorsPanel />
           </TabsContent>
 
           <TabsContent value="reconciliation" className="mt-6">
