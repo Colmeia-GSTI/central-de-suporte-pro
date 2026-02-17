@@ -310,13 +310,14 @@ export function BillingNfseTab() {
       // Update local status to "processando"
       await supabase.from("nfse_history").update({ status: "processando" }).eq("id", nfse.id);
 
+      const isStandalone = !nfse.contract_id;
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
-          action: "emit",
+          action: isStandalone ? "emit_standalone" : "emit",
           nfse_history_id: nfse.id,
           invoice_id: nfse.invoice_id,
           client_id: nfse.client_id,
-          contract_id: nfse.contract_id || undefined,
+          ...(nfse.contract_id ? { contract_id: nfse.contract_id } : {}),
           value: nfse.valor_servico,
           service_description: nfse.descricao_servico,
           municipal_service_code: nfse.codigo_tributacao || undefined,

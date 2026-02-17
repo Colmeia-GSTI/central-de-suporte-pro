@@ -1,17 +1,57 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Clock, Activity, TrendingDown, ShieldCheck, ShieldAlert, Ticket } from "lucide-react";
+import { AlertTriangle, Clock, Activity, TrendingDown, ShieldCheck, ShieldAlert, Ticket, RefreshCw, Loader2, RotateCcw, FileSearch } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { format, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/utils";
 
 export function IntegrationHealthDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isPollingBoletos, setIsPollingBoletos] = useState(false);
+  const [isCheckingNfse, setIsCheckingNfse] = useState(false);
+
+  const handleForcePollingAll = async () => {
+    setIsPollingBoletos(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("poll-boleto-status");
+      if (error) throw error;
+      toast.success("Polling executado", {
+        description: `${data.processed || 0} consultados, ${data.updated || 0} atualizados`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["integration-health-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro no polling", { description: getErrorMessage(e) });
+    } finally {
+      setIsPollingBoletos(false);
+    }
+  };
+
+  const handleCheckNfseAll = async () => {
+    setIsCheckingNfse(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("poll-asaas-nfse-status");
+      if (error) throw error;
+      toast.success("Verificação concluída", {
+        description: `${data.updated || 0} nota(s) atualizada(s)`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["integration-health-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro ao verificar NFS-e", { description: getErrorMessage(e) });
+    } finally {
+      setIsCheckingNfse(false);
+    }
+  };
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ["integration-health-stats"],
@@ -166,11 +206,23 @@ export function IntegrationHealthDashboard() {
               Boletos Pendentes &gt; 1h
             </CardTitle>
           </CardHeader>
-          <CardContent>
+           <CardContent>
             <div className={`text-3xl font-bold ${(stats?.stale_boletos || 0) > 0 ? "text-status-warning" : "text-status-success"}`}>
               {stats?.stale_boletos || 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">aguardando processamento</p>
+            {(stats?.stale_boletos || 0) > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 h-7 text-xs w-full"
+                disabled={isPollingBoletos}
+                onClick={handleForcePollingAll}
+              >
+                {isPollingBoletos ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                Forçar Polling
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -181,11 +233,23 @@ export function IntegrationHealthDashboard() {
               NFS-e Processando &gt; 2h
             </CardTitle>
           </CardHeader>
-          <CardContent>
+           <CardContent>
             <div className={`text-3xl font-bold ${(stats?.stale_nfse || 0) > 0 ? "text-status-danger" : "text-status-success"}`}>
               {stats?.stale_nfse || 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">notas paradas</p>
+            {(stats?.stale_nfse || 0) > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 h-7 text-xs w-full"
+                disabled={isCheckingNfse}
+                onClick={handleCheckNfseAll}
+              >
+                {isCheckingNfse ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <FileSearch className="h-3 w-3 mr-1" />}
+                Verificar Status
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -277,6 +341,28 @@ export function IntegrationHealthDashboard() {
                     <span className="text-xs text-muted-foreground">
                       {inc.hoursElapsed}h / {inc.slaHours}h
                     </span>
+                    {inc.type === "boleto_failure" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => navigate("/billing?tab=errors")}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        Corrigir
+                      </Button>
+                    )}
+                    {(inc.type === "nfse_failure" || inc.type === "e0014") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => navigate("/billing?tab=errors")}
+                      >
+                        <RotateCcw className="h-3 w-3 mr-1" />
+                        Corrigir
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"

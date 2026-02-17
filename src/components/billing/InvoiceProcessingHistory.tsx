@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -6,6 +7,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -15,12 +17,18 @@ import {
   Barcode,
   FileText,
   Mail,
-  MessageCircle,
   RefreshCw,
   AlertTriangle,
+  RotateCcw,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type InvoiceWithDetails = Tables<"invoices"> & {
@@ -79,7 +87,8 @@ const typeIcons = {
 
 function mapBoletoStatus(status: Enums<"boleto_processing_status"> | null): "success" | "error" | "pending" | "skipped" {
   if (!status || status === "pendente") return "pending";
-  if (status === "gerado" || status === "enviado") return "success";
+  if (status === "gerado" || status === "enviado" || status === "registrado") return "success";
+  if (status === "processando") return "pending";
   if (status === "erro") return "error";
   return "pending";
 }
@@ -102,16 +111,19 @@ function buildProcessingSteps(invoice: InvoiceWithDetails): ProcessingStep[] {
   const steps: ProcessingStep[] = [];
 
   // Boleto step
+  const boletoGenerated = !!(invoice.boleto_url || invoice.boleto_barcode);
   steps.push({
     id: "boleto",
     type: "boleto",
     status: mapBoletoStatus(invoice.boleto_status),
     title: "Boleto Bancário",
-    description: invoice.boleto_url 
-      ? `Boleto gerado - ${invoice.boleto_status === "enviado" ? "Enviado ao cliente" : "Disponível"}`
+    description: boletoGenerated
+      ? `Boleto gerado - ${invoice.boleto_status === "enviado" ? "Enviado ao cliente" : invoice.boleto_status === "registrado" ? "Registrado no banco" : "Disponível"}`
       : invoice.boleto_status === "erro" 
         ? "Erro na geração do boleto"
-        : "Aguardando geração",
+        : invoice.boleto_status === "processando"
+          ? "Processando no banco..."
+          : "Aguardando geração",
     timestamp: invoice.boleto_sent_at,
     errorMessage: invoice.boleto_error_msg,
   });
@@ -169,10 +181,149 @@ export function InvoiceProcessingHistory({
   onOpenChange,
   invoice,
 }: InvoiceProcessingHistoryProps) {
+  const queryClient = useQueryClient();
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
   if (!invoice) return null;
 
   const steps = buildProcessingSteps(invoice);
   const processingAttempts = invoice.processing_attempts || 0;
+
+  const handleRegenerateBoleto = async () => {
+    setActionLoading("boleto");
+    try {
+      const { error } = await supabase.functions.invoke("banco-inter", {
+        body: { action: "generate", invoice_id: invoice.id },
+      });
+      if (error) throw error;
+      toast.success("Boleto reenviado para geração");
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro ao regenerar boleto", { description: getErrorMessage(e) });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReprocessNfse = async () => {
+    setActionLoading("nfse");
+    try {
+      const { error } = await supabase.functions.invoke("asaas-nfse", {
+        body: {
+          action: invoice.contract_id ? "emit" : "emit_standalone",
+          invoice_id: invoice.id,
+          ...(invoice.contract_id ? { contract_id: invoice.contract_id } : {}),
+        },
+      });
+      if (error) throw error;
+      toast.success("NFS-e reenviada para processamento");
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro ao reprocessar NFS-e", { description: getErrorMessage(e) });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResendNotification = async () => {
+    setActionLoading("email");
+    try {
+      const { error } = await supabase.functions.invoke("resend-payment-notification", {
+        body: { invoice_id: invoice.id, channel: "email" },
+      });
+      if (error) throw error;
+      toast.success("Notificação reenviada");
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    } catch (e: unknown) {
+      toast.error("Erro ao reenviar", { description: getErrorMessage(e) });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleForcePolling = async () => {
+    setActionLoading("polling");
+    try {
+      const { data, error } = await supabase.functions.invoke("poll-boleto-status");
+      if (error) throw error;
+      toast.success("Polling executado", {
+        description: `${data.updated || 0} atualizado(s)`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro no polling", { description: getErrorMessage(e) });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const getStepAction = (step: ProcessingStep) => {
+    if (step.status !== "error" && !(step.type === "boleto" && step.status === "pending" && !invoice.boleto_barcode && !invoice.boleto_url)) return null;
+
+    switch (step.type) {
+      case "boleto":
+        if (step.status === "error") {
+          return (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs mt-2"
+              disabled={actionLoading === "boleto"}
+              onClick={handleRegenerateBoleto}
+            >
+              {actionLoading === "boleto" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCcw className="h-3 w-3 mr-1" />}
+              Regenerar Boleto
+            </Button>
+          );
+        }
+        if (step.status === "pending" && !invoice.boleto_barcode && !invoice.boleto_url) {
+          return (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs mt-2"
+              disabled={actionLoading === "polling"}
+              onClick={handleForcePolling}
+            >
+              {actionLoading === "polling" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              Forçar Polling
+            </Button>
+          );
+        }
+        return null;
+      case "nfse":
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs mt-2"
+            disabled={actionLoading === "nfse"}
+            onClick={handleReprocessNfse}
+          >
+            {actionLoading === "nfse" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCcw className="h-3 w-3 mr-1" />}
+            Reprocessar NFS-e
+          </Button>
+        );
+      case "email":
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs mt-2"
+            disabled={actionLoading === "email"}
+            onClick={handleResendNotification}
+          >
+            {actionLoading === "email" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+            Reenviar Notificação
+          </Button>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -258,6 +409,9 @@ export function InvoiceProcessingHistory({
                           </div>
                         </div>
                       )}
+
+                      {/* Action button for error/orphan steps */}
+                      {getStepAction(step)}
                     </div>
                   </div>
                 );
