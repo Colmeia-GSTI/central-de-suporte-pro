@@ -93,12 +93,12 @@ async function processInvoices(
             result.boleto_status = "success";
             console.log(`[batch-process] Boleto generated successfully for ${invoiceId}`);
 
-            // Atualizar status no banco
+            // CORREÇÃO: NÃO sobrescrever boleto_status aqui.
+            // A edge function (banco-inter ou asaas-nfse) já cuida do status internamente.
+            // Apenas incrementar processing_attempts.
             await supabase
               .from("invoices")
               .update({
-                boleto_status: "enviado",
-                boleto_sent_at: new Date().toISOString(),
                 processing_attempts: currentAttempts + 1,
               })
               .eq("id", invoiceId);

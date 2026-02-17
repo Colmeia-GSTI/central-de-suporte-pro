@@ -751,19 +751,29 @@ Deno.serve(async (req) => {
               : "/invoices/municipalServices";
             const servicesResponse = await asaasRequest(settings, endpoint, "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
+            // CORREÇÃO CRÍTICA: A API Asaas NÃO retorna campo `code`.
+            // O código do serviço está embutido no início do campo `description` (ex: "01.07.01 - Suporte técnico...")
             const matchedService = services.find(
-              (s: { code: string; id: string }) => normalizeServiceCode(s.code) === normalizedTarget
+              (s: { description: string; id: string }) => {
+                const codeMatch = s.description?.match(/^(\d{2}\.\d{2}\.\d{2})/);
+                if (!codeMatch) return false;
+                return normalizeServiceCode(codeMatch[1]) === normalizedTarget;
+              }
             );
             if (matchedService) {
+              const extractedCode = matchedService.description?.match(/^(\d{2}\.\d{2}\.\d{2})/)?.[1] || "";
               log(correlationId, "info", `MunicipalServiceId encontrado${city ? ` (cidade: ${city})` : ""}: ${matchedService.id}`, {
-                matched_code: matchedService.code,
+                matched_code: extractedCode,
               });
               return matchedService.id;
             }
             log(correlationId, "warn", `Nenhum match${city ? ` para cidade ${city}` : ""}`, {
               codigo_enviado: effectiveServiceCode,
               codigo_normalizado: normalizedTarget,
-              codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+              codigos_disponiveis: services.map((s: { description: string }) => {
+                const m = s.description?.match(/^(\d{2}\.\d{2}\.\d{2})/);
+                return m ? m[1] : s.description?.slice(0, 30);
+              }).slice(0, 20),
             });
             return null;
           };
@@ -1007,19 +1017,29 @@ Deno.serve(async (req) => {
               : "/invoices/municipalServices";
             const servicesResponse = await asaasRequest(settings, endpoint, "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
+            // CORREÇÃO CRÍTICA: A API Asaas NÃO retorna campo `code`.
+            // O código do serviço está embutido no início do campo `description` (ex: "01.07.01 - Suporte técnico...")
             const matchedService = services.find(
-              (s: { code: string; id: string }) => normalizeServiceCode(s.code) === normalizedTarget
+              (s: { description: string; id: string }) => {
+                const codeMatch = s.description?.match(/^(\d{2}\.\d{2}\.\d{2})/);
+                if (!codeMatch) return false;
+                return normalizeServiceCode(codeMatch[1]) === normalizedTarget;
+              }
             );
             if (matchedService) {
+              const extractedCode = matchedService.description?.match(/^(\d{2}\.\d{2}\.\d{2})/)?.[1] || "";
               log(correlationId, "info", `MunicipalServiceId encontrado (avulsa)${city ? ` (cidade: ${city})` : ""}: ${matchedService.id}`, {
-                matched_code: matchedService.code,
+                matched_code: extractedCode,
               });
               return matchedService.id;
             }
             log(correlationId, "warn", `Nenhum match (avulsa)${city ? ` para cidade ${city}` : ""}`, {
               codigo_enviado: service_code,
               codigo_normalizado: normalizedTarget,
-              codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+              codigos_disponiveis: services.map((s: { description: string }) => {
+                const m = s.description?.match(/^(\d{2}\.\d{2}\.\d{2})/);
+                return m ? m[1] : s.description?.slice(0, 30);
+              }).slice(0, 20),
             });
             return null;
           };
@@ -1838,7 +1858,31 @@ Deno.serve(async (req) => {
         };
 
         if (paymentType === "BOLETO" || paymentType === "UNDEFINED") {
-          // CORREÇÃO DEFINITIVA: Baixar PDF do boleto e salvar no Storage S3
+          // Campos obrigatórios para boleto (conforme contrato de dados padronizado)
+          updateData.payment_method = "boleto";
+          updateData.boleto_status = "enviado";
+          updateData.boleto_sent_at = new Date().toISOString();
+
+          // Buscar identificationField via endpoint separado (conforme docs.asaas.com)
+          // POST /payments retorna bankSlipUrl mas NÃO retorna identificationField diretamente
+          let identificationField = payment.identificationField || null;
+          let barCode = null;
+          if (!identificationField && payment.id) {
+            try {
+              const idFieldData = await asaasRequest(settings, `/payments/${payment.id}/identificationField`, "GET", undefined, correlationId);
+              identificationField = idFieldData?.identificationField || null;
+              barCode = idFieldData?.barCode || null;
+              log(correlationId, "info", "identificationField obtido via endpoint separado", { 
+                hasField: !!identificationField, hasBarCode: !!barCode 
+              });
+            } catch (idFieldError) {
+              log(correlationId, "warn", "Erro ao buscar identificationField (boleto pode estar em processamento)", { 
+                error: String(idFieldError) 
+              });
+            }
+          }
+
+          // Baixar PDF do boleto e salvar no Storage S3
           let storageBoletoUrl = payment.bankSlipUrl;
           if (payment.bankSlipUrl) {
             try {
@@ -1870,9 +1914,12 @@ Deno.serve(async (req) => {
             }
           }
           updateData.boleto_url = storageBoletoUrl;
-          updateData.boleto_barcode = payment.identificationField;
+          updateData.boleto_barcode = identificationField;
         }
         if (paymentType === "PIX") {
+          // Campos obrigatórios para PIX (conforme contrato de dados padronizado)
+          updateData.payment_method = "pix";
+
           // Buscar código PIX
           try {
             const pixInfo = await asaasRequest(settings, `/payments/${payment.id}/pixQrCode`, "GET", undefined, correlationId);

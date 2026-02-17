@@ -680,13 +680,14 @@ Deno.serve(async (req) => {
       // API v3 returns codigoSolicitacao for async processing - implement polling
       const updateData: Record<string, any> = {
         payment_method: "boleto",
+        billing_provider: "banco_inter",
       };
 
       if (result.codigoBarras && result.linhaDigitavel) {
         // Immediate response with barcode (rare but handle it)
         updateData.boleto_barcode = result.linhaDigitavel;
-        updateData.boleto_url = result.pdfUrl;
         updateData.boleto_status = "enviado";
+        updateData.boleto_sent_at = new Date().toISOString();
         console.log("[BANCO-INTER] Boleto com dados completos imediatos");
       } else if (result.codigoSolicitacao) {
         // Async processing - POLLING para obter dados completos
@@ -731,15 +732,60 @@ Deno.serve(async (req) => {
             
             if (detailsResponse.ok) {
               const details = await detailsResponse.json();
-              console.log("[BANCO-INTER] Polling response:", JSON.stringify(details).slice(0, 200));
+              console.log("[BANCO-INTER] Polling response:", JSON.stringify(details).slice(0, 300));
               
-              if (details.codigoBarras && details.linhaDigitavel) {
+              // CORREÇÃO: API v3 retorna dados aninhados em details.boleto (conforme documentação developers.inter.co)
+              const boletoData = details.boleto || {};
+              const cobrancaData = details.cobranca || details;
+              const codigoBarras = boletoData.codigoBarras || details.codigoBarras;
+              const linhaDigitavel = boletoData.linhaDigitavel || details.linhaDigitavel;
+              const nossoNumero = boletoData.nossoNumero || details.nossoNumero;
+              
+              if (codigoBarras && linhaDigitavel) {
                 console.log("[BANCO-INTER] Dados do boleto obtidos com sucesso via polling");
                 
-                updateData.boleto_barcode = details.linhaDigitavel;
-                updateData.boleto_url = details.pdfUrl || details.boleto?.urlPdf || details.urlPdf || null;
+                updateData.boleto_barcode = linhaDigitavel;
                 updateData.boleto_status = "enviado";
-                updateData.notes = `${existingNotes} codigoSolicitacao:${result.codigoSolicitacao} nossoNumero:${details.nossoNumero || ""}`.trim();
+                updateData.boleto_sent_at = new Date().toISOString();
+                updateData.notes = `${existingNotes} codigoSolicitacao:${result.codigoSolicitacao} nossoNumero:${nossoNumero || ""}`.trim();
+                
+                // CORREÇÃO: Obter PDF via endpoint dedicado /pdf (retorna base64 conforme docs Inter)
+                try {
+                  const pdfResponse = await mtlsFetch(
+                    `${baseUrl}/cobranca/v3/cobrancas/${result.codigoSolicitacao}/pdf`,
+                    { method: "GET", headers: { Authorization: `Bearer ${readToken}` } }
+                  );
+                  if (pdfResponse.ok) {
+                    const pdfData = await pdfResponse.json();
+                    if (pdfData.pdf) {
+                      // Decodificar base64 e salvar no Storage
+                      const pdfBytes = Uint8Array.from(atob(pdfData.pdf), c => c.charCodeAt(0));
+                      const boletoPath = `boletos/${invoice_id}/boleto.pdf`;
+                      await supabase.storage.from("invoice-documents").upload(boletoPath, pdfBytes, {
+                        contentType: "application/pdf",
+                        upsert: true,
+                      });
+                      updateData.boleto_url = `invoice-documents/${boletoPath}`;
+                      console.log("[BANCO-INTER] PDF do boleto salvo no Storage:", boletoPath);
+                      
+                      // Registrar na tabela invoice_documents
+                      await supabase.from("invoice_documents").insert({
+                        invoice_id: invoice_id,
+                        document_type: "boleto_pdf",
+                        file_path: boletoPath,
+                        file_name: `boleto_${invoice.invoice_number}.pdf`,
+                        mime_type: "application/pdf",
+                        bucket_name: "invoice-documents",
+                        storage_provider: "supabase",
+                        metadata: { source: "banco_inter", codigoSolicitacao: result.codigoSolicitacao },
+                      });
+                    }
+                  } else {
+                    console.warn("[BANCO-INTER] Erro ao obter PDF:", await pdfResponse.text());
+                  }
+                } catch (pdfError) {
+                  console.warn("[BANCO-INTER] Erro ao baixar/salvar PDF do boleto:", pdfError);
+                }
                 
                 boletoCompleto = true;
                 break;
