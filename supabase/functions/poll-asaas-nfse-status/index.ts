@@ -188,9 +188,86 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (records.length === 0 && orphansFixed === 0) {
+    // ========== AUTO-RETRY: Records stuck in 'pendente' without asaas_invoice_id ==========
+    // These records were reset or never processed. Re-trigger emission automatically.
+    let pendingRetried = 0;
+    const { data: pendingRecordsForRetry, error: pendingRetryError } = await supabase
+      .from("nfse_history")
+      .select("id, client_id, contract_id, invoice_id, valor_servico, descricao_servico, codigo_tributacao, aliquota, competencia, iss_retido, valor_pis, valor_cofins, valor_csll, valor_irrf, valor_inss, valor_liquido")
+      .eq("provider", "asaas")
+      .eq("status", "pendente")
+      .is("asaas_invoice_id", null)
+      .lt("created_at", thirtyMinutesAgo)
+      .order("created_at", { ascending: true })
+      .limit(5); // Max 5 per execution to avoid overloading
+
+    if (!pendingRetryError && pendingRecordsForRetry && pendingRecordsForRetry.length > 0) {
+      console.log(`[POLL-ASAAS-FALLBACK] ${pendingRecordsForRetry.length} NFS-e pendentes para auto-retry`);
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+      for (const pending of pendingRecordsForRetry) {
+        try {
+          // Mark as processing to prevent duplicate retries
+          await supabase
+            .from("nfse_history")
+            .update({ status: "processando", mensagem_retorno: "Auto-retry iniciado pelo cron", updated_at: new Date().toISOString() })
+            .eq("id", pending.id);
+
+          // Call asaas-nfse edge function to re-emit
+          const emitPayload: Record<string, unknown> = {
+            action: "emit",
+            client_id: pending.client_id,
+            value: pending.valor_servico,
+            service_description: pending.descricao_servico || "Serviços de TI",
+            contract_id: pending.contract_id,
+            invoice_id: pending.invoice_id,
+            nfse_history_id: pending.id,
+            competencia: pending.competencia,
+            iss_rate: pending.aliquota || 0,
+            retain_iss: pending.iss_retido || false,
+            pis_value: pending.valor_pis || 0,
+            cofins_value: pending.valor_cofins || 0,
+            csll_value: pending.valor_csll || 0,
+            irrf_value: pending.valor_irrf || 0,
+            inss_value: pending.valor_inss || 0,
+            valor_liquido: pending.valor_liquido || pending.valor_servico,
+          };
+
+          const retryResponse = await fetch(`${supabaseUrl}/functions/v1/asaas-nfse`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify(emitPayload),
+          });
+
+          if (retryResponse.ok) {
+            pendingRetried++;
+            console.log(`[POLL-ASAAS-FALLBACK] Auto-retry bem-sucedido para ${pending.id}`);
+          } else {
+            const errorBody = await retryResponse.text();
+            console.error(`[POLL-ASAAS-FALLBACK] Auto-retry falhou para ${pending.id}: ${retryResponse.status} ${errorBody.slice(0, 200)}`);
+          }
+        } catch (retryError) {
+          console.error(`[POLL-ASAAS-FALLBACK] Erro no auto-retry de ${pending.id}:`, retryError);
+        }
+      }
+
+      if (pendingRetried > 0) {
+        pendingNotifications.push({
+          title: "NFS-e Reprocessadas Automaticamente",
+          message: `${pendingRetried} NFS-e(s) pendentes foram reprocessadas automaticamente pelo sistema.`,
+          type: "info",
+        });
+      }
+    }
+
+    if (records.length === 0 && orphansFixed === 0 && pendingRetried === 0) {
       return new Response(
-        JSON.stringify({ success: true, message: "Nenhuma NFS-e pendente", stats: { found: 0, orphans_fixed: 0 } }),
+        JSON.stringify({ success: true, message: "Nenhuma NFS-e pendente", stats: { found: 0, orphans_fixed: 0, pending_retried: 0 } }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -269,13 +346,13 @@ Deno.serve(async (req) => {
     // Batch send all notifications at once
     await createBatchNotifications(supabase, pendingNotifications);
 
-    console.log(`[POLL-ASAAS-FALLBACK] Concluído: ${records.length} verificados, ${updatedCount} atualizados, ${orphansFixed} órfãos corrigidos`);
+    console.log(`[POLL-ASAAS-FALLBACK] Concluído: ${records.length} verificados, ${updatedCount} atualizados, ${orphansFixed} órfãos corrigidos, ${pendingRetried} pendentes reprocessados`);
 
     return new Response(
       JSON.stringify({
         success: true,
         message: "Polling Asaas fallback concluído",
-        stats: { found: records.length, updated: updatedCount, orphans_fixed: orphansFixed },
+        stats: { found: records.length, updated: updatedCount, orphans_fixed: orphansFixed, pending_retried: pendingRetried },
         mode: "fallback",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
