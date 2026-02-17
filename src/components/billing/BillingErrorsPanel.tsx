@@ -38,6 +38,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { formatCurrency } from "@/lib/currency";
 import { NfseServiceCodeCombobox } from "@/components/billing/nfse/NfseServiceCodeCombobox";
 import { NfseLinkExternalDialog } from "@/components/billing/nfse/NfseLinkExternalDialog";
 import type { NfseWithRelations } from "@/components/billing/nfse/NfseDetailsSheet";
@@ -144,7 +145,7 @@ export function BillingErrorsPanel() {
       const provider = invoice.billing_provider || "banco_inter";
       const fnName = provider === "asaas" ? "asaas-nfse" : "banco-inter";
       const body = provider === "asaas"
-        ? { action: "generate_boleto", invoice_id: invoice.id }
+        ? { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" }
         : { action: "generate", invoice_id: invoice.id };
       
       const { error } = await supabase.functions.invoke(fnName, { body });
@@ -221,7 +222,7 @@ export function BillingErrorsPanel() {
     setResendingId(invoice.id);
     try {
       const { error } = await supabase.functions.invoke("resend-payment-notification", {
-        body: { invoice_id: invoice.id, channel },
+        body: { invoice_id: invoice.id, channels: [channel] },
       });
       if (error) throw error;
       toast.success(`Notificação reenviada via ${channel === "email" ? "E-mail" : "WhatsApp"}`);
@@ -235,8 +236,6 @@ export function BillingErrorsPanel() {
 
   const isE0014 = (msg: string | null) => msg?.includes("E0014") || msg?.includes("duplicada");
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   return (
     <div className="space-y-6">

@@ -29,6 +29,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { formatCurrency } from "@/lib/currency";
 import { logger, retryWithBackoff } from "@/lib/logger";
 import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
@@ -163,8 +164,6 @@ export function BillingInvoicesTab() {
     enabled: invoiceIds.length > 0,
   });
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const totalPending = invoices.filter((i) => i.status === "pending").reduce((acc, i) => acc + i.amount, 0);
   const totalOverdue = invoices.filter((i) => i.status === "overdue").reduce((acc, i) => acc + i.amount, 0);
@@ -590,9 +589,25 @@ export function BillingInvoicesTab() {
                             onRenegotiate={() => setRenegotiateInvoice(invoice)}
                             onResendNotification={handleResendNotification}
                             onEmitNfse={() => setNfseInvoice(invoice)}
-                            onCancelBoleto={() => {
+                            onCancelBoleto={async () => {
+                              if (!invoice.boleto_barcode && !invoice.boleto_url) {
+                                toast.error("Nenhum boleto gerado para cancelar");
+                                return;
+                              }
                               setIsCancellingBoleto(true);
-                              toast.info("Cancelando boleto...");
+                              try {
+                                const { data, error } = await supabase.functions.invoke("banco-inter", {
+                                  body: { action: "cancel", invoice_id: invoice.id, motivo_cancelamento: "ACERTOS" },
+                                });
+                                if (error || data?.error) throw new Error(data?.error || "Erro ao cancelar");
+                                toast.success(`Boleto #${invoice.invoice_number} cancelado`);
+                                queryClient.invalidateQueries({ queryKey: ["invoices"] });
+                                queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+                              } catch (e: unknown) {
+                                toast.error("Erro ao cancelar boleto", { description: getErrorMessage(e) });
+                              } finally {
+                                setIsCancellingBoleto(false);
+                              }
                             }}
                             onCancelNfse={() => setCancelNfseInvoice(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
