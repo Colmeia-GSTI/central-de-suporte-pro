@@ -155,23 +155,71 @@ serve(async (req) => {
           if (!statusResponse.ok) return null;
 
           const boletoData = await statusResponse.json();
-          const cobranca = boletoData.cobranca || boletoData;
+          // CORREÇÃO: API v3 retorna dados aninhados em boleto.* (conforme docs developers.inter.co)
           const boleto = boletoData.boleto || {};
-          const codigoBarras = cobranca.linhaDigitavel || cobranca.codigoBarras || boleto.linhaDigitavel || boleto.codigoBarras;
+          const cobranca = boletoData.cobranca || boletoData;
+          // Priorizar boleto.* conforme documentação oficial
+          const codigoBarras = boleto.linhaDigitavel || boleto.codigoBarras || cobranca.linhaDigitavel || cobranca.codigoBarras;
           const situacao = cobranca.situacao || boletoData.situacao;
 
-          return { invoice, codigoBarras, situacao, pdfUrl: boleto.urlPdf || boleto.pdfUrl };
+          return { invoice, codigoBarras, situacao, codigoSolicitacao };
         })
       );
 
       for (const result of results) {
         if (result.status === "fulfilled" && result.value) {
           processedCount++;
-          const { invoice, codigoBarras, situacao, pdfUrl } = result.value;
+          const { invoice, codigoBarras, situacao, codigoSolicitacao } = result.value;
 
           if (codigoBarras) {
-            const updateData: Record<string, unknown> = { boleto_barcode: codigoBarras };
-            if (pdfUrl) updateData.boleto_url = pdfUrl;
+            const updateData: Record<string, unknown> = { 
+              boleto_barcode: codigoBarras,
+              boleto_status: "enviado",
+              boleto_sent_at: new Date().toISOString(),
+            };
+            
+            // CORREÇÃO: Obter PDF via endpoint dedicado /pdf (retorna base64 conforme docs Inter)
+            try {
+              const pdfResponse = await mtlsFetch(
+                `${baseUrl}/cobranca/v3/cobrancas/${codigoSolicitacao}/pdf`,
+                {
+                  method: "GET",
+                  headers: {
+                    Authorization: `Bearer ${access_token}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+              if (pdfResponse.ok) {
+                const pdfData = await pdfResponse.json();
+                if (pdfData.pdf) {
+                  const pdfBytes = Uint8Array.from(atob(pdfData.pdf), c => c.charCodeAt(0));
+                  const boletoPath = `boletos/${invoice.id}/boleto.pdf`;
+                  await supabase.storage.from("invoice-documents").upload(boletoPath, pdfBytes, {
+                    contentType: "application/pdf",
+                    upsert: true,
+                  });
+                  updateData.boleto_url = `invoice-documents/${boletoPath}`;
+                  console.log("[POLL-BOLETO-FALLBACK] PDF salvo no Storage:", boletoPath);
+                  
+                  await supabase.from("invoice_documents").insert({
+                    invoice_id: invoice.id,
+                    document_type: "boleto_pdf",
+                    file_path: boletoPath,
+                    file_name: `boleto_${invoice.invoice_number}.pdf`,
+                    mime_type: "application/pdf",
+                    bucket_name: "invoice-documents",
+                    storage_provider: "supabase",
+                    metadata: { source: "banco_inter_fallback", codigoSolicitacao },
+                  });
+                }
+              } else {
+                console.warn("[POLL-BOLETO-FALLBACK] Erro ao obter PDF:", await pdfResponse.text());
+              }
+            } catch (pdfError) {
+              console.warn("[POLL-BOLETO-FALLBACK] Erro ao baixar/salvar PDF:", pdfError);
+            }
+            
             if (invoice.notes) {
               updateData.notes = invoice.notes.replace(/\s*codigoSolicitacao:[a-f0-9-]+/gi, "").trim() || null;
             }
@@ -219,11 +267,12 @@ serve(async (req) => {
             // Send email/whatsapp
             if (clientEmail) {
               try {
+                const storedUrl = updateData.boleto_url as string | undefined;
                 await supabase.functions.invoke("send-email-smtp", {
                   body: {
                     to: clientEmail,
                     subject: `Boleto Fatura #${invoice.invoice_number} Disponível`,
-                    html: `<h2>Boleto Disponível</h2><p>Fatura #${invoice.invoice_number} - ${formatCurrency(invoice.amount)}</p>${pdfUrl ? `<a href="${pdfUrl}">Ver Boleto</a>` : ""}`,
+                    html: `<h2>Boleto Disponível</h2><p>Fatura #${invoice.invoice_number} - ${formatCurrency(invoice.amount)}</p>${storedUrl ? `<p>Boleto disponível no portal do cliente.</p>` : ""}`,
                   },
                 });
               } catch (e) {
