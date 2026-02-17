@@ -65,7 +65,9 @@ const ERROR_CODES = {
 
 // ============ NORMALIZE SERVICE CODE ============
 function normalizeServiceCode(code: string): string {
-  return code.replace(/[.\s\-]/g, "").replace(/^0+/, "");
+  // CORREÇÃO DEFINITIVA: NÃO remover zeros à esquerda
+  // O código "010701" deve ser mantido como "010701" para match correto com a municipalidade
+  return code.replace(/[.\s\-]/g, "");
 }
 
 // ============ KNOWN PREFEITURA ERRORS ============
@@ -725,22 +727,55 @@ Deno.serve(async (req) => {
         let resolvedMunicipalServiceId = municipal_service_id;
         if (!resolvedMunicipalServiceId && effectiveServiceCode) {
           log(correlationId, "info", `Buscando municipalServiceId para código ${effectiveServiceCode}`);
+          
+          // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
+          let emitenteCidade: string | null = null;
           try {
-            const servicesResponse = await asaasRequest(settings, "/invoices/municipalServices", "GET", undefined, correlationId);
+            const { data: companyData } = await supabase
+              .from("company_settings")
+              .select("endereco_cidade")
+              .limit(1)
+              .maybeSingle();
+            emitenteCidade = companyData?.endereco_cidade || null;
+            log(correlationId, "info", `Cidade do emitente: ${emitenteCidade || "não encontrada"}`);
+          } catch (e) {
+            log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
+          }
+          
+          const normalizedTarget = normalizeServiceCode(effectiveServiceCode);
+          
+          // Tentar com filtro de cidade primeiro
+          const tryResolve = async (city?: string): Promise<string | null> => {
+            const endpoint = city
+              ? `/invoices/municipalServices?description=&city=${encodeURIComponent(city)}`
+              : "/invoices/municipalServices";
+            const servicesResponse = await asaasRequest(settings, endpoint, "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
-            const normalizedTarget = normalizeServiceCode(effectiveServiceCode);
             const matchedService = services.find(
               (s: { code: string; id: string }) => normalizeServiceCode(s.code) === normalizedTarget
             );
             if (matchedService) {
-              resolvedMunicipalServiceId = matchedService.id;
-              log(correlationId, "info", `MunicipalServiceId encontrado: ${resolvedMunicipalServiceId}`, { matched_code: matchedService.code });
-            } else {
-              log(correlationId, "warn", "Nenhum match encontrado para código de serviço", {
-                codigo_enviado: effectiveServiceCode,
-                codigo_normalizado: normalizedTarget,
-                codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+              log(correlationId, "info", `MunicipalServiceId encontrado${city ? ` (cidade: ${city})` : ""}: ${matchedService.id}`, {
+                matched_code: matchedService.code,
               });
+              return matchedService.id;
+            }
+            log(correlationId, "warn", `Nenhum match${city ? ` para cidade ${city}` : ""}`, {
+              codigo_enviado: effectiveServiceCode,
+              codigo_normalizado: normalizedTarget,
+              codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+            });
+            return null;
+          };
+          
+          try {
+            // 1. Tentar com filtro de cidade
+            if (emitenteCidade) {
+              resolvedMunicipalServiceId = await tryResolve(emitenteCidade);
+            }
+            // 2. Fallback sem filtro de cidade
+            if (!resolvedMunicipalServiceId) {
+              resolvedMunicipalServiceId = await tryResolve();
             }
           } catch (e) {
             log(correlationId, "warn", "Não foi possível buscar serviços municipais", { error: String(e) });
@@ -951,22 +986,50 @@ Deno.serve(async (req) => {
         // 2. Try to resolve municipal service ID
         let municipalServiceId: string | null = null;
         if (service_code) {
+          // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
+          let emitenteCidade: string | null = null;
           try {
-            const servicesResponse = await asaasRequest(settings, "/invoices/municipalServices", "GET", undefined, correlationId);
+            const { data: companyData } = await supabase
+              .from("company_settings")
+              .select("endereco_cidade")
+              .limit(1)
+              .maybeSingle();
+            emitenteCidade = companyData?.endereco_cidade || null;
+          } catch (e) {
+            log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
+          }
+          
+          const normalizedTarget = normalizeServiceCode(service_code);
+          
+          const tryResolveStandalone = async (city?: string): Promise<string | null> => {
+            const endpoint = city
+              ? `/invoices/municipalServices?description=&city=${encodeURIComponent(city)}`
+              : "/invoices/municipalServices";
+            const servicesResponse = await asaasRequest(settings, endpoint, "GET", undefined, correlationId);
             const services = servicesResponse.data || [];
-            const normalizedTarget = normalizeServiceCode(service_code);
             const matchedService = services.find(
               (s: { code: string; id: string }) => normalizeServiceCode(s.code) === normalizedTarget
             );
             if (matchedService) {
-              municipalServiceId = matchedService.id;
-              log(correlationId, "info", `MunicipalServiceId encontrado (avulsa): ${municipalServiceId}`, { matched_code: matchedService.code });
-            } else {
-              log(correlationId, "warn", "Nenhum match encontrado para código de serviço (avulsa)", {
-                codigo_enviado: service_code,
-                codigo_normalizado: normalizedTarget,
-                codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+              log(correlationId, "info", `MunicipalServiceId encontrado (avulsa)${city ? ` (cidade: ${city})` : ""}: ${matchedService.id}`, {
+                matched_code: matchedService.code,
               });
+              return matchedService.id;
+            }
+            log(correlationId, "warn", `Nenhum match (avulsa)${city ? ` para cidade ${city}` : ""}`, {
+              codigo_enviado: service_code,
+              codigo_normalizado: normalizedTarget,
+              codigos_disponiveis: services.map((s: { code: string }) => s.code).slice(0, 20),
+            });
+            return null;
+          };
+          
+          try {
+            if (emitenteCidade) {
+              municipalServiceId = await tryResolveStandalone(emitenteCidade);
+            }
+            if (!municipalServiceId) {
+              municipalServiceId = await tryResolveStandalone();
             }
           } catch (e) {
             log(correlationId, "warn", "Erro ao buscar serviços municipais", { error: String(e) });
@@ -1775,7 +1838,38 @@ Deno.serve(async (req) => {
         };
 
         if (paymentType === "BOLETO" || paymentType === "UNDEFINED") {
-          updateData.boleto_url = payment.bankSlipUrl;
+          // CORREÇÃO DEFINITIVA: Baixar PDF do boleto e salvar no Storage S3
+          let storageBoletoUrl = payment.bankSlipUrl;
+          if (payment.bankSlipUrl) {
+            try {
+              const pdfResponse = await fetch(payment.bankSlipUrl);
+              if (pdfResponse.ok) {
+                const pdfBlob = await pdfResponse.arrayBuffer();
+                const boletoPath = `boletos/${invoice_id}/boleto.pdf`;
+                await supabase.storage.from("invoice-documents").upload(boletoPath, pdfBlob, {
+                  contentType: "application/pdf",
+                  upsert: true,
+                });
+                storageBoletoUrl = `invoice-documents/${boletoPath}`;
+                log(correlationId, "info", "PDF do boleto salvo no Storage", { path: boletoPath });
+                
+                // Registrar na tabela invoice_documents
+                await supabase.from("invoice_documents").insert({
+                  invoice_id: invoice_id,
+                  document_type: "boleto_pdf",
+                  file_path: boletoPath,
+                  file_name: `boleto_${invoice.invoice_number}.pdf`,
+                  mime_type: "application/pdf",
+                  bucket_name: "invoice-documents",
+                  storage_provider: "supabase",
+                  metadata: { source: "asaas", asaas_payment_id: payment.id },
+                });
+              }
+            } catch (storageError) {
+              log(correlationId, "warn", "Erro ao salvar PDF do boleto no Storage, usando URL externa", { error: String(storageError) });
+            }
+          }
+          updateData.boleto_url = storageBoletoUrl;
           updateData.boleto_barcode = payment.identificationField;
         }
         if (paymentType === "PIX") {

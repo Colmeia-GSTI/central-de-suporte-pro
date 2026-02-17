@@ -38,7 +38,8 @@ export function isBoletoReady(input: Pick<BoletoIndicatorInput, "boleto_url" | "
 }
 
 export function getBoletoIndicator(input: BoletoIndicatorInput): IndicatorResult {
-  if (input.boleto_error_msg) {
+  // CORREÇÃO DEFINITIVA: Mensagens informativas (Resetado) não são erros reais
+  if (input.boleto_error_msg && !input.boleto_error_msg.includes("Resetado")) {
     return { color: "text-destructive", tooltip: "Erro no boleto", level: "error" };
   }
 
@@ -47,6 +48,11 @@ export function getBoletoIndicator(input: BoletoIndicatorInput): IndicatorResult
       ? "Abrir PDF do boleto"
       : "Copiar código de barras";
     return { color: "text-emerald-500", tooltip, level: "success" };
+  }
+
+  // Mensagem de reset = aguardando nova geração
+  if (input.boleto_error_msg?.includes("Resetado")) {
+    return { color: "text-muted-foreground", tooltip: "Boleto resetado - aguardando nova geração", level: "pending" };
   }
 
   return { color: "text-muted-foreground", tooltip: "Boleto pendente", level: "pending" };
