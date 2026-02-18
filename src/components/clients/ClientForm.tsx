@@ -396,8 +396,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       )}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          {/* CNPJ field - hidden for technicians */}
-          {!isTechnicianOnly && (
+          {/* CNPJ field - hidden for technicians on edit, visible on create */}
+          {(!isTechnicianOnly || !client) && (
             <FormField
               control={form.control}
               name="document"
@@ -435,8 +435,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
             />
           )}
 
-          {/* Inscrição Estadual - hidden for technicians */}
-          {!isTechnicianOnly && (
+          {/* Inscrição Estadual - hidden for technicians on edit, visible on create */}
+          {(!isTechnicianOnly || !client) && (
             <FormField
               control={form.control}
               name="state_registration"
