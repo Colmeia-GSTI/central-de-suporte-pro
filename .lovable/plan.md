@@ -1,166 +1,71 @@
 
 
-# Fix: Baixa Automatica Completa + Icone de Pagamento Visivel
+# Adicionar Campo "Apelido" nos Clientes
 
-## Problemas Identificados
+## Objetivo
+Permitir cadastrar um apelido/tag em cada cliente para facilitar a identificacao rapida pelos tecnicos, especialmente ao vincular usuarios. O apelido aparecera na listagem de clientes e no detalhe.
 
-### 1. Webhook nao cria registro financeiro
+## Alteracoes
 
-Quando o Banco Inter envia o webhook de pagamento (PAGO/RECEBIDO/LIQUIDADO), o `webhook-banco-inter` atualiza:
-- `status` -> "paid"
-- `paid_date` -> data do pagamento
-- `payment_method` -> "boleto"
+### 1. Banco de Dados
+- Adicionar coluna `nickname` (text, nullable) na tabela `clients`
+- Tambem adicionar na VIEW `clients_contact_only` para que tecnicos vejam o apelido
 
-Mas NAO faz:
-- Preencher `paid_amount` (fica null)
-- Criar registro em `financial_entries` (como a baixa manual faz)
-- Criar `audit_log` de pagamento
+### 2. Formulario do Cliente (`ClientForm.tsx`)
+- Adicionar campo "Apelido" no schema Zod e no formulario, logo apos "Nome Fantasia"
+- Campo opcional, placeholder "Ex: Padaria do Ze, Escritorio Centro"
 
-Isso significa que a reconciliacao bancaria e os relatorios financeiros ficam incompletos quando o pagamento e automatico.
+### 3. Listagem de Clientes (`ClientsPage.tsx`)
+- Exibir o apelido como uma Badge colorida (estilo tag) ao lado do nome do cliente na tabela
+- Incluir o campo `nickname` na query de busca (search tambem filtra por apelido)
 
-### 2. Icone $ some quando fatura e paga
+### 4. Detalhe do Cliente (`ClientDetailPage.tsx`)
+- Exibir o apelido no cabecalho, abaixo do nome fantasia, como uma Badge destacada
+- Incluir `nickname` no select da query
 
-O icone `DollarSign` no `InvoiceInlineActions.tsx` (linha 165) so renderiza quando `isPendingOrOverdue`. Quando a fatura e paga (manual ou automaticamente), o icone desaparece. O usuario espera ver um indicador visual de que o pagamento foi confirmado.
-
----
-
-## Correcoes
-
-### Arquivo 1: `supabase/functions/webhook-banco-inter/index.ts`
-
-No bloco de boleto pago (linhas 127-135), apos marcar como "paid", adicionar:
-
-```typescript
-if (payload.situacao === "PAGO" || payload.situacao === "RECEBIDO" || payload.situacao === "LIQUIDADO") {
-  updateData.status = "paid";
-  updateData.paid_date = payload.dataHoraSituacao || payload.dataSituacao || new Date().toISOString();
-  updateData.payment_method = "boleto";
-  updateData.paid_amount = payload.valorTotalRecebimento || payload.valorNominal || null;
-}
-```
-
-E apos o update da fatura (apos linha 147), buscar a fatura atualizada e criar o registro financeiro:
-
-```typescript
-// Criar entrada financeira automatica
-if (updateData.status === "paid") {
-  const { data: updatedInvoice } = await supabase
-    .from("invoices")
-    .select("id, invoice_number, client_id, amount")
-    .eq("invoice_number", invoiceNumber)
-    .single();
-
-  if (updatedInvoice) {
-    const paidAmount = updateData.paid_amount || updatedInvoice.amount;
-
-    await supabase.from("financial_entries").insert({
-      client_id: updatedInvoice.client_id,
-      invoice_id: updatedInvoice.id,
-      type: "receita",
-      amount: paidAmount,
-      description: `Pagamento automático (boleto) - Fatura #${invoiceNumber}`,
-      entry_date: updateData.paid_date,
-      is_paid: true,
-      paid_date: updateData.paid_date,
-      payment_method: "boleto",
-      notes: `Confirmado via webhook Banco Inter. Origem: ${payload.origemRecebimento || "N/A"}`,
-    });
-
-    await supabase.from("audit_logs").insert({
-      table_name: "invoices",
-      record_id: updatedInvoice.id,
-      action: "WEBHOOK_PAYMENT_CONFIRMED",
-      new_data: {
-        paid_amount: paidAmount,
-        paid_date: updateData.paid_date,
-        payment_method: "boleto",
-        source: "webhook_banco_inter",
-        origem_recebimento: payload.origemRecebimento,
-      },
-    });
-  }
-}
-```
-
-Mesmo tratamento para o bloco PIX (apos linha 168).
-
-### Arquivo 2: `src/components/billing/InvoiceInlineActions.tsx`
-
-Alterar o icone `$` para ser visivel em todos os estados, mudando cor conforme o status:
-
-**Antes (linha 164-179):**
-```tsx
-{isPendingOrOverdue && (
-  <Tooltip>
-    ...
-    <DollarSign className={`${iconClass} text-muted-foreground`} />
-    ...
-    <TooltipContent>Baixa Manual</TooltipContent>
-  </Tooltip>
-)}
-```
-
-**Depois:**
-```tsx
-<Tooltip>
-  <TooltipTrigger asChild>
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={isPendingOrOverdue ? onManualPayment : undefined}
-      disabled={!isPendingOrOverdue}
-      className="h-7 w-7 p-0 hover:bg-muted"
-    >
-      <DollarSign className={`${iconClass} ${
-        invoice.status === "paid"
-          ? "text-emerald-500"
-          : "text-muted-foreground"
-      }`} />
-    </Button>
-  </TooltipTrigger>
-  <TooltipContent side="top">
-    {invoice.status === "paid"
-      ? `Pago${invoice.status === "paid" && invoice.boleto_url ? " (automático)" : ""}`
-      : "Baixa Manual"}
-  </TooltipContent>
-</Tooltip>
-```
-
-Isso faz:
-- Fatura pendente/vencida: icone cinza, clicavel para baixa manual
-- Fatura paga: icone verde, nao clicavel, tooltip "Pago"
-
-### Arquivo 3: `src/utils/invoiceIndicators.ts`
-
-Adicionar uma funcao `getPaymentIndicator` para centralizar a logica (opcional, para manter o padrao dos demais indicadores):
-
-```typescript
-export function getPaymentIndicator(invoice: { status: string; manual_payment?: boolean }): IndicatorResult {
-  if (invoice.status === "paid") {
-    return {
-      color: "text-emerald-500",
-      tooltip: invoice.manual_payment ? "Pago (baixa manual)" : "Pago (automático)",
-      level: "success",
-    };
-  }
-  return { color: "text-muted-foreground", tooltip: "Baixa Manual", level: "pending" };
-}
-```
+### 5. Mutation do ClientForm
+- Incluir `nickname` no payload de insert/update
+- Incluir no defaultValues e no rastreamento de mudancas (historico)
 
 ---
 
-## Resumo do Impacto
+## Detalhes Tecnicos
 
-| Aspecto | Antes | Depois |
-|---------|-------|--------|
-| Webhook paga fatura | Atualiza status apenas | Atualiza status + cria financial_entry + audit_log |
-| `paid_amount` no webhook | null | Preenchido com valor recebido |
-| Icone $ com fatura paga | Desaparece | Fica verde com tooltip "Pago" |
-| Icone $ com fatura pendente | Cinza, clicavel | Sem alteracao |
-| Relatorios financeiros | Incompletos para pagamentos automaticos | Completos |
+**Migracao SQL:**
+```sql
+ALTER TABLE clients ADD COLUMN nickname text;
 
-## Arquivos afetados
+CREATE OR REPLACE VIEW clients_contact_only AS
+SELECT id, name, trade_name, nickname, email, phone, whatsapp,
+       whatsapp_validated, is_active, created_at, updated_at,
+       address, city, state, zip_code, notes
+FROM clients;
+```
 
-1. `supabase/functions/webhook-banco-inter/index.ts` -- registrar financial_entry e paid_amount
-2. `src/components/billing/InvoiceInlineActions.tsx` -- icone $ sempre visivel
-3. `src/utils/invoiceIndicators.ts` -- funcao getPaymentIndicator (opcional)
+**Formulario -- novo campo apos trade_name:**
+```tsx
+<FormField name="nickname" ...>
+  <FormLabel>Apelido</FormLabel>
+  <Input placeholder="Ex: Padaria do Ze" />
+  <FormDescription>Identificacao rapida para os tecnicos</FormDescription>
+</FormField>
+```
+
+**Listagem -- badge ao lado do nome:**
+```tsx
+<p className="font-medium">
+  {client.name}
+  {client.nickname && (
+    <Badge variant="outline" className="ml-2 text-xs">
+      {client.nickname}
+    </Badge>
+  )}
+</p>
+```
+
+**Arquivos afetados:**
+1. Migracao SQL (nova coluna + view)
+2. `src/components/clients/ClientForm.tsx` -- campo no formulario + schema + payload
+3. `src/pages/clients/ClientsPage.tsx` -- exibir badge + incluir na busca
+4. `src/pages/clients/ClientDetailPage.tsx` -- exibir no cabecalho
+
