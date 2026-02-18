@@ -33,6 +33,7 @@ const clientSchema = z.object({
   document: z.string().optional(),
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   trade_name: z.string().optional(),
+  nickname: z.string().optional(),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   financial_email: z.string().email("Email inválido").optional().or(z.literal("")),
   phone: z.string().optional(),
@@ -86,6 +87,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       document: client?.document || "",
       name: client?.name || "",
       trade_name: (client as any)?.trade_name || "",
+      nickname: (client as any)?.nickname || "",
       email: client?.email || "",
       financial_email: (client as any)?.financial_email || "",
       phone: formatPhone(client?.phone),
@@ -283,6 +285,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       const payload = {
         name: data.name,
         trade_name: data.trade_name || null,
+        nickname: data.nickname || null,
         document: data.document || null,
         state_registration: data.state_registration || null,
         email: data.email || null,
@@ -309,6 +312,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         if (data.email !== (client.email || "")) changes.email = { old: client.email, new: data.email };
         if (data.phone !== (client.phone || "")) changes.phone = { old: client.phone, new: data.phone };
         if (data.is_active !== client.is_active) changes.is_active = { old: client.is_active, new: data.is_active };
+        if (data.nickname !== ((client as any)?.nickname || "")) changes.nickname = { old: (client as any)?.nickname, new: data.nickname };
       }
 
       if (isUpdate) {
@@ -471,6 +475,21 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                 <FormControl>
                   <Input placeholder="Nome fantasia da empresa" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="nickname"
+            render={({ field }) => (
+              <FormItem className="col-span-2 sm:col-span-1">
+                <FormLabel>Apelido</FormLabel>
+                <FormControl>
+                  <Input placeholder="Ex: Padaria do Zé, Escritório Centro" {...field} />
+                </FormControl>
+                <FormDescription>Identificação rápida para os técnicos</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

@@ -791,6 +791,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          nickname: string | null
           notes: string | null
           phone: string | null
           state: string | null
@@ -814,6 +815,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          nickname?: string | null
           notes?: string | null
           phone?: string | null
           state?: string | null
@@ -837,6 +839,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          nickname?: string | null
           notes?: string | null
           phone?: string | null
           state?: string | null
@@ -4044,6 +4047,7 @@ export type Database = {
           id: string | null
           is_active: boolean | null
           name: string | null
+          nickname: string | null
           notes: string | null
           phone: string | null
           state: string | null
@@ -4061,6 +4065,7 @@ export type Database = {
           id?: string | null
           is_active?: boolean | null
           name?: string | null
+          nickname?: string | null
           notes?: string | null
           phone?: string | null
           state?: string | null
@@ -4078,6 +4083,7 @@ export type Database = {
           id?: string | null
           is_active?: boolean | null
           name?: string | null
+          nickname?: string | null
           notes?: string | null
           phone?: string | null
           state?: string | null

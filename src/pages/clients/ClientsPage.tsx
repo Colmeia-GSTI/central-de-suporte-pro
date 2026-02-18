@@ -80,7 +80,7 @@ export default function ClientsPage() {
       }
 
       if (debouncedSearch) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%,document.ilike.%${debouncedSearch}%`);
+        query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%,document.ilike.%${debouncedSearch}%,nickname.ilike.%${debouncedSearch}%`);
       }
 
       const { data, error, count } = await query;
@@ -249,7 +249,14 @@ export default function ClientsPage() {
                   >
                     <TableCell>
                       <div>
-                        <p className="font-medium">{client.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{client.name}</p>
+                          {(client as any).nickname && (
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {(client as any).nickname}
+                            </Badge>
+                          )}
+                        </div>
                         {client.trade_name && (
                           <p className="text-sm text-muted-foreground">
                             {client.trade_name}
