@@ -612,7 +612,7 @@ export default function CompanyTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Configurações NFS-e Nacional
+              Configurações NFS-e
             </CardTitle>
             <CardDescription>
               Parâmetros padrão para emissão de Nota Fiscal de Serviço

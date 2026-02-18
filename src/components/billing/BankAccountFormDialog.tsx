@@ -19,20 +19,11 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface BankAccount {
-  id: string;
-  name: string;
-  bank_name: string | null;
-  agency: string | null;
-  account_number: string | null;
-  account_type: string | null;
-  initial_balance: number;
-  current_balance: number;
-  is_active: boolean;
-}
+type BankAccount = Tables<"bank_accounts">;
 
 interface BankAccountFormDialogProps {
   open: boolean;
@@ -46,7 +37,6 @@ export function BankAccountFormDialog({
   account,
 }: BankAccountFormDialogProps) {
   const queryClient = useQueryClient();
-  const [saving, setSaving] = useState(false);
 
   const [name, setName] = useState("");
   const [bankName, setBankName] = useState("");
@@ -75,20 +65,17 @@ export function BankAccountFormDialog({
     }
   }, [open, account]);
 
-  const handleSave = async () => {
-    if (!name.trim()) {
-      toast.error("Nome da conta é obrigatório");
-      return;
-    }
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!name.trim()) {
+        throw new Error("Nome da conta é obrigatório");
+      }
 
-    const balance = parseFloat(initialBalance.replace(",", "."));
-    if (isNaN(balance)) {
-      toast.error("Saldo inicial deve ser um número válido");
-      return;
-    }
+      const balance = parseFloat(initialBalance.replace(",", "."));
+      if (isNaN(balance)) {
+        throw new Error("Saldo inicial deve ser um número válido");
+      }
 
-    setSaving(true);
-    try {
       if (isEditing && account) {
         const { error } = await supabase
           .from("bank_accounts")
@@ -101,9 +88,7 @@ export function BankAccountFormDialog({
             initial_balance: balance,
           })
           .eq("id", account.id);
-
         if (error) throw error;
-        toast.success("Conta atualizada com sucesso");
       } else {
         const { error } = await supabase.from("bank_accounts").insert({
           name: name.trim(),
@@ -114,20 +99,19 @@ export function BankAccountFormDialog({
           initial_balance: balance,
           current_balance: balance,
         });
-
         if (error) throw error;
-        toast.success("Conta criada com sucesso");
       }
-
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["bank-accounts-active"] });
       onOpenChange(false);
-    } catch (err: any) {
+      toast.success(isEditing ? "Conta atualizada com sucesso" : "Conta criada com sucesso");
+    },
+    onError: (err: Error) => {
       toast.error(err.message || "Erro ao salvar conta");
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -217,11 +201,11 @@ export function BankAccountFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saveMutation.isPending}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+            {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isEditing ? "Salvar" : "Criar Conta"}
           </Button>
         </DialogFooter>

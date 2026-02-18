@@ -1,5 +1,5 @@
 /**
- * Cálculo de Retenções e Tributos para NFS-e via Asaas
+ * Cálculo de Retenções e Tributos para NFS-e emitida via Asaas
  */
 
 export interface RetencoesInput {
@@ -28,7 +28,7 @@ export interface RetencoesResult {
 }
 
 /**
- * Calcula todas as retenções e valor líquido conforme padrão NFS-e Nacional 2026
+ * Calcula todas as retenções e valor líquido para emissão via Asaas
  */
 export function calcularRetencoes(input: RetencoesInput): RetencoesResult {
   const {

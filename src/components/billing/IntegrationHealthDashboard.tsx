@@ -66,7 +66,7 @@ export function IntegrationHealthDashboard() {
         failures_by_hour: { hour: string; count: number }[];
       };
     },
-    refetchInterval: 60_000,
+    refetchInterval: 300_000,
   });
 
   // Fetch SLA definitions
@@ -160,7 +160,7 @@ export function IntegrationHealthDashboard() {
       return incidents.sort((a, b) => (a.slaBreached ? -1 : 1) - (b.slaBreached ? -1 : 1));
     },
     enabled: !!slaDefinitions,
-    refetchInterval: 60_000,
+    refetchInterval: 300_000,
   });
 
   // Retention compliance

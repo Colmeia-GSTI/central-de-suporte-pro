@@ -16,27 +16,10 @@ import { Plus, Pencil, ToggleLeft, ToggleRight, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import { BankAccountFormDialog } from "./BankAccountFormDialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatCurrency } from "@/lib/currency";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface BankAccount {
-  id: string;
-  name: string;
-  bank_name: string | null;
-  agency: string | null;
-  account_number: string | null;
-  account_type: string | null;
-  initial_balance: number;
-  current_balance: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
+type BankAccount = Tables<"bank_accounts">;
 
 export function BillingBankAccountsTab() {
   const queryClient = useQueryClient();

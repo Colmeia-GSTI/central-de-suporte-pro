@@ -31,6 +31,7 @@ import { ptBR } from "date-fns/locale";
 import { TimeReportTab } from "@/components/reports/TimeReportTab";
 import { AdditionalChargesReportTab } from "@/components/reports/AdditionalChargesReportTab";
 import { format } from "date-fns";
+import { formatCurrency } from "@/lib/currency";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
 
@@ -157,8 +158,7 @@ export default function ReportsPage() {
     { name: "Vencido", value: invoiceStats?.overdue_amount || 0 },
   ], [invoiceStats]);
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+  // formatCurrency imported from @/lib/currency
 
   return (
     <AppLayout>
