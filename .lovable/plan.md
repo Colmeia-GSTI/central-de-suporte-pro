@@ -1,55 +1,90 @@
 
-# Fix: PDF abre com dominio supabase em vez do dominio customizado
 
-## Problema
+# Plano: Download Direto de Boletos + Validacao de Envio por Email
 
-Quando o usuario clica para abrir o PDF da NFS-e ou boleto, o `createSignedUrl` gera uma URL apontando para `silefpsayliwqtoskkdz.supabase.co/storage/...`. O navegador bloqueia o `window.open()` para esse dominio externo (popup blocker), e mesmo quando nao bloqueia, o usuario ve a URL do backend em vez do dominio `suporte.colmeiagsti.com`.
+## Problemas Identificados
 
-## Causa Raiz
+### 1. Boletos #14 e #15 nao possuem dados
+Ambas as faturas tem `boleto_url: null`, `boleto_barcode: null`. Nao ha PDF para baixar. O `auto_payment_generated` ja foi resetado para `false`, permitindo nova geracao.
 
-O Supabase SDK gera signed URLs usando o dominio do projeto Supabase diretamente. Nao ha como forcar o SDK a usar outro dominio. Alem disso, `window.open()` dentro de callbacks async (apos `await`) e frequentemente bloqueado pelos navegadores como popup nao solicitado.
+**Acao**: Regenerar os boletos via interface (botao "Gerar Boleto") ou corrigir o fluxo de geracao automatica.
 
-## Solucao
+### 2. Download abre em nova aba em vez de baixar
+A funcao `openStorageFile` abre o PDF numa nova aba usando blob URL, mas o comportamento esperado e fazer download direto do arquivo.
 
-Substituir o padrao `createSignedUrl` + `window.open()` por download via blob. Isso:
-1. Baixa o arquivo em memoria usando `supabase.storage.from().download()`
-2. Cria um `URL.createObjectURL(blob)` local (dominio do proprio app)
-3. Abre o blob URL ou dispara download -- sem popup blocker, sem dominio externo
+**Acao**: Alterar `storage-utils.ts` para usar o atributo `download` no elemento `<a>`, forcando download em vez de navegacao.
 
-### Implementacao
+### 3. Email envia path do Storage como link (nao funciona)
+Na funcao `resend-payment-notification`, linha 246, o email inclui `invoice.boleto_url` como href de um link. Mas esse campo contem um caminho interno do Storage (ex: `invoice-documents/boletos/xxx/boleto.pdf`), nao uma URL publica acessivel pelo cliente.
 
-Criar uma funcao utilitaria `openStorageFile` centralizada em `src/lib/storage-utils.ts` que:
-- Recebe bucket e path
-- Faz download via SDK (`supabase.storage.from(bucket).download(path)`)
-- Cria blob URL e abre com `window.open()` ou fallback via `<a>` click
-- Trata erros com toast
+**Acao**: Gerar uma signed URL temporaria (valida por 7 dias) no momento do envio do email, usando o SDK do Supabase no backend, e usar essa URL no email.
 
-### Arquivos a alterar
+### 4. Boleto PDF deve ser anexado/linkado no email de conclusao do contrato
+O fluxo de criacao de contrato (`ContractForm.tsx` -> `generate-monthly-invoices`) envia email mas nao inclui link do boleto PDF.
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/lib/storage-utils.ts` | **NOVO** - funcao `openStorageFile(bucket, path)` |
-| `src/components/billing/BillingInvoicesTab.tsx` | Substituir `createSignedUrl` + `window.open` por `openStorageFile` (2 locais: linhas ~435 e ~580) |
-| `src/components/billing/BillingNfseTab.tsx` | Substituir `openUrlOrSigned` para usar `openStorageFile` (linha ~106) |
-| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Substituir `openUrlOrSigned` para usar `openStorageFile` (linha ~77) |
-| `src/components/billing/nfse/NfseShareMenu.tsx` | Manter `createSignedUrl` apenas para copiar link (clipboard) -- nao abre popup |
+**Acao**: No `generate-monthly-invoices`, apos gerar o boleto, incluir a signed URL do PDF no email enviado ao cliente.
 
-### Detalhes Tecnicos
+---
 
-**Nova funcao `openStorageFile`:**
+## Alteracoes
+
+### Arquivo 1: `src/lib/storage-utils.ts`
+- Adicionar funcao `downloadStorageFile` que forca download em vez de abrir em nova aba
+- Usar atributo `download` no elemento `<a>` com nome de arquivo amigavel
+- Manter `openStorageFile` para casos onde visualizacao e desejada
+
+### Arquivo 2: `src/components/billing/BillingInvoicesTab.tsx`
+- Trocar `openStorageFileSafe` por `downloadStorageFileSafe` nos handlers de boleto e NFS-e
+- Quando clicar no icone de boleto pronto: baixar o PDF
+- Quando clicar no icone de NFS-e autorizada: baixar o PDF
+
+### Arquivo 3: `supabase/functions/resend-payment-notification/index.ts`
+- Antes de montar o email, verificar se `boleto_url` e um path do Storage
+- Se for, gerar signed URL via `supabase.storage.from(bucket).createSignedUrl(path, 604800)` (7 dias)
+- Usar a signed URL no link do email em vez do path interno
+- Mesma logica para NFS-e PDF se houver
+
+### Arquivo 4: `supabase/functions/generate-monthly-invoices/index.ts`
+- No trecho que envia email apos gerar fatura, verificar se boleto foi gerado com sucesso
+- Se `boleto_url` existir, gerar signed URL e incluir no corpo do email
+- Incluir linha digitavel no email
+
+---
+
+## Detalhes Tecnicos
+
+### Download vs Visualizacao
 ```text
-1. Determina bucket e path a partir da URL armazenada
-2. Chama supabase.storage.from(bucket).download(path)
-3. Cria blob URL: URL.createObjectURL(blob)
-4. Cria elemento <a> invisivel com href=blobURL, target=_blank
-5. Dispara click programatico (nao e bloqueado como popup)
-6. Limpa blob URL apos timeout com URL.revokeObjectURL()
+// Download forcado (novo)
+anchor.download = "boleto_fatura_14.pdf"  // forca download
+anchor.href = blobUrl
+
+// Visualizacao (atual)  
+newTab.location.href = blobUrl  // abre no navegador
 ```
 
-**Logica de parsing do path:**
-- Se comeca com `nfse-files/` -> bucket `nfse-files`, path sem prefixo
-- Se comeca com `nfse/` -> bucket `nfse-files`, path como esta
-- Se comeca com `invoice-documents/` -> bucket `invoice-documents`, path sem prefixo
-- URLs externas (http/https) -> `window.open` direto (fallback)
+### Signed URL no Backend
+```text
+// No edge function, antes de enviar email:
+const { data: signedData } = await supabase.storage
+  .from("invoice-documents")
+  .createSignedUrl("boletos/invoice-id/boleto.pdf", 604800);  // 7 dias
 
-Essa abordagem resolve tanto o bloqueio de popup quanto a exposicao do dominio do backend.
+const boletoLink = signedData?.signedUrl || "";
+```
+
+### Resolucao do path no backend
+```text
+// "invoice-documents/boletos/xxx/boleto.pdf" -> bucket: "invoice-documents", path: "boletos/xxx/boleto.pdf"
+```
+
+---
+
+## Resultado Esperado
+
+1. Clicar no icone verde de boleto baixa o PDF diretamente (download, nao abre aba)
+2. Clicar no icone verde de NFS-e baixa o PDF diretamente
+3. Email de cobranca inclui link funcional para o PDF do boleto (signed URL valida por 7 dias)
+4. Email enviado na criacao de contrato inclui link do boleto quando disponivel
+5. URLs nos emails usam dominio do Supabase (signed URLs) que sao funcionais e temporarias
+
