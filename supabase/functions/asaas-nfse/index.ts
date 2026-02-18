@@ -957,6 +957,22 @@ Deno.serve(async (req) => {
           })
           .eq("id", historyId);
 
+        // ============ SYNC nfse_status TO invoices TABLE ============
+        const targetInvoiceId = invoice_id || null;
+        if (targetInvoiceId) {
+          const nfseStatus = invoice.status === "AUTHORIZED" ? "gerada" : "processando";
+          const invoiceUpdate: Record<string, unknown> = {
+            nfse_status: nfseStatus,
+            nfse_error_msg: null,
+            updated_at: new Date().toISOString(),
+          };
+          if (nfseStatus === "gerada") {
+            invoiceUpdate.nfse_generated_at = new Date().toISOString();
+          }
+          await supabase.from("invoices").update(invoiceUpdate).eq("id", targetInvoiceId);
+          log(correlationId, "info", "invoices.nfse_status sincronizado", { invoice_id: targetInvoiceId, nfse_status: nfseStatus });
+        }
+
         log(correlationId, "info", "NFS-e emitida com sucesso", { invoice_id: invoice.id, status: invoice.status });
         
         // Log event: api_response
@@ -1213,6 +1229,22 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", historyRecord.id);
+
+        // ============ SYNC nfse_status TO invoices TABLE (standalone) ============
+        const standaloneInvoiceId = invoice_id || null;
+        if (standaloneInvoiceId) {
+          const nfseStatus = invoice.status === "AUTHORIZED" ? "gerada" : "processando";
+          const invoiceUpdate: Record<string, unknown> = {
+            nfse_status: nfseStatus,
+            nfse_error_msg: null,
+            updated_at: new Date().toISOString(),
+          };
+          if (nfseStatus === "gerada") {
+            invoiceUpdate.nfse_generated_at = new Date().toISOString();
+          }
+          await supabase.from("invoices").update(invoiceUpdate).eq("id", standaloneInvoiceId);
+          log(correlationId, "info", "invoices.nfse_status sincronizado (avulsa)", { invoice_id: standaloneInvoiceId, nfse_status: nfseStatus });
+        }
 
         log(correlationId, "info", "NFS-e avulsa emitida com sucesso", { invoice_id: invoice.id });
         

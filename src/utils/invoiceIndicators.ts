@@ -16,6 +16,7 @@ export interface NfseIndicatorInput {
   xml_url?: string | null;
 }
 
+
 export interface EmailIndicatorInput {
   email_sent_at?: string | null;
   email_error_msg?: string | null;
@@ -64,7 +65,8 @@ export function getNfseIndicator(input?: NfseIndicatorInput): IndicatorResult {
   }
 
   if (input.status === "autorizada") {
-    return { color: "text-emerald-500", tooltip: "NFS-e autorizada", level: "success" };
+    const tooltip = input.pdf_url ? "Abrir PDF da NFS-e" : "NFS-e autorizada";
+    return { color: "text-emerald-500", tooltip, level: "success" };
   }
 
   if (input.status === "erro" || input.status === "rejeitada") {
