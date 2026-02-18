@@ -241,6 +241,7 @@ Deno.serve(async (req) => {
       boleto_url: boletoSignedUrl,
       boleto_barcode: invoice.boleto_barcode || "",
       pix_code: invoice.pix_code || "",
+      nfse_pdf_url: nfsePdfSignedUrl,
     };
 
     const results: { channel: string; success: boolean; error?: string; errorCode?: string }[] = [];
@@ -295,6 +296,12 @@ Deno.serve(async (req) => {
                 <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Copie o código acima e cole no app do seu banco na opção "PIX Copia e Cola".</p>
               </div>
             ` : ""}
+            ${nfsePdfSignedUrl ? `
+              <div style="margin: 20px 0;">
+                <h3>📄 Nota Fiscal de Serviço (NFS-e)</h3>
+                <p><a href="${nfsePdfSignedUrl}" style="display: inline-block; padding: 12px 24px; background: #059669; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Nota Fiscal</a></p>
+              </div>
+            ` : ""}
           `;
           emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
         }
@@ -324,6 +331,7 @@ Deno.serve(async (req) => {
           await supabase.from("invoices").update({
             email_status: "enviado",
             email_sent_at: new Date().toISOString(),
+            email_error_msg: null,
           }).eq("id", invoice_id);
         } catch (emailError: unknown) {
           console.error("[RESEND] Erro ao enviar email:", emailError);

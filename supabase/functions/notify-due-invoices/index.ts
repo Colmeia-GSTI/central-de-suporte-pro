@@ -240,6 +240,7 @@ serve(async (req) => {
             await supabase.from("invoices").update({
               email_status: "enviado",
               email_sent_at: new Date().toISOString(),
+              email_error_msg: null,
             }).eq("id", invoice.id);
           }
         } catch (error) {
