@@ -52,7 +52,7 @@ export default function ClientDetailPage() {
       // Technicians get limited fields via RLS, but we select all and let backend filter
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, trade_name, document, email, financial_email, phone, whatsapp, whatsapp_validated, address, city, state, zip_code, documentation, notes, is_active, created_at, updated_at")
+        .select("id, name, trade_name, nickname, document, email, financial_email, phone, whatsapp, whatsapp_validated, address, city, state, zip_code, documentation, notes, is_active, created_at, updated_at")
         .eq("id", id)
         .single();
 
@@ -115,6 +115,11 @@ export default function ClientDetailPage() {
             </div>
             {client.trade_name && (
               <p className="text-lg text-muted-foreground mt-0.5">{client.trade_name}</p>
+            )}
+            {(client as any).nickname && (
+              <Badge variant="outline" className="mt-1 text-sm font-normal">
+                {(client as any).nickname}
+              </Badge>
             )}
             {client.document && (
               <p className="text-muted-foreground text-sm mt-1">{client.document}</p>
