@@ -44,6 +44,7 @@ const statusLabels: Record<Enums<"contract_status">, string> = {
   expired: "Expirado",
   cancelled: "Cancelado",
   pending: "Pendente",
+  suspended: "Suspenso",
 };
 
 const statusColors: Record<Enums<"contract_status">, string> = {
@@ -51,6 +52,7 @@ const statusColors: Record<Enums<"contract_status">, string> = {
   expired: "bg-status-danger text-white",
   cancelled: "bg-muted text-muted-foreground",
   pending: "bg-status-warning text-white",
+  suspended: "bg-amber-500 text-white",
 };
 
 const supportModelLabels: Record<Enums<"support_model">, string> = {

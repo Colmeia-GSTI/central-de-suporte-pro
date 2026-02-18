@@ -4273,7 +4273,12 @@ export type Database = {
         | "license"
         | "other"
       boleto_processing_status: "pendente" | "gerado" | "enviado" | "erro"
-      contract_status: "active" | "expired" | "cancelled" | "pending"
+      contract_status:
+        | "active"
+        | "expired"
+        | "cancelled"
+        | "pending"
+        | "suspended"
       email_processing_status: "pendente" | "enviado" | "erro"
       event_type:
         | "visit"
@@ -4287,7 +4292,13 @@ export type Database = {
         | "boleto_failure"
         | "send_failure"
         | "e0014"
-      invoice_status: "pending" | "paid" | "overdue" | "cancelled"
+      invoice_status:
+        | "pending"
+        | "paid"
+        | "overdue"
+        | "cancelled"
+        | "lost"
+        | "renegotiated"
       nfse_processing_status: "pendente" | "gerada" | "erro"
       support_model: "ticket" | "hours_bank" | "unlimited"
       technician_level: "bronze" | "silver" | "gold" | "platinum" | "diamond"
@@ -4452,7 +4463,13 @@ export const Constants = {
         "other",
       ],
       boleto_processing_status: ["pendente", "gerado", "enviado", "erro"],
-      contract_status: ["active", "expired", "cancelled", "pending"],
+      contract_status: [
+        "active",
+        "expired",
+        "cancelled",
+        "pending",
+        "suspended",
+      ],
       email_processing_status: ["pendente", "enviado", "erro"],
       event_type: [
         "visit",
@@ -4468,7 +4485,14 @@ export const Constants = {
         "send_failure",
         "e0014",
       ],
-      invoice_status: ["pending", "paid", "overdue", "cancelled"],
+      invoice_status: [
+        "pending",
+        "paid",
+        "overdue",
+        "cancelled",
+        "lost",
+        "renegotiated",
+      ],
       nfse_processing_status: ["pendente", "gerada", "erro"],
       support_model: ["ticket", "hours_bank", "unlimited"],
       technician_level: ["bronze", "silver", "gold", "platinum", "diamond"],

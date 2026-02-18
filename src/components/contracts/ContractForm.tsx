@@ -512,6 +512,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                   <SelectContent>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="suspended">Suspenso</SelectItem>
                     <SelectItem value="expired">Expirado</SelectItem>
                     <SelectItem value="cancelled">Cancelado</SelectItem>
                   </SelectContent>

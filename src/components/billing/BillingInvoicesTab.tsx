@@ -62,6 +62,8 @@ const statusLabels: Record<Enums<"invoice_status">, string> = {
   paid: "PAGO",
   overdue: "VENCIDO",
   cancelled: "CANCELADO",
+  renegotiated: "RENEGOCIADO",
+  lost: "PERDIDO",
 };
 
 const statusColors: Record<Enums<"invoice_status">, string> = {
@@ -285,6 +287,8 @@ export function BillingInvoicesTab() {
             <SelectItem value="paid">Pago</SelectItem>
             <SelectItem value="overdue">Vencido</SelectItem>
             <SelectItem value="cancelled">Cancelado</SelectItem>
+            <SelectItem value="renegotiated">Renegociado</SelectItem>
+            <SelectItem value="lost">Perdido</SelectItem>
             <SelectItem value="with_errors">⚠ Com Erros</SelectItem>
           </SelectContent>
         </Select>
