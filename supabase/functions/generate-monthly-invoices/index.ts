@@ -537,6 +537,31 @@ Deno.serve(async (req) => {
               .single();
 
             if (smtpSettings?.is_active) {
+              // Re-fetch invoice to get boleto data (may have been set by banco-inter/asaas)
+              const { data: updatedInvoice } = await supabase
+                .from("invoices")
+                .select("boleto_url, boleto_barcode, pix_code")
+                .eq("id", newInvoice.id)
+                .single();
+
+              // Generate signed URL for boleto PDF if available
+              let boletoSignedUrl = "";
+              if (updatedInvoice?.boleto_url) {
+                const storedPath = updatedInvoice.boleto_url;
+                if (!storedPath.startsWith("http")) {
+                  const bucketName = storedPath.startsWith("invoice-documents/") ? "invoice-documents" : "nfse-files";
+                  const objectPath = storedPath.startsWith("invoice-documents/") 
+                    ? storedPath.replace("invoice-documents/", "") 
+                    : storedPath;
+                  const { data: signedData } = await supabase.storage
+                    .from(bucketName)
+                    .createSignedUrl(objectPath, 604800); // 7 dias
+                  boletoSignedUrl = signedData?.signedUrl || "";
+                } else {
+                  boletoSignedUrl = storedPath;
+                }
+              }
+
               // Build custom message if available
               let customSection = "";
               if (contract.notification_message) {
@@ -548,6 +573,28 @@ Deno.serve(async (req) => {
                   .replace(/{competencia}/g, referenceMonth);
 
                 customSection = `<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">${customSection}</div>`;
+              }
+
+              // Build payment section for email
+              let paymentSection = "";
+              if (boletoSignedUrl || updatedInvoice?.boleto_barcode) {
+                paymentSection += `
+                  <div style="margin: 20px 0;">
+                    <h3>📋 Boleto Bancário</h3>
+                    ${boletoSignedUrl ? `<p><a href="${boletoSignedUrl}" style="display: inline-block; padding: 12px 24px; background: #f59e0b; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Boleto PDF</a></p>` : ""}
+                    ${updatedInvoice?.boleto_barcode ? `
+                      <p style="margin-top: 15px;"><strong>Linha Digitável:</strong></p>
+                      <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; border-radius: 4px;">${updatedInvoice.boleto_barcode}</code>
+                    ` : ""}
+                  </div>`;
+              }
+              if (updatedInvoice?.pix_code) {
+                paymentSection += `
+                  <div style="margin: 20px 0;">
+                    <h3>📱 PIX Copia e Cola</h3>
+                    <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 11px; word-break: break-all; border-radius: 4px;">${updatedInvoice.pix_code}</code>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Copie o código acima e cole no app do seu banco na opção "PIX Copia e Cola".</p>
+                  </div>`;
               }
 
               await supabase.functions.invoke("send-email-smtp", {
@@ -577,7 +624,7 @@ Deno.serve(async (req) => {
                       </tr>
                     </table>
                     ${customSection}
-                    <p>Em breve você receberá os dados para pagamento.</p>
+                    ${paymentSection || "<p>Em breve você receberá os dados para pagamento.</p>"}
                     <hr>
                     <p style="color: #666; font-size: 12px;">
                       Este é um email automático. Em caso de dúvidas, entre em contato conosco.

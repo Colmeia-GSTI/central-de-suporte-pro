@@ -67,6 +67,37 @@ function wrapInEmailLayout(content: string, settings: EmailSettings): string {
 </html>`;
 }
 
+/**
+ * Resolve a stored file path into bucket + object path for signed URL generation.
+ */
+function resolveStoragePathBackend(storedPath: string): { bucket: string; path: string } | null {
+  if (!storedPath) return null;
+  if (storedPath.startsWith("http://") || storedPath.startsWith("https://")) return null;
+  if (storedPath.startsWith("invoice-documents/")) {
+    return { bucket: "invoice-documents", path: storedPath.replace("invoice-documents/", "") };
+  }
+  if (storedPath.startsWith("nfse-files/")) {
+    return { bucket: "nfse-files", path: storedPath.replace("nfse-files/", "") };
+  }
+  if (storedPath.startsWith("nfse/")) {
+    return { bucket: "nfse-files", path: storedPath };
+  }
+  return { bucket: "nfse-files", path: storedPath };
+}
+
+// deno-lint-ignore no-explicit-any
+async function resolveToSignedUrl(supabase: any, storedPath: string, expiresIn = 604800): Promise<string> {
+  if (!storedPath) return "";
+  const resolved = resolveStoragePathBackend(storedPath);
+  if (!resolved) return storedPath; // Already an external URL
+  const { data, error } = await supabase.storage.from(resolved.bucket).createSignedUrl(resolved.path, expiresIn);
+  if (error || !data?.signedUrl) {
+    console.error(`[RESEND] Erro ao gerar signed URL para ${storedPath}:`, error);
+    return "";
+  }
+  return data.signedUrl;
+}
+
 interface ResendRequest {
   invoice_id: string;
   channels: ("email" | "whatsapp")[];
@@ -192,13 +223,22 @@ Deno.serve(async (req) => {
     const formatCurrency = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
     const formatDate = (d: string) => new Date(d).toLocaleDateString("pt-BR");
 
+    // Generate signed URLs for storage paths
+    const boletoSignedUrl = invoice.boleto_url ? await resolveToSignedUrl(supabase, invoice.boleto_url) : "";
+    
+    // Also resolve NFS-e PDF if available
+    let nfsePdfSignedUrl = "";
+    if (linkedNfse?.pdf_url) {
+      nfsePdfSignedUrl = await resolveToSignedUrl(supabase, linkedNfse.pdf_url);
+    }
+
     // Template variables
     const templateVars: Record<string, string> = {
       client_name: client.name,
       invoice_number: String(invoice.invoice_number),
       amount: formatCurrency(invoice.amount),
       due_date: formatDate(invoice.due_date),
-      boleto_url: invoice.boleto_url || "",
+      boleto_url: boletoSignedUrl,
       boleto_barcode: invoice.boleto_barcode || "",
       pix_code: invoice.pix_code || "",
     };
@@ -243,7 +283,7 @@ Deno.serve(async (req) => {
             ${hasBoleto ? `
               <div style="margin: 20px 0;">
                 <h3>📋 Boleto Bancário</h3>
-                ${invoice.boleto_url ? `<p><a href="${invoice.boleto_url}" style="display: inline-block; padding: 12px 24px; background: ${emailSettings.primary_color}; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Boleto PDF</a></p>` : ""}
+                ${boletoSignedUrl ? `<p><a href="${boletoSignedUrl}" style="display: inline-block; padding: 12px 24px; background: ${emailSettings.primary_color}; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Boleto PDF</a></p>` : ""}
                 <p style="margin-top: 15px;"><strong>Linha Digitável:</strong></p>
                 <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; border-radius: 4px;">${invoice.boleto_barcode}</code>
               </div>
