@@ -71,6 +71,8 @@ const statusColors: Record<Enums<"invoice_status">, string> = {
   paid: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
   overdue: "bg-destructive/20 text-destructive border-destructive/40",
   cancelled: "bg-muted text-muted-foreground border-border",
+  renegotiated: "bg-blue-500/20 text-blue-400 border-blue-500/40",
+  lost: "bg-gray-500/20 text-gray-400 border-gray-500/40",
 };
 
 const ITEMS_PER_PAGE = 15;

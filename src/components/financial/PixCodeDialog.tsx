@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check, QrCode, ExternalLink } from "lucide-react";
+import { Copy, Check, QrCode } from "lucide-react";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/currency";
 
 interface PixCodeDialogProps {
   open: boolean;
@@ -31,9 +32,6 @@ export function PixCodeDialog({
   clientName,
 }: PixCodeDialogProps) {
   const [copied, setCopied] = useState(false);
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(pixCode);

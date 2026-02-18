@@ -25,23 +25,18 @@ export function EconomicIndicesWidget() {
   const { data: indices, isLoading } = useQuery({
     queryKey: ["economic-indices-latest"],
     queryFn: async () => {
-      // Get the latest entry for each index type
-      const types = ["IGPM", "IPCA", "INPC"];
-      const results: EconomicIndex[] = [];
+      const { data } = await supabase
+        .from("economic_indices")
+        .select("*")
+        .in("index_type", ["IGPM", "IPCA", "INPC"])
+        .order("reference_date", { ascending: false })
+        .limit(10);
 
-      for (const type of types) {
-        const { data } = await supabase
-          .from("economic_indices")
-          .select("*")
-          .eq("index_type", type)
-          .order("reference_date", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (data) results.push(data as EconomicIndex);
+      const latest = new Map<string, EconomicIndex>();
+      for (const row of data || []) {
+        if (!latest.has(row.index_type)) latest.set(row.index_type, row as EconomicIndex);
       }
-
-      return results;
+      return Array.from(latest.values());
     },
   });
 

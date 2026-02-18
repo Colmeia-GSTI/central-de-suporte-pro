@@ -32,7 +32,7 @@ const serviceSchema = z.object({
   description: z.string().optional(),
   base_value: z.coerce.number().min(0, "Valor deve ser positivo"),
   multiplier: z.coerce.number().min(0.1, "Multiplicador deve ser maior que 0.1").default(1),
-  // Campos NFS-e Nacional (essenciais para Simples Nacional)
+  // Campos NFS-e (essenciais para Simples Nacional)
   nfse_service_code: z.string().optional(),
   nfse_cnae: z.string().optional(),
   tax_iss: z.coerce.number().min(0).max(100).default(0), // Alíquota do Simples Nacional
@@ -185,7 +185,7 @@ export function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) 
     const hasAliquota = watchedIss !== undefined && watchedIss > 0;
 
     const messages: string[] = [];
-    if (!hasServiceCode) messages.push("Código de Tributação Nacional é obrigatório para NFS-e");
+    if (!hasServiceCode) messages.push("Código de Tributação é obrigatório para NFS-e");
     if (!hasCnae) messages.push("CNAE deve ter pelo menos 7 dígitos");
     if (!hasAliquota) messages.push("Alíquota do Simples Nacional deve ser maior que 0%");
 
@@ -363,7 +363,7 @@ export function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) 
               render={({ field }) => (
                 <FormItem className="col-span-2">
                   <FormLabel className="flex items-center gap-2">
-                    Código de Tributação Nacional *
+                    Código de Tributação *
                     {nfseValidation.hasServiceCode ? (
                       <CheckCircle className="h-3 w-3 text-green-600" />
                     ) : (

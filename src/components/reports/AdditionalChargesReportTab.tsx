@@ -10,21 +10,7 @@ import {
 import { TrendingUp, Receipt, FileText, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
-interface AdditionalChargesReportTabProps {
-  startDate: Date;
-}
-
-interface ReportData {
-  by_client: { client_name: string; client_id: string; charge_count: number; total_amount: number }[];
-  totals: { total_count: number; total_amount: number };
-  avulsas: { total_count: number; total_amount: number };
-  monthly: { month: string; additional_amount: number; recurring_amount: number }[];
-  upsell_candidates: { client_name: string; client_id: string; avulsa_count: number; avulsa_total: number }[];
-}
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+import { formatCurrency } from "@/lib/currency";
 
 export function AdditionalChargesReportTab({ startDate }: AdditionalChargesReportTabProps) {
   const endDate = useMemo(() => new Date(), []);
