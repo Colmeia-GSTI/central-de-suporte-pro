@@ -1,122 +1,204 @@
 
 
-# Remoção do NFS-e Nacional e Consolidação no Asaas
+# Revisao Completa E2E -- Otimizacao do Sistema (Fase 2)
 
-## Resumo
+## Problemas Identificados
 
-Remover todas as referências ao "Portal Nacional da NFS-e", "API Nacional", "DPS", "Ambiente de Dados Nacional" e integração direta por certificado A1 para NFS-e. O sistema passa a usar exclusivamente o Asaas como provedor de NFS-e. Simultaneamente, migrar chamadas de polling legadas para a edge function consolidada `poll-services` e corrigir textos de UI que mencionam o portal nacional.
+### 1. DUPLICACAO: `formatCurrency` local em 3 arquivos
+
+Existem 3 arquivos que definem `formatCurrency` localmente, identica a funcao centralizada em `@/lib/currency`:
+
+| Arquivo | Linha |
+|---|---|
+| `src/components/billing/BillingBankAccountsTab.tsx` | 34-39 |
+| `src/components/financial/PixCodeDialog.tsx` | 35-36 |
+| `src/pages/reports/ReportsPage.tsx` | 160-161 |
+| `src/components/reports/AdditionalChargesReportTab.tsx` | 26-27 |
+
+**Correcao:** Remover funcoes locais e importar `formatCurrency` de `@/lib/currency`.
 
 ---
 
-## Alterações Detalhadas
+### 2. DUPLICACAO: Interface `BankAccount` definida 2 vezes
 
-### 1. Edge Function `poll-services/index.ts`
+Ambos `BillingBankAccountsTab.tsx` (linhas 20-32) e `BankAccountFormDialog.tsx` (linhas 25-35) definem a mesma interface manualmente.
 
-- Remover o tipo `"nfse_nacional"` do union `PollRequest.services`
-- Remover a função `pollNfseNacional` inteira (~25 linhas)
-- Remover a chamada a `pollNfseNacional` do `Promise.all`
-- Remover a referência a `nfse_nacional` do array padrão de services
-- Resultado: o serviço fica apenas com `"boleto"` e `"asaas_nfse"`
+**Correcao:** Usar `Tables<"bank_accounts">` do types.ts gerado automaticamente em ambos os componentes, eliminando as interfaces manuais.
 
-### 2. Frontend -- Migrar polling legado para `poll-services`
+---
 
-5 componentes chamam edge functions legadas. Migrar todos para `poll-services`:
+### 3. `statusColors` incompleto em `BillingInvoicesTab`
 
-| Componente | De | Para |
+`BillingInvoicesTab.tsx` (linhas 69-74) define `statusColors` mas faltam os status `renegotiated` e `lost` que existem no enum `invoice_status`. Isso causa badges sem estilo para esses status.
+
+**Correcao:** Adicionar cores para `renegotiated` (azul) e `lost` (cinza).
+
+---
+
+### 4. POLLING EXCESSIVO: `IntegrationHealthDashboard` com 60s
+
+Duas queries no `IntegrationHealthDashboard.tsx` usam `refetchInterval: 60_000` (linhas 69 e 163). Para um dashboard de saude de integracao, dados mudam raramente.
+
+**Correcao:** Aumentar para `300_000` (5 min), alinhando com o padrao do sistema.
+
+---
+
+### 5. QUERIES N+1: `EconomicIndicesWidget`
+
+`EconomicIndicesWidget.tsx` (linhas 29-45) faz 3 queries sequenciais em loop (`for` para IGPM, IPCA, INPC) ao inves de uma unica query.
+
+**Correcao:** Substituir por uma unica query com `.in("index_type", ["IGPM", "IPCA", "INPC"])` e deduplicacao no frontend.
+
+---
+
+### 6. `BankAccountFormDialog` nao usa mutation pattern
+
+O dialog usa `useState(saving)` + try/catch manual ao inves do padrao `useMutation` do React Query usado em todo o resto do sistema.
+
+**Correcao:** Refatorar para usar `useMutation`.
+
+---
+
+### 7. Textos residuais "Nacional" nao corrigidos na fase anterior
+
+Ainda existem referencias a "Nacional" que deveriam ter sido atualizadas:
+
+| Arquivo | Linha | Texto |
 |---|---|---|
-| `BillingNfseTab.tsx` (linha 277) | `poll-asaas-nfse-status` | `poll-services` com `{ services: ["asaas_nfse"] }` |
-| `IntegrationHealthDashboard.tsx` (linha 25) | `poll-boleto-status` | `poll-services` com `{ services: ["boleto"] }` |
-| `IntegrationHealthDashboard.tsx` (linha 42) | `poll-asaas-nfse-status` | `poll-services` com `{ services: ["asaas_nfse"] }` |
-| `BillingBoletosTab.tsx` (linha 235) | `poll-boleto-status` | `poll-services` com `{ services: ["boleto"] }` |
-| `BillingErrorsPanel.tsx` (linha 165) | `poll-boleto-status` | `poll-services` com `{ services: ["boleto"] }` |
-| `InvoiceProcessingHistory.tsx` (linha 254) | `poll-boleto-status` | `poll-services` com `{ services: ["boleto"] }` |
+| `src/lib/nfse-retencoes.ts` | 31 | `"conforme padrao NFS-e Nacional 2026"` |
+| `src/components/billing/nfse/NfseTributacaoSection.tsx` | 65 | `"Tributacao (Padrao Nacional 2026)"` |
+| `src/components/settings/CompanyTab.tsx` | 615 | `"Configuracoes NFS-e Nacional"` |
+| `src/components/services/ServiceForm.tsx` | 35 | `"// Campos NFS-e Nacional"` |
+| `src/components/services/ServiceForm.tsx` | 188 | `"Codigo de Tributacao Nacional e obrigatorio"` |
 
-### 3. Remover Edge Functions legadas
+Nota: Referencias a "Simples Nacional" (regime tributario brasileiro) e "INPC (Indice Nacional...)" sao corretas e nao devem ser alteradas -- sao termos oficiais, nao referencias ao Portal Nacional de NFS-e.
 
-- Deletar `supabase/functions/poll-boleto-status/` (~321 linhas)
-- Deletar `supabase/functions/poll-asaas-nfse-status/` (~390 linhas)
-
-Impacto: ~710 linhas de código backend removidas.
-
-### 4. Atualizar textos de UI -- "Portal Nacional" para "Asaas"
-
-| Arquivo | Linha | Texto atual | Novo texto |
-|---|---|---|---|
-| `nfseFormat.ts` (linha 96) | `"API Nacional"` | Remover o case `"nacional"` |
-| `nfseFormat.ts` (linha 130) | `"A nota já existe no Portal Nacional..."` | `"A nota já existe no provedor Asaas. Use 'Vincular Nota Existente' para sincronizar."` |
-| `nfseFormat.ts` (linha 178) | `"Nota já existe no Portal Nacional"` | `"Nota já existe no provedor"` |
-| `nfseFormat.ts` (linha 179) | `"...série/número DPS já está registrada"` | `"Esta NFS-e já foi emitida anteriormente com os mesmos dados."` |
-| `NfseDetailsSheet.tsx` (linha 299) | `"Esta nota já existe no Portal Nacional"` | `"Esta nota já existe no provedor Asaas"` |
-| `NfseDetailsSheet.tsx` (linha 702) | `"Nota já existe no Portal Nacional"` | `"Nota já existe no provedor"` |
-| `NfseDetailsSheet.tsx` (linha 705) | `"...mesma Série/Número DPS"` | `"Esta NFS-e já foi emitida anteriormente com os mesmos dados."` |
-| `NfseLinkExternalDialog.tsx` (linha 91) | `"Vincule uma NFS-e já emitida no Portal Nacional..."` | `"Vincule uma NFS-e já emitida no Asaas ao registro local."` |
-| `NfseLinkExternalDialog.tsx` (linha 100) | `"...já existe no Portal Nacional"` | `"...já foi processada pelo Asaas"` |
-| `NfseLinkExternalDialog.tsx` (linha 109) | `"...verificou no Portal Nacional..."` | `"...verificou no Asaas que a nota existe..."` |
-| `webhook-asaas-nfse/index.ts` (linha 63) | `"DPS duplicada - NFS-e já existe no Portal Nacional"` | `"NFS-e duplicada - já emitida anteriormente no Asaas"` |
-| `webhook-asaas-nfse/index.ts` (linhas 284-288) | Referências a "Portal Nacional" | Trocar para "provedor Asaas" |
-| `asaas-nfse/index.ts` (linha 63) | `"DPS duplicada - NFS-e já existe no Portal Nacional"` | `"NFS-e duplicada - já emitida no Asaas"` |
-
-### 5. Atualizar `nfse-validation.ts` (cabeçalho)
-
-- Linha 1-4: Remover referência a "Portal Nacional da NFS-e" e "DPS"
-- Novo cabeçalho: `"NFS-e Validation Rules for Asaas integration"`
-
-### 6. Atualizar `nfse-retencoes.ts` (cabeçalho)
-
-- Linha 1-4: Remover referência a "NFS-e Nacional 2026" e "DPS v1.0"
-- Novo cabeçalho: `"Cálculo de Retenções e Tributos para NFS-e via Asaas"`
-
-### 7. Comentários de código
-
-Remover comentários `// Tributos Nacional 2026` em:
-- `NfseAvulsaDialog.tsx` (linha 239)
-- `EmitNfseDialog.tsx` (linha 205)
-
-### 8. Aba "Ajuda" no `BillingNfseTab.tsx`
-
-- Linha 880: Remover o item `Certificado: A1 válido (quando usando API Nacional)` do checklist
-- Linha 922-924: Remover referência a `certificado digital (A1/A3) para assinatura de XML` na seção NF-e/CT-e
-
-### 9. Card "Certificado digital (A1)" no `BillingNfseTab.tsx`
-
-- Linhas 390-407: Remover o card de saúde do certificado digital, pois com Asaas o certificado A1 não é necessário para NFS-e
-- Linhas 330-336: Remover `certOk` do health check
-- Atualizar grid de 3 para 2 colunas (`md:grid-cols-2`)
-- Nota: o CertificateManager e CertificateUpload continuam existindo para uso com Banco Inter (mTLS), mas não são mais exibidos na aba NFS-e
-
-### 10. NfseAvulsaDialog -- Remover query de certificado
-
-- Linhas 100-114: Remover a query `nfse-primary-certificate` que busca o certificado primário, pois não é mais necessária para emissão via Asaas
-- Linhas 146-148: Remover `certificateDaysRemaining`
+**Correcao:** Atualizar textos para refletir "Asaas" ou remover a palavra "Nacional" onde se refere ao sistema de emissao.
 
 ---
 
-## Arquivos Afetados
+### 8. Coluna `nfse_history.provider` com default `'nacional'`
 
-### Editar:
-1. `supabase/functions/poll-services/index.ts` -- remover nfse_nacional
-2. `src/components/billing/BillingNfseTab.tsx` -- migrar polling, remover card certificado, ajustar ajuda
-3. `src/components/billing/IntegrationHealthDashboard.tsx` -- migrar polling
-4. `src/components/billing/BillingBoletosTab.tsx` -- migrar polling
-5. `src/components/billing/BillingErrorsPanel.tsx` -- migrar polling
-6. `src/components/billing/InvoiceProcessingHistory.tsx` -- migrar polling
-7. `src/components/billing/nfse/nfseFormat.ts` -- remover provider "nacional", atualizar textos
-8. `src/components/billing/nfse/NfseDetailsSheet.tsx` -- atualizar textos E0014
-9. `src/components/billing/nfse/NfseLinkExternalDialog.tsx` -- atualizar textos
-10. `src/components/billing/nfse/NfseAvulsaDialog.tsx` -- remover query certificado, limpar comentários
-11. `src/components/financial/EmitNfseDialog.tsx` -- limpar comentários
-12. `src/lib/nfse-validation.ts` -- atualizar cabeçalho
-13. `src/lib/nfse-retencoes.ts` -- atualizar cabeçalho
-14. `supabase/functions/asaas-nfse/index.ts` -- atualizar textos
-15. `supabase/functions/webhook-asaas-nfse/index.ts` -- atualizar textos
+A tabela `nfse_history` tem `provider text DEFAULT 'nacional'`. Como o sistema agora usa exclusivamente Asaas, o default deveria ser `'asaas'`.
 
-### Deletar:
-16. `supabase/functions/poll-boleto-status/index.ts`
-17. `supabase/functions/poll-asaas-nfse-status/index.ts`
+**Correcao:** Migration SQL para alterar o default.
 
-### Resultado:
-- ~710 linhas de edge functions removidas
-- Zero referências a "Portal Nacional", "API Nacional", "DPS" ou "nfse_nacional"
-- Polling unificado via `poll-services`
-- Todas as referências fiscais alinhadas com documentação Asaas
+---
+
+## Plano de Execucao
+
+### Etapa 1 -- Eliminar duplicacoes de `formatCurrency`
+
+- Remover funcao local de `BillingBankAccountsTab.tsx`, `PixCodeDialog.tsx`, `ReportsPage.tsx`, `AdditionalChargesReportTab.tsx`
+- Importar `formatCurrency` de `@/lib/currency`
+
+### Etapa 2 -- Eliminar interface `BankAccount` duplicada
+
+- Usar `Tables<"bank_accounts">` nos componentes `BillingBankAccountsTab` e `BankAccountFormDialog`
+- Remover interfaces manuais
+
+### Etapa 3 -- Corrigir `statusColors` incompleto
+
+- Adicionar `renegotiated` e `lost` ao `statusColors` no `BillingInvoicesTab`
+
+### Etapa 4 -- Otimizacoes de performance
+
+- Reduzir `refetchInterval` do `IntegrationHealthDashboard` de 60s para 300s
+- Consolidar queries N+1 do `EconomicIndicesWidget` em query unica
+
+### Etapa 5 -- Refatorar `BankAccountFormDialog` para `useMutation`
+
+- Substituir `useState(saving)` + try/catch por `useMutation` padrao
+
+### Etapa 6 -- Corrigir textos residuais "Nacional"
+
+- Atualizar `nfse-retencoes.ts` linha 31
+- Atualizar `NfseTributacaoSection.tsx` linha 65
+- Atualizar `CompanyTab.tsx` linha 615
+- Atualizar `ServiceForm.tsx` linhas 35, 188
+
+### Etapa 7 -- Migration: alterar default de `nfse_history.provider`
+
+```sql
+ALTER TABLE nfse_history ALTER COLUMN provider SET DEFAULT 'asaas';
+UPDATE nfse_history SET provider = 'asaas' WHERE provider = 'nacional';
+```
+
+---
+
+## Secao Tecnica
+
+### EconomicIndicesWidget -- query consolidada:
+
+```typescript
+const { data } = await supabase
+  .from("economic_indices")
+  .select("*")
+  .in("index_type", ["IGPM", "IPCA", "INPC"])
+  .order("reference_date", { ascending: false })
+  .limit(10);
+
+const latest = new Map<string, EconomicIndex>();
+for (const row of data || []) {
+  if (!latest.has(row.index_type)) latest.set(row.index_type, row as EconomicIndex);
+}
+return Array.from(latest.values());
+```
+
+### statusColors completo:
+
+```typescript
+const statusColors: Record<Enums<"invoice_status">, string> = {
+  pending: "bg-status-warning/20 text-status-warning border-status-warning/40",
+  paid: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+  overdue: "bg-destructive/20 text-destructive border-destructive/40",
+  cancelled: "bg-muted text-muted-foreground border-border",
+  renegotiated: "bg-blue-500/20 text-blue-400 border-blue-500/40",
+  lost: "bg-gray-500/20 text-gray-400 border-gray-500/40",
+};
+```
+
+### BankAccountFormDialog -- refatoracao para useMutation:
+
+```typescript
+const saveMutation = useMutation({
+  mutationFn: async () => {
+    // validacao + insert/update
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts-active"] });
+    onOpenChange(false);
+    toast.success(isEditing ? "Conta atualizada" : "Conta criada");
+  },
+  onError: (err: Error) => {
+    toast.error(err.message || "Erro ao salvar conta");
+  },
+});
+```
+
+### Arquivos afetados:
+
+**Editar (10 arquivos):**
+1. `src/components/billing/BillingBankAccountsTab.tsx`
+2. `src/components/billing/BankAccountFormDialog.tsx`
+3. `src/components/financial/PixCodeDialog.tsx`
+4. `src/pages/reports/ReportsPage.tsx`
+5. `src/components/reports/AdditionalChargesReportTab.tsx`
+6. `src/components/billing/BillingInvoicesTab.tsx`
+7. `src/components/billing/IntegrationHealthDashboard.tsx`
+8. `src/components/billing/EconomicIndicesWidget.tsx`
+9. `src/components/billing/nfse/NfseTributacaoSection.tsx`
+10. `src/components/settings/CompanyTab.tsx`
+11. `src/components/services/ServiceForm.tsx`
+12. `src/lib/nfse-retencoes.ts`
+
+**Migration SQL:** 1 migration para `nfse_history.provider` default
+
+### Impacto estimado:
+- ~30 linhas de codigo duplicado removidas (formatCurrency + BankAccount interface)
+- ~80% reducao em queries do EconomicIndicesWidget (3 para 1)
+- ~80% reducao em polling do IntegrationHealthDashboard (60s para 300s)
+- Zero referencias residuais a "NFS-e Nacional" como sistema de emissao
+- statusColors completo evita badges sem estilo
 
