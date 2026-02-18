@@ -1,65 +1,78 @@
 
-# Tela de Gestao de Contas Bancarias
+# Tela de Contas a Receber
 
 ## Resumo
 
-Adicionar uma nova aba "Contas" no modulo de Faturamento (`BillingPage`) com CRUD completo para gerenciar contas bancarias. A aba permite criar, editar e desativar (soft-delete) contas, exibindo saldo inicial, saldo atual e detalhes bancarios.
+Criar uma nova aba "A Receber" no modulo de Faturamento que consulta diretamente a view `accounts_receivable` do banco. A tela oferece uma visao consolidada de todas as faturas com filtros por status de negocios (em_aberto, atrasado, pago, renegociado, perdido) e por cliente, alem de resumo financeiro e exportacao.
 
 ---
 
-## O que ja existe e funciona
+## O que ja existe
 
-- Tabela `bank_accounts` no banco com RLS (admin/financial podem gerenciar, staff pode visualizar)
-- Tipos TypeScript gerados automaticamente
-- Componente `BankAccountSelector` que lista contas ativas
-- Aba de Conciliacao que filtra por conta bancaria
+- View `accounts_receivable` no banco com campos: id, invoice_number, client_id, client_name, contract_id, amount, due_date, paid_date, paid_amount, ar_status, days_overdue, is_overdue
+- Tipos TypeScript gerados automaticamente na secao Views do types.ts
+- Padroes de tabs, tabelas, filtros e paginacao ja consolidados no modulo de Billing
+- Componente `ExportButton` reutilizavel para exportacao CSV/Excel/JSON
+- Utilitario `formatCurrency` para formatacao BRL
 
 ## O que sera criado
 
-### 1. Componente `BillingBankAccountsTab`
+### 1. Componente `AccountsReceivableTab`
 
-Novo componente em `src/components/billing/BillingBankAccountsTab.tsx`:
+Novo arquivo `src/components/billing/AccountsReceivableTab.tsx`:
 
-- **Listagem**: Tabela com todas as contas (ativas e inativas), exibindo nome, banco, agencia, conta, tipo, saldo inicial, saldo atual e status
-- **Criar**: Botao "Nova Conta" abre dialog com formulario
-- **Editar**: Botao de editar em cada linha abre dialog preenchido
-- **Desativar/Reativar**: Toggle de status (soft-delete, sem exclusao real)
-- **Validacoes**: Nome obrigatorio, saldo inicial numerico
+- **Query**: Consulta a view `accounts_receivable` via Supabase SDK, ordenada por `due_date` descendente, limite 500
+- **Filtro por status**: Select com opcoes mapeadas para os valores da view (em_aberto, atrasado, pago, renegociado, perdido, todos)
+- **Filtro por cliente**: Select populado dinamicamente a partir dos clientes distintos retornados na query
+- **Busca por texto**: Input para filtrar por nome do cliente ou numero da fatura
+- **Resumo financeiro**: Chips compactos mostrando total em aberto, total atrasado, total pago (mesmo padrao da BillingInvoicesTab)
+- **Tabela desktop**: Colunas -- Nº Fatura, Cliente, Valor, Vencimento, Dias Atraso, Status, Dt. Pagamento
+- **Cards mobile**: Layout compacto para telas pequenas
+- **Paginacao**: Frontend, 15 itens por pagina (padrao existente)
+- **Exportacao**: Botao ExportButton com colunas mapeadas
+- **Badge de status**: Cores diferenciadas por ar_status (em_aberto=amarelo, atrasado=vermelho, pago=verde, renegociado=azul, perdido=cinza)
 
-### 2. Componente `BankAccountFormDialog`
+### 2. Integracao no BillingPage
 
-Dialog reutilizavel para criar e editar contas:
-
-- Campos: Nome (obrigatorio), Banco, Agencia, Numero da Conta, Tipo (corrente/poupanca), Saldo Inicial
-- Saldo Atual nao e editavel (controlado apenas por conciliacao)
-- Validacao via formulario controlado
-
-### 3. Integracao no `BillingPage`
-
-- Adicionar aba "Contas" (icone `Landmark`) ao array `BILLING_TABS`
-- Restringir acesso: apenas `admin` e `financial` podem ver a aba (usando `canManage` que ja existe)
-- Atualizar grid de tabs de 9 para 10 colunas no desktop
+- Adicionar entrada `{ id: "receivable", label: "A Receber", icon: DollarSign }` ao array BILLING_TABS (posicao apos "invoices")
+- Adicionar TabsContent correspondente renderizando `AccountsReceivableTab`
+- Permissao: visivel para quem pode ver financial (mesma regra das faturas, sem restricao extra)
+- Atualizar grid de tabs de 10 para 11 colunas no desktop
 
 ---
 
 ## Secao Tecnica
 
-### Arquivos a criar:
-- `src/components/billing/BillingBankAccountsTab.tsx` -- listagem + logica CRUD
-- `src/components/billing/BankAccountFormDialog.tsx` -- dialog de formulario
+### Arquivo a criar:
+- `src/components/billing/AccountsReceivableTab.tsx`
 
-### Arquivos a editar:
-- `src/pages/billing/BillingPage.tsx` -- adicionar aba "Contas" ao array de tabs e ao conteudo
+### Arquivo a editar:
+- `src/pages/billing/BillingPage.tsx` -- adicionar tab "receivable" e importar componente
 
-### Queries e Mutations:
-- `queryKey: ["bank-accounts"]` -- lista todas as contas (ativas e inativas)
-- `insert` em `bank_accounts` -- criar nova conta
-- `update` em `bank_accounts` -- editar conta existente
-- `update is_active` -- desativar/reativar (sem delete)
+### Query principal:
+```typescript
+supabase
+  .from("accounts_receivable")
+  .select("*")
+  .order("due_date", { ascending: false })
+  .limit(500)
+```
 
-### Permissoes:
-- Aba visivel apenas para quem tem `can("financial", "edit")` (admin e financial)
-- RLS ja configurado no banco: admin/financial podem ALL, staff pode SELECT
+A filtragem por ar_status sera feita no frontend (via useMemo) para manter o padrao existente e evitar multiplas queries. Filtragem por cliente tambem no frontend.
 
-### Invalidacao de cache:
-- Apos criar/editar/desativar, invalidar `["bank-accounts"]` e `["bank-accounts-active"]` (usado pelo `BankAccountSelector` na aba de conciliacao)
+### Mapeamento de status para UI:
+- `em_aberto` -> "Em Aberto" (amarelo/warning)
+- `atrasado` -> "Atrasado" (vermelho/destructive)
+- `pago` -> "Pago" (verde/emerald)
+- `renegociado` -> "Renegociado" (azul/info)
+- `perdido` -> "Perdido" (cinza/muted)
+
+### Colunas de exportacao:
+- invoice_number (Nº Fatura)
+- client_name (Cliente)
+- amount (Valor)
+- due_date (Vencimento)
+- days_overdue (Dias Atraso)
+- ar_status (Status)
+- paid_date (Dt. Pagamento)
+- paid_amount (Valor Pago)
