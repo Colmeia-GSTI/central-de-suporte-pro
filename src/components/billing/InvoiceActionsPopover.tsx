@@ -78,7 +78,7 @@ export function InvoiceActionsPopover({
   const isLoading = generatingPayment?.startsWith(invoice.id);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon" className="h-9 w-9">
           {isLoading ? (

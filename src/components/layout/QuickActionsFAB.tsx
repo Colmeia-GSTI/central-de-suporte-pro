@@ -97,7 +97,7 @@ export function QuickActionsFAB() {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-center gap-3">
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-center gap-3 pointer-events-none">
         {/* Backdrop for dark mode visibility */}
         {isOpen && (
           <div
@@ -113,7 +113,7 @@ export function QuickActionsFAB() {
               <Button
                 size="icon"
                 className={cn(
-                  "h-12 w-12 rounded-full shadow-lg transition-all duration-300",
+                  "h-12 w-12 rounded-full shadow-lg transition-all duration-300 pointer-events-auto",
                   "bg-gradient-to-r hover:scale-110 active:scale-95",
                   "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary",
                   action.color,
@@ -143,7 +143,7 @@ export function QuickActionsFAB() {
             <Button
               size="icon"
               className={cn(
-                "h-14 w-14 rounded-full shadow-xl transition-all duration-300",
+                "h-14 w-14 rounded-full shadow-xl transition-all duration-300 pointer-events-auto",
                 "btn-premium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary",
                 "active:scale-95",
                 isOpen && "rotate-45"
