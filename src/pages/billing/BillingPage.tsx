@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, AlertTriangle } from "lucide-react";
+import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, AlertTriangle, Landmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBillingCounters } from "@/hooks/useBillingCounters";
 import { BillingInvoicesTab } from "@/components/billing/BillingInvoicesTab";
@@ -14,6 +14,7 @@ import { BankReconciliationTab } from "@/components/billing/BankReconciliationTa
 import { FiscalReportTab } from "@/components/billing/FiscalReportTab";
 import { IntegrationHealthDashboard } from "@/components/billing/IntegrationHealthDashboard";
 import { BillingErrorsPanel } from "@/components/billing/BillingErrorsPanel";
+import { BillingBankAccountsTab } from "@/components/billing/BillingBankAccountsTab";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface TabBadgeProps {
@@ -50,6 +51,7 @@ const BILLING_TABS = [
   { id: "reconciliation", label: "Conciliação", icon: ArrowRightLeft },
   { id: "fiscal", label: "Fiscal", icon: Scale },
   { id: "health", label: "Saúde", icon: Activity },
+  { id: "accounts", label: "Contas", icon: Landmark },
   { id: "services", label: "Serviços", icon: Wrench },
   { id: "tax-codes", label: "Códigos Tributários", icon: Calculator },
 ] as const;
@@ -67,6 +69,9 @@ export default function BillingPage() {
 
   const currentTab = (() => {
     if ((rawTab === "services" || rawTab === "tax-codes") && !canManageServices) {
+      return "invoices";
+    }
+    if (rawTab === "accounts" && !canManage) {
       return "invoices";
     }
     return rawTab;
@@ -128,9 +133,12 @@ export default function BillingPage() {
         </div>
 
         <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-3 md:space-y-6">
-          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-9 md:w-auto">
+          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-10 md:w-auto">
             {BILLING_TABS.map((tab) => {
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {
+                return null;
+              }
+              if (tab.id === "accounts" && !canManage) {
                 return null;
               }
               return (
@@ -173,6 +181,10 @@ export default function BillingPage() {
 
           <TabsContent value="health" className="mt-6">
             <IntegrationHealthDashboard />
+          </TabsContent>
+
+          <TabsContent value="accounts" className="mt-6">
+            <BillingBankAccountsTab />
           </TabsContent>
 
           <TabsContent value="services" className="mt-6">
