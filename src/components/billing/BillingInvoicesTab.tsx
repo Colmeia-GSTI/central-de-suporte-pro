@@ -397,6 +397,24 @@ export function BillingInvoicesTab() {
                           NFS-e
                         </Badge>
                       )}
+                      <InvoiceActionsPopover
+                        invoice={invoice}
+                        nfseInfo={nfseInfo}
+                        generatingPayment={generatingPayment}
+                        processingComplete={processingComplete}
+                        sendingNotification={sendingNotification}
+                        onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
+                        onGeneratePayment={handleGeneratePayment}
+                        onManualPayment={() => setManualPaymentInvoice(invoice)}
+                        onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                        onSecondCopy={() => setSecondCopyInvoice(invoice)}
+                        onRenegotiate={() => setRenegotiateInvoice(invoice)}
+                        onResendNotification={handleResendNotification}
+                        onEmitNfse={() => setNfseInvoice(invoice)}
+                        onCancelBoleto={() => setIsCancellingBoleto(true)}
+                        onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                        onViewHistory={() => setHistoryInvoice(invoice)}
+                      />
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
@@ -791,9 +809,12 @@ export function BillingInvoicesTab() {
         />
       )}
 
-      {pixDialogInvoice && (
+      {pixDialogInvoice && pixDialogInvoice.pix_code && (
         <PixCodeDialog
-          invoice={pixDialogInvoice}
+          pixCode={pixDialogInvoice.pix_code}
+          invoiceNumber={pixDialogInvoice.invoice_number}
+          amount={pixDialogInvoice.amount}
+          clientName={pixDialogInvoice.clients?.name || "Cliente"}
           open={true}
           onOpenChange={(open) => {
             if (!open) setPixDialogInvoice(null);
