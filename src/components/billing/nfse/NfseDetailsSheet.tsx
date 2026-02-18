@@ -74,16 +74,9 @@ function statusBadgeVariant(status: NfseStatus): { className: string; icon: Reac
   }
 }
 
-async function openUrlOrSigned(url: string) {
-  if (url.startsWith("nfse-files/")) {
-    const path = url.replace("nfse-files/", "");
-    const { data, error } = await supabase.storage.from("nfse-files").createSignedUrl(path, 60);
-    if (error) throw error;
-    window.open(data.signedUrl, "_blank");
-    return;
-  }
-  window.open(url, "_blank");
-}
+// Re-export from centralized utility
+import { openStorageFile } from "@/lib/storage-utils";
+const openUrlOrSigned = openStorageFile;
 
 function IssuesList({ issues }: { issues: ValidationIssue[] }) {
   if (issues.length === 0) return null;
