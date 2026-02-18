@@ -1,66 +1,81 @@
 
+# Fix: Status de Email e Link da NFS-e no Email de Cobranca
 
-# Fix: Verificar retorno do `functions.invoke` no bloco de pagamento
+## Problemas Encontrados
 
-## Problema
+### 1. `email_error_msg` nao e limpo apos reenvio bem-sucedido
 
-No `generate-monthly-invoices/index.ts`, o bloco de geracao de pagamento (linhas 430-445) nao verifica o retorno de `supabase.functions.invoke()`. Diferente do bloco NFS-e (que ja foi corrigido e faz `const { data, error } = ...`), o bloco de pagamento simplesmente faz `await` e ignora o resultado.
+Na fatura #14 da CVR, o status mostra `email_status: enviado` (correto), mas `email_error_msg` ainda contem `"Bloqueado: boleto_pendente"` do erro anterior. Isso acontece porque o bloco de sucesso (linha 324-327 do `resend-payment-notification`) atualiza `email_status` e `email_sent_at`, mas nao limpa o campo `email_error_msg`.
 
-Isso causa:
-- Se `banco-inter` ou `asaas-nfse` retornar erro HTTP, ele e silenciosamente ignorado
-- `auto_payment_generated` e marcado como `true` mesmo quando falhou
-- `boleto_status` permanece `pendente` sem mensagem de erro
-- Faturas como CVR e Ruaro ficam "perdidas" sem boleto
+O mesmo problema existe no `notify-due-invoices` -- precisa ser verificado.
 
-## Correcao
+**Correcao:** Adicionar `email_error_msg: null` ao update de sucesso.
 
-Alterar APENAS o bloco de pagamento (linhas 430-445) para capturar e verificar o retorno, seguindo o mesmo padrao ja usado no bloco NFS-e logo abaixo.
+### 2. Link da NFS-e nao aparece no email
 
-### Antes (linhas 430-445):
+O codigo gera o `nfsePdfSignedUrl` (linha 230-233) mas nunca o utiliza no corpo do email. O cliente recebe apenas o link do boleto e/ou PIX, sem acesso a nota fiscal.
+
+**Correcao:** 
+- Adicionar `nfse_pdf_url` nas variaveis de template (`templateVars`)
+- Incluir um bloco de "Nota Fiscal" no template padrao do email, com link para o PDF da NFS-e
+
+---
+
+## Alteracoes
+
+### Arquivo: `supabase/functions/resend-payment-notification/index.ts`
+
+**Fix 1 -- Limpar erro anterior no sucesso (linha 324-327):**
+
+Antes:
 ```typescript
-if (provider === "asaas") {
-  await supabase.functions.invoke("asaas-nfse", { body: { ... } });
-} else {
-  await supabase.functions.invoke("banco-inter", { body: { ... } });
-}
+await supabase.from("invoices").update({
+  email_status: "enviado",
+  email_sent_at: new Date().toISOString(),
+}).eq("id", invoice_id);
 ```
 
-### Depois:
+Depois:
 ```typescript
-const invokeResult = provider === "asaas"
-  ? await supabase.functions.invoke("asaas-nfse", { body: { ... } })
-  : await supabase.functions.invoke("banco-inter", { body: { ... } });
-
-if (invokeResult.error) {
-  throw new Error(
-    `Erro ao gerar ${paymentType} via ${provider}: ${invokeResult.error.message || JSON.stringify(invokeResult.error)}`
-  );
-}
-
-const responseData = invokeResult.data as Record<string, unknown> | null;
-if (responseData?.error) {
-  throw new Error(
-    `Provedor ${provider} retornou erro: ${String(responseData.error)}`
-  );
-}
+await supabase.from("invoices").update({
+  email_status: "enviado",
+  email_sent_at: new Date().toISOString(),
+  email_error_msg: null,
+}).eq("id", invoice_id);
 ```
 
-O `throw` e capturado pelo `catch (paymentError)` existente na linha 458, que ja atualiza `boleto_status: "erro"` e `boleto_error_msg` corretamente.
+**Fix 2 -- Adicionar `nfse_pdf_url` ao templateVars (linha 236-244):**
 
-## Arquivo afetado
+Adicionar: `nfse_pdf_url: nfsePdfSignedUrl`
 
-- `supabase/functions/generate-monthly-invoices/index.ts` -- linhas 430-445 apenas
+**Fix 3 -- Incluir bloco NFS-e no template padrao (apos o bloco PIX, ~linha 297):**
 
-## O que NAO muda
+```html
+${nfsePdfSignedUrl ? `
+  <div style="margin: 20px 0;">
+    <h3>📄 Nota Fiscal de Servico (NFS-e)</h3>
+    <p><a href="${nfsePdfSignedUrl}" style="display: inline-block; padding: 12px 24px; background: #059669; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Nota Fiscal</a></p>
+  </div>
+` : ""}
+```
 
-- O bloco NFS-e (479-514) ja esta correto -- sem alteracao
-- O `catch` existente (458-469) ja grava o erro na fatura -- sem alteracao
-- O marcador `auto_payment_generated: true` (450-455) so executa se nao houver throw -- comportamento correto
-- Nenhum outro arquivo e alterado
+### Arquivo: `supabase/functions/notify-due-invoices/index.ts`
+
+Verificar se o mesmo padrao de "nao limpar email_error_msg" existe la tambem e corrigir.
+
+---
+
+## Sobre Anexos
+
+Os emails enviam **links** (URLs assinadas com validade de 7 dias) para o boleto e a nota fiscal, e nao anexos binarios. Isso e intencional -- o SMTP customizado via `Deno.connect` nao suporta facilmente attachments MIME, e links assinados sao mais leves e confiaveis. O boleto ja vai como link; a nota fiscal passara a ir tambem.
+
+## Arquivos afetados
+
+1. `supabase/functions/resend-payment-notification/index.ts` -- 3 alteracoes pontuais
+2. `supabase/functions/notify-due-invoices/index.ts` -- verificar e alinhar mesmo padrao
 
 ## Impacto
 
-- Previne falhas silenciosas em futuras geracoes de faturas
-- Erros de provedor passam a ser visiveis na aba "Erros" do faturamento
-- Zero risco de breaking change -- o fluxo de sucesso continua identico
-- As faturas CVR e Ruaro precisam ter os boletos regenerados manualmente pela interface (botao "Gerar Boleto")
+- `email_error_msg` sera limpo em reenvios bem-sucedidos, eliminando indicadores de erro fantasma na interface
+- Clientes passam a receber o link da NFS-e no email de cobranca
+- Zero breaking changes -- emails que ja funcionam continuam identicos
