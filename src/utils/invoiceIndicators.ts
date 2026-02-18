@@ -103,6 +103,17 @@ export function getEmailIndicator(input: EmailIndicatorInput): IndicatorResult {
   return { color: "text-muted-foreground", tooltip: "Enviar email", level: "pending" };
 }
 
+export function getPaymentIndicator(invoice: { status: string; manual_payment?: boolean }): IndicatorResult {
+  if (invoice.status === "paid") {
+    return {
+      color: "text-emerald-500",
+      tooltip: invoice.manual_payment ? "Pago (baixa manual)" : "Pago (automático)",
+      level: "success",
+    };
+  }
+  return { color: "text-muted-foreground", tooltip: "Baixa Manual", level: "pending" };
+}
+
 export function getSendBlockedStatus(input: { nfseInfo?: NfseIndicatorInput }): SendBlockResult {
   const reasons: string[] = [];
 

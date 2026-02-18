@@ -161,22 +161,29 @@ export function InvoiceInlineActions({
         </TooltipContent>
       </Tooltip>
 
-      {/* Manual Payment */}
-      {isPendingOrOverdue && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={onManualPayment} 
-              className="h-7 w-7 p-0 hover:bg-muted"
-            >
-              <DollarSign className={`${iconClass} text-muted-foreground`} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">Baixa Manual</TooltipContent>
-        </Tooltip>
-      )}
+      {/* Payment indicator */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={isPendingOrOverdue ? onManualPayment : undefined}
+            disabled={!isPendingOrOverdue}
+            className="h-7 w-7 p-0 hover:bg-muted"
+          >
+            <DollarSign className={`${iconClass} ${
+              invoice.status === "paid"
+                ? "text-emerald-500"
+                : "text-muted-foreground"
+            }`} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {invoice.status === "paid"
+            ? `Pago${invoice.boleto_url ? " (automático)" : ""}`
+            : "Baixa Manual"}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
