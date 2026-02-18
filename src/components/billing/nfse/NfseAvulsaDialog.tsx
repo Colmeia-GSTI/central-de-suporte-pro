@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format, differenceInDays } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FileText, Loader2, Receipt, ShieldAlert, CalendarIcon, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,12 +37,6 @@ type CompanyCfg = {
   nfse_ambiente: string | null;
 };
 
-type Certificate = {
-  id: string;
-  nome: string;
-  validade: string | null;
-  titular: string | null;
-};
 
 const createInitialTributacao = (aliquota: number = 0): TributacaoData => ({
   issRetido: false,
@@ -97,21 +91,6 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
     },
   });
 
-  const { data: primaryCertificate } = useQuery({
-    queryKey: ["nfse-primary-certificate", company?.id],
-    queryFn: async () => {
-      if (!company?.id) return null;
-      const { data, error } = await supabase
-        .from("certificates")
-        .select("id, nome, validade, titular")
-        .eq("company_id", company.id)
-        .eq("is_primary", true)
-        .maybeSingle();
-      if (error) return null;
-      return data as Certificate;
-    },
-    enabled: !!company?.id,
-  });
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ["clients-for-nfse-avulsa"],
@@ -143,9 +122,6 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
 
   const isCompanyConfigured = !!company?.cnpj && !!company?.inscricao_municipal;
 
-  const certificateDaysRemaining = primaryCertificate?.validade
-    ? differenceInDays(new Date(primaryCertificate.validade), new Date())
-    : null;
 
   // Alíquota: usa a editada se maior que 0, senão a sugerida do código de serviço
   const aliquotaIss = tributacao.aliquotaIss > 0 ? tributacao.aliquotaIss : (serviceCode?.aliquota_sugerida ?? 0);
@@ -236,7 +212,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
           aliquota: aliquotaIss,
           competencia,
           invoice_id: invoiceId,
-          // Tributos Nacional 2026
+          // Tributos
           retain_iss: tributacao.issRetido,
           iss_rate: aliquotaIss,
           pis_value: tributacao.valorPis,

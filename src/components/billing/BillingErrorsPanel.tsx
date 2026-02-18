@@ -162,7 +162,7 @@ export function BillingErrorsPanel() {
   const handleForcePolling = async (invoiceId: string) => {
     setPollingId(invoiceId);
     try {
-      const { data, error } = await supabase.functions.invoke("poll-boleto-status");
+      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["boleto"] } });
       if (error) throw error;
       toast.success("Polling executado", {
         description: `${data.processed || 0} consultados, ${data.updated || 0} atualizados`,

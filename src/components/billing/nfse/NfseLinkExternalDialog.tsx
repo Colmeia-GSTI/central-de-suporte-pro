@@ -88,7 +88,7 @@ export function NfseLinkExternalDialog({
             Vincular Nota Existente
           </DialogTitle>
           <DialogDescription>
-            Vincule uma NFS-e já emitida no Portal Nacional ao registro local.
+            Vincule uma NFS-e já emitida no Asaas ao registro local.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,7 +97,7 @@ export function NfseLinkExternalDialog({
           <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950/30">
             <Info className="h-4 w-4 text-blue-700" />
             <AlertDescription className="text-blue-900 dark:text-blue-200 text-xs">
-              <strong>O que é o erro E0014?</strong> Indica que uma nota com os mesmos dados (DPS) já existe no Portal Nacional.
+              <strong>O que é o erro E0014?</strong> Indica que uma nota com os mesmos dados já foi processada pelo Asaas.
               Isso acontece quando a nota foi emitida, mas o sistema não recebeu a confirmação. A vinculação manual
               sincroniza o registro local com a nota já autorizada.
             </AlertDescription>
@@ -106,7 +106,7 @@ export function NfseLinkExternalDialog({
           <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/30">
             <AlertTriangle className="h-4 w-4 text-amber-700" />
             <AlertDescription className="text-amber-900 dark:text-amber-200 text-xs">
-              Use esta opção apenas se você verificou no Portal Nacional que a nota existe e está autorizada.
+              Use esta opção apenas se você verificou no Asaas que a nota existe e está autorizada.
             </AlertDescription>
           </Alert>
 

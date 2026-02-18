@@ -278,13 +278,13 @@ async function processInvoiceWebhook(
         codigo_prefeitura: parsed.codigo,
       });
     
-    // Special handling for E0014 (DPS duplicada)
+    // Special handling for E0014 (NFS-e duplicada)
     if (parsed.codigo === "E0014") {
-      await logNfseEvent(supabase, nfseRecord.id, "dps_duplicada", "warn",
-        "DPS duplicada detectada - nota possivelmente já emitida no Portal Nacional",
+      await logNfseEvent(supabase, nfseRecord.id, "nfse_duplicada", "warn",
+        "NFS-e duplicada - já emitida anteriormente no Asaas",
         correlationId, {
           asaas_invoice_id: invoice.id,
-          sugestao: "Verifique no Portal Nacional se existe nota autorizada para este cliente/valor",
+          sugestao: "Verifique no Asaas se existe nota autorizada para este cliente/valor",
         });
     }
 

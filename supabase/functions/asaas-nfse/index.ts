@@ -60,7 +60,7 @@ const ERROR_CODES = {
   DELETE_NOT_ALLOWED: "Exclusão não permitida",
   RECORD_NOT_FOUND: "Registro não encontrado",
   ASAAS_API_ERROR: "Erro da API Asaas",
-  DPS_DUPLICADA: "DPS duplicada - NFS-e já existe no Portal Nacional",
+  DPS_DUPLICADA: "NFS-e duplicada - já emitida no Asaas",
 } as const;
 
 // ============ NORMALIZE SERVICE CODE ============
@@ -82,7 +82,7 @@ const KNOWN_PREFEITURA_ERRORS: Record<string, KnownError> = {
   E0014: {
     code: "DPS_DUPLICADA",
     title: "Nota Fiscal já existe",
-    message: "Esta NFS-e já foi emitida anteriormente no Portal Nacional com a mesma Série/Número DPS.",
+    message: "Esta NFS-e já foi emitida anteriormente com os mesmos dados no provedor Asaas.",
     action: "VERIFY_EXTERNAL",
   },
   E0001: {
@@ -122,7 +122,7 @@ function parseStatusDescription(statusDescription: string | null): {
   
   // Map known actions
   const acoesConhecidas: Record<string, string> = {
-    E0014: "Verifique se a nota já existe no Portal Nacional e use 'Vincular Nota Existente'",
+    E0014: "Verifique se a nota já existe no Asaas e use 'Vincular Nota Existente'",
     E0001: "Verifique os dados do certificado digital",
     E0002: "Verifique os dados do prestador e tomador de serviço",
   };

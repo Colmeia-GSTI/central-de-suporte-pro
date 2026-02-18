@@ -251,7 +251,7 @@ export function InvoiceProcessingHistory({
   const handleForcePolling = async () => {
     setActionLoading("polling");
     try {
-      const { data, error } = await supabase.functions.invoke("poll-boleto-status");
+      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["boleto"] } });
       if (error) throw error;
       toast.success("Polling executado", {
         description: `${data.updated || 0} atualizado(s)`,

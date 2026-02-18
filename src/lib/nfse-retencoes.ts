@@ -1,6 +1,5 @@
 /**
- * NFS-e Nacional 2026: Cálculo de Retenções e Tributos
- * Padrão DPS (Declaração de Prestação de Serviço) v1.0
+ * Cálculo de Retenções e Tributos para NFS-e via Asaas
  */
 
 export interface RetencoesInput {

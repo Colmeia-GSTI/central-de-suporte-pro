@@ -22,7 +22,7 @@ export function IntegrationHealthDashboard() {
   const handleForcePollingAll = async () => {
     setIsPollingBoletos(true);
     try {
-      const { data, error } = await supabase.functions.invoke("poll-boleto-status");
+      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["boleto"] } });
       if (error) throw error;
       toast.success("Polling executado", {
         description: `${data.processed || 0} consultados, ${data.updated || 0} atualizados`,
@@ -39,7 +39,7 @@ export function IntegrationHealthDashboard() {
   const handleCheckNfseAll = async () => {
     setIsCheckingNfse(true);
     try {
-      const { data, error } = await supabase.functions.invoke("poll-asaas-nfse-status");
+      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["asaas_nfse"] } });
       if (error) throw error;
       toast.success("Verificação concluída", {
         description: `${data.updated || 0} nota(s) atualizada(s)`,

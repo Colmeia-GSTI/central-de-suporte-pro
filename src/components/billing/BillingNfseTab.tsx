@@ -154,21 +154,6 @@ export function BillingNfseTab() {
     },
   });
 
-  const { data: primaryCertificate } = useQuery({
-    queryKey: ["nfse-primary-certificate-health", company?.id],
-    queryFn: async () => {
-      if (!company?.id) return null;
-      const { data, error } = await supabase
-        .from("certificates")
-        .select("id, nome, validade, titular")
-        .eq("company_id", company.id)
-        .eq("is_primary", true)
-        .maybeSingle();
-      if (error) return null;
-      return data;
-    },
-    enabled: !!company?.id,
-  });
 
   const { data: nfseData, isLoading } = useQuery({
     queryKey: ["nfse-history", search, statusFilter, competenciaFilter, page],
@@ -274,7 +259,7 @@ export function BillingNfseTab() {
   const handleCheckStatus = async () => {
     setCheckingStatus(true);
     try {
-      const { data, error } = await supabase.functions.invoke("poll-asaas-nfse-status");
+      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["asaas_nfse"] } });
       if (error) throw error;
       const result = data as { updated?: number; processed?: number; message?: string };
       if ((result.updated ?? 0) > 0) {
@@ -329,11 +314,9 @@ export function BillingNfseTab() {
 
   const health = useMemo(() => {
     const companyOk = !!company?.cnpj && !!company?.inscricao_municipal;
-    const certOk =
-      !!primaryCertificate?.validade && new Date(primaryCertificate.validade).getTime() > Date.now();
     const ambiente = company?.nfse_ambiente === "producao" ? "Produção" : "Homologação";
-    return { companyOk, certOk, ambiente };
-  }, [company, primaryCertificate]);
+    return { companyOk, ambiente };
+  }, [company]);
 
   return (
     <div className="space-y-6">
@@ -369,7 +352,7 @@ export function BillingNfseTab() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Configuração da empresa</CardTitle>
@@ -383,25 +366,6 @@ export function BillingNfseTab() {
               <ShieldCheck className="h-5 w-5 text-status-success" />
             ) : (
               <AlertTriangle className="h-5 w-5 text-status-danger" />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Certificado digital (A1)</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between">
-            <div className="text-sm">
-              <p className="text-muted-foreground">Principal</p>
-              <p className="font-medium">
-                {primaryCertificate?.nome ? primaryCertificate.nome : "Não configurado"}
-              </p>
-            </div>
-            {health.certOk ? (
-              <ShieldCheck className="h-5 w-5 text-status-success" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-status-warning" />
             )}
           </CardContent>
         </Card>
@@ -876,9 +840,6 @@ export function BillingNfseTab() {
                 <li>
                   <strong>Competência</strong>: formato <strong>AAAA-MM</strong> (sem dia) e sem datas futuras.
                 </li>
-                <li>
-                  <strong>Certificado</strong>: A1 válido (quando usando API Nacional).
-                </li>
               </ul>
             </CardContent>
           </Card>
@@ -920,7 +881,7 @@ export function BillingNfseTab() {
                 </p>
                 <ul className="list-disc pl-5 space-y-1">
                   <li>Autorização eletrônica é condição de validade do documento.</li>
-                  <li>Uso de certificado digital (A1/A3) para assinatura de XML.</li>
+                  
                   <li>Atualizações normativas são frequentes (ex.: Ajustes SINIEF para NF-e).</li>
                 </ul>
               </AccordionContent>

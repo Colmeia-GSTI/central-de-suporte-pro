@@ -1,6 +1,5 @@
 /**
- * NFS-e Validation Rules for Portal Nacional da NFS-e
- * Based on the DPS (Declaração de Prestação de Serviço) standard
+ * NFS-e Validation Rules for Asaas integration
  */
 
 export interface NfseValidationResult {

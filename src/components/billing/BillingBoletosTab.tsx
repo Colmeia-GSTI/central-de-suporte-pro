@@ -232,7 +232,7 @@ export function BillingBoletosTab() {
   const handleForcePolling = async () => {
     setIsPolling(true);
     try {
-      const { data, error } = await supabase.functions.invoke("poll-boleto-status");
+      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["boleto"] } });
       if (error) throw error;
       
       toast.success("Polling executado", {
