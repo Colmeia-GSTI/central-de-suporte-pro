@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, AlertTriangle, Landmark } from "lucide-react";
+import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, AlertTriangle, Landmark, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBillingCounters } from "@/hooks/useBillingCounters";
 import { BillingInvoicesTab } from "@/components/billing/BillingInvoicesTab";
@@ -15,6 +15,7 @@ import { FiscalReportTab } from "@/components/billing/FiscalReportTab";
 import { IntegrationHealthDashboard } from "@/components/billing/IntegrationHealthDashboard";
 import { BillingErrorsPanel } from "@/components/billing/BillingErrorsPanel";
 import { BillingBankAccountsTab } from "@/components/billing/BillingBankAccountsTab";
+import { AccountsReceivableTab } from "@/components/billing/AccountsReceivableTab";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface TabBadgeProps {
@@ -45,6 +46,7 @@ function TabBadge({ count, variant }: TabBadgeProps) {
 
 const BILLING_TABS = [
   { id: "invoices", label: "Faturas", icon: Receipt },
+  { id: "receivable", label: "A Receber", icon: DollarSign },
   { id: "boletos", label: "Boletos", icon: Barcode },
   { id: "nfse", label: "NFS-e", icon: FileText },
   { id: "errors", label: "Erros", icon: AlertTriangle },
@@ -133,7 +135,7 @@ export default function BillingPage() {
         </div>
 
         <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-3 md:space-y-6">
-          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-10 md:w-auto">
+          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-11 md:w-auto">
             {BILLING_TABS.map((tab) => {
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {
                 return null;
@@ -157,6 +159,10 @@ export default function BillingPage() {
 
           <TabsContent value="invoices" className="mt-6">
             <BillingInvoicesTab />
+          </TabsContent>
+
+          <TabsContent value="receivable" className="mt-6">
+            <AccountsReceivableTab />
           </TabsContent>
 
           <TabsContent value="boletos" className="mt-6">
