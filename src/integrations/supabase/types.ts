@@ -240,8 +240,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_accounts: {
+        Row: {
+          account_number: string | null
+          account_type: string | null
+          agency: string | null
+          bank_name: string | null
+          created_at: string
+          current_balance: number
+          id: string
+          initial_balance: number
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          account_type?: string | null
+          agency?: string | null
+          bank_name?: string | null
+          created_at?: string
+          current_balance?: number
+          id?: string
+          initial_balance?: number
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          account_type?: string | null
+          agency?: string | null
+          bank_name?: string | null
+          created_at?: string
+          current_balance?: number
+          id?: string
+          initial_balance?: number
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bank_reconciliation: {
         Row: {
+          bank_account_id: string | null
           bank_amount: number
           bank_date: string
           bank_description: string
@@ -259,6 +302,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bank_account_id?: string | null
           bank_amount: number
           bank_date: string
           bank_description: string
@@ -276,6 +320,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bank_account_id?: string | null
           bank_amount?: number
           bank_date?: string
           bank_description?: string
@@ -294,10 +339,24 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "bank_reconciliation_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bank_reconciliation_financial_entry_id_fkey"
             columns: ["financial_entry_id"]
             isOneToOne: false
             referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_reconciliation_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
             referencedColumns: ["id"]
           },
           {
@@ -383,6 +442,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
             referencedColumns: ["id"]
           },
           {
@@ -927,6 +993,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "contract_additional_charges_applied_invoice_id_fkey"
+            columns: ["applied_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contract_additional_charges_applied_invoice_id_fkey"
             columns: ["applied_invoice_id"]
@@ -1499,6 +1572,13 @@ export type Database = {
             foreignKeyName: "financial_entries_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
@@ -1684,6 +1764,13 @@ export type Database = {
             foreignKeyName: "invoice_documents_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_documents_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
@@ -1729,6 +1816,13 @@ export type Database = {
             foreignKeyName: "invoice_generation_log_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_generation_log_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
@@ -1763,6 +1857,13 @@ export type Database = {
           unit_value?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoice_items_invoice_id_fkey"
             columns: ["invoice_id"]
@@ -1804,6 +1905,13 @@ export type Database = {
           success?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "invoice_notification_logs_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoice_notification_logs_invoice_id_fkey"
             columns: ["invoice_id"]
@@ -1996,6 +2104,13 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_parent_invoice_id_fkey"
+            columns: ["parent_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
             referencedColumns: ["id"]
           },
           {
@@ -2410,6 +2525,13 @@ export type Database = {
             foreignKeyName: "nfse_cancellation_log_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
+            referencedRelation: "accounts_receivable"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_cancellation_log_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
@@ -2654,6 +2776,13 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
             referencedColumns: ["id"]
           },
           {
@@ -3867,6 +3996,45 @@ export type Database = {
       }
     }
     Views: {
+      accounts_receivable: {
+        Row: {
+          amount: number | null
+          ar_status: string | null
+          client_id: string | null
+          client_name: string | null
+          contract_id: string | null
+          days_overdue: number | null
+          due_date: string | null
+          id: string | null
+          invoice_number: number | null
+          is_overdue: boolean | null
+          paid_amount: number | null
+          paid_date: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients_contact_only: {
         Row: {
           address: string | null
@@ -4059,6 +4227,13 @@ export type Database = {
             columns: ["contract_id"]
             isOneToOne: false
             referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfse_history_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "accounts_receivable"
             referencedColumns: ["id"]
           },
           {
