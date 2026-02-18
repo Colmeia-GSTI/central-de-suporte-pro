@@ -14,7 +14,7 @@ const corsHeaders = {
 };
 
 interface PollRequest {
-  services?: ("boleto" | "asaas_nfse" | "nfse_nacional")[];
+  services?: ("boleto" | "asaas_nfse")[];
 }
 
 interface InterSettings {
@@ -295,31 +295,6 @@ async function pollAsaasNfse(supabase: SupabaseClient): Promise<{ processed: num
   return { processed, updated };
 }
 
-// ============ NFS-E NACIONAL POLLING ============
-
-async function pollNfseNacional(supabase: SupabaseClient): Promise<{ processed: number; updated: number }> {
-  console.log("[POLL-SERVICES] Verificando NFS-e Nacional...");
-
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-
-  const { data: pendingNfse } = await supabase
-    .from("nfse_history")
-    .select("id, protocolo, chave_acesso, status")
-    .in("status", ["pendente", "processando", "enviada"])
-    .or("provider.is.null,provider.eq.nacional")
-    .lt("updated_at", twoHoursAgo)
-    .limit(10);
-
-  if (!pendingNfse?.length) {
-    console.log("[POLL-SERVICES] Nenhuma NFS-e Nacional pendente");
-    return { processed: 0, updated: 0 };
-  }
-
-  // NFS-e Nacional requires mTLS with A1 certificate - just log for now
-  console.log(`[POLL-SERVICES] ${pendingNfse.length} NFS-e Nacional aguardando (requer certificado A1)`);
-  return { processed: pendingNfse.length, updated: 0 };
-}
-
 // ============ MAIN HANDLER ============
 
 Deno.serve(async (req) => {
@@ -340,21 +315,19 @@ Deno.serve(async (req) => {
       // Default to all services
     }
 
-    const services = body.services || ["boleto", "asaas_nfse", "nfse_nacional"];
+    const services = body.services || ["boleto", "asaas_nfse"];
     console.log(`[POLL-SERVICES] Iniciando polling: ${services.join(", ")}`);
 
     const results: Record<string, { processed: number; updated: number }> = {};
 
     // Run all services in parallel
-    const [boletoResult, asaasResult, nacionalResult] = await Promise.all([
+    const [boletoResult, asaasResult] = await Promise.all([
       services.includes("boleto") ? pollBoletos(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
       services.includes("asaas_nfse") ? pollAsaasNfse(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
-      services.includes("nfse_nacional") ? pollNfseNacional(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
     ]);
 
     results.boleto = boletoResult;
     results.asaas_nfse = asaasResult;
-    results.nfse_nacional = nacionalResult;
 
     const totalProcessed = Object.values(results).reduce((a, b) => a + b.processed, 0);
     const totalUpdated = Object.values(results).reduce((a, b) => a + b.updated, 0);

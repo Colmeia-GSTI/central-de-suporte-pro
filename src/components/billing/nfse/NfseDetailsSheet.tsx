@@ -296,7 +296,7 @@ export function NfseDetailsSheet(props: {
       
       // Detectar erro E0014 - DPS Duplicada
       if (errorMessage.includes("E0014") || errorMessage.includes("DPS_DUPLICADA") || errorMessage.includes("Vincular Nota")) {
-        toast.error("Esta nota já existe no Portal Nacional", {
+        toast.error("Esta nota já existe no provedor Asaas", {
           description: "Use 'Vincular Nota Existente' para sincronizar o registro.",
           duration: 8000,
         });
@@ -699,10 +699,10 @@ export function NfseDetailsSheet(props: {
                   <Link2 className="h-4 w-4 text-amber-700" />
                   <AlertDescription>
                     <p className="font-medium text-amber-900 dark:text-amber-200">
-                      Nota já existe no Portal Nacional
+                      Nota já existe no provedor
                     </p>
                     <p className="text-sm mt-1 text-amber-800 dark:text-amber-300">
-                      Esta NFS-e foi emitida anteriormente com a mesma Série/Número DPS.
+                      Esta NFS-e já foi emitida anteriormente com os mesmos dados.
                       Informe o número da nota para sincronizar o registro.
                     </p>
                     <div className="flex gap-2 mt-3">

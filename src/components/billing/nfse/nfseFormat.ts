@@ -93,7 +93,6 @@ export function asaasStatusLabel(asaasStatus: string | null | undefined): string
 export function providerLabel(provider: string | null | undefined): string {
   if (!provider) return "-";
   if (provider === "asaas") return "Asaas";
-  if (provider === "nacional") return "API Nacional";
   return provider;
 }
 
@@ -127,7 +126,7 @@ export interface ParsedNfseError {
 
 // Known prefeitura error codes and their user-friendly messages
 const KNOWN_ERROR_ACTIONS: Record<string, string> = {
-  E0014: "A nota já existe no Portal Nacional. Use 'Vincular Nota Existente' para sincronizar.",
+  E0014: "A nota já existe no provedor Asaas. Use 'Vincular Nota Existente' para sincronizar.",
   E0001: "Verifique os dados do certificado digital.",
   E0002: "Verifique os dados do prestador e tomador.",
 };
@@ -175,8 +174,8 @@ export function formatNfseErrorMessage(mensagemRetorno: string | null | undefine
 
   if (parsed.isE0014) {
     return {
-      title: "Nota já existe no Portal Nacional",
-      description: "Esta NFS-e foi emitida anteriormente. A série/número DPS já está registrada.",
+      title: "Nota já existe no provedor",
+      description: "Esta NFS-e já foi emitida anteriormente com os mesmos dados.",
       action: "Informe o número da nota para sincronizar o registro.",
       showLinkButton: true,
     };

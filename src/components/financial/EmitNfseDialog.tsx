@@ -202,7 +202,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
           aliquota: isStandalone ? aliquotaIss : undefined,
           effective_date: competencia + "-01",
           competencia,
-          // Tributos Nacional 2026
+          // Tributos
           retain_iss: tributacao.issRetido,
           iss_rate: aliquotaIss,
           pis_value: tributacao.valorPis,
