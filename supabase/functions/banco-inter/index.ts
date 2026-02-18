@@ -589,10 +589,19 @@ Deno.serve(async (req) => {
     if (payment_type === "boleto") {
       // Generate Boleto
       const dueDate = new Date(invoice.due_date);
+      let dataVencimento = dueDate.toISOString().split("T")[0];
+      
+      // Auto-ajustar data de vencimento se já passou
+      const today = new Date().toISOString().split("T")[0];
+      if (dataVencimento < today) {
+        console.log(`[BANCO-INTER] Data de vencimento ${dataVencimento} já passou, ajustando para ${today}`);
+        dataVencimento = today;
+      }
+      
       const boletoPayload = {
         seuNumero: invoice.invoice_number.toString(),
         valorNominal: invoice.amount,
-        dataVencimento: dueDate.toISOString().split("T")[0],
+        dataVencimento,
         numDiasAgenda: 60,
         pagador: {
           cpfCnpj: invoice.client?.document?.replace(/\D/g, "") || "",
