@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
 import { logger, retryWithBackoff } from "@/lib/logger";
+import { openStorageFileSafe } from "@/lib/storage-utils";
 import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
 import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialog";
@@ -414,9 +415,9 @@ export function BillingInvoicesTab() {
                       sendingNotification={sendingNotification}
                       onViewHistory={() => setHistoryInvoice(invoice)}
                       onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                      onBoletoClick={() => {
+                      onBoletoClick={async () => {
                         if (invoice.boleto_url) {
-                          window.open(invoice.boleto_url, "_blank");
+                          await openStorageFileSafe(invoice.boleto_url, "PDF do boleto");
                         } else if (invoice.boleto_barcode) {
                           navigator.clipboard.writeText(invoice.boleto_barcode);
                           toast.success("Código de barras copiado!");
@@ -431,15 +432,7 @@ export function BillingInvoicesTab() {
                         if (status === "erro" || status === "rejeitada") {
                           setSearchParams({ tab: "nfse" });
                         } else if (status === "autorizada" && nfseInfo?.pdf_url) {
-                          // Open PDF directly via signed URL
-                          const { data: signedData } = await supabase.storage
-                            .from("nfse-files")
-                            .createSignedUrl(nfseInfo.pdf_url, 3600);
-                          if (signedData?.signedUrl) {
-                            window.open(signedData.signedUrl, "_blank");
-                          } else {
-                            toast.error("Erro ao gerar URL do PDF");
-                          }
+                          await openStorageFileSafe(nfseInfo.pdf_url, "PDF da NFS-e");
                         } else {
                           setNfseInvoice(invoice);
                         }
@@ -560,9 +553,9 @@ export function BillingInvoicesTab() {
                             sendingNotification={sendingNotification}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
-                            onBoletoClick={() => {
+                            onBoletoClick={async () => {
                               if (invoice.boleto_url) {
-                                window.open(invoice.boleto_url, "_blank");
+                                await openStorageFileSafe(invoice.boleto_url, "PDF do boleto");
                               } else if (invoice.boleto_barcode) {
                                 navigator.clipboard.writeText(invoice.boleto_barcode);
                                 toast.success("Código de barras copiado!");
@@ -577,14 +570,7 @@ export function BillingInvoicesTab() {
                               if (status === "erro" || status === "rejeitada") {
                                 setSearchParams({ tab: "nfse" });
                               } else if (status === "autorizada" && nfseInfo?.pdf_url) {
-                                const { data: signedData } = await supabase.storage
-                                  .from("nfse-files")
-                                  .createSignedUrl(nfseInfo.pdf_url, 3600);
-                                if (signedData?.signedUrl) {
-                                  window.open(signedData.signedUrl, "_blank");
-                                } else {
-                                  toast.error("Erro ao gerar URL do PDF");
-                                }
+                                await openStorageFileSafe(nfseInfo.pdf_url, "PDF da NFS-e");
                               } else {
                                 setNfseInvoice(invoice);
                               }
