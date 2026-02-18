@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
 import { logger, retryWithBackoff } from "@/lib/logger";
-import { openStorageFileSafe } from "@/lib/storage-utils";
+import { downloadStorageFileSafe } from "@/lib/storage-utils";
 import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
 import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialog";
@@ -417,7 +417,7 @@ export function BillingInvoicesTab() {
                       onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                       onBoletoClick={async () => {
                         if (invoice.boleto_url) {
-                          await openStorageFileSafe(invoice.boleto_url, "PDF do boleto");
+                          await downloadStorageFileSafe(invoice.boleto_url, "PDF do boleto", `boleto_fatura_${invoice.invoice_number}.pdf`);
                         } else if (invoice.boleto_barcode) {
                           navigator.clipboard.writeText(invoice.boleto_barcode);
                           toast.success("Código de barras copiado!");
@@ -432,7 +432,7 @@ export function BillingInvoicesTab() {
                         if (status === "erro" || status === "rejeitada") {
                           setSearchParams({ tab: "nfse" });
                         } else if (status === "autorizada" && nfseInfo?.pdf_url) {
-                          await openStorageFileSafe(nfseInfo.pdf_url, "PDF da NFS-e");
+                          await downloadStorageFileSafe(nfseInfo.pdf_url, "PDF da NFS-e", `nfse_fatura_${invoice.invoice_number}.pdf`);
                         } else {
                           setNfseInvoice(invoice);
                         }
@@ -555,7 +555,7 @@ export function BillingInvoicesTab() {
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                             onBoletoClick={async () => {
                               if (invoice.boleto_url) {
-                                await openStorageFileSafe(invoice.boleto_url, "PDF do boleto");
+                                await downloadStorageFileSafe(invoice.boleto_url, "PDF do boleto", `boleto_fatura_${invoice.invoice_number}.pdf`);
                               } else if (invoice.boleto_barcode) {
                                 navigator.clipboard.writeText(invoice.boleto_barcode);
                                 toast.success("Código de barras copiado!");
@@ -570,7 +570,7 @@ export function BillingInvoicesTab() {
                               if (status === "erro" || status === "rejeitada") {
                                 setSearchParams({ tab: "nfse" });
                               } else if (status === "autorizada" && nfseInfo?.pdf_url) {
-                                await openStorageFileSafe(nfseInfo.pdf_url, "PDF da NFS-e");
+                                await downloadStorageFileSafe(nfseInfo.pdf_url, "PDF da NFS-e", `nfse_fatura_${invoice.invoice_number}.pdf`);
                               } else {
                                 setNfseInvoice(invoice);
                               }
