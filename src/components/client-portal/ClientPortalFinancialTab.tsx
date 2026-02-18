@@ -45,6 +45,8 @@ const statusLabels: Record<string, string> = {
   paid: "Pago",
   overdue: "Vencido",
   cancelled: "Cancelado",
+  renegotiated: "Renegociado",
+  lost: "Perdido",
 };
 
 const statusConfig: Record<string, { icon: React.ReactNode; className: string }> = {

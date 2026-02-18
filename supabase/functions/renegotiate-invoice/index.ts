@@ -149,10 +149,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Cancel original invoice  
+    // Mark original invoice as renegotiated  
     const { error: cancelError } = await supabase
       .from("invoices")
-      .update({ status: "cancelled" })
+      .update({ status: "renegotiated" })
       .eq("id", invoice_id);
 
     if (cancelError) {
