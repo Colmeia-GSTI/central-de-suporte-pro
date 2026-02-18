@@ -54,7 +54,7 @@ type InvoiceWithClient = Tables<"invoices"> & {
   billing_provider: string | null;
 };
 
-type NfseByInvoice = Record<string, { status: string; numero_nfse: string | null }>;
+type NfseByInvoice = Record<string, { status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null }>;
 
 const statusLabels: Record<Enums<"invoice_status">, string> = {
   pending: "PENDENTE",
@@ -144,7 +144,7 @@ export function BillingInvoicesTab() {
       if (invoiceIds.length === 0) return {};
       const { data, error } = await supabase
         .from("nfse_history")
-        .select("invoice_id, status, numero_nfse")
+        .select("invoice_id, status, numero_nfse, pdf_url, xml_url")
         .in("invoice_id", invoiceIds);
       if (error) throw error;
       const statusPriority: Record<string, number> = {
@@ -156,7 +156,7 @@ export function BillingInvoicesTab() {
         const existingPriority = existing ? (statusPriority[existing.status] ?? 99) : 99;
         const newPriority = statusPriority[n.status] ?? 99;
         if (newPriority < existingPriority) {
-          acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse };
+          acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse, pdf_url: n.pdf_url, xml_url: n.xml_url };
         }
         return acc;
       }, {});
@@ -426,10 +426,20 @@ export function BillingInvoicesTab() {
                           toast.info("Nenhum boleto ou PIX gerado para esta fatura");
                         }
                       }}
-                      onNfseClick={() => {
+                      onNfseClick={async () => {
                         const status = nfseInfo?.status;
                         if (status === "erro" || status === "rejeitada") {
                           setSearchParams({ tab: "nfse" });
+                        } else if (status === "autorizada" && nfseInfo?.pdf_url) {
+                          // Open PDF directly via signed URL
+                          const { data: signedData } = await supabase.storage
+                            .from("nfse-files")
+                            .createSignedUrl(nfseInfo.pdf_url, 3600);
+                          if (signedData?.signedUrl) {
+                            window.open(signedData.signedUrl, "_blank");
+                          } else {
+                            toast.error("Erro ao gerar URL do PDF");
+                          }
                         } else {
                           setNfseInvoice(invoice);
                         }
@@ -562,10 +572,19 @@ export function BillingInvoicesTab() {
                                 toast.info("Nenhum boleto ou PIX gerado para esta fatura");
                               }
                             }}
-                            onNfseClick={() => {
+                            onNfseClick={async () => {
                               const status = nfseInfo?.status;
                               if (status === "erro" || status === "rejeitada") {
                                 setSearchParams({ tab: "nfse" });
+                              } else if (status === "autorizada" && nfseInfo?.pdf_url) {
+                                const { data: signedData } = await supabase.storage
+                                  .from("nfse-files")
+                                  .createSignedUrl(nfseInfo.pdf_url, 3600);
+                                if (signedData?.signedUrl) {
+                                  window.open(signedData.signedUrl, "_blank");
+                                } else {
+                                  toast.error("Erro ao gerar URL do PDF");
+                                }
                               } else {
                                 setNfseInvoice(invoice);
                               }

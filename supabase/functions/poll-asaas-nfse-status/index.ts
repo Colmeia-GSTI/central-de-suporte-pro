@@ -339,6 +339,29 @@ Deno.serve(async (req) => {
         }
 
         await supabase.from("nfse_history").update(updateData).eq("id", record.id);
+
+        // ============ SYNC nfse_status TO invoices TABLE ============
+        // Look up the invoice_id from nfse_history to sync status
+        if (newStatus === "autorizada" || newStatus === "erro") {
+          const { data: historyRow } = await supabase
+            .from("nfse_history")
+            .select("invoice_id")
+            .eq("id", record.id)
+            .maybeSingle();
+          if (historyRow?.invoice_id) {
+            const invoiceUpdate: Record<string, unknown> = {
+              nfse_status: newStatus === "autorizada" ? "gerada" : "erro",
+              nfse_error_msg: newStatus === "erro" ? (updateData.mensagem_erro as string || null) : null,
+              updated_at: new Date().toISOString(),
+            };
+            if (newStatus === "autorizada") {
+              invoiceUpdate.nfse_generated_at = new Date().toISOString();
+            }
+            await supabase.from("invoices").update(invoiceUpdate).eq("id", historyRow.invoice_id);
+            console.log(`[POLL-ASAAS-FALLBACK] invoices.nfse_status sincronizado para fatura ${historyRow.invoice_id}`);
+          }
+        }
+
         updatedCount++;
       }
     }
