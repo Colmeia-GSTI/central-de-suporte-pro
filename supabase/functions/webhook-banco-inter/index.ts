@@ -132,6 +132,7 @@ async function processPayload(
       updateData.status = "paid";
       updateData.paid_date = payload.dataHoraSituacao || payload.dataSituacao || new Date().toISOString();
       updateData.payment_method = "boleto";
+      updateData.paid_amount = payload.valorTotalRecebimento || payload.valorNominal || null;
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -145,6 +146,52 @@ async function processPayload(
         throw error;
       }
       console.log("[WEBHOOK-BANCO-INTER] Fatura atualizada com sucesso");
+
+      // Criar entrada financeira e audit log para pagamentos confirmados
+      if (updateData.status === "paid") {
+        const { data: updatedInvoice } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, client_id, amount")
+          .eq("invoice_number", invoiceNumber)
+          .single();
+
+        if (updatedInvoice) {
+          const paidAmount = updateData.paid_amount || updatedInvoice.amount;
+
+          const { error: feError } = await supabase.from("financial_entries").insert({
+            client_id: updatedInvoice.client_id,
+            invoice_id: updatedInvoice.id,
+            type: "receita",
+            amount: paidAmount,
+            description: `Pagamento automático (boleto) - Fatura #${invoiceNumber}`,
+            date: updateData.paid_date as string,
+            category: "pagamento_automatico",
+          });
+
+          if (feError) {
+            console.error("[WEBHOOK-BANCO-INTER] Erro ao criar financial_entry:", feError);
+          } else {
+            console.log("[WEBHOOK-BANCO-INTER] financial_entry criada com sucesso");
+          }
+
+          const { error: auditError } = await supabase.from("audit_logs").insert({
+            table_name: "invoices",
+            record_id: updatedInvoice.id,
+            action: "WEBHOOK_PAYMENT_CONFIRMED",
+            new_data: {
+              paid_amount: paidAmount,
+              paid_date: updateData.paid_date,
+              payment_method: "boleto",
+              source: "webhook_banco_inter",
+              origem_recebimento: payload.origemRecebimento,
+            } as unknown as Record<string, unknown>,
+          });
+
+          if (auditError) {
+            console.error("[WEBHOOK-BANCO-INTER] Erro ao criar audit_log:", auditError);
+          }
+        }
+      }
     }
   } else if (isPix && payload.txid) {
     console.log("[WEBHOOK-BANCO-INTER] Atualizando PIX:", payload.txid);
@@ -171,6 +218,45 @@ async function processPayload(
           throw updateError;
         }
         console.log("[WEBHOOK-BANCO-INTER] PIX atualizado com sucesso");
+
+        // Criar entrada financeira para PIX
+        const pixInvoice = invoices[0];
+        const { data: fullInvoice } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, client_id, amount")
+          .eq("id", pixInvoice.id)
+          .single();
+
+        if (fullInvoice) {
+          const pixAmount = payload.valor?.original
+            ? parseFloat(payload.valor.original)
+            : fullInvoice.amount;
+
+          const { error: feError } = await supabase.from("financial_entries").insert({
+            client_id: fullInvoice.client_id,
+            invoice_id: fullInvoice.id,
+            type: "receita",
+            amount: pixAmount,
+            description: `Pagamento automático (PIX) - Fatura #${fullInvoice.invoice_number}`,
+            date: payload.dataHoraSituacao || new Date().toISOString(),
+            category: "pagamento_automatico",
+          });
+
+          if (feError) {
+            console.error("[WEBHOOK-BANCO-INTER] Erro ao criar financial_entry PIX:", feError);
+          }
+
+          await supabase.from("audit_logs").insert({
+            table_name: "invoices",
+            record_id: fullInvoice.id,
+            action: "WEBHOOK_PAYMENT_CONFIRMED",
+            new_data: {
+              paid_amount: pixAmount,
+              payment_method: "pix",
+              source: "webhook_banco_inter",
+            } as unknown as Record<string, unknown>,
+          });
+        }
       }
     }
   }
