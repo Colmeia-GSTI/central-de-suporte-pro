@@ -427,21 +427,32 @@ Deno.serve(async (req) => {
             for (const paymentType of paymentTypes) {
               console.log(`[GEN-INVOICES] Gerando ${paymentType} via ${provider} para fatura #${newInvoice.invoice_number}`);
 
-              if (provider === "asaas") {
-                await supabase.functions.invoke("asaas-nfse", {
-                  body: {
-                    action: "create_payment",
-                    invoice_id: newInvoice.id,
-                    billing_type: paymentType === "pix" ? "PIX" : "BOLETO",
-                  },
-                });
-              } else {
-                await supabase.functions.invoke("banco-inter", {
-                  body: {
-                    invoice_id: newInvoice.id,
-                    payment_type: paymentType,
-                  },
-                });
+              const invokeResult = provider === "asaas"
+                ? await supabase.functions.invoke("asaas-nfse", {
+                    body: {
+                      action: "create_payment",
+                      invoice_id: newInvoice.id,
+                      billing_type: paymentType === "pix" ? "PIX" : "BOLETO",
+                    },
+                  })
+                : await supabase.functions.invoke("banco-inter", {
+                    body: {
+                      invoice_id: newInvoice.id,
+                      payment_type: paymentType,
+                    },
+                  });
+
+              if (invokeResult.error) {
+                throw new Error(
+                  `Erro ao gerar ${paymentType} via ${provider}: ${invokeResult.error.message || JSON.stringify(invokeResult.error)}`
+                );
+              }
+
+              const responseData = invokeResult.data as unknown as Record<string, unknown> | null;
+              if (responseData?.error) {
+                throw new Error(
+                  `Provedor ${provider} retornou erro: ${String(responseData.error)}`
+                );
               }
             }
 
