@@ -1,71 +1,49 @@
 
 
-# Adicionar Campo "Apelido" nos Clientes
+# Corrigir: Permitir Tecnico Cadastrar Clientes com CNPJ
 
-## Objetivo
-Permitir cadastrar um apelido/tag em cada cliente para facilitar a identificacao rapida pelos tecnicos, especialmente ao vincular usuarios. O apelido aparecera na listagem de clientes e no detalhe.
+## Problema
 
-## Alteracoes
+O campo CNPJ esta oculto para tecnicos porque o formulario usa `{!isTechnicianOnly && (...)}` para esconder campos sensiveis. Isso faz sentido para **visualizacao** na listagem, mas impede o tecnico de preencher o CNPJ ao **cadastrar** um novo cliente.
 
-### 1. Banco de Dados
-- Adicionar coluna `nickname` (text, nullable) na tabela `clients`
-- Tambem adicionar na VIEW `clients_contact_only` para que tecnicos vejam o apelido
+## Solucao
 
-### 2. Formulario do Cliente (`ClientForm.tsx`)
-- Adicionar campo "Apelido" no schema Zod e no formulario, logo apos "Nome Fantasia"
-- Campo opcional, placeholder "Ex: Padaria do Ze, Escritorio Centro"
+Mostrar o campo CNPJ (e Inscricao Estadual) para tecnicos **quando estiverem criando um novo cliente**. Quando estiverem **editando**, manter o campo oculto para proteger dados sensiveis.
 
-### 3. Listagem de Clientes (`ClientsPage.tsx`)
-- Exibir o apelido como uma Badge colorida (estilo tag) ao lado do nome do cliente na tabela
-- Incluir o campo `nickname` na query de busca (search tambem filtra por apelido)
+A logica muda de:
+- `{!isTechnicianOnly && (campo CNPJ)}` (sempre oculto para tecnico)
 
-### 4. Detalhe do Cliente (`ClientDetailPage.tsx`)
-- Exibir o apelido no cabecalho, abaixo do nome fantasia, como uma Badge destacada
-- Incluir `nickname` no select da query
-
-### 5. Mutation do ClientForm
-- Incluir `nickname` no payload de insert/update
-- Incluir no defaultValues e no rastreamento de mudancas (historico)
-
----
+Para:
+- `{(!isTechnicianOnly || !client) && (campo CNPJ)}` (visivel para tecnico apenas na criacao)
 
 ## Detalhes Tecnicos
 
-**Migracao SQL:**
-```sql
-ALTER TABLE clients ADD COLUMN nickname text;
+### Arquivo: `src/components/clients/ClientForm.tsx`
 
-CREATE OR REPLACE VIEW clients_contact_only AS
-SELECT id, name, trade_name, nickname, email, phone, whatsapp,
-       whatsapp_validated, is_active, created_at, updated_at,
-       address, city, state, zip_code, notes
-FROM clients;
-```
-
-**Formulario -- novo campo apos trade_name:**
+**Linha 400** -- Campo CNPJ:
 ```tsx
-<FormField name="nickname" ...>
-  <FormLabel>Apelido</FormLabel>
-  <Input placeholder="Ex: Padaria do Ze" />
-  <FormDescription>Identificacao rapida para os tecnicos</FormDescription>
-</FormField>
+// Antes:
+{!isTechnicianOnly && (
+
+// Depois:
+{(!isTechnicianOnly || !client) && (
 ```
 
-**Listagem -- badge ao lado do nome:**
+**Linha 439** -- Campo Inscricao Estadual:
 ```tsx
-<p className="font-medium">
-  {client.name}
-  {client.nickname && (
-    <Badge variant="outline" className="ml-2 text-xs">
-      {client.nickname}
-    </Badge>
-  )}
-</p>
+// Antes:
+{!isTechnicianOnly && (
+
+// Depois:
+{(!isTechnicianOnly || !client) && (
 ```
 
-**Arquivos afetados:**
-1. Migracao SQL (nova coluna + view)
-2. `src/components/clients/ClientForm.tsx` -- campo no formulario + schema + payload
-3. `src/pages/clients/ClientsPage.tsx` -- exibir badge + incluir na busca
-4. `src/pages/clients/ClientDetailPage.tsx` -- exibir no cabecalho
+Isso garante:
+- Tecnico **criando** cliente: ve CNPJ e Inscricao Estadual (pode preencher)
+- Tecnico **editando** cliente: NAO ve CNPJ (protege dado sensivel)
+- Admin/Financial/Manager: ve sempre (sem alteracao)
+
+### Banco de Dados
+
+Nenhuma alteracao necessaria. A RLS ja permite INSERT para staff (`is_staff(auth.uid())`), que inclui tecnicos.
 
