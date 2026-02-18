@@ -49,6 +49,7 @@ import { toast } from "sonner";
 import { AgingReportWidget } from "./AgingReportWidget";
 import { EconomicIndicesWidget } from "./EconomicIndicesWidget";
 import { ReconciliationMatchDialog } from "./ReconciliationMatchDialog";
+import { BankAccountSelector } from "./BankAccountSelector";
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   pending: { label: "Pendente", icon: <Clock className="h-3 w-3" />, className: "bg-status-warning/20 text-status-warning border-status-warning/30" },
@@ -61,12 +62,13 @@ const statusConfig: Record<string, { label: string; icon: React.ReactNode; class
 export function BankReconciliationTab() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [matchDialog, setMatchDialog] = useState<{ open: boolean; entry: any | null }>({ open: false, entry: null });
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
   const { data: entries = [], isLoading } = useQuery({
-    queryKey: ["bank-reconciliation", statusFilter],
+    queryKey: ["bank-reconciliation", statusFilter, selectedAccountId],
     queryFn: async () => {
       let query = supabase
         .from("bank_reconciliation")
@@ -76,6 +78,10 @@ export function BankReconciliationTab() {
 
       if (statusFilter !== "all") {
         query = query.eq("status", statusFilter);
+      }
+
+      if (selectedAccountId) {
+        query = query.eq("bank_account_id", selectedAccountId);
       }
 
       const { data, error } = await query;
@@ -210,6 +216,9 @@ export function BankReconciliationTab() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Bank Account Selector */}
+      <BankAccountSelector value={selectedAccountId} onChange={setSelectedAccountId} />
 
       {/* Aging + Indices Side-by-Side */}
       <div className="grid gap-4 md:grid-cols-2">
