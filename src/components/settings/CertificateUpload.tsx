@@ -101,12 +101,24 @@ export function CertificateUpload({
 
       if (uploadError) throw uploadError;
 
+      // Encrypt password server-side before storing
+      const { data: encryptResult, error: encryptError } = await supabase.functions.invoke(
+        "certificate-vault",
+        { body: { action: "encrypt", password } }
+      );
+
+      if (encryptError || !encryptResult?.encrypted_password) {
+        logger.error("Failed to encrypt certificate password", "Certificates", { error: String(encryptError) });
+        toast.error("Erro ao proteger a senha do certificado");
+        return;
+      }
+
       // Update company settings with certificate info
       const { error: updateError } = await supabase
         .from("company_settings")
         .update({
           certificado_arquivo_url: `certificates/${uploadData.path}`,
-          certificado_senha_hash: password, // In production, encrypt this
+          certificado_senha_hash: encryptResult.encrypted_password,
           certificado_uploaded_at: new Date().toISOString(),
         })
         .eq("id", companyId);
