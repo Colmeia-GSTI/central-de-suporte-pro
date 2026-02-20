@@ -568,6 +568,7 @@ export default function ClientPortalPage() {
                             onChange={(e) => setAssetDescription(e.target.value)}
                           />
                         )}
+                      </div>
                       <div className="flex justify-end gap-2">
                         <Button type="button" variant="outline" onClick={() => setIsNewTicketOpen(false)}>
                           Cancelar
