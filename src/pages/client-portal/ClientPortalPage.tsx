@@ -41,8 +41,17 @@ import {
   CheckCircle,
   Star,
   DollarSign,
+  Monitor,
+  Laptop,
+  Server,
+  Printer,
+  Network,
+  Wifi,
+  Box,
+  TrendingUp,
 } from "lucide-react";
 import { ClientPortalFinancialTab } from "@/components/client-portal/ClientPortalFinancialTab";
+import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -86,7 +95,9 @@ export default function ClientPortalPage() {
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"my" | "all">("my");
   const [ratingTicket, setRatingTicket] = useState<{id: string; number: number; title: string} | null>(null);
-  const [activeSection, setActiveSection] = useState<"chamados" | "financeiro">("chamados");
+  const [activeSection, setActiveSection] = useState<"chamados" | "financeiro" | "relatorios">("chamados");
+  const [selectedAssetId, setSelectedAssetId] = useState<string>("");
+  const [assetDescription, setAssetDescription] = useState("");
 
   const isClient = roles.includes("client") || roles.includes("client_master");
   const isClientMaster = roles.includes("client_master");
@@ -174,6 +185,22 @@ export default function ClientPortalPage() {
     enabled: !!selectedTicket,
   });
 
+  // Fetch client assets for device linking
+  const { data: clientAssets = [] } = useQuery({
+    queryKey: ["client-assets", clientData?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assets")
+        .select("id, name, asset_type, status")
+        .eq("client_id", clientData!.id)
+        .eq("status", "active")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!clientData?.id,
+  });
+
   // Fetch categories
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
@@ -194,11 +221,18 @@ export default function ClientPortalPage() {
       description: string;
       priority: Enums<"ticket_priority">;
       category_id?: string;
+      asset_id?: string | null;
+      asset_description?: string | null;
     }) => {
       if (!clientData?.id) throw new Error("Cliente não encontrado");
 
       const { error } = await supabase.from("tickets").insert({
-        ...ticketData,
+        title: ticketData.title,
+        description: ticketData.description,
+        priority: ticketData.priority,
+        category_id: ticketData.category_id || null,
+        asset_id: ticketData.asset_id || null,
+        asset_description: ticketData.asset_description || null,
         client_id: clientData.id,
         created_by: user?.id,
         requester_contact_id: clientData.contactId,
@@ -210,6 +244,8 @@ export default function ClientPortalPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-tickets"] });
       setIsNewTicketOpen(false);
+      setSelectedAssetId("");
+      setAssetDescription("");
       toast({ title: "Chamado aberto com sucesso!" });
     },
     onError: () => {
@@ -235,6 +271,16 @@ export default function ClientPortalPage() {
     },
   });
 
+  const assetTypeIcons: Record<string, React.ReactNode> = {
+    desktop: <Monitor className="h-4 w-4" />,
+    laptop: <Laptop className="h-4 w-4" />,
+    server: <Server className="h-4 w-4" />,
+    printer: <Printer className="h-4 w-4" />,
+    network: <Network className="h-4 w-4" />,
+    access_point: <Wifi className="h-4 w-4" />,
+    other: <Box className="h-4 w-4" />,
+  };
+
   const handleNewTicket = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -243,6 +289,8 @@ export default function ClientPortalPage() {
       description: formData.get("description") as string,
       priority: formData.get("priority") as Enums<"ticket_priority">,
       category_id: formData.get("category_id") as string || undefined,
+      asset_id: selectedAssetId && selectedAssetId !== "other" ? selectedAssetId : null,
+      asset_description: selectedAssetId === "other" ? assetDescription : null,
     });
   };
 
@@ -319,12 +367,25 @@ export default function ClientPortalPage() {
               <DollarSign className="h-4 w-4" />
               Financeiro
             </Button>
+            <Button
+              variant={activeSection === "relatorios" ? "default" : "outline"}
+              onClick={() => setActiveSection("relatorios")}
+              className="gap-2"
+            >
+              <TrendingUp className="h-4 w-4" />
+              Relatórios
+            </Button>
           </div>
         )}
 
         {/* Financial Tab - client_master only */}
         {isClientMaster && activeSection === "financeiro" && clientData?.id && (
           <ClientPortalFinancialTab clientId={clientData.id} />
+        )}
+
+        {/* Reports Tab - client_master only */}
+        {isClientMaster && activeSection === "relatorios" && clientData?.id && (
+          <ClientManagementReport clientId={clientData.id} />
         )}
 
         {/* Tickets Section */}
@@ -466,6 +527,47 @@ export default function ClientPortalPage() {
                           </Select>
                         </div>
                       </div>
+                      {/* Device Selection */}
+                      <div className="space-y-2">
+                        <Label>Dispositivo com problema</Label>
+                        {clientAssets.length > 0 ? (
+                          <>
+                            <Select value={selectedAssetId} onValueChange={setSelectedAssetId}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione o dispositivo (opcional)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {clientAssets.map((asset) => (
+                                  <SelectItem key={asset.id} value={asset.id}>
+                                    <span className="flex items-center gap-2">
+                                      {assetTypeIcons[asset.asset_type] || <Box className="h-4 w-4" />}
+                                      {asset.name}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="other">
+                                  <span className="flex items-center gap-2">
+                                    <Box className="h-4 w-4" />
+                                    Outro dispositivo (especificar)
+                                  </span>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {selectedAssetId === "other" && (
+                              <Input
+                                placeholder="Descreva o dispositivo"
+                                value={assetDescription}
+                                onChange={(e) => setAssetDescription(e.target.value)}
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <Input
+                            placeholder="Descreva o dispositivo com problema (opcional)"
+                            value={assetDescription}
+                            onChange={(e) => setAssetDescription(e.target.value)}
+                          />
+                        )}
                       <div className="flex justify-end gap-2">
                         <Button type="button" variant="outline" onClick={() => setIsNewTicketOpen(false)}>
                           Cancelar

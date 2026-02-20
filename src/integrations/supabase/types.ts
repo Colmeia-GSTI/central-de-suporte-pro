@@ -4367,6 +4367,10 @@ export type Database = {
         }[]
       }
       get_certificate_password: { Args: { cert_id: string }; Returns: string }
+      get_client_management_report: {
+        Args: { p_client_id: string; p_end_date: string; p_start_date: string }
+        Returns: Json
+      }
       get_company_certificate_password: { Args: never; Returns: string }
       get_integration_health_stats: { Args: never; Returns: Json }
       get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
