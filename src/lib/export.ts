@@ -122,4 +122,15 @@ export const exportConfigs = {
     { key: "client_name", label: "Cliente" },
     { key: "status", label: "Status" },
   ],
+  managementReport: [
+    { key: "periodo", label: "Período" },
+    { key: "total_chamados", label: "Total Chamados" },
+    { key: "chamados_resolvidos", label: "Resolvidos" },
+    { key: "sla_percentual", label: "SLA %" },
+    { key: "horas_trabalhadas", label: "Horas Trabalhadas" },
+    { key: "valor_faturado", label: "Valor Faturado" },
+    { key: "valor_pago", label: "Valor Pago" },
+    { key: "valor_pendente", label: "Valor Pendente" },
+    { key: "valor_vencido", label: "Valor Vencido" },
+  ],
 };

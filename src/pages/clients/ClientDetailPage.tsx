@@ -20,8 +20,13 @@ import {
   MapPin,
   MessageCircle,
   CheckCircle2,
+  TrendingUp,
 } from "lucide-react";
 import { ClientUsersList } from "@/components/clients/ClientUsersList";
+import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
+import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
+import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
+import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
 import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
 import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
@@ -129,7 +134,7 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-flex">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-flex">
             <TabsTrigger value="info" className="gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Informações</span>
@@ -149,6 +154,10 @@ export default function ClientDetailPage() {
             <TabsTrigger value="technicians" className="gap-2">
               <UserCheck className="h-4 w-4" />
               <span className="hidden sm:inline">Técnicos</span>
+            </TabsTrigger>
+            <TabsTrigger value="report" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              <span className="hidden sm:inline">Relatório</span>
             </TabsTrigger>
           </TabsList>
 
@@ -272,6 +281,11 @@ export default function ClientDetailPage() {
           {/* Technicians Tab */}
           <TabsContent value="technicians">
             <ClientTechniciansList clientId={id!} />
+          </TabsContent>
+
+          {/* Management Report Tab */}
+          <TabsContent value="report">
+            <ClientManagementReport clientId={id!} />
           </TabsContent>
         </Tabs>
       </div>
