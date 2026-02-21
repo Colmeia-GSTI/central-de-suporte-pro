@@ -56,7 +56,23 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { TicketRatingDialog } from "@/components/tickets/TicketRatingDialog";
-import type { Enums } from "@/integrations/supabase/types";
+import type { Enums, Tables } from "@/integrations/supabase/types";
+
+interface PortalTicket {
+  id: string;
+  ticket_number: number;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  created_at: string;
+  resolved_at: string | null;
+  satisfaction_rating: number | null;
+  client_id: string | null;
+  requester_contact_id: string | null;
+  ticket_categories: { name: string } | null;
+  requester: { name: string } | null;
+}
 
 const statusLabels: Record<string, string> = {
   open: "Aberto",
@@ -105,6 +121,7 @@ export default function ClientPortalPage() {
   // Fetch client association via client_contacts
   const { data: clientData } = useQuery({
     queryKey: ["client-user", user?.id],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       // Buscar cliente pelo vínculo do usuário em client_contacts
       const { data: contact } = await supabase
@@ -114,7 +131,8 @@ export default function ClientPortalPage() {
         .maybeSingle();
       
       if (contact?.clients) {
-        return { ...(contact.clients as any), contactId: contact.id };
+        const clientRecord = contact.clients as unknown as Tables<"clients">;
+        return { ...clientRecord, contactId: contact.id };
       }
       return null;
     },
@@ -188,6 +206,7 @@ export default function ClientPortalPage() {
   // Fetch client assets for device linking
   const { data: clientAssets = [] } = useQuery({
     queryKey: ["client-assets", clientData?.id],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assets")
@@ -204,6 +223,7 @@ export default function ClientPortalPage() {
   // Fetch categories
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_categories")
@@ -269,6 +289,10 @@ export default function ClientPortalPage() {
       queryClient.invalidateQueries({ queryKey: ["ticket-comments"] });
       toast({ title: "Comentário adicionado" });
     },
+    onError: (error: Error) => {
+      console.error("[AddComment] Falha ao adicionar comentário:", error);
+      toast({ title: "Erro ao enviar comentário", description: "Tente novamente.", variant: "destructive" });
+    },
   });
 
   const assetTypeIcons: Record<string, React.ReactNode> = {
@@ -313,7 +337,7 @@ export default function ClientPortalPage() {
 
   if (!isClient) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Acesso Negado</CardTitle>
@@ -327,7 +351,7 @@ export default function ClientPortalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -339,7 +363,7 @@ export default function ClientPortalPage() {
             <span className="text-sm text-muted-foreground">
               {profile?.full_name}
             </span>
-            <Button variant="ghost" size="sm" onClick={signOut}>
+            <Button variant="ghost" size="sm" onClick={signOut} className="active:scale-[0.98] transition-transform">
               <LogOut className="h-4 w-4 mr-2" />
               Sair
             </Button>
@@ -467,7 +491,7 @@ export default function ClientPortalPage() {
                 </div>
                 <Dialog open={isNewTicketOpen} onOpenChange={setIsNewTicketOpen}>
                   <DialogTrigger asChild>
-                    <Button>
+                    <Button className="active:scale-[0.98] transition-transform">
                       <Plus className="h-4 w-4 mr-2" />
                       Novo Chamado
                     </Button>
@@ -617,7 +641,7 @@ export default function ClientPortalPage() {
                             </TableCell>
                           </TableRow>
                         ) : (
-                          openTickets.map((ticket: any) => (
+                          openTickets.map((ticket) => (
                             <TableRow
                               key={ticket.id}
                               className="cursor-pointer hover:bg-muted/50"
@@ -664,7 +688,7 @@ export default function ClientPortalPage() {
                             Avalie os chamados abaixo para encerrá-los definitivamente.
                           </p>
                         </div>
-                        {resolvedTickets.map((ticket: any) => (
+                        {resolvedTickets.map((ticket) => (
                           <Card key={ticket.id} className="border-green-200 dark:border-green-800">
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between gap-4">
@@ -724,7 +748,7 @@ export default function ClientPortalPage() {
                             </TableCell>
                           </TableRow>
                         ) : (
-                          closedTickets.map((ticket: any) => (
+                          closedTickets.map((ticket) => (
                             <TableRow
                               key={ticket.id}
                               className="cursor-pointer hover:bg-muted/50"
@@ -815,7 +839,7 @@ export default function ClientPortalPage() {
                           placeholder="Digite sua mensagem..."
                           required
                         />
-                        <Button type="submit" size="icon">
+                        <Button type="submit" size="icon" disabled={addCommentMutation.isPending} aria-label="Enviar comentário">
                           <MessageSquare className="h-4 w-4" />
                         </Button>
                       </form>

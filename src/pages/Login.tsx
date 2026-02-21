@@ -77,7 +77,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-background relative overflow-hidden">
       {/* Hexagon Pattern Background */}
       <svg className="absolute inset-0 w-full h-full opacity-[0.03] dark:opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
         <defs>
