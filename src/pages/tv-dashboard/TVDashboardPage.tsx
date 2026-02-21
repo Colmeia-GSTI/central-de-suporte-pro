@@ -121,7 +121,7 @@ export default function TVDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
+    <div className="min-h-[100dvh] bg-background p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-4xl font-bold">Central de Helpdesk</h1>

@@ -104,6 +104,7 @@ export function ClientManagementReport({ clientId }: ClientManagementReportProps
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["client-management-report", clientId, period],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_client_management_report", {
         p_client_id: clientId,

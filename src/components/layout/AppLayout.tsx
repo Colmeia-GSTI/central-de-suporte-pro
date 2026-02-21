@@ -102,7 +102,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
       <GlobalProgress />
       <BackgroundPattern />
       
-      <div className="min-h-screen flex w-full relative">
+      <div className="min-h-[100dvh] flex w-full relative">
         <AppSidebar />
         
         <main className="flex-1 flex flex-col">

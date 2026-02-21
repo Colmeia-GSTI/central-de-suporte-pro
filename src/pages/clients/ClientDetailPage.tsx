@@ -27,17 +27,11 @@ import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
 import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
-import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
-import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
-import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { formatPhone } from "@/lib/utils";
 import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
 import type { Tables } from "@/integrations/supabase/types";
 
-type Client = Tables<"clients"> & {
-  documentation?: string | null;
-  trade_name?: string | null;
-};
+type Client = Tables<"clients">;
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -108,6 +102,7 @@ export default function ClientDetailPage() {
             size="icon"
             onClick={() => navigate("/clients")}
             className="shrink-0"
+            aria-label="Voltar para lista de clientes"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -121,9 +116,9 @@ export default function ClientDetailPage() {
             {client.trade_name && (
               <p className="text-lg text-muted-foreground mt-0.5">{client.trade_name}</p>
             )}
-            {(client as any).nickname && (
+            {client.nickname && (
               <Badge variant="outline" className="mt-1 text-sm font-normal">
-                {(client as any).nickname}
+                {client.nickname}
               </Badge>
             )}
             {client.document && (
