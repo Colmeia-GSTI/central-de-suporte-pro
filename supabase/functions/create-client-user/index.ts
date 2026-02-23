@@ -133,7 +133,8 @@ Deno.serve(async (req) => {
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .substring(0, 30);
+      .substring(0, 30)
+      .replace(/-$/g, "") || "client";
     
     const syntheticEmail = email || `${username}@${clientSlug}.internal`;
 
