@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "npm:zod@3.23.8";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,15 +46,36 @@ Deno.serve(async (req) => {
       );
     }
 
-    const body = await req.json();
-    const { invoice_id, paid_amount, paid_date, payment_method, payment_notes, emit_nfse } = body;
+    // Schema validation
+    const ManualPaymentSchema = z.object({
+      invoice_id: z.string().uuid("invoice_id deve ser um UUID válido"),
+      paid_amount: z.number().positive("Valor deve ser positivo").max(10_000_000, "Valor excede o limite máximo"),
+      paid_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de data inválido (YYYY-MM-DD)").optional(),
+      payment_method: z.string().max(50).optional(),
+      payment_notes: z.string().max(500).optional().nullable(),
+      emit_nfse: z.boolean().optional(),
+    });
 
-    if (!invoice_id || !paid_amount) {
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
       return new Response(
-        JSON.stringify({ error: "invoice_id e paid_amount são obrigatórios" }),
+        JSON.stringify({ error: "JSON inválido no corpo da requisição" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const parsed = ManualPaymentSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || "Dados inválidos";
+      return new Response(
+        JSON.stringify({ error: firstError }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { invoice_id, paid_amount, paid_date, payment_method, payment_notes, emit_nfse } = parsed.data;
 
     console.log(`[MANUAL-PAYMENT] User ${user.id} registrando pagamento manual para fatura ${invoice_id}`);
 

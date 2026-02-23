@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "npm:zod@3.23.8";
 
 interface ProcessInvoiceRequest {
   invoice_ids: string[];
@@ -382,14 +383,37 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = (await req.json()) as ProcessInvoiceRequest;
+    // Schema validation
+    const BatchProcessSchema = z.object({
+      invoice_ids: z.array(z.string().uuid()).min(1, "Selecione ao menos uma fatura").max(100, "Máximo de 100 faturas por lote"),
+      generate_boleto: z.boolean().optional(),
+      generate_pix: z.boolean().optional(),
+      emit_nfse: z.boolean().optional(),
+      send_email: z.boolean().optional(),
+      send_whatsapp: z.boolean().optional(),
+      billing_provider: z.enum(["banco_inter", "asaas"]).optional(),
+    });
 
-    if (!body.invoice_ids || body.invoice_ids.length === 0) {
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
       return new Response(
-        JSON.stringify({ error: "No invoices specified" }),
+        JSON.stringify({ error: "JSON inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const parsed = BatchProcessSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || "Dados inválidos";
+      return new Response(
+        JSON.stringify({ error: firstError }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const body = parsed.data;
 
     console.log(`[batch-process] User ${user.id} processing ${body.invoice_ids.length} invoices`);
 
