@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "npm:zod@3.23.8";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,23 +76,41 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Parse request body
-    const body: CreateClientUserRequest = await req.json();
-    const { clientId, contactId, name, username, password, email, phone, role, isPrimary, isClientMaster } = body;
+    // Schema validation
+    const CreateClientUserSchema = z.object({
+      clientId: z.string().uuid("clientId deve ser um UUID válido"),
+      contactId: z.string().uuid().optional(),
+      name: z.string().trim().min(2, "Nome deve ter no mínimo 2 caracteres").max(100, "Nome deve ter no máximo 100 caracteres"),
+      username: z.string().trim().min(3, "Username deve ter no mínimo 3 caracteres").max(50, "Username deve ter no máximo 50 caracteres")
+        .regex(/^[a-zA-Z0-9._-]+$/, "Username pode conter apenas letras, números, '.', '_' e '-'"),
+      password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres").max(128, "Senha deve ter no máximo 128 caracteres"),
+      email: z.string().email("Formato de email inválido").max(255).optional().nullable(),
+      phone: z.string().max(20).optional().nullable(),
+      role: z.string().max(50).optional().nullable(),
+      isPrimary: z.boolean().optional(),
+      isClientMaster: z.boolean().optional(),
+    });
 
-    if (!clientId || !name || !username || !password) {
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
       return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: clientId, name, username, password" }),
+        JSON.stringify({ error: "JSON inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (password.length < 6) {
+    const parsed = CreateClientUserSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || "Dados inválidos";
       return new Response(
-        JSON.stringify({ error: "Senha deve ter no mínimo 6 caracteres" }),
+        JSON.stringify({ error: firstError }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { clientId, contactId, name, username, password, email, phone, role, isPrimary, isClientMaster } = parsed.data;
 
     // Admin client para operações privilegiadas
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);

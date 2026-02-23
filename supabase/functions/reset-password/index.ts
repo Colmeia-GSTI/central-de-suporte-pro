@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "npm:zod@3.23.8";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,22 +63,34 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get request body
-    const { user_id, new_password } = await req.json();
+    // Schema validation
+    const ResetPasswordSchema = z.object({
+      user_id: z.string().uuid("user_id deve ser um UUID válido"),
+      new_password: z.string()
+        .min(8, "A senha deve ter no mínimo 8 caracteres")
+        .max(128, "A senha deve ter no máximo 128 caracteres"),
+    });
 
-    if (!user_id || !new_password) {
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
       return new Response(
-        JSON.stringify({ error: "ID do usuário e nova senha são obrigatórios" }),
+        JSON.stringify({ error: "JSON inválido" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (new_password.length < 6) {
+    const parsed = ResetPasswordSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || "Dados inválidos";
       return new Response(
-        JSON.stringify({ error: "A senha deve ter no mínimo 6 caracteres" }),
+        JSON.stringify({ error: firstError }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { user_id, new_password } = parsed.data;
 
     // Update user password using admin client
     const { data, error } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
