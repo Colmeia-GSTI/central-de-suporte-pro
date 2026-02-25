@@ -132,6 +132,7 @@ export default function ClientsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["clients-select"] });
       toast({ title: "Cliente excluído com sucesso" });
       setDeleteConfirm({ open: false, client: null });
     },

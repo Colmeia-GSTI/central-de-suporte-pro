@@ -32,7 +32,12 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
-import { FileText, Lock, Calendar, CreditCard, TrendingUp, MessageSquare } from "lucide-react";
+import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format, parse } from "date-fns";
+import { ptBR } from "date-fns/locale/pt-BR";
+import { cn } from "@/lib/utils";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const contractSchema = z.object({
@@ -765,11 +770,38 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
               control={form.control}
               name="adjustment_date"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="flex flex-col">
                   <FormLabel>Data do Próximo Reajuste</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value ? (
+                            format(parse(field.value, "yyyy-MM-dd", new Date()), "dd/MM/yyyy")
+                          ) : (
+                            <span>Selecione a data</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value ? parse(field.value, "yyyy-MM-dd", new Date()) : undefined}
+                        onSelect={(date) => field.onChange(date ? format(date, "yyyy-MM-dd") : "")}
+                        locale={ptBR}
+                        initialFocus
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <FormDescription>Geralmente 1 ano após início</FormDescription>
                   <FormMessage />
                 </FormItem>
