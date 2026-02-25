@@ -360,6 +360,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     onSuccess: (clientId) => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["clients-select"] });
       toast({
         title: client ? "Cliente atualizado" : "Cliente criado",
         description: "Operação realizada com sucesso",
