@@ -1,63 +1,80 @@
 
 
-# Correcao: Email sintetico com dominio invalido na Edge Function create-client-user
+# Plano: Corrigir listagem de clientes e campo de data de reajuste
 
-## Problema
+## Problema Identificado
 
-Os logs mostram o erro repetido:
+### Causa Raiz: Cache Desatualizado (Query Key Divergente)
 
-```
-Error creating auth user: AuthApiError: Unable to validate email address: invalid format
-Synthetic email: adriana.krauzer@sociedade-cultural-recreativa-.internal
-```
+Quando um novo cliente e cadastrado (ex: "Viapiana"), o `ClientForm` invalida o cache com a chave `["clients"]`. Porem, o formulario de contratos (`ContractForm`) busca clientes usando a chave `["clients-select"]`. Como essas chaves sao diferentes, o cache do formulario de contratos nunca e atualizado apos a criacao de um novo cliente.
 
-O dominio `sociedade-cultural-recreativa-` termina com hifen, o que e invalido para email.
+Agravante: o `QueryClient` global esta configurado com `staleTime: 5 minutos`, o que significa que mesmo ao navegar para a pagina de novo contrato, o React Query reutiliza dados em cache antigos sem refazer a consulta.
 
-## Causa Raiz
+### Problema Secundario: Campo de Data de Reajuste
 
-No arquivo `supabase/functions/create-client-user/index.ts`, o slug do cliente e gerado assim:
+O campo "Data do Proximo Reajuste" usa um `<Input type="date">` nativo do HTML. Isso funciona de forma inconsistente entre navegadores e nao segue o padrao visual do sistema (Shadcn UI). Precisa ser substituido por um date picker com calendario clicavel.
 
-```text
-.replace(/^-|-$/g, "")   <-- remove hifens das pontas
-.substring(0, 30)         <-- corta em 30 chars, REINTRODUZINDO hifen no final
-```
+---
 
-O nome "SOCIEDADE CULTURAL RECREATIVA E BENEF SAO JOAO BOSCO" gera o slug `sociedade-cultural-recreativa-e-benef-sao-joao-bosco`. Apos o `substring(0, 30)`, fica `sociedade-cultural-recreativa-` (com hifen no final).
+## Solucao
 
-## Correcao
+### 1. Corrigir invalidacao de cache no ClientForm
 
-Adicionar um segundo `.replace(/-$/g, "")` APOS o `substring` e um fallback para slug vazio:
+**Arquivo:** `src/components/clients/ClientForm.tsx`
 
-**Arquivo:** `supabase/functions/create-client-user/index.ts` (linhas 120-126)
+No `onSuccess` da mutation, adicionar invalidacao da chave `["clients-select"]` alem da existente `["clients"]`:
 
-De:
 ```typescript
-const clientSlug = clientData.name
-  .toLowerCase()
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .replace(/[^a-z0-9]+/g, "-")
-  .replace(/^-|-$/g, "")
-  .substring(0, 30);
+onSuccess: (clientId) => {
+  clearDraft();
+  queryClient.invalidateQueries({ queryKey: ["clients"] });
+  queryClient.invalidateQueries({ queryKey: ["clients-select"] }); // NOVO
+  // ... resto do codigo
+};
 ```
 
-Para:
-```typescript
-const clientSlug = clientData.name
-  .toLowerCase()
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .replace(/[^a-z0-9]+/g, "-")
-  .replace(/^-|-$/g, "")
-  .substring(0, 30)
-  .replace(/-$/g, "") || "client";
-```
+### 2. Corrigir invalidacao na pagina de exclusao de clientes
 
-Isso garante que:
-1. O hifen reintroduzido pelo corte sera removido
-2. Se o slug ficar vazio por algum motivo, usa "client" como fallback
+**Arquivo:** `src/pages/clients/ClientsPage.tsx`
 
-## Resultado Esperado
+No `deleteMutation.onSuccess`, tambem invalidar `["clients-select"]` para manter consistencia.
 
-O email sintetico passara a ser `adriana.krauzer@sociedade-cultural-recreativa.internal` (dominio valido).
+### 3. Substituir Input de data por DatePicker com calendario
+
+**Arquivo:** `src/components/contracts/ContractForm.tsx`
+
+Substituir o `<Input type="date">` do campo `adjustment_date` por um componente `Popover` + `Calendar` do Shadcn UI, com formatacao em PT-BR e botao clicavel mostrando a data selecionada.
+
+O componente renderizara:
+- Um botao com icone de calendario que abre um popover
+- Um calendario mensal para selecao de data
+- Formatacao da data no padrao brasileiro (dd/MM/yyyy)
+- Placeholder "Selecione a data" quando vazio
+
+### 4. Garantir que a pagina de contratos tambem invalide o cache de clientes
+
+**Arquivo:** `src/pages/contracts/ContractsPage.tsx`
+
+No `deleteMutation.onSuccess`, invalidar `["clients-select"]` para prevenir inconsistencias futuras.
+
+---
+
+## Detalhes Tecnicos
+
+### Arquivos Modificados
+
+| Arquivo | Alteracao |
+|---|---|
+| `src/components/clients/ClientForm.tsx` | Adicionar `invalidateQueries(["clients-select"])` no onSuccess |
+| `src/pages/clients/ClientsPage.tsx` | Adicionar `invalidateQueries(["clients-select"])` no delete onSuccess |
+| `src/components/contracts/ContractForm.tsx` | Trocar `<Input type="date">` por `Popover + Calendar` do Shadcn |
+
+### Imports adicionais no ContractForm
+
+- `Popover`, `PopoverTrigger`, `PopoverContent` de `@/components/ui/popover`
+- `Calendar` de `@/components/ui/calendar`
+- `CalendarIcon` de `lucide-react`
+- `format` de `date-fns`
+- `ptBR` de `date-fns/locale/pt-BR`
+- `cn` de `@/lib/utils`
 
