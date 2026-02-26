@@ -1,61 +1,95 @@
 
 
-# Plano: Corrigir listagem de clientes e campo de data de reajuste
+# Plano Unificado: Melhorias no Formulario de Contratos e Mensagem de Cobranca
 
-## Problema Identificado
+## Resumo das Alteracoes
 
-### Causa Raiz: Cache Desatualizado (Query Key Divergente)
-
-Quando um novo cliente e cadastrado (ex: "Viapiana"), o `ClientForm` invalida o cache com a chave `["clients"]`. Porem, o formulario de contratos (`ContractForm`) busca clientes usando a chave `["clients-select"]`. Como essas chaves sao diferentes, o cache do formulario de contratos nunca e atualizado apos a criacao de um novo cliente.
-
-Agravante: o `QueryClient` global esta configurado com `staleTime: 5 minutos`, o que significa que mesmo ao navegar para a pagina de novo contrato, o React Query reutiliza dados em cache antigos sem refazer a consulta.
-
-### Problema Secundario: Campo de Data de Reajuste
-
-O campo "Data do Proximo Reajuste" usa um `<Input type="date">` nativo do HTML. Isso funciona de forma inconsistente entre navegadores e nao segue o padrao visual do sistema (Shadcn UI). Precisa ser substituido por um date picker com calendario clicavel.
+Este plano consolida todas as correcoes e melhorias identificadas no modulo de contratos, calendario e mensagens de cobranca.
 
 ---
 
-## Solucao
+## 1. Calendario com navegacao rapida por mes/ano e altura fixa
 
-### 1. Corrigir invalidacao de cache no ClientForm
+**Arquivo:** `src/components/ui/calendar.tsx`
 
-**Arquivo:** `src/components/clients/ClientForm.tsx`
-
-No `onSuccess` da mutation, adicionar invalidacao da chave `["clients-select"]` alem da existente `["clients"]`:
-
-```typescript
-onSuccess: (clientId) => {
-  clearDraft();
-  queryClient.invalidateQueries({ queryKey: ["clients"] });
-  queryClient.invalidateQueries({ queryKey: ["clients-select"] }); // NOVO
-  // ... resto do codigo
-};
-```
-
-### 2. Corrigir invalidacao na pagina de exclusao de clientes
-
-**Arquivo:** `src/pages/clients/ClientsPage.tsx`
-
-No `deleteMutation.onSuccess`, tambem invalidar `["clients-select"]` para manter consistencia.
-
-### 3. Substituir Input de data por DatePicker com calendario
+Adicionar estilos para os dropdowns nativos do DayPicker (`caption_dropdowns`, `dropdown_month`, `dropdown_year`, `dropdown`) e a prop `fixedWeeks` para manter altura constante. Isso resolve o problema do calendario "pulando" e permite selecionar mes/ano com clique direto.
 
 **Arquivo:** `src/components/contracts/ContractForm.tsx`
 
-Substituir o `<Input type="date">` do campo `adjustment_date` por um componente `Popover` + `Calendar` do Shadcn UI, com formatacao em PT-BR e botao clicavel mostrando a data selecionada.
+No campo `adjustment_date`, adicionar as props `captionLayout="dropdown-buttons"`, `fromYear={2024}`, `toYear={2036}` e `fixedWeeks` ao componente Calendar.
 
-O componente renderizara:
-- Um botao com icone de calendario que abre um popover
-- Um calendario mensal para selecao de data
-- Formatacao da data no padrao brasileiro (dd/MM/yyyy)
-- Placeholder "Selecione a data" quando vazio
+---
 
-### 4. Garantir que a pagina de contratos tambem invalide o cache de clientes
+## 2. Substituir todos os inputs nativos de data por Calendar/Popover
 
-**Arquivo:** `src/pages/contracts/ContractsPage.tsx`
+**Arquivo:** `src/components/contracts/ContractForm.tsx`
 
-No `deleteMutation.onSuccess`, invalidar `["clients-select"]` para prevenir inconsistencias futuras.
+Os campos `start_date` (linha 537) e `end_date` (linha 570) ainda usam `<Input type="date">`. Serao convertidos para o mesmo padrao Popover + Calendar com dropdowns de mes/ano, identico ao campo de reajuste.
+
+---
+
+## 3. Unificar "Tempo indeterminado" e "Renovacao automatica"
+
+**Arquivo:** `src/components/contracts/ContractForm.tsx`
+
+Substituir o checkbox `indefinite_term` (linha 544) e o switch `auto_renew` (linha 578) por um unico Select "Vigencia do Contrato" com 3 opcoes:
+
+| Opcao | end_date | auto_renew | Campo data fim |
+|---|---|---|---|
+| Indeterminado | null | true | Escondido |
+| Renovacao automatica | obrigatorio | true | Visivel |
+| Prazo fixo | obrigatorio | false | Visivel |
+
+O schema Zod sera atualizado para incluir `term_type` como campo auxiliar. Os campos `indefinite_term` e `auto_renew` continuam existindo no schema para manter compatibilidade com o banco, mas serao derivados automaticamente do `term_type` selecionado.
+
+---
+
+## 4. Corrigir botao "Criar" -> "Salvar" na edicao
+
+**Arquivo:** `src/components/contracts/ContractForm.tsx` (linha 1045)
+
+Trocar `contract` por `contractData` na condicao do botao:
+
+```text
+Antes:  contract ? "Atualizar" : "Criar"
+Depois: contractData ? "Salvar" : "Criar Contrato"
+```
+
+Tambem corrigir o toast de sucesso (linha 392) para usar `contractData`.
+
+---
+
+## 5. Adicionar status "suspended" ao schema Zod
+
+**Arquivo:** `src/components/contracts/ContractForm.tsx` (linha 52)
+
+O enum atualmente nao inclui `"suspended"`, mas o Select ja tem essa opcao (linha 520). Adicionar ao schema para evitar erro de validacao ao editar contratos suspensos.
+
+---
+
+## 6. Adicionar variavel {nota} na mensagem de cobranca
+
+**Arquivo:** `src/components/contracts/ContractNotificationMessageForm.tsx`
+
+Adicionar `{ key: "{nota}", description: "Numero da NFS-e emitida" }` na lista de variaveis disponiveis e no preview.
+
+**Arquivo:** `supabase/functions/generate-monthly-invoices/index.ts` (linha 579)
+
+Adicionar substituicao de `{nota}` com o numero real da NFS-e apos emissao. Tambem adicionar `{boleto}` (link do boleto) e `{pix}` (codigo PIX) para que todas as variaveis listadas no frontend sejam de fato substituidas no backend.
+
+---
+
+## 7. Correcoes de qualidade de codigo
+
+**Arquivo:** `src/components/contracts/ContractForm.tsx`
+
+- Eliminar casts `(contractData as any)` (linhas 116-136) estendendo o tipo `ContractWithClient` ou usando um tipo mais completo
+- Passar `contractId={contractData?.id}` ao `ContractServicesSection` (linha 856) para habilitar historico
+- Invalidar queries adicionais no `onSuccess`: `["invoices"]`, `["billing-counters"]`, `["contract", contractData?.id]`
+
+**Arquivo:** `src/components/contracts/ContractServicesSection.tsx` (linha 123)
+
+Corrigir `useCallback(onChange, [])` que congela o callback. Usar `useRef` para manter referencia estavel.
 
 ---
 
@@ -63,18 +97,19 @@ No `deleteMutation.onSuccess`, invalidar `["clients-select"]` para prevenir inco
 
 ### Arquivos Modificados
 
-| Arquivo | Alteracao |
+| Arquivo | Alteracoes |
 |---|---|
-| `src/components/clients/ClientForm.tsx` | Adicionar `invalidateQueries(["clients-select"])` no onSuccess |
-| `src/pages/clients/ClientsPage.tsx` | Adicionar `invalidateQueries(["clients-select"])` no delete onSuccess |
-| `src/components/contracts/ContractForm.tsx` | Trocar `<Input type="date">` por `Popover + Calendar` do Shadcn |
+| `src/components/ui/calendar.tsx` | Estilos para dropdowns de mes/ano, suporte a `fixedWeeks` |
+| `src/components/contracts/ContractForm.tsx` | Schema Zod (suspended, term_type), botao Salvar, 3 date pickers, vigencia unificada, tipagem, contractId, invalidacao |
+| `src/components/contracts/ContractNotificationMessageForm.tsx` | Variaveis {nota}, {boleto}, {pix} |
+| `supabase/functions/generate-monthly-invoices/index.ts` | Substituicao de {nota}, {boleto}, {pix} com dados reais |
+| `src/components/contracts/ContractServicesSection.tsx` | Correcao useCallback |
 
-### Imports adicionais no ContractForm
+### Impacto no Banco de Dados
 
-- `Popover`, `PopoverTrigger`, `PopoverContent` de `@/components/ui/popover`
-- `Calendar` de `@/components/ui/calendar`
-- `CalendarIcon` de `lucide-react`
-- `format` de `date-fns`
-- `ptBR` de `date-fns/locale/pt-BR`
-- `cn` de `@/lib/utils`
+Nenhum. Todas as alteracoes sao no frontend e Edge Function existente. Os campos `auto_renew` e `end_date` ja existem no banco.
+
+### Estilos do Calendar para dropdowns
+
+Serao adicionados os classNames `caption_dropdowns`, `dropdown_month`, `dropdown_year` e `dropdown` ao componente Calendar base, com estilos que garantem selects visiveis, compactos e consistentes com o design system.
 
