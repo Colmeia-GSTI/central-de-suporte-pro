@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -119,13 +119,14 @@ export function ContractServicesSection({
     enabled: !!contractId,
   });
 
-  // Calculate total whenever services change
-  const stableOnChange = useCallback(onChange, []);
+  // Stable ref for onChange to avoid stale closure
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
   
   useEffect(() => {
     const total = services.reduce((acc, s) => acc + s.subtotal, 0);
-    stableOnChange(services, total);
-  }, [services, stableOnChange]);
+    onChangeRef.current(services, total);
+  }, [services]);
 
   const handleAddService = () => {
     if (!selectedServiceId) return;

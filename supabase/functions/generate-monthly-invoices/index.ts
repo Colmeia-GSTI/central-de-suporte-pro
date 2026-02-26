@@ -576,12 +576,34 @@ Deno.serve(async (req) => {
               // Build custom message if available
               let customSection = "";
               if (contract.notification_message) {
+                // Fetch NFS-e number if available
+                let nfseNumber = "Pendente";
+                try {
+                  const { data: nfseData } = await supabase
+                    .from("nfse_history")
+                    .select("numero_nfse")
+                    .eq("invoice_id", newInvoice.id)
+                    .eq("status", "autorizada")
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (nfseData?.numero_nfse) {
+                    nfseNumber = String(nfseData.numero_nfse);
+                  }
+                } catch (nfseQueryErr) {
+                  console.error("[GEN-INVOICES] Erro ao buscar NFS-e para variável {nota}:", nfseQueryErr);
+                }
+
                 customSection = contract.notification_message
                   .replace(/{cliente}/g, contract.clients?.name || "Cliente")
                   .replace(/{valor}/g, `R$ ${totalAmount.toFixed(2)}`)
                   .replace(/{vencimento}/g, new Date(dueDate).toLocaleDateString("pt-BR"))
                   .replace(/{fatura}/g, `#${newInvoice.invoice_number}`)
-                  .replace(/{competencia}/g, referenceMonth);
+                  .replace(/{contrato}/g, contract.name)
+                  .replace(/{competencia}/g, referenceMonth)
+                  .replace(/{nota}/g, nfseNumber)
+                  .replace(/{boleto}/g, boletoSignedUrl || "Não disponível")
+                  .replace(/{pix}/g, updatedInvoice?.pix_code || "Não disponível");
 
                 customSection = `<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">${customSection}</div>`;
               }

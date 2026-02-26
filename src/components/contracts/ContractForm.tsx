@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -35,10 +34,18 @@ import { ContractNotificationMessageForm } from "./ContractNotificationMessageFo
 import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { cn } from "@/lib/utils";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+
+// Helper to derive term_type from existing contract data
+function derivedTermType(data: { end_date?: string | null; auto_renew?: boolean }): "indefinite" | "auto_renew" | "fixed" {
+  if (!data.end_date) return "indefinite";
+  if (data.auto_renew) return "auto_renew";
+  return "fixed";
+}
 
 const contractSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -46,11 +53,10 @@ const contractSchema = z.object({
   monthly_value: z.coerce.number().min(0, "Valor deve ser positivo"),
   start_date: z.string().min(1, "Data de início é obrigatória"),
   end_date: z.string().optional(),
-  indefinite_term: z.boolean().default(true),
+  term_type: z.enum(["indefinite", "auto_renew", "fixed"]).default("indefinite"),
   support_model: z.enum(["ticket", "hours_bank", "unlimited"]),
   hours_included: z.coerce.number().optional(),
-  status: z.enum(["active", "expired", "cancelled", "pending"]),
-  auto_renew: z.boolean().default(false),
+  status: z.enum(["active", "expired", "cancelled", "pending", "suspended"]),
   internal_notes: z.string().optional(),
   // Billing fields
   billing_day: z.coerce.number().min(1).max(28).default(10),
@@ -76,13 +82,14 @@ const contractSchema = z.object({
 
 type ContractFormData = z.infer<typeof contractSchema>;
 
+// Extended type to include all contract fields used in the form
 type ContractWithClient = Tables<"contracts"> & {
   clients: Tables<"clients"> | null;
 };
 
 interface ContractFormProps {
   contract?: ContractWithClient | null;
-  initialData?: any;
+  initialData?: ContractWithClient | null;
   onSuccess: () => void;
   onCancel: () => void;
   isEditing?: boolean;
@@ -93,10 +100,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Use contract, initialData, or null for fallback
   const contractData = contract || initialData;
 
-  // State for contract services
   const [contractServices, setContractServices] = useState<ContractService[]>([]);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
 
@@ -108,32 +113,26 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       monthly_value: contractData?.monthly_value || 0,
       start_date: contractData?.start_date || new Date().toISOString().split("T")[0],
       end_date: contractData?.end_date || "",
-      indefinite_term: !contractData?.end_date,
+      term_type: contractData ? derivedTermType(contractData) : "indefinite",
       support_model: contractData?.support_model || "ticket",
       hours_included: contractData?.hours_included || undefined,
       status: contractData?.status || "active",
-      auto_renew: contractData?.auto_renew || false,
-      internal_notes: (contractData as any)?.internal_notes || "",
-      // Billing defaults
-      billing_day: (contractData as any)?.billing_day || 10,
-      days_before_due: (contractData as any)?.days_before_due || 5,
-      billing_provider: (contractData as any)?.billing_provider || "banco_inter",
-      payment_preference: (contractData as any)?.payment_preference || "boleto",
-      // Initial invoice generation (only for new contracts)
+      internal_notes: contractData?.internal_notes || "",
+      billing_day: contractData?.billing_day || 10,
+      days_before_due: contractData?.days_before_due || 5,
+      billing_provider: (contractData?.billing_provider as "banco_inter" | "asaas") || "banco_inter",
+      payment_preference: (contractData?.payment_preference as "boleto" | "pix" | "both") || "boleto",
       generate_initial_invoice: false,
       generate_payment: true,
       send_notification: true,
-      // Adjustment defaults
-      adjustment_date: (contractData as any)?.adjustment_date || "",
-      adjustment_index: (contractData as any)?.adjustment_index || "IGPM",
-      adjustment_percentage: (contractData as any)?.adjustment_percentage || undefined,
-      // Notification
-      notification_message: (contractData as any)?.notification_message || "",
-      // NFSE defaults
-      nfse_enabled: (contractData as any)?.nfse_enabled ?? true,
-      nfse_service_code: (contractData as any)?.nfse_service_code || "010701",
-      nfse_descricao_customizada: (contractData as any)?.nfse_descricao_customizada || "",
-      nfse_cnae: (contractData as any)?.nfse_cnae || "",
+      adjustment_date: contractData?.adjustment_date || "",
+      adjustment_index: (contractData?.adjustment_index as "IGPM" | "IPCA" | "INPC" | "FIXO") || "IGPM",
+      adjustment_percentage: contractData?.adjustment_percentage || undefined,
+      notification_message: contractData?.notification_message || "",
+      nfse_enabled: contractData?.nfse_enabled ?? true,
+      nfse_service_code: contractData?.nfse_service_code || "010701",
+      nfse_descricao_customizada: contractData?.nfse_descricao_customizada || "",
+      nfse_cnae: contractData?.nfse_cnae || "",
     },
   });
 
@@ -154,18 +153,17 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         `)
         .eq("contract_id", contractId);
       if (error) throw error;
-      return data.map((s: any) => ({
-        service_id: s.service_id,
-        service_name: s.services?.name || "Serviço",
-        quantity: s.quantity || 1,
-        unit_value: s.unit_value || 0,
-        subtotal: (s.quantity || 1) * (s.unit_value || 0),
+      return data.map((s: Record<string, unknown>) => ({
+        service_id: s.service_id as string,
+        service_name: ((s.services as Record<string, unknown>)?.name as string) || "Serviço",
+        quantity: (s.quantity as number) || 1,
+        unit_value: (s.unit_value as number) || 0,
+        subtotal: ((s.quantity as number) || 1) * ((s.unit_value as number) || 0),
       })) as ContractService[];
     },
     enabled: !!contractId,
   });
 
-  // Initialize services state when data loads
   useEffect(() => {
     if (existingServices.length > 0 && contractServices.length === 0) {
       setContractServices(existingServices);
@@ -187,29 +185,29 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
   const mutation = useMutation({
     mutationFn: async (data: ContractFormData) => {
+      // Derive auto_renew and end_date from term_type
+      const autoRenew = data.term_type !== "fixed";
+      const endDate = data.term_type === "indefinite" ? null : (data.end_date || null);
+
       const payload = {
         name: data.name,
         client_id: data.client_id,
         monthly_value: calculatedTotal > 0 ? calculatedTotal : data.monthly_value,
         start_date: data.start_date,
-        end_date: data.indefinite_term ? null : (data.end_date || null),
+        end_date: endDate,
         support_model: data.support_model as Enums<"support_model">,
         hours_included: data.hours_included || null,
         status: data.status as Enums<"contract_status">,
-        auto_renew: data.auto_renew,
+        auto_renew: autoRenew,
         internal_notes: data.internal_notes || null,
-        // Billing fields
         billing_day: data.billing_day,
         days_before_due: data.days_before_due,
         billing_provider: data.billing_provider,
         payment_preference: data.payment_preference,
-        // Adjustment fields
         adjustment_date: data.adjustment_date || null,
         adjustment_index: data.adjustment_index,
         adjustment_percentage: data.adjustment_percentage || null,
-        // Notification
         notification_message: data.notification_message || null,
-        // NFSE fields
         nfse_enabled: data.nfse_enabled,
         nfse_service_code: data.nfse_service_code || null,
         nfse_descricao_customizada: data.nfse_descricao_customizada || null,
@@ -220,7 +218,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       const isUpdate = !!contractData;
 
       // Detectar mudanças para histórico
-      const changes: Record<string, { old: any; new: any }> = {};
+      const changes: Record<string, { old: unknown; new: unknown }> = {};
       if (isUpdate) {
         if (data.name !== contractData.name) changes.name = { old: contractData.name, new: data.name };
         if (data.status !== contractData.status) changes.status = { old: contractData.status, new: data.status };
@@ -237,7 +235,6 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           .eq("id", contractData.id);
         if (error) throw error;
 
-        // Registrar no histórico se houve mudanças
         if (Object.keys(changes).length > 0) {
           const changesSummary = Object.entries(changes)
             .map(([field, { old: oldVal, new: newVal }]) => `${field}: ${oldVal} → ${newVal}`)
@@ -260,7 +257,6 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         if (error) throw error;
         contractIdValue = newContract.id;
 
-        // Registrar criação no histórico
         await supabase.from("contract_history").insert({
           contract_id: contractIdValue,
           user_id: user?.id,
@@ -269,9 +265,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         });
       }
 
-      // Save contract services (usar contractIdValue para novos contratos)
+      // Save contract services
       if (contractIdValue && contractServices.length > 0) {
-        // Para edição, deletar serviços existentes
         if (isUpdate) {
           await supabase
             .from("contract_services")
@@ -279,7 +274,6 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             .eq("contract_id", contractIdValue);
         }
 
-        // Insert new services
         const servicesToInsert = contractServices.map((s) => ({
           contract_id: contractIdValue,
           service_id: s.service_id,
@@ -302,13 +296,11 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         const currentYear = now.getFullYear();
         const referenceMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
         
-        // Calculate due date
         const billingDay = data.billing_day || 10;
         const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
         const actualBillingDay = Math.min(billingDay, lastDayOfMonth);
         const dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
         
-        // Create invoice
         const invoiceAmount = calculatedTotal > 0 ? calculatedTotal : data.monthly_value;
         const { data: invoice, error: invoiceError } = await supabase
           .from("invoices")
@@ -326,7 +318,6 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           .single();
         
         if (!invoiceError && invoice) {
-          // Generate payment via provider if requested
           if (data.generate_payment) {
             try {
               if (data.billing_provider === "asaas") {
@@ -338,7 +329,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                   },
                 });
               } else {
-              await supabase.functions.invoke("banco-inter", {
+                await supabase.functions.invoke("banco-inter", {
                   body: {
                     invoice_id: invoice.id,
                     payment_type: data.payment_preference === "pix" ? "pix" : "boleto",
@@ -346,12 +337,10 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                 });
               }
             } catch (paymentError) {
-              console.error("Error generating payment:", paymentError);
-              // Continue - invoice was created, payment can be generated later
+              console.error("[ContractForm] Erro ao gerar pagamento:", paymentError);
             }
           }
           
-          // Generate NFS-e if enabled for this contract
           if (data.nfse_enabled) {
             try {
               await supabase.functions.invoke("asaas-nfse", {
@@ -361,14 +350,11 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                   contract_id: contractIdValue,
                 },
               });
-              console.log("[CONTRACT] NFS-e generation requested for invoice:", invoice.id);
             } catch (nfseError) {
-              console.error("Error generating NFS-e:", nfseError);
-              // Continue - invoice was created, NFS-e can be generated later
+              console.error("[ContractForm] Erro ao gerar NFS-e:", nfseError);
             }
           }
           
-          // Send notification if requested
           if (data.send_notification) {
             try {
               await supabase.functions.invoke("resend-payment-notification", {
@@ -378,8 +364,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                 },
               });
             } catch (notifError) {
-              console.error("Error sending notification:", notifError);
-              // Continue - invoice was created
+              console.error("[ContractForm] Erro ao enviar notificação:", notifError);
             }
           }
         }
@@ -388,8 +373,13 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
       queryClient.invalidateQueries({ queryKey: ["contract-services"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      if (contractData?.id) {
+        queryClient.invalidateQueries({ queryKey: ["contract", contractData.id] });
+      }
       toast({
-        title: contract ? "Contrato atualizado" : "Contrato criado",
+        title: contractData ? "Contrato salvo" : "Contrato criado",
         description: "Operação realizada com sucesso",
       });
       onSuccess();
@@ -410,7 +400,6 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   const handleServicesChange = useCallback((services: ContractService[], total: number) => {
     setContractServices(services);
     setCalculatedTotal(total);
-    // Update the form value
     if (total > 0) {
       form.setValue("monthly_value", total);
     }
@@ -418,7 +407,45 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
   const supportModel = form.watch("support_model");
   const nfseEnabled = form.watch("nfse_enabled");
-  const indefiniteTerm = form.watch("indefinite_term");
+  const termType = form.watch("term_type");
+
+  // Date picker helper component
+  const DatePickerField = ({ field, label, description }: { field: { value: string; onChange: (v: string) => void }; label: string; description?: string }) => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <FormControl>
+          <Button
+            variant="outline"
+            className={cn(
+              "w-full pl-3 text-left font-normal",
+              !field.value && "text-muted-foreground"
+            )}
+          >
+            {field.value ? (
+              format(parse(field.value, "yyyy-MM-dd", new Date()), "dd/MM/yyyy")
+            ) : (
+              <span>Selecione a data</span>
+            )}
+            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+          </Button>
+        </FormControl>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          captionLayout="dropdown-buttons"
+          fromYear={2020}
+          toYear={2036}
+          fixedWeeks
+          selected={field.value ? parse(field.value, "yyyy-MM-dd", new Date()) : undefined}
+          onSelect={(date) => field.onChange(date ? format(date, "yyyy-MM-dd") : "")}
+          locale={ptBR}
+          initialFocus
+          className={cn("p-3 pointer-events-auto")}
+        />
+      </PopoverContent>
+    </Popover>
+  );
 
   return (
     <Form {...form}>
@@ -531,65 +558,56 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             control={form.control}
             name="start_date"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="flex flex-col">
                 <FormLabel>Data de Início *</FormLabel>
-                <FormControl>
-                  <Input type="date" {...field} />
-                </FormControl>
+                <DatePickerField field={field} label="Data de Início" />
                 <FormMessage />
               </FormItem>
             )}
           />
 
+          {/* Unified Term Type selector */}
           <FormField
             control={form.control}
-            name="indefinite_term"
+            name="term_type"
             render={({ field }) => (
-              <FormItem className="flex items-center gap-2">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-                <FormLabel className="!mt-0 cursor-pointer">
-                  Contrato por tempo indeterminado
-                </FormLabel>
+              <FormItem>
+                <FormLabel>Vigência do Contrato</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="indefinite">Indeterminado</SelectItem>
+                    <SelectItem value="auto_renew">Renovação automática</SelectItem>
+                    <SelectItem value="fixed">Prazo fixo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  {termType === "indefinite" && "Sem data de término, vigente até cancelamento"}
+                  {termType === "auto_renew" && "Renova automaticamente ao atingir a data de término"}
+                  {termType === "fixed" && "Encerra na data de término definida"}
+                </FormDescription>
+                <FormMessage />
               </FormItem>
             )}
           />
 
-          {!indefiniteTerm && (
+          {termType !== "indefinite" && (
             <FormField
               control={form.control}
               name="end_date"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="flex flex-col">
                   <FormLabel>Data de Término</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
+                  <DatePickerField field={field} label="Data de Término" />
                   <FormMessage />
                 </FormItem>
               )}
             />
           )}
-
-          <FormField
-            control={form.control}
-            name="auto_renew"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-2 col-span-2">
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-                <FormLabel className="!mt-0">Renovação automática</FormLabel>
-              </FormItem>
-            )}
-          />
         </div>
 
         {/* Billing Section */}
@@ -772,36 +790,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
               render={({ field }) => (
                 <FormItem className="flex flex-col">
                   <FormLabel>Data do Próximo Reajuste</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(parse(field.value, "yyyy-MM-dd", new Date()), "dd/MM/yyyy")
-                          ) : (
-                            <span>Selecione a data</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value ? parse(field.value, "yyyy-MM-dd", new Date()) : undefined}
-                        onSelect={(date) => field.onChange(date ? format(date, "yyyy-MM-dd") : "")}
-                        locale={ptBR}
-                        initialFocus
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <DatePickerField field={field} label="Data do Próximo Reajuste" />
                   <FormDescription>Geralmente 1 ano após início</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -854,6 +843,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         <Separator className="my-6" />
         
         <ContractServicesSection
+          contractId={contractData?.id}
           initialServices={existingServices}
           onChange={handleServicesChange}
         />
@@ -1042,7 +1032,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             Cancelar
           </Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Salvando..." : contract ? "Atualizar" : "Criar"}
+            {mutation.isPending ? "Salvando..." : contractData ? "Salvar" : "Criar Contrato"}
           </Button>
         </div>
       </form>
