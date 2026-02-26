@@ -17,6 +17,7 @@ const AVAILABLE_VARIABLES = [
   { key: "{vencimento}", description: "Data de vencimento" },
   { key: "{fatura}", description: "Número da fatura" },
   { key: "{contrato}", description: "Nome do contrato" },
+  { key: "{nota}", description: "Número da NFS-e emitida" },
   { key: "{boleto}", description: "Link do boleto" },
   { key: "{pix}", description: "Código PIX copia-e-cola" },
 ];
@@ -36,13 +37,13 @@ export function ContractNotificationMessageForm({
   const [preview, setPreview] = useState("");
 
   useEffect(() => {
-    // Generate preview with sample data
-    const sampleData = {
+    const sampleData: Record<string, string> = {
       "{cliente}": clientName,
       "{valor}": "R$ 1.500,00",
       "{vencimento}": "10/02/2026",
       "{fatura}": "12345",
       "{contrato}": "Suporte Mensal",
+      "{nota}": "2026000001",
       "{boleto}": "https://banco.inter/boleto/123",
       "{pix}": "00020126580014br.gov.bcb...",
     };
