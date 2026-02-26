@@ -4372,6 +4372,18 @@ export type Database = {
         Returns: Json
       }
       get_company_certificate_password: { Args: never; Returns: string }
+      get_contracts_invoice_summary: {
+        Args: never
+        Returns: {
+          contract_id: string
+          overdue_count: number
+          overdue_total: number
+          paid_count: number
+          paid_total: number
+          pending_count: number
+          total_invoiced: number
+        }[]
+      }
       get_integration_health_stats: { Args: never; Returns: Json }
       get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
       get_license_key: { Args: { license_id: string }; Returns: string }
