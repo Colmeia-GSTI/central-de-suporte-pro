@@ -48,7 +48,7 @@ type Invoice = Pick<
   | "due_date"
   | "amount"
   | "status"
-  | "paid_at"
+  | "paid_date"
 >;
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -70,7 +70,7 @@ export function ContractInvoicesSheet({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("invoices")
-        .select("id, invoice_number, reference_month, due_date, amount, status, paid_at")
+        .select("id, invoice_number, reference_month, due_date, amount, status, paid_date")
         .eq("contract_id", contract.id)
         .not("status", "in", "(cancelled,renegotiated)")
         .order("due_date", { ascending: false });

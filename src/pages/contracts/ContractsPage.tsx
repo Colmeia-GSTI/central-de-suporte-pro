@@ -21,7 +21,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus, CheckCircle2, AlertTriangle } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus, CheckCircle2, AlertTriangle, MoreHorizontal } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -238,20 +245,20 @@ export default function ContractsPage() {
         </div>
 
         {/* Table */}
-        <div className="rounded-lg border bg-card">
+        <div className="rounded-lg border bg-card overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Contrato</TableHead>
-                <TableHead>Cliente</TableHead>
+                <TableHead className="min-w-[160px]">Contrato</TableHead>
+                <TableHead className="min-w-[160px]">Cliente</TableHead>
                 <TableHead>Modelo</TableHead>
-                <TableHead>Valor Mensal</TableHead>
+                <TableHead className="whitespace-nowrap">Valor Mensal</TableHead>
                 <TableHead>Vigência</TableHead>
-                <TableHead>Próx. Reajuste</TableHead>
+                <TableHead className="whitespace-nowrap">Próx. Reajuste</TableHead>
                 <TableHead>Quitado</TableHead>
                 <TableHead>Atrasado</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="text-right w-[120px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -289,12 +296,14 @@ export default function ContractsPage() {
                       onClick={() => handleEdit(contract)}
                     >
                       <TableCell>
-                        <p className="font-medium">{contract.name}</p>
+                        <p className="font-medium max-w-[180px] truncate" title={contract.name}>{contract.name}</p>
                       </TableCell>
                       <TableCell>
-                        {contract.clients?.name || (
-                          <span className="text-muted-foreground">-</span>
-                        )}
+                        <span className="max-w-[180px] truncate block" title={contract.clients?.name || ""}>
+                          {contract.clients?.name || (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -327,18 +336,15 @@ export default function ContractsPage() {
                         </TooltipProvider>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
+                        <div className="flex items-center gap-1 text-sm whitespace-nowrap">
                           <Calendar className="h-3 w-3 text-muted-foreground" />
-                          {format(new Date(contract.start_date), "dd/MM/yyyy", {
-                            locale: ptBR,
-                          })}
-                          {contract.end_date && (
-                            <>
-                              {" - "}
-                              {format(new Date(contract.end_date), "dd/MM/yyyy", {
-                                locale: ptBR,
-                              })}
-                            </>
+                          {format(new Date(contract.start_date), "dd/MM/yy", { locale: ptBR })}
+                          {contract.end_date ? (
+                            <span className="text-muted-foreground">
+                              → {format(new Date(contract.end_date), "dd/MM/yy", { locale: ptBR })}
+                            </span>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">Ilimitado</Badge>
                           )}
                         </div>
                       </TableCell>
@@ -425,14 +431,14 @@ export default function ContractsPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-8 w-8"
+                                  aria-label="Histórico de parcelas"
                                   onClick={() => setInvoicesSheet({ open: true, contract })}
                                 >
                                   <DollarSign className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Histórico de parcelas</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Histórico de parcelas</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                           <TooltipProvider>
@@ -441,91 +447,82 @@ export default function ContractsPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-8 w-8"
+                                  aria-label="Ver histórico"
                                   onClick={() => setHistorySheet({ open: true, contract })}
                                 >
                                   <History className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Ver histórico</p>
-                              </TooltipContent>
+                              <TooltipContent><p>Ver histórico</p></TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          <PermissionGate module="contracts" action="edit">
+                          <PermissionGate module="financial" action="manage">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => setAdjustmentDialog({ open: true, contract })}
-                                    disabled={contract.status !== "active"}
+                                    className="h-8 w-8"
+                                    aria-label="Gerar fatura manual"
+                                    onClick={() => setGenerateInvoiceConfirm({ open: true, contract })}
+                                    disabled={contract.status !== "active" || generateInvoiceMutation.isPending}
                                   >
-                                    <TrendingUp className="h-4 w-4" />
+                                    {generateInvoiceMutation.isPending && generateInvoiceConfirm.contract?.id === contract.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4" />
+                                    )}
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Aplicar reajuste anual</p>
-                                </TooltipContent>
+                                <TooltipContent><p>Gerar fatura manual</p></TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            <PermissionGate module="financial" action="manage">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => setAdditionalChargeDialog({ open: true, contract })}
-                                      disabled={contract.status !== "active"}
-                                    >
-                                      <PackagePlus className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Adicionais pontuais</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => setGenerateInvoiceConfirm({ open: true, contract })}
-                                      disabled={contract.status !== "active" || generateInvoiceMutation.isPending}
-                                    >
-                                      {generateInvoiceMutation.isPending && generateInvoiceConfirm.contract?.id === contract.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Receipt className="h-4 w-4" />
-                                      )}
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Gerar fatura manual</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </PermissionGate>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(contract)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
                           </PermissionGate>
-                          <PermissionGate module="contracts" action="delete">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteClick(contract)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </PermissionGate>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Mais ações">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <PermissionGate module="contracts" action="edit">
+                                <DropdownMenuItem
+                                  onClick={() => setAdjustmentDialog({ open: true, contract })}
+                                  disabled={contract.status !== "active"}
+                                >
+                                  <TrendingUp className="h-4 w-4 mr-2" />
+                                  Reajuste anual
+                                </DropdownMenuItem>
+                              </PermissionGate>
+                              <PermissionGate module="financial" action="manage">
+                                <DropdownMenuItem
+                                  onClick={() => setAdditionalChargeDialog({ open: true, contract })}
+                                  disabled={contract.status !== "active"}
+                                >
+                                  <PackagePlus className="h-4 w-4 mr-2" />
+                                  Adicionais pontuais
+                                </DropdownMenuItem>
+                              </PermissionGate>
+                              <DropdownMenuSeparator />
+                              <PermissionGate module="contracts" action="edit">
+                                <DropdownMenuItem onClick={() => handleEdit(contract)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Editar contrato
+                                </DropdownMenuItem>
+                              </PermissionGate>
+                              <PermissionGate module="contracts" action="delete">
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => handleDeleteClick(contract)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir
+                                </DropdownMenuItem>
+                              </PermissionGate>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
