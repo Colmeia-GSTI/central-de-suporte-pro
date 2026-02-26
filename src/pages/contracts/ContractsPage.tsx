@@ -21,12 +21,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus } from "lucide-react";
+import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ContractAdjustmentDialog } from "@/components/contracts/ContractAdjustmentDialog";
 import { ContractHistorySheet } from "@/components/contracts/ContractHistorySheet";
+import { ContractInvoicesSheet } from "@/components/contracts/ContractInvoicesSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +39,16 @@ type ContractWithClient = Tables<"contracts"> & {
   nfse_enabled?: boolean | null;
   nfse_service_code?: string | null;
 };
+
+interface InvoiceSummary {
+  contract_id: string;
+  paid_count: number;
+  paid_total: number;
+  overdue_count: number;
+  overdue_total: number;
+  pending_count: number;
+  total_invoiced: number;
+}
 
 const statusLabels: Record<Enums<"contract_status">, string> = {
   active: "Ativo",
@@ -76,6 +87,10 @@ export default function ContractsPage() {
     open: false,
     contract: null,
   });
+  const [invoicesSheet, setInvoicesSheet] = useState<{ open: boolean; contract: ContractWithClient | null }>({
+    open: false,
+    contract: null,
+  });
   const [generateInvoiceConfirm, setGenerateInvoiceConfirm] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
     contract: null,
@@ -106,6 +121,21 @@ export default function ContractsPage() {
       if (error) throw error;
       return data as ContractWithClient[];
     },
+  });
+
+  // Query paralela para resumo financeiro via RPC
+  const { data: summaryMap = {} } = useQuery({
+    queryKey: ["contracts-invoice-summary"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_contracts_invoice_summary");
+      if (error) throw error;
+      const map: Record<string, InvoiceSummary> = {};
+      for (const row of (data as InvoiceSummary[]) || []) {
+        map[row.contract_id] = row;
+      }
+      return map;
+    },
+    staleTime: 2 * 60_000,
   });
 
   const deleteMutation = useMutation({
@@ -148,6 +178,7 @@ export default function ContractsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      queryClient.invalidateQueries({ queryKey: ["contracts-invoice-summary"] });
       setGenerateInvoiceConfirm({ open: false, contract: null });
 
       const stats = data.stats || { generated: 0, skipped: 0 };
@@ -216,6 +247,9 @@ export default function ContractsPage() {
                 <TableHead>Modelo</TableHead>
                 <TableHead>Valor Mensal</TableHead>
                 <TableHead>Vigência</TableHead>
+                <TableHead>Próx. Reajuste</TableHead>
+                <TableHead>Quitado</TableHead>
+                <TableHead>Atrasado</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -229,13 +263,16 @@ export default function ContractsPage() {
                     <TableCell><Skeleton className="h-6 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                     <TableCell className="text-right"><div className="flex justify-end gap-2"><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /></div></TableCell>
                   </TableRow>
                 ))
               ) : contracts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={10} className="text-center py-8">
                     <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <p className="mt-2 text-muted-foreground">
                       Nenhum contrato encontrado
@@ -243,164 +280,257 @@ export default function ContractsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                contracts.map((contract) => (
-                  <TableRow key={contract.id}>
-                    <TableCell>
-                      <p className="font-medium">{contract.name}</p>
-                    </TableCell>
-                    <TableCell>
-                      {contract.clients?.name || (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {supportModelLabels[contract.support_model]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <TooltipProvider>
-                        <div className="flex items-center gap-1.5">
-                          <DollarSign className="h-3 w-3 text-muted-foreground" />
-                          <span className="font-mono">
-                            {formatCurrencyBRLWithSymbol(contract.monthly_value)}
-                          </span>
-                          {contract.nfse_enabled && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Receipt className="h-3.5 w-3.5 text-primary ml-1" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">
-                                  NFS-e habilitada
-                                  {contract.nfse_service_code && (
-                                    <> (Código: {contract.nfse_service_code})</>
-                                  )}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
+                contracts.map((contract) => {
+                  const summary = summaryMap[contract.id];
+                  return (
+                    <TableRow
+                      key={contract.id}
+                      className="cursor-pointer"
+                      onClick={() => handleEdit(contract)}
+                    >
+                      <TableCell>
+                        <p className="font-medium">{contract.name}</p>
+                      </TableCell>
+                      <TableCell>
+                        {contract.clients?.name || (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {supportModelLabels[contract.support_model]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <TooltipProvider>
+                          <div className="flex items-center gap-1.5">
+                            <DollarSign className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-mono">
+                              {formatCurrencyBRLWithSymbol(contract.monthly_value)}
+                            </span>
+                            {contract.nfse_enabled && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Receipt className="h-3.5 w-3.5 text-primary ml-1" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">
+                                    NFS-e habilitada
+                                    {contract.nfse_service_code && (
+                                      <> (Código: {contract.nfse_service_code})</>
+                                    )}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TooltipProvider>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm">
+                          <Calendar className="h-3 w-3 text-muted-foreground" />
+                          {format(new Date(contract.start_date), "dd/MM/yyyy", {
+                            locale: ptBR,
+                          })}
+                          {contract.end_date && (
+                            <>
+                              {" - "}
+                              {format(new Date(contract.end_date), "dd/MM/yyyy", {
+                                locale: ptBR,
+                              })}
+                            </>
                           )}
                         </div>
-                      </TooltipProvider>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        {format(new Date(contract.start_date), "dd/MM/yyyy", {
-                          locale: ptBR,
-                        })}
-                        {contract.end_date && (
-                          <>
-                            {" - "}
-                            {format(new Date(contract.end_date), "dd/MM/yyyy", {
-                              locale: ptBR,
-                            })}
-                          </>
+                      </TableCell>
+                      {/* Próx. Reajuste */}
+                      <TableCell>
+                        {contract.adjustment_date ? (
+                          <span className="text-sm">
+                            {format(new Date(contract.adjustment_date), "dd/MM/yyyy", { locale: ptBR })}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[contract.status]}>
-                        {statusLabels[contract.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setHistorySheet({ open: true, contract })}
-                              >
-                                <History className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Ver histórico</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <PermissionGate module="contracts" action="edit">
+                      </TableCell>
+                      {/* Quitado */}
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-status-success/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInvoicesSheet({ open: true, contract });
+                          }}
+                          aria-label="Ver parcelas pagas"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 text-status-success" />
+                          <span className="font-semibold text-status-success">
+                            {summary?.paid_count ?? 0}
+                          </span>
+                          {summary && summary.paid_total > 0 && (
+                            <span className="text-muted-foreground font-mono hidden lg:inline">
+                              {formatCurrencyBRLWithSymbol(summary.paid_total)}
+                            </span>
+                          )}
+                        </button>
+                      </TableCell>
+                      {/* Atrasado */}
+                      <TableCell>
+                        <button
+                          type="button"
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                            summary && summary.overdue_count > 0
+                              ? "hover:bg-status-danger/10"
+                              : ""
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInvoicesSheet({ open: true, contract });
+                          }}
+                          aria-label="Ver parcelas atrasadas"
+                        >
+                          <AlertTriangle
+                            className={`h-3.5 w-3.5 ${
+                              summary && summary.overdue_count > 0
+                                ? "text-status-danger"
+                                : "text-muted-foreground/50"
+                            }`}
+                          />
+                          <span
+                            className={`font-semibold ${
+                              summary && summary.overdue_count > 0
+                                ? "text-status-danger"
+                                : "text-muted-foreground/50"
+                            }`}
+                          >
+                            {summary?.overdue_count ?? 0}
+                          </span>
+                          {summary && summary.overdue_total > 0 && (
+                            <span className="text-muted-foreground font-mono hidden lg:inline">
+                              {formatCurrencyBRLWithSymbol(summary.overdue_total)}
+                            </span>
+                          )}
+                        </button>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={statusColors[contract.status]}>
+                          {statusLabels[contract.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => setAdjustmentDialog({ open: true, contract })}
-                                  disabled={contract.status !== "active"}
+                                  onClick={() => setInvoicesSheet({ open: true, contract })}
                                 >
-                                  <TrendingUp className="h-4 w-4" />
+                                  <DollarSign className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Aplicar reajuste anual</p>
+                                <p>Histórico de parcelas</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                          <PermissionGate module="financial" action="manage">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setHistorySheet({ open: true, contract })}
+                                >
+                                  <History className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Ver histórico</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <PermissionGate module="contracts" action="edit">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => setAdditionalChargeDialog({ open: true, contract })}
+                                    onClick={() => setAdjustmentDialog({ open: true, contract })}
                                     disabled={contract.status !== "active"}
                                   >
-                                    <PackagePlus className="h-4 w-4" />
+                                    <TrendingUp className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Adicionais pontuais</p>
+                                  <p>Aplicar reajuste anual</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setGenerateInvoiceConfirm({ open: true, contract })}
-                                    disabled={contract.status !== "active" || generateInvoiceMutation.isPending}
-                                  >
-                                    {generateInvoiceMutation.isPending && generateInvoiceConfirm.contract?.id === contract.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Receipt className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Gerar fatura manual</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <PermissionGate module="financial" action="manage">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setAdditionalChargeDialog({ open: true, contract })}
+                                      disabled={contract.status !== "active"}
+                                    >
+                                      <PackagePlus className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Adicionais pontuais</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setGenerateInvoiceConfirm({ open: true, contract })}
+                                      disabled={contract.status !== "active" || generateInvoiceMutation.isPending}
+                                    >
+                                      {generateInvoiceMutation.isPending && generateInvoiceConfirm.contract?.id === contract.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Receipt className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Gerar fatura manual</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </PermissionGate>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(contract)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                           </PermissionGate>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(contract)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </PermissionGate>
-                        <PermissionGate module="contracts" action="delete">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteClick(contract)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </PermissionGate>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          <PermissionGate module="contracts" action="delete">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteClick(contract)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </PermissionGate>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -442,6 +572,19 @@ export default function ContractsPage() {
             id: historySheet.contract.id,
             name: historySheet.contract.name,
             client_name: historySheet.contract.clients?.name,
+          }}
+        />
+      )}
+
+      {/* Contract Invoices Sheet */}
+      {invoicesSheet.contract && (
+        <ContractInvoicesSheet
+          open={invoicesSheet.open}
+          onOpenChange={(open) => setInvoicesSheet({ ...invoicesSheet, open })}
+          contract={{
+            id: invoicesSheet.contract.id,
+            name: invoicesSheet.contract.name,
+            client_name: invoicesSheet.contract.clients?.name,
           }}
         />
       )}
