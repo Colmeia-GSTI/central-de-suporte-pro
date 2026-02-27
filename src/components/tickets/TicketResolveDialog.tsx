@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/logger";
 import { toast } from "sonner";
+import { calculateElapsedBusinessMinutes } from "@/lib/sla-calculator";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, Clock, Loader2 } from "lucide-react";
+import { CheckCircle, Clock, Loader2, Timer } from "lucide-react";
 import type { Enums } from "@/integrations/supabase/types";
 
 interface TicketResolveDialogProps {
@@ -31,6 +32,8 @@ interface TicketResolveDialogProps {
   categoryId?: string | null;
   clientId?: string | null;
   ticketTitle: string;
+  ticketCreatedAt: string;
+  firstResponseAt?: string | null;
   onSuccess?: () => void;
 }
 
@@ -50,6 +53,8 @@ export function TicketResolveDialog({
   categoryId,
   clientId,
   ticketTitle,
+  ticketCreatedAt,
+  firstResponseAt,
   onSuccess,
 }: TicketResolveDialogProps) {
   const { user } = useAuth();
@@ -76,11 +81,70 @@ export function TicketResolveDialog({
     enabled: open,
   });
 
+  // Fetch business hours for auto-calculation
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings-business-hours"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_settings")
+        .select("business_hours")
+        .limit(1)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: open,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch ticket pauses
+  const { data: ticketPauses = [] } = useQuery({
+    queryKey: ["ticket-pauses-resolve", ticketId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ticket_pauses")
+        .select("paused_at, resumed_at")
+        .eq("ticket_id", ticketId);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open,
+  });
+
   const totalMinutes = timeEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
   const billableMinutes = timeEntries
     .filter(e => e.is_billable)
     .reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
 
+  // Auto-calculate elapsed business minutes since first_response_at (or created_at)
+  const autoElapsedMinutes = useMemo(() => {
+    const startRef = firstResponseAt || ticketCreatedAt;
+    if (!startRef) return 0;
+
+    const businessHours = companySettings?.business_hours as {
+      timezone: string;
+      shifts: { name: string; start: string; end: string }[];
+      days: Record<string, boolean>;
+    } | null;
+
+    if (!businessHours) return 0;
+
+    let elapsed = calculateElapsedBusinessMinutes(
+      new Date(startRef),
+      new Date(),
+      businessHours
+    );
+
+    // Deduct pause time
+    for (const pause of ticketPauses) {
+      const pauseStart = new Date(pause.paused_at);
+      const pauseEnd = pause.resumed_at ? new Date(pause.resumed_at) : new Date();
+      if (pauseStart >= pauseEnd) continue;
+      elapsed -= calculateElapsedBusinessMinutes(pauseStart, pauseEnd, businessHours);
+    }
+
+    return Math.max(0, elapsed);
+  }, [firstResponseAt, ticketCreatedAt, companySettings, ticketPauses]);
   const resolveMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Usuário não autenticado");
@@ -117,7 +181,10 @@ export function TicketResolveDialog({
       
       // 3. Register in history with total time
       const finalTotal = totalMinutes + extraMins;
-      const timeInfo = finalTotal > 0 ? ` (${formatDuration(finalTotal)} trabalhadas)` : "";
+      const autoInfo = autoElapsedMinutes > 0 ? `Tempo de atendimento: ${formatDuration(autoElapsedMinutes)}` : "";
+      const manualInfo = finalTotal > 0 ? `Tempo registrado: ${formatDuration(finalTotal)}` : "";
+      const timeInfo = [autoInfo, manualInfo].filter(Boolean).join(" | ");
+      const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
       
       const { error: historyError } = await supabase
         .from("ticket_history")
@@ -126,7 +193,7 @@ export function TicketResolveDialog({
           user_id: user.id,
           old_status: currentStatus,
           new_status: "resolved" as Enums<"ticket_status">,
-          comment: `Chamado resolvido${timeInfo}: ${resolutionNotes.trim()}`,
+          comment: `Chamado resolvido${timeDisplay}: ${resolutionNotes.trim()}`,
         });
       
       if (historyError) throw historyError;
@@ -200,6 +267,15 @@ export function TicketResolveDialog({
           {/* Time Summary Card */}
           <Card className="bg-muted/50">
             <CardContent className="py-3 px-4">
+              {autoElapsedMinutes > 0 && (
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border">
+                  <Timer className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Tempo de Atendimento</span>
+                  <span className="ml-auto text-sm font-semibold text-primary">
+                    {formatDuration(autoElapsedMinutes)}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 mb-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Tempo Registrado</span>

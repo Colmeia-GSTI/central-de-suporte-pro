@@ -989,6 +989,8 @@ export default function TicketsPage() {
               categoryId={selectedTicket.category_id}
               clientId={selectedTicket.client_id}
               ticketTitle={selectedTicket.title}
+              ticketCreatedAt={selectedTicket.created_at}
+              firstResponseAt={selectedTicket.first_response_at}
               onSuccess={() => {
                 queryClient.invalidateQueries({ queryKey: ["tickets"] });
                 setIsResolveOpen(false);
