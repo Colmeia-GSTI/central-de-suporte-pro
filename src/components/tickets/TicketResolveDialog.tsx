@@ -348,6 +348,15 @@ export function TicketResolveDialog({
               rows={4}
               className="resize-none"
             />
+            {resolutionNotes.trim().length < 10 ? (
+              <p className="text-xs text-destructive">
+                Faltam {10 - resolutionNotes.trim().length} caracteres
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {resolutionNotes.trim().length} caracteres ✓
+              </p>
+            )}
           </div>
 
           {/* Create Article Checkbox */}
