@@ -180,7 +180,7 @@ export function SLAIndicator({ ticket, compact = false }: SLAIndicatorProps) {
               ) : (
                 <Clock className="h-3 w-3 mr-1" />
               )}
-              {formatMinutesToDisplay(remaining)}
+              {critical ? "SLA expirado" : formatMinutesToDisplay(remaining)}
             </Badge>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">
