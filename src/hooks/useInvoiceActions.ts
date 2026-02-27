@@ -362,9 +362,19 @@ export function useInvoiceActions() {
 
   const cancelInvoiceMutation = useMutation({
     mutationFn: async ({ invoiceId, reason }: { invoiceId: string; reason: string }) => {
+      // Sanitize: cancel invoice + normalize orphan transient fields
       const { error } = await supabase
         .from("invoices")
-        .update({ status: "cancelled" as const, updated_at: new Date().toISOString() })
+        .update({
+          status: "cancelled" as const,
+          boleto_status: null,
+          boleto_error_msg: null,
+          nfse_status: null,
+          nfse_error_msg: null,
+          email_status: null,
+          email_error_msg: null,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", invoiceId);
       if (error) throw error;
 
@@ -377,6 +387,17 @@ export function useInvoiceActions() {
         new_data: { reason, cancelled_at: new Date().toISOString() } as unknown as undefined,
         user_id: user?.id ?? null,
       });
+
+      // Resolve linked NFS-e errors (mark as resolved, not delete)
+      await supabase
+        .from("nfse_history")
+        .update({
+          status: "resolvido",
+          mensagem_retorno: `Resolvido: fatura cancelada. Motivo: ${reason}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("invoice_id", invoiceId)
+        .in("status", ["erro", "rejeitada"]);
     },
     onSuccess: () => {
       invalidateAll();
