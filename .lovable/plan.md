@@ -1,66 +1,66 @@
 
 
-# Correção: Comentários e Macros - Tabelas/Colunas Ausentes no Banco
+# Correção: Contabilizar tempo desde abertura na finalização do chamado
+
+## Problema
+
+O dialog de finalização (`TicketResolveDialog`) só exibe o tempo registrado manualmente via cronômetro ou entrada manual (`ticket_time_entries`). Se o técnico não usou essas ferramentas, o tempo aparece como **0min**, mesmo que o chamado esteja aberto há horas.
+
+O sistema deveria calcular automaticamente o tempo útil transcorrido desde o início do atendimento (`first_response_at`) até o momento da finalização, usando o horário comercial configurado.
 
 ## Causa Raiz
 
-O código frontend referencia estruturas de banco de dados que nunca foram criadas:
+O componente `TicketResolveDialog` não recebe `created_at` nem `first_response_at` do ticket, e não calcula o tempo transcorrido usando o `sla-calculator.ts` que já existe no projeto.
 
-1. **Coluna `attachments`** na tabela `ticket_comments` -- o código faz SELECT e INSERT com essa coluna, mas ela não existe. Isso causa erro 400 tanto ao carregar quanto ao enviar comentários.
-2. **Tabela `ticket_macros`** -- o código busca macros para respostas rápidas, mas a tabela não existe. Isso causa erro 404 (não-crítico, mas gera ruído).
+## Solução
 
-## Correções
+### 1. Adicionar props de datas ao TicketResolveDialog
 
-### 1. Migration: Adicionar coluna `attachments` e criar tabela `ticket_macros`
+Adicionar as props `ticketCreatedAt` e `firstResponseAt` para que o dialog saiba quando o chamado foi criado e quando o atendimento começou.
 
-Uma única migration SQL para:
+### 2. Calcular tempo transcorrido automaticamente
 
-**a) Adicionar coluna `attachments` em `ticket_comments`:**
-```sql
-ALTER TABLE public.ticket_comments 
-ADD COLUMN IF NOT EXISTS attachments jsonb DEFAULT '[]'::jsonb;
-```
+Dentro do dialog, buscar o `business_hours` da `company_settings` e usar a função `calculateElapsedBusinessMinutes` (já existente em `src/lib/sla-calculator.ts`) para calcular:
+- **Tempo desde início do atendimento** (`first_response_at` até agora)
+- Considerar pausas do chamado (`ticket_pauses`)
 
-**b) Criar tabela `ticket_macros`:**
-```sql
-CREATE TABLE IF NOT EXISTS public.ticket_macros (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  shortcut text,
-  content text NOT NULL,
-  is_internal boolean DEFAULT false,
-  is_active boolean DEFAULT true,
-  created_by uuid REFERENCES auth.users(id),
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-```
+### 3. Exibir tempo calculado no card de resumo
 
-**c) RLS para `ticket_macros`:**
-- Staff pode ler macros ativas
-- Admins/managers podem criar/editar/deletar
+O card "Tempo Registrado" passará a mostrar:
+- **Tempo total de atendimento** (calculado automaticamente desde `first_response_at`)
+- **Tempo registrado manualmente** (entradas existentes)
+- **Tempo faturável** (entradas com `is_billable = true`)
 
-### 2. Criar bucket de storage `ticket-attachments`
+### 4. Passar as props no TicketsPage
 
-O código faz upload para o bucket `ticket-attachments`, que também não existe. Precisa ser criado para que anexos funcionem.
+Atualizar a chamada ao `TicketResolveDialog` em `TicketsPage.tsx` para passar `ticketCreatedAt` e `firstResponseAt` do ticket selecionado.
 
-### 3. Nenhuma alteração no frontend
+## Arquivos Modificados
 
-O código frontend já está correto -- apenas as estruturas de banco estavam faltando. Após a migration, tudo funcionará sem mudanças no código.
-
-## Arquivos/Recursos Modificados
-
-| Recurso | Alteração |
+| Arquivo | Alteração |
 |---|---|
-| Migration SQL | Adicionar coluna `attachments`, criar tabela `ticket_macros` com RLS |
-| Storage bucket | Criar `ticket-attachments` |
+| `src/components/tickets/TicketResolveDialog.tsx` | Adicionar props de datas, buscar business_hours e pausas, calcular tempo automaticamente, exibir no card |
+| `src/pages/tickets/TicketsPage.tsx` | Passar `ticketCreatedAt` e `firstResponseAt` ao dialog |
+
+## Detalhes Técnicos
+
+```text
+TicketResolveDialog
+  -> Recebe ticketCreatedAt + firstResponseAt
+  -> Busca company_settings.business_hours
+  -> Busca ticket_pauses do ticket
+  -> Calcula: calculateElapsedBusinessMinutes(firstResponseAt, now, businessHours) - pausas
+  -> Exibe no card:
+     "Tempo de atendimento: Xh Ymin" (automático)
+     "Tempo registrado: Xh Ymin" (manual)
+     "Faturável: Xh Ymin"
+```
 
 ## Impacto
 
 | Cenário | Antes | Depois |
 |---|---|---|
-| Carregar comentários | Erro 400 (coluna não existe) | Carrega normalmente |
-| Enviar comentário | Erro 400 (coluna não existe) | Salva com sucesso |
-| Anexar arquivo | Falha (bucket não existe) | Upload funciona |
-| Respostas rápidas | Erro 404 (tabela não existe) | Lista vazia (sem macros cadastradas ainda) |
+| Finalizar sem cronômetro | Mostra 0min | Mostra tempo real desde início do atendimento |
+| Finalizar com cronômetro | Mostra apenas entradas manuais | Mostra tempo automático + entradas manuais |
+| Registro no histórico | Tempo pode ser 0 | Inclui tempo real trabalhado |
 
