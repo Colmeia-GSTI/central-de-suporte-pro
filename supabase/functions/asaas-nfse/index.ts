@@ -892,18 +892,16 @@ Deno.serve(async (req) => {
           invoicePayload.payment = payment_id;
         }
 
-        // NFS-e Nacional 2026 - Tributos
-        if (typeof retain_iss === "boolean" || iss_rate || pis_value || cofins_value || csll_value || irrf_value || inss_value) {
-          invoicePayload.taxes = {
-            retainIss: retain_iss || false,
-            iss: iss_rate || 0,
-            pis: pis_value || 0,
-            cofins: cofins_value || 0,
-            csll: csll_value || 0,
-            irrf: irrf_value || 0,
-            inss: inss_value || 0,
-          };
-        }
+        // NFS-e Nacional 2026 - Tributos (OBRIGATÓRIO pela API Asaas)
+        invoicePayload.taxes = {
+          retainIss: retain_iss || false,
+          iss: iss_rate || 0,
+          pis: pis_value || 0,
+          cofins: cofins_value || 0,
+          csll: csll_value || 0,
+          irrf: irrf_value || 0,
+          inss: inss_value || 0,
+        };
 
         log(correlationId, "info", "Emitindo NFS-e no Asaas", { payload: JSON.stringify(invoicePayload).slice(0, 300) });
         
