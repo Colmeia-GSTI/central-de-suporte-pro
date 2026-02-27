@@ -1,68 +1,37 @@
 
 
-# Fluxo Completo: Iniciar Atendimento com Vinculação Automática e Redirecionamento
+# Correção do Erro de Build: batch-process-invoices
 
-## Problema Atual
+## Problema
 
-1. Após clicar "Iniciar", o técnico é vinculado e o status muda para `in_progress`, mas o Dialog abre com o objeto **desatualizado** (status ainda `open`).
-2. O Dialog sempre abre na aba "Detalhes" em vez de "Comentários/Interações".
-3. Não há feedback visual imediato na listagem após a ação.
+A edge function `supabase/functions/batch-process-invoices/index.ts` importa `z` de `npm:zod@3.23.8`, mas o ambiente Deno nao consegue resolver esse pacote. O erro impede o deploy das edge functions.
 
-## Correções
+## Causa Raiz
 
-### 1. TicketDetails - Aceitar `initialTab` (src/components/tickets/TicketDetails.tsx)
+O formato `npm:zod@3.23.8` depende de configuracao especifica no `deno.json` ou de `nodeModulesDir: "auto"`. Como o projeto usa Lovable Cloud, o padrao e importar de CDN (esm.sh) para edge functions.
 
-- Adicionar prop opcional `initialTab?: "details" | "comments" | "history"`
-- Usar `initialTab` como valor padrão do `useState` do tab ativo
-- Quando o chamado for aberto após "Iniciar", já cair direto em "Comentários"
+## Correcao
 
-### 2. TicketsPage - Atualização otimista e redirecionamento (src/pages/tickets/TicketsPage.tsx)
+### Arquivo: `supabase/functions/batch-process-invoices/index.ts`
 
-- Adicionar estado `selectedTicketInitialTab` para controlar a aba inicial
-- No `onSuccess` do `startTicketMutation`:
-  - Construir o ticket atualizado otimisticamente (status `in_progress`, `assigned_to` preenchido, `first_response_at` definido) em vez de usar o objeto stale da lista
-  - Definir `selectedTicketInitialTab = "comments"`
-  - Abrir o Dialog com esses dados atualizados
-- Ao abrir ticket normalmente (clique na linha ou botão "Ver"), resetar `selectedTicketInitialTab` para `undefined` (aba "Detalhes" padrão)
-- Passar `initialTab` para o componente `TicketDetails`
+Substituir a linha 2:
 
-### 3. Invalidação global de cache
+```typescript
+// De:
+import { z } from "npm:zod@3.23.8";
 
-- O `onSuccess` já chama `queryClient.invalidateQueries({ queryKey: ["tickets"] })`, o que propaga a atualização para todos os painéis/dashboards que usam a mesma query key.
-- Isso garante sincronização global sem delay perceptível.
-
-## Fluxo Final
-
-```text
-Técnico clica "Iniciar"
-  -> Dialog de seleção de ativo abre
-  -> Técnico preenche e confirma
-  -> Mutation executa:
-     - status -> in_progress
-     - assigned_to -> user.id
-     - first_response_at -> agora
-     - asset_id / asset_description -> preenchido
-     - ticket_history -> registrado
-  -> onSuccess:
-     - Cache invalidado globalmente
-     - Ticket atualizado otimisticamente
-     - Dialog abre na aba "Comentários"
-  -> Técnico começa a registrar interações imediatamente
+// Para:
+import { z } from "https://esm.sh/zod@3.23.8";
 ```
 
-## Arquivos Modificados
+Isso alinha com o padrao usado em outras edge functions do projeto que importam dependencias externas via esm.sh.
 
-| Arquivo | Alteração |
-|---|---|
-| `src/components/tickets/TicketDetails.tsx` | Adicionar prop `initialTab`, usar como valor default do tab |
-| `src/pages/tickets/TicketsPage.tsx` | Estado `selectedTicketInitialTab`, atualização otimista do ticket no onSuccess, passar `initialTab` ao TicketDetails |
+## Verificacao Adicional
+
+Verificar se ha outras edge functions com o mesmo padrao `npm:` que possam causar o mesmo erro.
 
 ## Impacto
 
-| Cenário | Antes | Depois |
-|---|---|---|
-| Após clicar Iniciar | Abre na aba Detalhes com status "Aberto" | Abre na aba Comentários com status "Em Andamento" |
-| Técnico vinculado | Já funciona | Mantido, sem alteração |
-| Propagação para dashboards | Já funciona via invalidateQueries | Mantido |
-| Abrir chamado normalmente | Aba Detalhes | Aba Detalhes (inalterado) |
-
+- Corrige o erro de build atual
+- Nenhuma alteracao funcional - apenas o metodo de importacao muda
+- A funcionalidade do zod permanece identica
