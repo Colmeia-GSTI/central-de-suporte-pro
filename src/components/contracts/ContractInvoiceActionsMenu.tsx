@@ -5,8 +5,13 @@ import {
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
   MoreHorizontal, Barcode, QrCode, Zap, Mail, MessageCircle, Send,
-  Building2, Loader2, ExternalLink, CheckCircle2, FileText,
+  Building2, Loader2, ExternalLink, CheckCircle2, FileText, Trash2,
 } from "lucide-react";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
 import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
@@ -44,6 +49,8 @@ interface ContractInvoiceActionsMenuProps {
 export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvoiceActionsMenuProps) {
   const [nfseDialogOpen, setNfseDialogOpen] = useState(false);
   const [pixDialogOpen, setPixDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
   const {
     generatingPayment,
@@ -51,6 +58,7 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
     sendingNotification,
     isProcessing,
     markAsPaidMutation,
+    cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,
@@ -192,6 +200,20 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
               )}
             </>
           )}
+
+          {/* Cancelar Fatura */}
+          {(invoice.status === "pending" || invoice.status === "overdue") && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setCancelDialogOpen(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Cancelar Fatura
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -214,6 +236,41 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
           clientName={clientName || "Cliente"}
         />
       )}
+
+      {/* Cancel Invoice Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={(open) => { if (!open) { setCancelDialogOpen(false); setCancelReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar Fatura #{invoice.invoice_number}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá cancelar a fatura permanentemente. Informe o motivo do cancelamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            placeholder="Motivo do cancelamento (obrigatório)"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            className="min-h-[80px]"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!cancelReason.trim() || cancelInvoiceMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (cancelReason.trim()) {
+                  cancelInvoiceMutation.mutate(
+                    { invoiceId: invoice.id, reason: cancelReason.trim() },
+                    { onSuccess: () => { setCancelDialogOpen(false); setCancelReason(""); } }
+                  );
+                }
+              }}
+            >
+              {cancelInvoiceMutation.isPending ? "Cancelando..." : "Confirmar Cancelamento"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
