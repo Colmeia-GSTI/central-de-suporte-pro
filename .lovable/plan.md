@@ -1,99 +1,90 @@
 
-Objetivo: corrigir de ponta a ponta o cenário em que a Viapiana (e outros clientes) continuam aparecendo com NFS-e em erro e fatura vencida, e criar um fluxo seguro de saneamento para “eliminar problemas” sem quebrar a rastreabilidade financeira.
 
-1) Diagnóstico confirmado (causa raiz)
-- A fatura da Viapiana (#52) está `overdue` e sem registro de cancelamento em auditoria (`audit_logs` vazio para essa fatura).  
-  Isso indica que o cancelamento comercial da fatura não foi concluído no fluxo correto.
-- Existem registros de NFS-e em `nfse_history` com erro `invalid_action` e mensagem “Necessário informar os impostos da nota fiscal.” vinculados à fatura da Viapiana.
-- Há inconsistência de cobrança nessa mesma fatura: `boleto_status = enviado`, mas sem `boleto_url`, sem `boleto_barcode` e `payment_method` nulo (estado órfão/inconsistente).
-- O “Painel de Erros” hoje prioriza reprocessar/regenerar, mas não tem um fluxo claro de saneamento final (“descartar erro”, “encerrar cobrança problemática”) com trilha de auditoria explícita para financeiro.
+# Correção de 4 Problemas na Listagem de Chamados e Dashboard
 
-2) Estratégia de correção (fluxo completo de saneamento)
-Vamos implementar um fluxo com 2 ações distintas e explícitas, para evitar confusão entre “cancelar boleto”, “cancelar nota” e “cancelar cobrança”:
+## Problemas Identificados
 
-A. Encerrar Cobrança Problemática (fatura)
-- Ação principal no painel de erros e na listagem de faturas.
-- Efeitos:
-  - muda `invoices.status` para `cancelled`;
-  - grava motivo obrigatório em `audit_logs`;
-  - limpa/normaliza campos transitórios inconsistentes (ex.: `boleto_status` órfão, mensagens de erro obsoletas), sem apagar histórico útil;
-  - tira imediatamente da inadimplência (não volta para overdue).
-- Regras:
-  - só para `pending`/`overdue`;
-  - se houver NFS-e autorizada, exigir decisão guiada: cancelar NFS-e antes de encerrar cobrança.
+### 1. Dashboard: "Chamados Abertos" não navega
+O card `AnimatedStatCard` tem `cursor-pointer` mas nenhum `onClick` ou `Link`. Clicar nele não faz nada.
 
-B. Resolver Erro de NFS-e (sem “sumir” com rastreio)
-- Em vez de apagar direto o histórico, criar ação de “resolver erro”:
-  - marca registro como resolvido (ex.: status funcional de resolução + motivo);
-  - mantém trilha para auditoria fiscal/financeira.
-- Exclusão física (delete) ficará restrita a casos técnicos específicos (órfão/duplicado sem valor fiscal), com confirmação reforçada.
+### 2. "SLA expirado" sem clareza
+O indicador mostra "Expirado" quando `remainingMinutes <= 0`, mas o texto é pouco informativo. O tooltip já explica, mas visualmente o badge poderia ser mais descritivo.
 
-3) Ajustes de UI e fluxo operacional
-Arquivos-alvo:
-- `src/components/billing/BillingErrorsPanel.tsx`
-- `src/components/billing/BillingInvoicesTab.tsx`
-- `src/components/billing/InvoiceActionsPopover.tsx`
-- `src/components/contracts/ContractInvoiceActionsMenu.tsx`
-- `src/components/billing/CancelNfseDialog.tsx` (integração/uso consistente)
-- `src/hooks/useInvoiceActions.ts`
+### 3. Descrição manual de dispositivo não permite iniciar
+Quando o cliente tem ativos cadastrados, o usuário pode selecionar "Outro" e digitar. Mas quando o cliente **não tem nenhum ativo**, o campo de descrição aparece (textarea), porém a lógica `canSubmit` exige `selectedAssetId === "other"` ou `!clientId`. Como `clientId` existe e o Select não é exibido (não há ativos), o `selectedAssetId` fica vazio e `canSubmit` retorna `false`, impedindo o início.
 
-Melhorias:
-- Adicionar botões claros no Painel de Erros:
-  - “Encerrar cobrança” (fatura)
-  - “Resolver erro NFS-e”
-  - “Reprocessar NFS-e” (quando fizer sentido)
-- Exibir estado “Resolvido” para erro já tratado, evitando que continue “poluindo” a aba de erros.
-- Unificar os diálogos de justificativa obrigatória (texto mínimo e sem ação silenciosa).
-- Evitar ações destrutivas sem confirmação (já no padrão do projeto).
+### 4. Botão "Iniciar" não fica verde dentro do SLA
+O botão usa `variant="default"` (cor da marca/amarelo), sem lógica para mudar para verde quando o SLA está OK.
 
-4) Correções de backend/funções para impedir recorrência
-Arquivos-alvo:
-- `supabase/functions/asaas-nfse/index.ts`
-- `supabase/functions/generate-monthly-invoices/index.ts`
-- (se necessário) função dedicada de saneamento financeiro
+---
 
-Ajustes:
-- Reforçar payload fiscal em toda reemissão de NFS-e (inclusive caminhos de reprocessamento), garantindo envio consistente de tributos.
-- Na reemissão via painel de erros, buscar e repassar explicitamente configurações fiscais do contrato (alíquota/ISS retido) para eliminar variação entre fluxos.
-- Normalizar estado de cobrança órfã (ex.: “enviado sem artefato”) para estado de reprocessamento claro.
-- Garantir que cancelamento comercial finalize estado da fatura e não deixe “pendurada” para cron de overdue.
+## Correções
 
-5) Ajustes de dados (saneamento inicial dos registros já quebrados)
-- Executar saneamento pontual dos registros já inconsistentes:
-  - Viapiana: encerrar corretamente a cobrança com justificativa e registrar auditoria.
-  - Resolver os registros de NFS-e em erro vinculados à cobrança encerrada (marcar como resolvidos/encerrados).
-  - Corrigir estados órfãos de boleto para não reaparecerem como problema ativo.
-- Isso será feito por operação controlada (não destrutiva por padrão), com logs.
+### 1. Tornar cards do Dashboard clicáveis (Dashboard.tsx)
 
-6) Política de exclusão segura (importante)
-- Faturas: não excluir fisicamente por padrão; usar cancelamento comercial (`cancelled`) para preservar integridade financeira.
-- NFS-e de erro: priorizar “resolver” em vez de deletar; delete apenas em exceções técnicas com justificativa.
-- Tudo com auditoria obrigatória.
+Adicionar props `href` ao `AnimatedStatCard` e envolver o card com `Link` quando `href` estiver presente.
 
-7) Validação e critérios de aceite
-- Viapiana não aparece mais como “vencida” após encerramento correto.
-- Viapiana não aparece mais como “erro ativo” em NFS-e após resolução.
-- Painel de erros mostra apenas pendências reais (não resolvidas).
-- Novo fluxo exige motivo e deixa trilha em auditoria.
-- Reprocessamentos futuros não retornam erro de tributos ausentes no mesmo cenário.
+**Arquivo: `src/components/dashboard/AnimatedStatCard.tsx`**
+- Adicionar prop opcional `href?: string`
+- Envolver o card com `Link` do react-router-dom quando `href` for fornecido
 
-8) Riscos e mitigação
-- Risco: confundir “cancelar boleto” com “cancelar cobrança”.
-  - Mitigação: rotular ações com clareza e separar no UI.
-- Risco: exclusão de histórico fiscal importante.
-  - Mitigação: padrão é resolução/cancelamento lógico, não delete físico.
-- Risco: regressão em fluxos de contrato/listas.
-  - Mitigação: invalidar caches corretos e validar telas de Faturas, Erros, Contratos e NFS-e.
+**Arquivo: `src/pages/Dashboard.tsx`**
+- Adicionar `href` nos cards relevantes:
+  - "Chamados Abertos" -> `/tickets?status=open`
+  - "Em Andamento" -> `/tickets?status=in_progress`
+  - "SLA Violado" -> `/tickets?status=active` (filtro de ativos)
+  - "Clientes Ativos" -> `/clients`
 
-9) Sequência de implementação
-1. Ajustar hook central (`useInvoiceActions`) para saneamento completo da fatura problemática.
-2. Expor as novas ações no Painel de Erros e menus de fatura/contrato.
-3. Corrigir fluxo de resolução de erro NFS-e (status resolvido + auditoria).
-4. Reforçar backend de emissão/reemissão com tributos consistentes.
-5. Rodar saneamento inicial dos casos já quebrados (incluindo Viapiana).
-6. Validar ponta a ponta nas abas: Faturas, Erros (NFS-e/Boletos), Contratos.
+### 2. Melhorar clareza do "SLA expirado" (SLAIndicator)
 
-Resultado esperado
-- Você terá um fluxo operacional claro para “retirar da frente” cobranças/notas problemáticas com segurança.
-- Os erros atuais da Viapiana serão saneados.
-- A reincidência cai porque emissão/reemissão e estados passam a ser tratados de forma consistente.
+Pequeno ajuste visual: quando o SLA está expirado no modo compact, mostrar "SLA expirado" em vez de apenas "Expirado" para dar mais contexto.
+
+**Arquivo: `src/lib/sla-calculator.ts`**
+- Sem alteração necessaria (o texto "Expirado" é correto).
+
+**Arquivo: `src/components/tickets/SLAIndicator.tsx`**
+- No modo compact, quando `critical` (breached), substituir o texto de `formatMinutesToDisplay(remaining)` (que retorna "Expirado") por "SLA expirado" para maior clareza visual.
+
+### 3. Corrigir `canSubmit` para clientes sem ativos (AssetSelectionDialog)
+
+**Arquivo: `src/components/tickets/AssetSelectionDialog.tsx`**
+
+Adicionar condição no `canSubmit`:
+```
+if (clientId && !hasAssets && customDescription.trim()) {
+  return true; // Cliente sem ativos cadastrados, com descrição manual
+}
+```
+
+Isso permite que quando o cliente não tem ativos e o textarea de descrição é exibido, o botão "Iniciar Atendimento" fique habilitado.
+
+### 4. Botão "Iniciar" com cor baseada no SLA (TicketsPage)
+
+**Arquivo: `src/pages/tickets/TicketsPage.tsx`**
+
+O botão "Iniciar" atualmente usa `variant="default"`. Para refletir o estado do SLA:
+- Usar a classe `bg-green-600 hover:bg-green-700 text-white` como estilo padrão do botão Iniciar (pois chamados abertos sem atribuição normalmente estão dentro do SLA)
+- Isso dá feedback visual imediato de que o chamado pode ser iniciado
+
+Alternativa mais robusta: como o SLA já é renderizado na coluna ao lado, o botão "Iniciar" pode simplesmente usar verde fixo (`bg-green-600`) para indicar "ação disponível/positiva", diferenciando-o visualmente do botão padrão amarelo da marca.
+
+---
+
+## Arquivos Modificados
+
+| Arquivo | Alteracao |
+|---|---|
+| `src/components/dashboard/AnimatedStatCard.tsx` | Adicionar prop `href` com navegacao |
+| `src/pages/Dashboard.tsx` | Passar `href` nos stat cards relevantes |
+| `src/components/tickets/AssetSelectionDialog.tsx` | Corrigir `canSubmit` para clientes sem ativos |
+| `src/components/tickets/SLAIndicator.tsx` | Texto "SLA expirado" mais descritivo no compact |
+| `src/pages/tickets/TicketsPage.tsx` | Botao Iniciar com cor verde |
+
+## Impacto
+
+| Cenario | Antes | Depois |
+|---|---|---|
+| Clicar "Chamados Abertos" no dashboard | Nada acontece | Navega para /tickets filtrado |
+| SLA expirado na listagem | Texto "Expirado" sem contexto | "SLA expirado" com icone de alerta |
+| Cliente sem ativos, digitar descricao manual | Botao desabilitado | Botao habilitado com descricao preenchida |
+| Botao Iniciar na listagem | Cor amarela (default) | Cor verde indicando acao positiva |
