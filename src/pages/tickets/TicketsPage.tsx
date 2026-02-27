@@ -95,6 +95,7 @@ export default function TicketsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
+  const [selectedTicketInitialTab, setSelectedTicketInitialTab] = useState<"details" | "comments" | "history" | undefined>(undefined);
   const [cursor, setCursor] = useState<string | null>(null); // Cursor-based pagination
   const [previousCursors, setPreviousCursors] = useState<string[]>([]); // Stack de cursors anteriores
   
@@ -195,6 +196,7 @@ export default function TicketsPage() {
   const hasPreviousPage = previousCursors.length > 0;
 
   const handleViewTicket = (ticket: TicketWithRelations) => {
+    setSelectedTicketInitialTab(undefined);
     setSelectedTicket(ticket);
   };
 
@@ -249,10 +251,17 @@ export default function TicketsPage() {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       toast({ title: "Atendimento iniciado" });
       
-      // Find and open the ticket details
+      // Build optimistically updated ticket to avoid showing stale data
       const ticket = tickets.find(t => t.id === ticketId);
       if (ticket) {
-        setSelectedTicket(ticket);
+        const updatedTicket: TicketWithRelations = {
+          ...ticket,
+          status: "in_progress" as Enums<"ticket_status">,
+          assigned_to: user?.id ?? null,
+          first_response_at: new Date().toISOString(),
+        };
+        setSelectedTicketInitialTab("comments");
+        setSelectedTicket(updatedTicket);
       }
       
       // Reset pending state
@@ -550,12 +559,13 @@ export default function TicketsPage() {
         </div>
 
         {/* Ticket Details Dialog */}
-        <Dialog open={!!selectedTicket} onOpenChange={() => setSelectedTicket(null)}>
+        <Dialog open={!!selectedTicket} onOpenChange={() => { setSelectedTicket(null); setSelectedTicketInitialTab(undefined); }}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             {selectedTicket && (
               <TicketDetails
                 ticket={selectedTicket}
                 onClose={() => setSelectedTicket(null)}
+                initialTab={selectedTicketInitialTab}
                 onTransfer={() => setIsTransferOpen(true)}
                 onPause={() => setIsPauseOpen(true)}
                 onResolve={() => setIsResolveOpen(true)}

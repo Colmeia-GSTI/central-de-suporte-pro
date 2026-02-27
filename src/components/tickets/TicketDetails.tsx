@@ -20,6 +20,7 @@ type TicketWithRelations = Tables<"tickets"> & {
 interface TicketDetailsProps {
   ticket: TicketWithRelations;
   onClose: () => void;
+  initialTab?: "details" | "comments" | "history";
   // Callbacks for action dialogs (handled by parent to avoid nested Dialog issues)
   onTransfer?: () => void;
   onPause?: () => void;
@@ -56,8 +57,8 @@ const canResolveStatuses: Enums<"ticket_status">[] = [
   "open", "in_progress", "waiting", "paused", "waiting_third_party", "no_contact"
 ];
 
-export function TicketDetails({ ticket, onClose, onTransfer, onPause, onResolve }: TicketDetailsProps) {
-  const [activeTab, setActiveTab] = useState("details");
+export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause, onResolve }: TicketDetailsProps) {
+  const [activeTab, setActiveTab] = useState(initialTab || "details");
   const queryClient = useQueryClient();
 
   const handleUpdate = () => {
