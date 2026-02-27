@@ -86,6 +86,8 @@ const getStatusIcon = (status: Enums<"ticket_status"> | null | undefined) => {
   }
 };
 
+type FieldChange = { field: string; label: string; old: string; new: string };
+
 type TicketHistoryRow = {
   id: string;
   ticket_id: string;
@@ -93,6 +95,7 @@ type TicketHistoryRow = {
   old_status: Enums<"ticket_status"> | null;
   new_status: Enums<"ticket_status"> | null;
   comment: string | null;
+  field_changes?: FieldChange[] | null;
   created_at: string;
   user_full_name?: string | null;
 };
@@ -106,7 +109,7 @@ export function TicketHistoryTab({ ticketId }: TicketHistoryTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_history")
-        .select("id, ticket_id, user_id, old_status, new_status, comment, created_at")
+        .select("id, ticket_id, user_id, old_status, new_status, comment, created_at, field_changes")
         .eq("ticket_id", ticketId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -230,11 +233,26 @@ export function TicketHistoryTab({ ticketId }: TicketHistoryTabProps) {
               </div>
             )}
 
-            {/* Mostrar detalhes de edição */}
-            {item.comment && getEventType(item) === "edit" && (
-              <p className="text-sm text-muted-foreground mt-1 bg-muted/50 p-2 rounded">
-                {item.comment.replace("Edição: ", "")}
-              </p>
+            {/* Mostrar detalhes de edição com field_changes estruturados */}
+            {getEventType(item) === "edit" && (
+              <div className="mt-1 space-y-1">
+                {(item as TicketHistoryRow).field_changes && (item as TicketHistoryRow).field_changes!.length > 0 ? (
+                  <div className="bg-muted/50 p-2 rounded space-y-1">
+                    {(item as TicketHistoryRow).field_changes!.map((fc, i) => (
+                      <div key={i} className="text-xs flex items-start gap-1 flex-wrap">
+                        <span className="font-medium text-foreground">{fc.label}:</span>
+                        <span className="text-muted-foreground line-through">{fc.old || "—"}</span>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <span className="text-foreground font-medium">{fc.new || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : item.comment ? (
+                  <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                    {item.comment.replace("Edição: ", "")}
+                  </p>
+                ) : null}
+              </div>
             )}
 
             {/* Outros comentários genéricos (não edição) */}

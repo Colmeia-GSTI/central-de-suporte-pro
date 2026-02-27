@@ -15,7 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { User, Lock, Zap, Search } from "lucide-react";
+import { User, Lock, Zap, Search, Paperclip, X as XIcon, FileText, Image as ImageIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +30,8 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
   const [isInternal, setIsInternal] = useState(false);
   const [macroSearch, setMacroSearch] = useState("");
   const [macroPopoverOpen, setMacroPopoverOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -63,12 +65,15 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
     setMacroSearch("");
   };
 
+  type AttachmentInfo = { name: string; url: string; size: number; type: string; path: string };
+
   type CommentWithProfile = {
     id: string;
     ticket_id: string;
     user_id: string | null;
     content: string;
     is_internal: boolean;
+    attachments?: AttachmentInfo[] | null;
     created_at: string;
     user_full_name?: string | null;
   };
@@ -78,7 +83,7 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_comments")
-        .select("id, ticket_id, user_id, content, is_internal, created_at")
+        .select("id, ticket_id, user_id, content, is_internal, attachments, created_at")
         .eq("ticket_id", ticketId)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -110,12 +115,36 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
   });
 
   const addCommentMutation = useMutation({
-    mutationFn: async ({ content, internal }: { content: string; internal: boolean }) => {
-      const { error } = await supabase.from("ticket_comments").insert({
+    mutationFn: async ({ content, internal, files }: { content: string; internal: boolean; files: File[] }) => {
+      // Upload files to Supabase Storage first (FALHA-05)
+      const attachments: AttachmentInfo[] = [];
+      for (const file of files) {
+        const ext = file.name.split(".").pop();
+        const path = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("ticket-attachments")
+          .upload(path, file, { upsert: false });
+        if (uploadError) {
+          logger.warn("File upload failed", "Tickets", { error: uploadError.message, file: file.name });
+          continue;
+        }
+        const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(path);
+        attachments.push({
+          name: file.name,
+          url: urlData.publicUrl,
+          size: file.size,
+          type: file.type,
+          path: uploadData.path,
+        });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("ticket_comments") as any).insert({
         ticket_id: ticketId,
         content,
         user_id: user?.id,
         is_internal: internal,
+        attachments: attachments.length > 0 ? attachments : [],
       });
       if (error) throw error;
 
@@ -147,6 +176,7 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       setComment("");
       setIsInternal(false);
+      setPendingFiles([]);
       toast({ title: "Comentário adicionado" });
     },
     onError: () => {
@@ -156,7 +186,25 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
 
   const handleAddComment = () => {
     if (!comment.trim()) return;
-    addCommentMutation.mutate({ content: comment, internal: isInternal });
+    addCommentMutation.mutate({ content: comment, internal: isInternal, files: pendingFiles });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const MAX = 10 * 1024 * 1024; // 10 MB
+    const valid = files.filter((f) => {
+      if (f.size > MAX) {
+        toast({ title: `"${f.name}" excede 10MB`, variant: "destructive" });
+        return false;
+      }
+      return true;
+    });
+    setPendingFiles((prev) => [...prev, ...valid]);
+    e.target.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   if (isLoading) {
@@ -207,6 +255,30 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
               <p className="text-sm mt-1 whitespace-pre-wrap bg-muted/50 p-3 rounded-lg">
                 {c.content}
               </p>
+              {/* Attachments display */}
+              {(c as CommentWithProfile).attachments && (c as CommentWithProfile).attachments!.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {(c as CommentWithProfile).attachments!.map((att, i) => (
+                    <a
+                      key={i}
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-2 py-1 rounded border bg-background hover:bg-muted transition-colors text-xs"
+                    >
+                      {att.type.startsWith("image/") ? (
+                        <ImageIcon className="h-3.5 w-3.5 text-blue-500" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      <span className="max-w-[120px] truncate">{att.name}</span>
+                      <span className="text-muted-foreground">
+                        ({Math.round(att.size / 1024)}KB)
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -225,6 +297,29 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
           onChange={(e) => setComment(e.target.value)}
           rows={3}
         />
+
+        {/* Pending files preview (FALHA-05) */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {pendingFiles.map((f, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 px-2 py-1 rounded border bg-muted text-xs"
+              >
+                <Paperclip className="h-3 w-3 text-muted-foreground" />
+                <span className="max-w-[120px] truncate">{f.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  className="text-muted-foreground hover:text-destructive ml-0.5"
+                  aria-label="Remover arquivo"
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -238,6 +333,29 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
                 Comentário interno
               </Label>
             </div>
+
+            {/* Attach file button (FALHA-05) */}
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                multiple
+                accept="image/*,.pdf,.txt,.log,.zip,.doc,.docx,.xls,.xlsx"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <span
+                className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+                title="Anexar arquivo (máx. 10MB por arquivo)"
+              >
+                <Paperclip className="h-3 w-3" />
+                Anexar
+                {pendingFiles.length > 0 && (
+                  <span className="ml-0.5 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
+                    {pendingFiles.length}
+                  </span>
+                )}
+              </span>
+            </label>
 
             {/* Quick Replies / Macros */}
             {macros.length > 0 && (

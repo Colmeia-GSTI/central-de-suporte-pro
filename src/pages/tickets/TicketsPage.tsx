@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -22,15 +23,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag, X } from "lucide-react";
+import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag, X, LayoutList, Kanban, ChevronDown, Users, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
+import { TicketsKanbanView } from "@/components/tickets/TicketsKanbanView";
+import { useSavedViews } from "@/hooks/useSavedViews";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
 import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
@@ -98,6 +109,8 @@ export default function TicketsPage() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [technicianFilter, setTechnicianFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
   const [selectedTicketInitialTab, setSelectedTicketInitialTab] = useState<"details" | "comments" | "history" | undefined>(undefined);
   const [cursor, setCursor] = useState<string | null>(null); // Cursor-based pagination
@@ -116,6 +129,56 @@ export default function TicketsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { views: savedViews, saveView, deleteView } = useSavedViews();
+
+  // ── Bulk action mutations (FALHA-10) ──────────────────────────
+  const bulkStatusMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      const { error } = await supabase
+        .from("tickets")
+        .update({ status: status as Enums<"ticket_status"> })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, { ids, status }) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast({ title: `${ids.length} chamado(s) atualizado(s) para "${status}"` });
+      setSelectedIds(new Set());
+    },
+    onError: () => toast({ title: "Erro ao atualizar status em lote", variant: "destructive" }),
+  });
+
+  const bulkPriorityMutation = useMutation({
+    mutationFn: async ({ ids, priority }: { ids: string[]; priority: string }) => {
+      const { error } = await supabase
+        .from("tickets")
+        .update({ priority: priority as Enums<"ticket_priority"> })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, { ids }) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast({ title: `Prioridade de ${ids.length} chamado(s) atualizada` });
+      setSelectedIds(new Set());
+    },
+    onError: () => toast({ title: "Erro ao atualizar prioridade em lote", variant: "destructive" }),
+  });
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: async ({ ids, userId }: { ids: string[]; userId: string | null }) => {
+      const { error } = await supabase
+        .from("tickets")
+        .update({ assigned_to: userId })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, { ids }) => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast({ title: `${ids.length} chamado(s) atribuído(s)` });
+      setSelectedIds(new Set());
+    },
+    onError: () => toast({ title: "Erro ao atribuir chamados em lote", variant: "destructive" }),
+  });
 
   // Fetch staff members for technician filter
   const { data: staffMembers = [] } = useQuery({
@@ -478,14 +541,204 @@ export default function TicketsPage() {
                 Limpar filtros
               </Button>
             )}
+
+            {/* Saved Views (FALHA-20) */}
+            <div className="ml-auto flex items-center gap-2">
+              {savedViews.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+                      Vistas Salvas ({savedViews.length})
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Aplicar vista</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {savedViews.map((v) => (
+                      <DropdownMenuItem
+                        key={v.id}
+                        className="flex items-center justify-between"
+                        onSelect={() => {
+                          setStatusFilter(v.filters.status || "active");
+                          setPriorityFilter(v.filters.priority || "all");
+                          setTechnicianFilter(v.filters.technician || "all");
+                          setClientFilter(v.filters.client || "all");
+                          if (v.filters.search !== undefined) setSearch(v.filters.search);
+                        }}
+                      >
+                        <span>{v.name}</span>
+                        <button
+                          className="text-muted-foreground hover:text-destructive ml-2"
+                          onClick={(e) => { e.stopPropagation(); deleteView(v.id); }}
+                          aria-label="Excluir vista"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => {
+                  const name = window.prompt("Nome para esta vista:");
+                  if (!name?.trim()) return;
+                  saveView(name.trim(), {
+                    status: statusFilter,
+                    priority: priorityFilter,
+                    technician: technicianFilter,
+                    client: clientFilter,
+                    search,
+                  });
+                  toast({ title: `Vista "${name.trim()}" salva` });
+                }}
+              >
+                Salvar Vista
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Table */}
+        {/* View Mode Toggle + Bulk Action Bar */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === "table" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("table")}
+            className="gap-1.5"
+          >
+            <LayoutList className="h-4 w-4" />
+            Tabela
+          </Button>
+          <Button
+            variant={viewMode === "kanban" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("kanban")}
+            className="gap-1.5"
+          >
+            <Kanban className="h-4 w-4" />
+            Kanban
+          </Button>
+
+          {selectedIds.size > 0 && (
+            <div className="ml-4 flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-lg px-3 py-1.5">
+              <span className="text-sm font-medium text-primary">
+                {selectedIds.size} selecionado(s)
+              </span>
+
+              {/* Bulk: Change Status */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                    Status
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuLabel>Alterar status</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {["open", "in_progress", "waiting", "resolved", "closed"].map((s) => (
+                    <DropdownMenuItem
+                      key={s}
+                      onClick={() => bulkStatusMutation.mutate({ ids: [...selectedIds], status: s })}
+                    >
+                      {s === "open" ? "Aberto" : s === "in_progress" ? "Em Andamento" : s === "waiting" ? "Aguardando" : s === "resolved" ? "Resolvido" : "Fechado"}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Bulk: Change Priority */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                    <AlertCircle className="h-3 w-3" />
+                    Prioridade
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuLabel>Alterar prioridade</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {[["critical","Crítica"],["high","Alta"],["medium","Média"],["low","Baixa"]].map(([val, label]) => (
+                    <DropdownMenuItem
+                      key={val}
+                      onClick={() => bulkPriorityMutation.mutate({ ids: [...selectedIds], priority: val })}
+                    >
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Bulk: Assign Technician */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                    <Users className="h-3 w-3" />
+                    Atribuir
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuLabel>Atribuir técnico</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => bulkAssignMutation.mutate({ ids: [...selectedIds], userId: null })}>
+                    Remover atribuição
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {staffMembers.map((s) => (
+                    <DropdownMenuItem
+                      key={s.user_id}
+                      onClick={() => bulkAssignMutation.mutate({ ids: [...selectedIds], userId: s.user_id })}
+                    >
+                      {s.full_name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                <X className="h-3 w-3 mr-1" />
+                Cancelar
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Kanban View (FALHA-11) */}
+        {viewMode === "kanban" && (
+          <TicketsKanbanView
+            tickets={tickets}
+            onTicketClick={handleViewTicket}
+          />
+        )}
+
+        {/* Table View */}
+        {viewMode !== "kanban" && (
         <div className="rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={tickets.length > 0 && selectedIds.size === tickets.length}
+                    onCheckedChange={(checked) => {
+                      if (checked) setSelectedIds(new Set(tickets.map((t) => t.id)));
+                      else setSelectedIds(new Set());
+                    }}
+                    aria-label="Selecionar todos"
+                  />
+                </TableHead>
                 <TableHead className="w-20">#</TableHead>
                 <TableHead>Título</TableHead>
                 <TableHead>Cliente</TableHead>
@@ -500,9 +753,9 @@ export default function TicketsPage() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                // Loading skeleton
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -517,7 +770,7 @@ export default function TicketsPage() {
                 ))
               ) : tickets.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
+                  <TableCell colSpan={11} className="text-center py-8">
                     <Ticket className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <p className="mt-2 text-muted-foreground">
                       Nenhum chamado encontrado
@@ -526,11 +779,25 @@ export default function TicketsPage() {
                 </TableRow>
               ) : (
                 tickets.map((ticket) => (
-                  <TableRow 
+                  <TableRow
                     key={ticket.id}
-                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${selectedIds.has(ticket.id) ? "bg-primary/5" : ""}`}
                     onClick={() => handleViewTicket(ticket)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(ticket.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.add(ticket.id);
+                            else next.delete(ticket.id);
+                            return next;
+                          });
+                        }}
+                        aria-label={`Selecionar chamado #${ticket.ticket_number}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-sm">
                       #{ticket.ticket_number}
                     </TableCell>
@@ -672,6 +939,7 @@ export default function TicketsPage() {
             </div>
           )}
         </div>
+        )} {/* end viewMode !== "kanban" */}
 
         {/* Ticket Details Dialog */}
         <Dialog open={!!selectedTicket} onOpenChange={() => { setSelectedTicket(null); setSelectedTicketInitialTab(undefined); }}>

@@ -28,6 +28,7 @@ import { EntityHistoryTimeline, HistoryEntry } from "@/components/ui/EntityHisto
 import { TagsInput } from "@/components/tickets/TagsInput";
 import { TagBadge } from "@/components/tickets/TagBadge";
 import { RequesterContactCard } from "@/components/tickets/RequesterContactCard";
+import { TicketLinksSection } from "@/components/tickets/TicketLinksSection";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type RequesterContactType = {
@@ -264,24 +265,55 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
   });
 
   const handleSave = async () => {
-    // Detectar mudanças para registrar no histórico
-    const changes: string[] = [];
-    if (formData.title !== ticket.title) changes.push("Título alterado");
-    if (formData.description !== (ticket.description || "")) changes.push("Descrição alterada");
-    if (formData.priority !== ticket.priority) 
-      changes.push(`Prioridade: ${priorityLabels[ticket.priority]} → ${priorityLabels[formData.priority]}`);
-    if (formData.category_id !== (ticket.category_id || "")) changes.push("Categoria alterada");
-    if (formData.assigned_to !== (ticket.assigned_to || "")) changes.push("Técnico alterado");
-    if (formData.asset_id !== (ticket.asset_id || "")) changes.push("Ativo alterado");
+    // Build structured field changes for audit trail (FALHA-04)
+    type FieldChange = { field: string; label: string; old: string; new: string };
+    const fieldChanges: FieldChange[] = [];
 
-    // Registrar edições no histórico (se houver mudanças além de status)
-    if (changes.length > 0) {
-      const { error: historyError } = await supabase.from("ticket_history").insert({
+    if (formData.title !== ticket.title) {
+      fieldChanges.push({ field: "title", label: "Título", old: ticket.title, new: formData.title });
+    }
+    if (formData.description !== (ticket.description || "")) {
+      fieldChanges.push({
+        field: "description",
+        label: "Descrição",
+        old: (ticket.description || "").substring(0, 80),
+        new: formData.description.substring(0, 80),
+      });
+    }
+    if (formData.priority !== ticket.priority) {
+      fieldChanges.push({
+        field: "priority",
+        label: "Prioridade",
+        old: priorityLabels[ticket.priority],
+        new: priorityLabels[formData.priority],
+      });
+    }
+    if (formData.category_id !== (ticket.category_id || "")) {
+      const oldCat = categories.find((c) => c.id === (ticket.category_id || ""))?.name || ticket.category_id || "-";
+      const newCat = categories.find((c) => c.id === formData.category_id)?.name || formData.category_id || "-";
+      fieldChanges.push({ field: "category_id", label: "Categoria", old: oldCat, new: newCat });
+    }
+    if (formData.assigned_to !== (ticket.assigned_to || "")) {
+      const oldTech = technicians.find((t) => t.user_id === (ticket.assigned_to || ""))?.full_name || "-";
+      const newTech = technicians.find((t) => t.user_id === formData.assigned_to)?.full_name || "-";
+      fieldChanges.push({ field: "assigned_to", label: "Técnico", old: oldTech, new: newTech });
+    }
+    if (formData.asset_id !== (ticket.asset_id || "")) {
+      const oldAsset = assets.find((a) => a.id === (ticket.asset_id || ""))?.name || "-";
+      const newAsset = assets.find((a) => a.id === formData.asset_id)?.name || "-";
+      fieldChanges.push({ field: "asset_id", label: "Ativo", old: oldAsset, new: newAsset });
+    }
+
+    if (fieldChanges.length > 0) {
+      const summary = fieldChanges.map((c) => `${c.label}: "${c.old}" → "${c.new}"`).join("; ");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: historyError } = await (supabase.from("ticket_history") as any).insert({
         ticket_id: ticket.id,
         user_id: user?.id,
         old_status: null,
         new_status: null,
-        comment: `Edição: ${changes.join(", ")}`,
+        comment: `Edição: ${fieldChanges.map((c) => c.label).join(", ")}`,
+        field_changes: fieldChanges,
       });
       if (historyError) {
         logger.warn("Failed to insert edit history", "Tickets", { error: historyError.message });
@@ -645,6 +677,9 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         </Select>
         <Badge className={statusColors[formData.status]}>{statusLabels[formData.status]}</Badge>
       </div>
+
+      {/* Ticket Links Section */}
+      <TicketLinksSection ticketId={ticket.id} ticketNumber={ticket.ticket_number} />
 
       {/* Recent History Collapsible */}
       <Collapsible open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
