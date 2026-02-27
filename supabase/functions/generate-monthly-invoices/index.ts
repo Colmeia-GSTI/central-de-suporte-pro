@@ -285,16 +285,79 @@ Deno.serve(async (req) => {
 
         // Calculate due date based on billing_day
         const billingDay = contract.billing_day || 10;
-        const lastDayOfMonth = new Date(targetYear, targetMonth, 0).getDate();
+        let currentTargetMonth = targetMonth;
+        let currentTargetYear = targetYear;
+        let currentReferenceMonth = referenceMonth;
+
+        const lastDayOfMonth = new Date(currentTargetYear, currentTargetMonth, 0).getDate();
         const actualBillingDay = Math.min(billingDay, lastDayOfMonth);
-        const dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
+        let dueDate = `${currentReferenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
+
+        // Check if due date is in the past — if so, advance to next month
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+        if (dueDate < todayStr) {
+          let nextMonth = currentTargetMonth + 1;
+          let nextYear = currentTargetYear;
+          if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear++;
+          }
+          const nextReferenceMonth = `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
+
+          console.log(`[GEN-INVOICES] Vencimento ${dueDate} já passou para ${contract.name}. Avançando para ${nextReferenceMonth}`);
+
+          await logToDatabase(
+            supabase,
+            "info",
+            "Billing",
+            "generate-monthly-invoices",
+            `Vencimento retroativo detectado para ${contract.name}. Fatura avançada para ${nextReferenceMonth}`,
+            { contract_id: contract.id, original_due: dueDate, new_reference: nextReferenceMonth },
+            undefined,
+            executionId
+          );
+
+          // Check if invoice already exists for the next month
+          const { data: nextExisting } = await supabase
+            .from("invoices")
+            .select("id")
+            .eq("contract_id", contract.id)
+            .eq("reference_month", nextReferenceMonth)
+            .not("status", "in", '("cancelled","voided")')
+            .limit(1);
+
+          if (nextExisting && nextExisting.length > 0) {
+            console.log(`[GEN-INVOICES] Fatura já existe para ${contract.name} em ${nextReferenceMonth}, pulando`);
+            skipped++;
+            results.push({
+              contract_id: contract.id,
+              contract_name: contract.name,
+              status: "skipped",
+              invoice_id: nextExisting[0].id,
+              invoice_number: null,
+              error: null,
+              duration_ms: Date.now() - contractStartTime,
+            });
+            continue;
+          }
+
+          // Recalculate for next month
+          currentTargetMonth = nextMonth;
+          currentTargetYear = nextYear;
+          currentReferenceMonth = nextReferenceMonth;
+          const nextLastDay = new Date(currentTargetYear, currentTargetMonth, 0).getDate();
+          const nextActualBillingDay = Math.min(billingDay, nextLastDay);
+          dueDate = `${currentReferenceMonth}-${String(nextActualBillingDay).padStart(2, "0")}`;
+        }
 
         // Fetch additional charges for this contract and month
         const { data: additionalCharges } = await supabase
           .from("contract_additional_charges")
           .select("id, description, amount")
           .eq("contract_id", contract.id)
-          .eq("reference_month", referenceMonth)
+          .eq("reference_month", currentReferenceMonth)
           .eq("applied", false);
 
         const charges = (additionalCharges || []) as AdditionalCharge[];
@@ -302,7 +365,7 @@ Deno.serve(async (req) => {
         const totalAmount = contract.monthly_value + additionalTotal;
 
         // Build invoice notes with contract info and additional charges
-        let invoiceNotes = `Fatura mensal - Contrato: ${contract.name} - Competência: ${referenceMonth}`;
+        let invoiceNotes = `Fatura mensal - Contrato: ${contract.name} - Competência: ${currentReferenceMonth}`;
         if (charges.length > 0) {
           invoiceNotes += `\n\nValores adicionais:`;
           for (const charge of charges) {
@@ -318,7 +381,7 @@ Deno.serve(async (req) => {
             contract_id: contract.id,
             amount: totalAmount,
             due_date: dueDate,
-            reference_month: referenceMonth,
+            reference_month: currentReferenceMonth,
             status: "pending",
             payment_method: contract.payment_preference || "boleto",
             notes: invoiceNotes,
@@ -351,7 +414,7 @@ Deno.serve(async (req) => {
           // Log the failure
           await supabase.from("invoice_generation_log").insert({
             contract_id: contract.id,
-            reference_month: referenceMonth,
+            reference_month: currentReferenceMonth,
             status: "error",
             error_message: invoiceError.message,
           });
@@ -410,7 +473,7 @@ Deno.serve(async (req) => {
         await supabase.from("invoice_generation_log").insert({
           contract_id: contract.id,
           invoice_id: newInvoice.id,
-          reference_month: referenceMonth,
+          reference_month: currentReferenceMonth,
           status: "success",
         });
 
