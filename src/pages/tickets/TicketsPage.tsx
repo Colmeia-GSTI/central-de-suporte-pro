@@ -495,9 +495,8 @@ export default function TicketsPage() {
                       <div className="flex items-center justify-end gap-1">
                         {ticket.status === "open" && !ticket.assigned_to && (
                           <Button
-                            variant="default"
                             size="sm"
-                            className="gap-1 h-7 text-xs"
+                            className="gap-1 h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
                             onClick={(e) => handleStartTicket(e, ticket)}
                             disabled={startTicketMutation.isPending}
                           >

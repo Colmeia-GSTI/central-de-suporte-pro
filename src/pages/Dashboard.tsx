@@ -122,11 +122,11 @@ export default function Dashboard() {
   });
 
   const statCards = [
-    { title: "Chamados Abertos", value: stats?.openTickets ?? 0, icon: Ticket, color: "text-primary" },
-    { title: "Em Andamento", value: stats?.inProgressTickets ?? 0, icon: Clock, color: "text-warning" },
+    { title: "Chamados Abertos", value: stats?.openTickets ?? 0, icon: Ticket, color: "text-primary", href: "/tickets?status=open" },
+    { title: "Em Andamento", value: stats?.inProgressTickets ?? 0, icon: Clock, color: "text-warning", href: "/tickets?status=in_progress" },
     { title: "Resolvidos Hoje", value: stats?.resolvedToday ?? 0, icon: CheckCircle, color: "text-success" },
-    { title: "SLA Violado", value: stats?.slaViolated ?? 0, icon: AlertTriangle, color: "text-destructive" },
-    { title: "Clientes Ativos", value: stats?.activeClients ?? 0, icon: Users, color: "text-primary" },
+    { title: "SLA Violado", value: stats?.slaViolated ?? 0, icon: AlertTriangle, color: "text-destructive", href: "/tickets" },
+    { title: "Clientes Ativos", value: stats?.activeClients ?? 0, icon: Users, color: "text-primary", href: "/clients" },
     { title: "Taxa de Resolução", value: `${stats?.resolutionRate ?? 0}%`, icon: TrendingUp, color: "text-success" },
   ];
 
@@ -170,6 +170,7 @@ export default function Dashboard() {
               color={stat.color}
               isLoading={isLoading}
               index={index}
+              href={stat.href}
             />
           ))}
         </div>

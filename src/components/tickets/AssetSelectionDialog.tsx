@@ -106,8 +106,11 @@ export function AssetSelectionDialog({
     if (!clientId && customDescription.trim()) {
       return true; // Sem cliente, com descrição
     }
+    if (clientId && !hasAssets && customDescription.trim()) {
+      return true; // Cliente sem ativos cadastrados, com descrição manual
+    }
     return false;
-  }, [selectedAssetId, customDescription, clientId]);
+  }, [selectedAssetId, customDescription, clientId, hasAssets]);
 
   const handleConfirm = () => {
     if (selectedAssetId && selectedAssetId !== "other") {

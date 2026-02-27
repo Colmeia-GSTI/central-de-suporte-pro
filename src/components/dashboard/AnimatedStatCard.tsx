@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { LucideIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -10,6 +11,7 @@ interface AnimatedStatCardProps {
   color: string;
   isLoading?: boolean;
   index?: number;
+  href?: string;
   trend?: {
     value: number;
     isPositive: boolean;
@@ -23,8 +25,11 @@ export function AnimatedStatCard({
   color,
   isLoading,
   index = 0,
+  href,
   trend,
 }: AnimatedStatCardProps) {
+  const Wrapper = href ? Link : "div";
+  const wrapperProps = href ? { to: href } : {};
   return (
     <motion.div
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -41,6 +46,7 @@ export function AnimatedStatCard({
       }}
       whileTap={{ scale: 0.98 }}
     >
+      <Wrapper {...wrapperProps} className={href ? "block no-underline" : undefined}>
       <Card className="relative overflow-hidden group cursor-pointer premium-card">
         {/* Gradient overlay on hover */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -89,6 +95,7 @@ export function AnimatedStatCard({
           )}
         </CardContent>
       </Card>
+      </Wrapper>
     </motion.div>
   );
 }
