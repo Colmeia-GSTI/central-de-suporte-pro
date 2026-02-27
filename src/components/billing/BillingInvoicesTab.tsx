@@ -46,6 +46,11 @@ import { SecondCopyDialog } from "@/components/billing/SecondCopyDialog";
 import { RenegotiateInvoiceDialog } from "@/components/billing/RenegotiateInvoiceDialog";
 import { CancelNfseDialog } from "@/components/billing/CancelNfseDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
@@ -96,6 +101,8 @@ export function BillingInvoicesTab() {
   const [secondCopyInvoice, setSecondCopyInvoice] = useState<InvoiceWithClient | null>(null);
   const [renegotiateInvoice, setRenegotiateInvoice] = useState<InvoiceWithClient | null>(null);
   const [cancelNfseInvoice, setCancelNfseInvoice] = useState<InvoiceWithClient | null>(null);
+  const [cancelInvoiceTarget, setCancelInvoiceTarget] = useState<InvoiceWithClient | null>(null);
+  const [cancelInvoiceReason, setCancelInvoiceReason] = useState("");
   const [isCancellingBoleto, setIsCancellingBoleto] = useState(false);
   const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false);
   const [isBatchNotifying, setIsBatchNotifying] = useState(false);
@@ -106,6 +113,7 @@ export function BillingInvoicesTab() {
     processingComplete,
     sendingNotification,
     markAsPaidMutation,
+    cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,
@@ -419,6 +427,7 @@ export function BillingInvoicesTab() {
                         onEmitNfse={() => setNfseInvoice(invoice)}
                         onCancelBoleto={() => setIsCancellingBoleto(true)}
                         onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                        onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                         onViewHistory={() => setHistoryInvoice(invoice)}
                       />
                     </div>
@@ -639,6 +648,7 @@ export function BillingInvoicesTab() {
                               }
                             }}
                             onCancelNfse={() => setCancelNfseInvoice(invoice)}
+                            onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                           />
                         </TableCell>
@@ -882,6 +892,40 @@ export function BillingInvoicesTab() {
           }}
         />
       )}
+      {/* Cancel Invoice Dialog */}
+      <AlertDialog open={!!cancelInvoiceTarget} onOpenChange={(open) => { if (!open) { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar Fatura #{cancelInvoiceTarget?.invoice_number}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá cancelar a fatura permanentemente. Informe o motivo do cancelamento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            placeholder="Motivo do cancelamento (obrigatório)"
+            value={cancelInvoiceReason}
+            onChange={(e) => setCancelInvoiceReason(e.target.value)}
+            className="min-h-[80px]"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!cancelInvoiceReason.trim() || cancelInvoiceMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (cancelInvoiceTarget && cancelInvoiceReason.trim()) {
+                  cancelInvoiceMutation.mutate(
+                    { invoiceId: cancelInvoiceTarget.id, reason: cancelInvoiceReason.trim() },
+                    { onSuccess: () => { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }
+                  );
+                }
+              }}
+            >
+              {cancelInvoiceMutation.isPending ? "Cancelando..." : "Confirmar Cancelamento"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

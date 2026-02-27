@@ -360,12 +360,40 @@ export function useInvoiceActions() {
     }
   };
 
+  const cancelInvoiceMutation = useMutation({
+    mutationFn: async ({ invoiceId, reason }: { invoiceId: string; reason: string }) => {
+      const { error } = await supabase
+        .from("invoices")
+        .update({ status: "cancelled" as const, updated_at: new Date().toISOString() })
+        .eq("id", invoiceId);
+      if (error) throw error;
+
+      // Registrar auditoria
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("audit_logs").insert({
+        table_name: "invoices",
+        record_id: invoiceId,
+        action: "CANCEL",
+        new_data: { reason, cancelled_at: new Date().toISOString() } as unknown as undefined,
+        user_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Fatura cancelada com sucesso");
+    },
+    onError: (error: unknown) => {
+      toast.error("Erro ao cancelar fatura", { description: getErrorMessage(error) });
+    },
+  });
+
   return {
     generatingPayment,
     processingComplete,
     sendingNotification,
     isProcessing,
     markAsPaidMutation,
+    cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,

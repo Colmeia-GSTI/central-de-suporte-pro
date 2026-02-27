@@ -72,7 +72,6 @@ export function ContractInvoicesSheet({
         .from("invoices")
         .select("id, invoice_number, reference_month, due_date, amount, status, paid_date")
         .eq("contract_id", contract.id)
-        .not("status", "in", "(cancelled,renegotiated)")
         .order("due_date", { ascending: false });
       if (error) throw error;
       return data as Invoice[];
@@ -102,6 +101,8 @@ export function ContractInvoicesSheet({
     let totalOverdue = 0;
     let totalPending = 0;
     for (const inv of invoices) {
+      // Excluir canceladas e renegociadas dos totais
+      if (inv.status === "cancelled" || inv.status === "renegotiated") continue;
       totalInvoiced += inv.amount;
       if (inv.status === "paid") totalPaid += inv.amount;
       if (inv.status === "overdue") totalOverdue += inv.amount;

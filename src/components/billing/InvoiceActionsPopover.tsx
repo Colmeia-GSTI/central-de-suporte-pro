@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Barcode, QrCode, MoreHorizontal, Loader2, FileText, Mail, MessageCircle,
-  Send, Zap, XCircle, Building2, HandCoins, Ban, CheckCircle2, Clock,
+  Send, Zap, XCircle, Building2, HandCoins, Ban, CheckCircle2, Clock, Trash2,
 } from "lucide-react";
 
 interface InvoiceForActions {
@@ -48,6 +48,7 @@ interface InvoiceActionsPopoverProps {
   onEmitNfse: () => void;
   onCancelBoleto: () => void;
   onCancelNfse: () => void;
+  onCancelInvoice: () => void;
   onViewHistory: () => void;
 }
 
@@ -67,6 +68,7 @@ export function InvoiceActionsPopover({
   onEmitNfse,
   onCancelBoleto,
   onCancelNfse,
+  onCancelInvoice,
   onViewHistory,
 }: InvoiceActionsPopoverProps) {
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
@@ -223,6 +225,20 @@ export function InvoiceActionsPopover({
             <DropdownMenuItem onClick={onEmitNfse}>
               <FileText className="mr-2 h-4 w-4" />
               Emitir NFS-e Manual
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {/* Cancelar Fatura */}
+        {isPendingOrOverdue && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={onCancelInvoice}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Cancelar Fatura
             </DropdownMenuItem>
           </>
         )}
