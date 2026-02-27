@@ -3369,6 +3369,7 @@ export type Database = {
       }
       ticket_comments: {
         Row: {
+          attachments: Json | null
           content: string
           created_at: string
           id: string
@@ -3377,6 +3378,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          attachments?: Json | null
           content: string
           created_at?: string
           id?: string
@@ -3385,6 +3387,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          attachments?: Json | null
           content?: string
           created_at?: string
           id?: string
@@ -3439,6 +3442,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ticket_macros: {
+        Row: {
+          content: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          is_internal: boolean | null
+          name: string
+          shortcut: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_internal?: boolean | null
+          name: string
+          shortcut?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_internal?: boolean | null
+          name?: string
+          shortcut?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       ticket_pauses: {
         Row: {
