@@ -36,9 +36,10 @@ const ticketSchema = z.object({
     .min(5, "Título deve ter pelo menos 5 caracteres")
     .max(255, "Título deve ter no máximo 255 caracteres"),
   description: z.string()
-    .max(10000, "Descrição deve ter no máximo 10.000 caracteres")
-    .optional(),
+    .min(20, "Descreva o problema com pelo menos 20 caracteres")
+    .max(10000, "Descrição deve ter no máximo 10.000 caracteres"),
   client_id: z.string().optional(),
+  requester_contact_id: z.string().optional(),
   category_id: z.string().optional(),
   subcategory_id: z.string().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]),
@@ -70,6 +71,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
       title: initialData?.title || "",
       description: initialData?.description || "",
       client_id: initialData?.client_id || "",
+      requester_contact_id: "",
       priority: initialData?.priority || "medium",
       origin: "portal",
       category_id: "",
@@ -122,6 +124,31 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
     },
   });
 
+  // Fetch contacts when client is selected
+  const selectedClientId = form.watch("client_id");
+  const { data: clientContacts = [] } = useQuery({
+    queryKey: ["client-contacts-select", selectedClientId],
+    queryFn: async () => {
+      if (!selectedClientId) return [];
+      const { data, error } = await supabase
+        .from("client_contacts")
+        .select("id, name, role, phone, whatsapp")
+        .eq("client_id", selectedClientId)
+        .eq("is_active", true)
+        .order("is_primary", { ascending: false })
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedClientId,
+  });
+
+  // Reset requester_contact when client changes
+  const handleClientChange = (value: string, fieldOnChange: (v: string) => void) => {
+    fieldOnChange(value);
+    form.setValue("requester_contact_id", "");
+  };
+
   // Filter subcategories based on selected category
   const selectedCategoryId = form.watch("category_id");
   const filteredSubcategories = useMemo(() => {
@@ -133,8 +160,9 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
     mutationFn: async (data: TicketFormData) => {
       const payload = {
         title: data.title,
-        description: data.description || null,
+        description: data.description,
         client_id: data.client_id || null,
+        requester_contact_id: data.requester_contact_id || null,
         category_id: data.category_id || null,
         subcategory_id: data.subcategory_id || null,
         priority: data.priority as Enums<"ticket_priority">,
@@ -228,10 +256,13 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Descrição</FormLabel>
+              <FormLabel>
+                Descrição <span className="text-destructive">*</span>
+                <span className="text-xs text-muted-foreground ml-1">(mínimo 20 caracteres)</span>
+              </FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Descreva o problema em detalhes..."
+                  placeholder="Descreva o problema em detalhes: o que aconteceu, quando começou, quais passos foram tentados..."
                   rows={4}
                   {...field}
                 />
@@ -248,7 +279,10 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cliente</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={(value) => handleClientChange(value, field.onChange)}
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um cliente" />
@@ -258,6 +292,44 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                     {clients.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="requester_contact_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contato Solicitante</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={!selectedClientId || clientContacts.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        !selectedClientId
+                          ? "Selecione um cliente primeiro"
+                          : clientContacts.length === 0
+                          ? "Nenhum contato cadastrado"
+                          : "Selecione o contato solicitante"
+                      } />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {clientContacts.map((contact) => (
+                      <SelectItem key={contact.id} value={contact.id}>
+                        <span>{contact.name}</span>
+                        {contact.role && (
+                          <span className="text-muted-foreground ml-1">— {contact.role}</span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
