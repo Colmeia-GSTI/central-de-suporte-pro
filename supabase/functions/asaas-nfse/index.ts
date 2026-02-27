@@ -893,13 +893,15 @@ Deno.serve(async (req) => {
         }
 
         // NFS-e Nacional 2026 - Tributos (OBRIGATÓRIO pela API Asaas)
+        invoicePayload.observations = "";
+        invoicePayload.deductions = 0;
         invoicePayload.taxes = {
           retainIss: retain_iss || false,
           iss: iss_rate || 0,
           pis: pis_value || 0,
           cofins: cofins_value || 0,
           csll: csll_value || 0,
-          irrf: irrf_value || 0,
+          ir: irrf_value || 0,
           inss: inss_value || 0,
         };
 
@@ -1163,18 +1165,18 @@ Deno.serve(async (req) => {
           throw new AsaasApiError(errorMsg, 400, "MISSING_MUNICIPAL_SERVICE_CODE");
         }
 
-        // NFS-e Nacional 2026 - Tributos
-        if (aliquotaIss || issRetidoValue || pis_value || cofins_value || csll_value || irrf_value || inss_value) {
-          invoicePayload.taxes = {
-            retainIss: issRetidoValue,
-            iss: aliquotaIss,
-            pis: pis_value || 0,
-            cofins: cofins_value || 0,
-            csll: csll_value || 0,
-            irrf: irrf_value || 0,
-            inss: inss_value || 0,
-          };
-        }
+        // NFS-e Nacional 2026 - Tributos (OBRIGATÓRIO pela API Asaas)
+        invoicePayload.observations = "";
+        invoicePayload.deductions = 0;
+        invoicePayload.taxes = {
+          retainIss: issRetidoValue || false,
+          iss: aliquotaIss || 0,
+          pis: pis_value || 0,
+          cofins: cofins_value || 0,
+          csll: csll_value || 0,
+          ir: irrf_value || 0,
+          inss: inss_value || 0,
+        };
 
         log(correlationId, "info", "Emitindo NFS-e avulsa no Asaas");
         
@@ -1272,6 +1274,17 @@ Deno.serve(async (req) => {
           value: 5.00,
           effectiveDate: new Date().toISOString().split("T")[0],
           externalReference: `teste-nfse-${Date.now()}`,
+          observations: "Teste de homologação",
+          deductions: 0,
+          taxes: {
+            retainIss: false,
+            iss: 0,
+            pis: 0,
+            cofins: 0,
+            csll: 0,
+            ir: 0,
+            inss: 0,
+          },
         };
 
         if (payment_id) {

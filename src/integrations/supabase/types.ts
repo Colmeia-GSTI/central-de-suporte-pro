@@ -1227,9 +1227,11 @@ export type Database = {
           internal_notes: string | null
           monthly_value: number
           name: string
+          nfse_aliquota: number | null
           nfse_cnae: string | null
           nfse_descricao_customizada: string | null
           nfse_enabled: boolean | null
+          nfse_iss_retido: boolean | null
           nfse_service_code: string | null
           nfse_service_code_id: string | null
           notification_message: string | null
@@ -1256,9 +1258,11 @@ export type Database = {
           internal_notes?: string | null
           monthly_value?: number
           name: string
+          nfse_aliquota?: number | null
           nfse_cnae?: string | null
           nfse_descricao_customizada?: string | null
           nfse_enabled?: boolean | null
+          nfse_iss_retido?: boolean | null
           nfse_service_code?: string | null
           nfse_service_code_id?: string | null
           notification_message?: string | null
@@ -1285,9 +1289,11 @@ export type Database = {
           internal_notes?: string | null
           monthly_value?: number
           name?: string
+          nfse_aliquota?: number | null
           nfse_cnae?: string | null
           nfse_descricao_customizada?: string | null
           nfse_enabled?: boolean | null
+          nfse_iss_retido?: boolean | null
           nfse_service_code?: string | null
           nfse_service_code_id?: string | null
           notification_message?: string | null

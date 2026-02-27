@@ -78,6 +78,8 @@ const contractSchema = z.object({
   nfse_service_code: z.string().optional(),
   nfse_descricao_customizada: z.string().optional(),
   nfse_cnae: z.string().optional(),
+  nfse_aliquota: z.coerce.number().min(0).max(25).default(0),
+  nfse_iss_retido: z.boolean().default(false),
 });
 
 type ContractFormData = z.infer<typeof contractSchema>;
@@ -133,6 +135,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       nfse_service_code: contractData?.nfse_service_code || "010701",
       nfse_descricao_customizada: contractData?.nfse_descricao_customizada || "",
       nfse_cnae: contractData?.nfse_cnae || "",
+      nfse_aliquota: (contractData as Record<string, unknown>)?.nfse_aliquota as number || 0,
+      nfse_iss_retido: (contractData as Record<string, unknown>)?.nfse_iss_retido as boolean || false,
     },
   });
 
@@ -212,6 +216,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         nfse_service_code: data.nfse_service_code || null,
         nfse_descricao_customizada: data.nfse_descricao_customizada || null,
         nfse_cnae: data.nfse_cnae || null,
+        nfse_aliquota: data.nfse_aliquota || 0,
+        nfse_iss_retido: data.nfse_iss_retido || false,
       };
 
       let contractIdValue = contractData?.id;
@@ -976,6 +982,9 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         if (code?.cnae_principal) {
                           form.setValue("nfse_cnae", code.cnae_principal);
                         }
+                        if (code?.aliquota_sugerida) {
+                          form.setValue("nfse_aliquota", code.aliquota_sugerida);
+                        }
                       }}
                     />
                     <FormDescription>
@@ -985,6 +994,57 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="nfse_aliquota"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Alíquota ISS (%)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={25}
+                          step={0.01}
+                          placeholder="Ex: 2.00"
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Preenchido ao selecionar código de serviço
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nfse_iss_retido"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col justify-end">
+                      <div className="flex items-center gap-3 rounded-lg border p-3 h-10">
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <FormLabel className="cursor-pointer text-sm font-normal">
+                          ISS Retido pelo Tomador
+                        </FormLabel>
+                      </div>
+                      <FormDescription>
+                        Quando o cliente retém o ISS na fonte
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

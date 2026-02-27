@@ -145,6 +145,8 @@ Deno.serve(async (req) => {
         description,
         nfse_descricao_customizada,
         nfse_service_code,
+        nfse_aliquota,
+        nfse_iss_retido,
         clients (
           name,
           email,
@@ -559,6 +561,8 @@ Deno.serve(async (req) => {
                 value: totalAmount,
                 service_description: serviceDescription,
                 municipal_service_code: contract.nfse_service_code || undefined,
+                iss_rate: contract.nfse_aliquota || 0,
+                retain_iss: contract.nfse_iss_retido || false,
               },
             });
 
@@ -815,7 +819,7 @@ Deno.serve(async (req) => {
               // Faturas de contrato: buscar código de serviço do contrato
               const { data: retryContract } = await supabase
                 .from("contracts")
-                .select("nfse_service_code, nfse_descricao_customizada, description, name, nfse_enabled")
+                .select("nfse_service_code, nfse_descricao_customizada, description, name, nfse_enabled, nfse_aliquota, nfse_iss_retido")
                 .eq("id", inv.contract_id)
                 .single();
 
@@ -852,6 +856,19 @@ Deno.serve(async (req) => {
               .eq("status", "erro");
 
             // Reemitir (o auto-resolve da asaas-nfse cuida do código caso não tenha)
+            // Buscar aliquota/iss_retido do contrato para retry
+            let retryIssRate = 0;
+            let retryRetainIss = false;
+            if (inv.contract_id) {
+              const { data: retryContractTax } = await supabase
+                .from("contracts")
+                .select("nfse_aliquota, nfse_iss_retido")
+                .eq("id", inv.contract_id)
+                .single();
+              retryIssRate = retryContractTax?.nfse_aliquota || 0;
+              retryRetainIss = retryContractTax?.nfse_iss_retido || false;
+            }
+
             const { error: retryError } = await supabase.functions.invoke("asaas-nfse", {
               body: {
                 action: inv.contract_id ? "emit" : "emit_standalone",
@@ -862,6 +879,8 @@ Deno.serve(async (req) => {
                 service_description: serviceDescription,
                 municipal_service_code: serviceCode,
                 service_code: serviceCode,
+                iss_rate: retryIssRate,
+                retain_iss: retryRetainIss,
               },
             });
 
