@@ -33,7 +33,21 @@ import {
   Link2,
   Search,
   XCircle,
+  Ban,
+  CheckCircle2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -79,12 +93,19 @@ type ErrorNfse = {
 
 export function BillingErrorsPanel() {
   const queryClient = useQueryClient();
+  const { cancelInvoiceMutation } = useInvoiceActions();
   const [tab, setTab] = useState<"boletos" | "nfse" | "notifications">("boletos");
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [pollingId, setPollingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [editingServiceCode, setEditingServiceCode] = useState<string | null>(null);
   const [linkNfse, setLinkNfse] = useState<NfseWithRelations | null>(null);
+  // Sanitation dialog state
+  const [cancelDialogInvoice, setCancelDialogInvoice] = useState<ErrorInvoice | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [resolvingNfseId, setResolvingNfseId] = useState<string | null>(null);
+  const [resolveDialogNfse, setResolveDialogNfse] = useState<ErrorNfse | null>(null);
+  const [resolveReason, setResolveReason] = useState("");
 
   // Boleto errors
   const { data: boletoErrors = [], isLoading: loadingBoletos } = useQuery({
@@ -180,6 +201,23 @@ export function BillingErrorsPanel() {
     try {
       await supabase.from("nfse_history").update({ status: "processando" }).eq("id", nfse.id);
       const isStandalone = !nfse.contract_id;
+
+      // Fetch tax config from contract to prevent "impostos ausentes" error
+      let taxParams: Record<string, unknown> = {};
+      if (nfse.contract_id) {
+        const { data: contract } = await supabase
+          .from("contracts")
+          .select("nfse_aliquota, nfse_iss_retido, nfse_service_code")
+          .eq("id", nfse.contract_id)
+          .maybeSingle();
+        if (contract) {
+          taxParams = {
+            iss_rate: contract.nfse_aliquota || 0,
+            retain_iss: contract.nfse_iss_retido || false,
+          };
+        }
+      }
+
       const { error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: isStandalone ? "emit_standalone" : "emit",
@@ -190,6 +228,7 @@ export function BillingErrorsPanel() {
           value: nfse.valor_servico,
           service_description: nfse.descricao_servico,
           municipal_service_code: nfse.codigo_tributacao || undefined,
+          ...taxParams,
         },
       });
       if (error) throw error;
@@ -200,6 +239,54 @@ export function BillingErrorsPanel() {
     } finally {
       setReprocessingId(null);
     }
+  };
+
+  const handleResolveNfse = async (nfse: ErrorNfse, reason: string) => {
+    setResolvingNfseId(nfse.id);
+    try {
+      await supabase
+        .from("nfse_history")
+        .update({
+          status: "resolvido",
+          mensagem_retorno: `Resolvido manualmente: ${reason}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", nfse.id);
+
+      // Clear nfse_error_msg on linked invoice
+      if (nfse.invoice_id) {
+        await supabase
+          .from("invoices")
+          .update({ nfse_status: null, nfse_error_msg: null, updated_at: new Date().toISOString() })
+          .eq("id", nfse.invoice_id);
+      }
+
+      // Audit log
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("audit_logs").insert({
+        table_name: "nfse_history",
+        record_id: nfse.id,
+        action: "RESOLVE_ERROR",
+        new_data: { reason, resolved_at: new Date().toISOString() } as unknown as undefined,
+        user_id: user?.id ?? null,
+      });
+
+      toast.success("Erro NFS-e resolvido");
+      invalidateAll();
+    } catch (e: unknown) {
+      toast.error("Erro ao resolver", { description: getErrorMessage(e) });
+    } finally {
+      setResolvingNfseId(null);
+      setResolveDialogNfse(null);
+      setResolveReason("");
+    }
+  };
+
+  const handleCancelInvoiceFromPanel = async (invoice: ErrorInvoice, reason: string) => {
+    await cancelInvoiceMutation.mutateAsync({ invoiceId: invoice.id, reason });
+    invalidateAll();
+    setCancelDialogInvoice(null);
+    setCancelReason("");
   };
 
   const handleUpdateServiceCode = async (nfse: ErrorNfse, newCode: string) => {
@@ -397,6 +484,15 @@ export function BillingErrorsPanel() {
                                 Polling
                               </Button>
                             )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive"
+                              onClick={() => setCancelDialogInvoice(inv)}
+                            >
+                              <Ban className="h-3 w-3 mr-1" />
+                              Encerrar
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -504,6 +600,15 @@ export function BillingErrorsPanel() {
                                 Reprocessar
                               </Button>
                             )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-muted-foreground"
+                              onClick={() => setResolveDialogNfse(nfse)}
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Resolver
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -609,6 +714,63 @@ export function BillingErrorsPanel() {
           onSuccess={invalidateAll}
         />
       )}
+
+      {/* Cancel Invoice Dialog */}
+      <AlertDialog open={!!cancelDialogInvoice} onOpenChange={(open) => { if (!open) { setCancelDialogInvoice(null); setCancelReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Encerrar Cobrança</AlertDialogTitle>
+            <AlertDialogDescription>
+              Fatura #{cancelDialogInvoice?.invoice_number} — {cancelDialogInvoice?.clients?.name}.
+              Essa ação cancela a fatura e resolve erros vinculados. Informe o motivo:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            placeholder="Motivo do encerramento (obrigatório, mín. 10 caracteres)"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            className="min-h-[80px]"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelInvoiceMutation.isPending}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelReason.trim().length < 10 || cancelInvoiceMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => cancelDialogInvoice && handleCancelInvoiceFromPanel(cancelDialogInvoice, cancelReason.trim())}
+            >
+              {cancelInvoiceMutation.isPending ? "Processando..." : "Encerrar Cobrança"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Resolve NFS-e Error Dialog */}
+      <AlertDialog open={!!resolveDialogNfse} onOpenChange={(open) => { if (!open) { setResolveDialogNfse(null); setResolveReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resolver Erro NFS-e</AlertDialogTitle>
+            <AlertDialogDescription>
+              {resolveDialogNfse?.clients?.name} — {resolveDialogNfse?.mensagem_retorno?.slice(0, 100)}.
+              O registro será marcado como resolvido (sem exclusão).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            placeholder="Motivo da resolução (obrigatório, mín. 10 caracteres)"
+            value={resolveReason}
+            onChange={(e) => setResolveReason(e.target.value)}
+            className="min-h-[80px]"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resolvingNfseId !== null}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={resolveReason.trim().length < 10 || resolvingNfseId !== null}
+              onClick={() => resolveDialogNfse && handleResolveNfse(resolveDialogNfse, resolveReason.trim())}
+            >
+              {resolvingNfseId ? "Processando..." : "Resolver Erro"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
