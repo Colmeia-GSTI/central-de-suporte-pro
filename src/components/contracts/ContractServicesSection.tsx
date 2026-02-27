@@ -88,6 +88,13 @@ export function ContractServicesSection({
     }
   }, [initialServices, originalServices.length]);
 
+  // Sincronizar services quando initialServices carregar assincronamente
+  useEffect(() => {
+    if (initialServices.length > 0 && services.length === 0) {
+      setServices(initialServices);
+    }
+  }, [initialServices]);
+
   // Fetch available services
   const { data: availableServices = [] } = useQuery({
     queryKey: ["services-active"],
