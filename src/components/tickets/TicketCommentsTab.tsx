@@ -9,10 +9,17 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { User, Lock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { User, Lock, Zap, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface TicketCommentsTabProps {
   ticketId: string;
@@ -21,9 +28,40 @@ interface TicketCommentsTabProps {
 export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
   const [comment, setComment] = useState("");
   const [isInternal, setIsInternal] = useState(false);
+  const [macroSearch, setMacroSearch] = useState("");
+  const [macroPopoverOpen, setMacroPopoverOpen] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const debouncedMacroSearch = useDebounce(macroSearch, 200);
+
+  // Fetch macros for quick replies
+  const { data: macros = [] } = useQuery({
+    queryKey: ["ticket-macros"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ticket_macros")
+        .select("id, name, shortcut, content, is_internal")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const filteredMacros = debouncedMacroSearch
+    ? macros.filter((m) =>
+        m.name.toLowerCase().includes(debouncedMacroSearch.toLowerCase()) ||
+        (m.shortcut && m.shortcut.toLowerCase().includes(debouncedMacroSearch.toLowerCase()))
+      )
+    : macros;
+
+  const handleApplyMacro = (macro: { content: string; is_internal: boolean }) => {
+    setComment(macro.content);
+    setIsInternal(macro.is_internal);
+    setMacroPopoverOpen(false);
+    setMacroSearch("");
+  };
 
   type CommentWithProfile = {
     id: string;
@@ -187,18 +225,79 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
           onChange={(e) => setComment(e.target.value)}
           rows={3}
         />
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="internal-comment"
-              checked={isInternal}
-              onCheckedChange={setIsInternal}
-            />
-            <Label htmlFor="internal-comment" className="text-sm flex items-center gap-1">
-              <Lock className="h-3 w-3" />
-              Comentário interno
-            </Label>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="internal-comment"
+                checked={isInternal}
+                onCheckedChange={setIsInternal}
+              />
+              <Label htmlFor="internal-comment" className="text-sm flex items-center gap-1 cursor-pointer">
+                <Lock className="h-3 w-3" />
+                Comentário interno
+              </Label>
+            </div>
+
+            {/* Quick Replies / Macros */}
+            {macros.length > 0 && (
+              <Popover open={macroPopoverOpen} onOpenChange={setMacroPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+                    <Zap className="h-3 w-3" />
+                    Respostas Rápidas
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="start">
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar resposta..."
+                        value={macroSearch}
+                        onChange={(e) => setMacroSearch(e.target.value)}
+                        className="pl-8 h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {filteredMacros.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Nenhuma resposta encontrada
+                      </p>
+                    ) : (
+                      filteredMacros.map((macro) => (
+                        <button
+                          key={macro.id}
+                          className="w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b last:border-b-0"
+                          onClick={() => handleApplyMacro(macro)}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{macro.name}</span>
+                            {macro.shortcut && (
+                              <span className="text-xs text-muted-foreground font-mono bg-muted px-1 rounded">
+                                {macro.shortcut}
+                              </span>
+                            )}
+                            {macro.is_internal && (
+                              <Badge variant="secondary" className="text-[10px] h-4 gap-0.5 px-1">
+                                <Lock className="h-2.5 w-2.5" />
+                                Interno
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {macro.content}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
+
           <Button
             onClick={handleAddComment}
             disabled={!comment.trim() || addCommentMutation.isPending}

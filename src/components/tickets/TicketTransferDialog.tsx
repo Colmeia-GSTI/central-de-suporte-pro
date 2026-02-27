@@ -49,16 +49,47 @@ export function TicketTransferDialog({
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch technicians
+  // Fetch staff technicians (filter by role) + their active ticket count
   const { data: technicians = [] } = useQuery({
     queryKey: ["technicians-transfer"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1. Get user_ids that are staff (technician, manager, admin)
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["technician", "manager", "admin"]);
+      if (rolesError) throw rolesError;
+
+      const staffUserIds = [...new Set((rolesData || []).map((r) => r.user_id))];
+      if (staffUserIds.length === 0) return [];
+
+      // 2. Fetch profiles for those users
+      const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("user_id, full_name")
+        .in("user_id", staffUserIds)
         .order("full_name");
-      if (error) throw error;
-      return data;
+      if (profilesError) throw profilesError;
+
+      // 3. Fetch active ticket counts per user
+      const { data: ticketCounts, error: countError } = await supabase
+        .from("tickets")
+        .select("assigned_to")
+        .in("status", ["open", "in_progress", "waiting", "paused", "no_contact"])
+        .not("assigned_to", "is", null);
+      if (countError) throw countError;
+
+      const countByUser = new Map<string, number>();
+      for (const t of ticketCounts || []) {
+        if (t.assigned_to) {
+          countByUser.set(t.assigned_to, (countByUser.get(t.assigned_to) || 0) + 1);
+        }
+      }
+
+      return (profilesData || []).map((p) => ({
+        ...p,
+        activeTickets: countByUser.get(p.user_id) || 0,
+      }));
     },
     enabled: open,
   });
@@ -206,7 +237,12 @@ export function TicketTransferDialog({
                       .filter((t) => t.user_id !== currentAssignedTo)
                       .map((tech) => (
                         <SelectItem key={tech.user_id} value={tech.user_id}>
-                          {tech.full_name}
+                          <span className="flex items-center justify-between w-full gap-2">
+                            <span>{tech.full_name}</span>
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              {tech.activeTickets} {tech.activeTickets === 1 ? "chamado" : "chamados"}
+                            </span>
+                          </span>
                         </SelectItem>
                       ))}
                   </SelectContent>

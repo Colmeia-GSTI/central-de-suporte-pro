@@ -28,12 +28,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag } from "lucide-react";
+import { Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight, Play, Tag, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
 import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
+import { TicketRatingDialog } from "@/components/tickets/TicketRatingDialog";
 import { AssetSelectionDialog } from "@/components/tickets/AssetSelectionDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { SLAIndicator } from "@/components/tickets/SLAIndicator";
@@ -94,16 +95,20 @@ export default function TicketsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [technicianFilter, setTechnicianFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
   const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
   const [selectedTicketInitialTab, setSelectedTicketInitialTab] = useState<"details" | "comments" | "history" | undefined>(undefined);
   const [cursor, setCursor] = useState<string | null>(null); // Cursor-based pagination
   const [previousCursors, setPreviousCursors] = useState<string[]>([]); // Stack de cursors anteriores
-  
+
   // State for secondary dialogs (moved out of nested Dialog to prevent portal conflicts)
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isPauseOpen, setIsPauseOpen] = useState(false);
   const [isResolveOpen, setIsResolveOpen] = useState(false);
-  
+  const [isRatingOpen, setIsRatingOpen] = useState(false);
+
   // State for asset selection dialog when starting ticket
   const [isAssetDialogOpen, setIsAssetDialogOpen] = useState(false);
   const [pendingStartTicket, setPendingStartTicket] = useState<TicketWithRelations | null>(null);
@@ -111,7 +116,42 @@ export default function TicketsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  
+
+  // Fetch staff members for technician filter
+  const { data: staffMembers = [] } = useQuery({
+    queryKey: ["staff-members-filter"],
+    queryFn: async () => {
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["technician", "manager", "admin"]);
+      if (rolesError) throw rolesError;
+      const staffIds = [...new Set((rolesData || []).map((r) => r.user_id))];
+      if (staffIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", staffIds)
+        .order("full_name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch active clients for client filter
+  const { data: clientsForFilter = [] } = useQuery({
+    queryKey: ["clients-filter"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   // Handle URL params for opening ticket form with pre-filled data (redirect to new page)
   useEffect(() => {
     if (searchParams.get("action") === "new") {
@@ -135,7 +175,7 @@ export default function TicketsPage() {
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["tickets", debouncedSearch, statusFilter, cursor],
+    queryKey: ["tickets", debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, cursor],
     queryFn: async () => {
       let query = supabase
         .from("tickets")
@@ -170,6 +210,20 @@ export default function TicketsPage() {
         query = query.not("status", "in", '("resolved","closed")');
       } else if (statusFilter !== "all") {
         query = query.eq("status", statusFilter as Enums<"ticket_status">);
+      }
+
+      if (priorityFilter !== "all") {
+        query = query.eq("priority", priorityFilter as Enums<"ticket_priority">);
+      }
+
+      if (technicianFilter === "unassigned") {
+        query = query.is("assigned_to", null);
+      } else if (technicianFilter !== "all") {
+        query = query.eq("assigned_to", technicianFilter);
+      }
+
+      if (clientFilter !== "all") {
+        query = query.eq("client_id", clientFilter);
       }
 
       const { data, error, count } = await query;
@@ -315,7 +369,7 @@ export default function TicketsPage() {
   // Reset pagination when filters change
   useEffect(() => {
     handleResetPagination();
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter]);
 
   return (
     <AppLayout>
@@ -337,33 +391,94 @@ export default function TicketsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por título ou número..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por título ou número..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val)}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Ativos</SelectItem>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="open">Aberto</SelectItem>
+                <SelectItem value="in_progress">Em Andamento</SelectItem>
+                <SelectItem value="waiting">Aguardando</SelectItem>
+                <SelectItem value="paused">Pausado</SelectItem>
+                <SelectItem value="waiting_third_party">Aguardando Terceiro</SelectItem>
+                <SelectItem value="no_contact">Sem Contato</SelectItem>
+                <SelectItem value="resolved">Resolvido</SelectItem>
+                <SelectItem value="closed">Fechado</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={priorityFilter} onValueChange={(val) => setPriorityFilter(val)}>
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="Prioridade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as prioridades</SelectItem>
+                <SelectItem value="critical">Crítica</SelectItem>
+                <SelectItem value="high">Alta</SelectItem>
+                <SelectItem value="medium">Média</SelectItem>
+                <SelectItem value="low">Baixa</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={technicianFilter} onValueChange={(val) => setTechnicianFilter(val)}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Técnico" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os técnicos</SelectItem>
+                <SelectItem value="unassigned">Sem técnico</SelectItem>
+                {staffMembers.map((s) => (
+                  <SelectItem key={s.user_id} value={s.user_id}>
+                    {s.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={clientFilter} onValueChange={(val) => setClientFilter(val)}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os clientes</SelectItem>
+                {clientsForFilter.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(priorityFilter !== "all" || technicianFilter !== "all" || clientFilter !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 text-muted-foreground"
+                onClick={() => {
+                  setPriorityFilter("all");
+                  setTechnicianFilter("all");
+                  setClientFilter("all");
+                }}
+              >
+                <X className="h-3 w-3" />
+                Limpar filtros
+              </Button>
+            )}
           </div>
-        <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filtrar por status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Ativos</SelectItem>
-            <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="open">Aberto</SelectItem>
-            <SelectItem value="in_progress">Em Andamento</SelectItem>
-            <SelectItem value="waiting">Aguardando</SelectItem>
-            <SelectItem value="paused">Pausado</SelectItem>
-            <SelectItem value="waiting_third_party">Aguardando Terceiro</SelectItem>
-            <SelectItem value="no_contact">Sem Contato</SelectItem>
-            <SelectItem value="resolved">Resolvido</SelectItem>
-            <SelectItem value="closed">Fechado</SelectItem>
-          </SelectContent>
-          </Select>
         </div>
 
         {/* Table */}
@@ -608,6 +723,20 @@ export default function TicketsPage() {
               ticketTitle={selectedTicket.title}
               onSuccess={() => {
                 queryClient.invalidateQueries({ queryKey: ["tickets"] });
+                setIsResolveOpen(false);
+                setIsRatingOpen(true);
+              }}
+            />
+
+            <TicketRatingDialog
+              open={isRatingOpen}
+              onOpenChange={setIsRatingOpen}
+              ticketId={selectedTicket.id}
+              ticketNumber={selectedTicket.ticket_number}
+              ticketTitle={selectedTicket.title}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["tickets"] });
+                setSelectedTicket(null);
               }}
             />
           </>
