@@ -15,6 +15,8 @@ interface Contract {
   payment_preference: string | null;
   billing_provider: string | null;
   nfse_enabled: boolean | null;
+  nfse_aliquota: number | null;
+  nfse_iss_retido: boolean | null;
   notification_message: string | null;
   description: string | null;
   nfse_descricao_customizada: string | null;
@@ -354,6 +356,52 @@ Deno.serve(async (req) => {
           dueDate = `${currentReferenceMonth}-${String(nextActualBillingDay).padStart(2, "0")}`;
         }
 
+        // ── Verificar janela de geração antecipada (days_before_due) ──
+        if (!manualContractId) {
+          const daysBeforeDue = contract.days_before_due ?? 5;
+          const dueDateObj = new Date(dueDate + "T12:00:00");
+          const generateAfterDate = new Date(dueDateObj);
+          generateAfterDate.setDate(generateAfterDate.getDate() - daysBeforeDue);
+
+          const todayDate = new Date();
+          todayDate.setHours(12, 0, 0, 0);
+
+          if (todayDate < generateAfterDate) {
+            const generateAfterStr = generateAfterDate.toISOString().split("T")[0];
+            console.log(
+              `[GEN-INVOICES] Contrato ${contract.name}: vencimento ${dueDate}, geração a partir de ${generateAfterStr}. Fora da janela, pulando.`
+            );
+
+            await logToDatabase(
+              supabase,
+              "info",
+              "Billing",
+              "generate-monthly-invoices",
+              `Contrato ${contract.name} fora da janela de geração (days_before_due=${daysBeforeDue}). Vencimento: ${dueDate}, geração a partir de: ${generateAfterStr}`,
+              {
+                contract_id: contract.id,
+                due_date: dueDate,
+                generate_after: generateAfterStr,
+                days_before_due: daysBeforeDue,
+              },
+              undefined,
+              executionId
+            );
+
+            skipped++;
+            results.push({
+              contract_id: contract.id,
+              contract_name: contract.name,
+              status: "skipped",
+              invoice_id: null,
+              invoice_number: null,
+              error: null,
+              duration_ms: Date.now() - contractStartTime,
+            });
+            continue;
+          }
+        }
+
         // Fetch additional charges for this contract and month
         const { data: additionalCharges } = await supabase
           .from("contract_additional_charges")
@@ -547,6 +595,30 @@ Deno.serve(async (req) => {
 
         // Auto-emit NFS-e if contract has nfse_enabled
         if (contract.nfse_enabled) {
+          // ── Validar alíquota ISS antes de emitir NFS-e ──
+          if (!contract.nfse_aliquota || contract.nfse_aliquota <= 0) {
+            const aliquotaErrorMsg = `Alíquota ISS não configurada no contrato "${contract.name}" (valor atual: ${contract.nfse_aliquota ?? "null"}). Configure em Contratos > Editar antes de emitir NFS-e.`;
+            console.error(`[GEN-INVOICES] ${aliquotaErrorMsg}`);
+
+            await supabase
+              .from("invoices")
+              .update({
+                nfse_status: "erro",
+                nfse_error_msg: aliquotaErrorMsg,
+              })
+              .eq("id", newInvoice.id);
+
+            await logToDatabase(
+              supabase,
+              "error",
+              "Nfse",
+              "validate-aliquota",
+              aliquotaErrorMsg,
+              { contract_id: contract.id, invoice_id: newInvoice.id, nfse_aliquota: contract.nfse_aliquota },
+              { message: aliquotaErrorMsg, code: "MISSING_ISS_RATE" },
+              executionId
+            );
+          } else {
           try {
             const serviceDescription = contract.nfse_descricao_customizada
               || contract.description
@@ -602,6 +674,7 @@ Deno.serve(async (req) => {
               })
               .eq("id", newInvoice.id);
           }
+          } // end else (alíquota válida)
         }
 
         // Send notification to client if email is available
