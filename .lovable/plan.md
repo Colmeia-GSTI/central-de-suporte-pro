@@ -1,71 +1,70 @@
 
+# Correção Definitiva: Alíquota ISS nos Contratos (Existentes + Futuros)
 
-# Plano Combinado: Respeitar `days_before_due` + Validar alíquota ISS antes de emitir NFS-e
+## Problema
 
-## Problemas Identificados
+4 contratos ativos com `nfse_enabled = true` possuem `nfse_aliquota = 0`, causando rejeição do Asaas ao emitir NFS-e. A causa raiz está em dois pontos:
 
-### Problema 1: Faturas geradas fora da janela de antecedência
-A rotina `generate-monthly-invoices` busca o campo `days_before_due` do contrato mas **nunca o utiliza**. Resultado: o CRON gera faturas para TODOS os contratos ativos toda vez que roda, mesmo quando faltam semanas para o vencimento.
-
-**Exemplo:** Contrato com vencimento dia 10 e `days_before_due = 5` deveria gerar fatura apenas a partir do dia 5. Mas hoje a fatura é gerada a qualquer momento.
-
-### Problema 2: NFS-e emitida com alíquota zero
-O contrato "Cloud BSSoft" tem `nfse_aliquota: 0`. O Asaas rejeita com o erro "Necessário informar os impostos da nota fiscal". O sistema não valida a alíquota antes de chamar a API, causando erro e tentativas repetidas desnecessárias.
-
----
+1. **Schema do formulário**: O default de `nfse_aliquota` no Zod schema é `0` em vez de usar a alíquota padrão da empresa (`6%`)
+2. **Validação ausente**: O formulário permite salvar contrato com NFS-e habilitada e alíquota zero, sem qualquer aviso
+3. **Dados existentes**: 4 contratos já salvos com valor `0` precisam ser corrigidos no banco
 
 ## Solução
 
-### Arquivo: `supabase/functions/generate-monthly-invoices/index.ts`
+### 1. Corrigir os 4 contratos existentes no banco de dados
 
-**Correção 1 -- Janela de geração antecipada (após linha 355, antes de buscar cobranças adicionais):**
+Atualizar diretamente os registros com `nfse_aliquota = 0` para usar a alíquota padrão da empresa (`6.00`):
 
-Adicionar verificação usando `days_before_due`:
-- Calcular `generateAfterDate = dueDate - days_before_due` (default 5 dias)
-- Se a data atual for anterior a `generateAfterDate` **e** não for geração manual (`manualContractId`), pular o contrato com log descritivo
-- Geração manual (via UI) ignora essa verificação
+- Cloud BSSoft
+- CVR COMERCIO DE CONFECCOES LTDA
+- Gestão de TI - Remoto
+- RUARO COMERCIO DE CONFECCOES LTDA
 
-**Correção 2 -- Validar alíquota antes de emitir NFS-e (linha 549, bloco `if (contract.nfse_enabled)`):**
+**Ferramenta**: Insert/Update tool (dados, não schema)
 
-Antes de invocar `asaas-nfse`, verificar se `nfse_aliquota > 0`. Se for zero ou null:
-- Registrar erro descritivo na fatura (`nfse_status: "erro"`, `nfse_error_msg: "Alíquota ISS não configurada..."`)
-- Logar no `application_logs` com instrução de correção
-- NÃO chamar a API do Asaas
+### 2. ContractForm: Carregar alíquota padrão da empresa
 
-**Correção 3 -- Atualizar interface Contract (linha 8):**
+No `ContractForm.tsx`, buscar `nfse_aliquota_padrao` da tabela `company_settings` e usar como valor default quando o contrato for novo (sem `contractData`).
 
-Adicionar os campos `nfse_aliquota` e `nfse_iss_retido` à interface TypeScript `Contract`, que já são buscados na query mas não estão tipados.
+**Mudanças**:
+- Adicionar `useQuery` para buscar `company_settings` (campos: `nfse_aliquota_padrao`, `nfse_cnae_padrao`, `nfse_codigo_tributacao_padrao`)
+- No `defaultValues` do form, substituir o default fixo `0` pela alíquota da empresa
+- Usar `useEffect` para atualizar os valores do form quando os dados da empresa carregarem (apenas para contratos novos)
 
----
+### 3. ContractForm: Validação obrigatória quando NFS-e habilitada
 
-## Detalhes Técnicos
+Adicionar validação Zod condicional (via `refine`/`superRefine`): quando `nfse_enabled = true`, `nfse_aliquota` deve ser maior que `0`.
 
+**Mudança no schema**:
 ```text
-Para cada contrato ativo:
-  1. Verificar fatura existente para a competência -> skip se sim
-  2. Calcular dueDate baseado no billing_day
-  3. Se dueDate já passou -> avançar competência
-  4. [NOVO] Calcular generateAfterDate = dueDate - days_before_due
-  5. [NOVO] Se hoje < generateAfterDate E não é manual -> skip + log
-  6. Buscar cobranças adicionais, criar fatura
-  7. Gerar pagamento (boleto/pix)
-  8. [NOVO] Verificar nfse_aliquota > 0 antes de emitir NFS-e
-  9. Enviar notificações
+contractSchema com .superRefine:
+  - Se nfse_enabled === true e nfse_aliquota <= 0:
+    -> Adicionar erro no campo nfse_aliquota: "Alíquota ISS obrigatória quando NFS-e está habilitada"
+  - Se nfse_enabled === true e nfse_service_code está vazio:
+    -> Adicionar erro: "Código de serviço obrigatório quando NFS-e está habilitada"
 ```
 
-## Impacto
+### 4. Fallback no motor de faturamento (já implementado)
 
-| Cenário | Antes | Depois |
-|---|---|---|
-| Contrato vence dia 10, days_before_due=5, CRON roda dia 1 | Fatura gerada | Pulada (fora da janela) |
-| Contrato vence dia 10, days_before_due=5, CRON roda dia 5 | Fatura gerada | Fatura gerada (dentro da janela) |
-| Geração manual pelo usuário | Funciona | Continua funcionando (bypass) |
-| NFS-e com alíquota 0 | Erro do Asaas, sem contexto | Erro local claro, sem chamada à API |
-| NFS-e com alíquota 6% | Funciona | Continua funcionando |
+A validação de alíquota no `generate-monthly-invoices` já está em produção (implementação anterior). Ela serve como rede de segurança caso um contrato passe sem alíquota.
 
-## Arquivo Modificado
+## Arquivos Modificados
 
-| Arquivo | Alterações |
+| Arquivo | Alteração |
 |---|---|
-| `supabase/functions/generate-monthly-invoices/index.ts` | Tipar interface Contract, adicionar verificação days_before_due, validar alíquota ISS |
+| Banco de dados (UPDATE) | Atualizar 4 contratos: `nfse_aliquota = 6.00` |
+| `src/components/contracts/ContractForm.tsx` | Buscar alíquota padrão da empresa, aplicar como default, validação condicional no schema |
 
+## Fluxo Corrigido
+
+```text
+Novo Contrato:
+  1. Formulário abre com nfse_aliquota = 6% (da empresa)
+  2. Ao selecionar código de serviço, alíquota sugerida substitui
+  3. Se NFS-e habilitada e alíquota = 0, form BLOQUEIA submissão
+  4. Motor de faturamento valida novamente (rede de segurança)
+
+Contrato Existente (edição):
+  1. Carrega alíquota salva no contrato
+  2. Se era 0, validação impede salvar com NFS-e habilitada
+```
