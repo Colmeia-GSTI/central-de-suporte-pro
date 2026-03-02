@@ -721,6 +721,21 @@ Deno.serve(async (req) => {
               }
             }
           }
+
+          // Fallback final: código de tributação padrão da empresa
+          if (!effectiveServiceCode) {
+            const { data: companyDefaults } = await supabase
+              .from("company_settings")
+              .select("nfse_codigo_tributacao_padrao")
+              .limit(1)
+              .maybeSingle();
+            if (companyDefaults?.nfse_codigo_tributacao_padrao) {
+              effectiveServiceCode = companyDefaults.nfse_codigo_tributacao_padrao;
+              log(correlationId, "info", "municipal_service_code resolvido via company_settings.nfse_codigo_tributacao_padrao", {
+                code: effectiveServiceCode,
+              });
+            }
+          }
         }
 
         // 2. Resolve municipal service ID if only code provided
