@@ -11,6 +11,7 @@ import { TicketStatusChart } from "@/components/dashboard/TicketStatusChart";
 import { WeeklyTrendChart } from "@/components/dashboard/WeeklyTrendChart";
 import { RecentTicketsList } from "@/components/dashboard/RecentTicketsList";
 import { TechnicianDashboard } from "@/components/dashboard/TechnicianDashboard";
+import { FinancialDashboard } from "@/components/dashboard/FinancialDashboard";
 
 interface DashboardStats {
   openTickets: number;
@@ -40,6 +41,12 @@ export default function Dashboard() {
   const isTechnicianOnly = roles.includes("technician") && 
     !roles.includes("admin") && 
     !roles.includes("manager");
+
+  const isFinancialOnly = roles.includes("financial") &&
+    !roles.includes("admin") &&
+    !roles.includes("manager");
+
+  const isAdmin = roles.includes("admin");
   const { data: stats, isLoading } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async (): Promise<DashboardStats> => {
@@ -121,20 +128,33 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const statCards = [
+  const allStatCards = [
     { title: "Chamados Abertos", value: stats?.openTickets ?? 0, icon: Ticket, color: "text-primary", href: "/tickets?status=open" },
     { title: "Em Andamento", value: stats?.inProgressTickets ?? 0, icon: Clock, color: "text-warning", href: "/tickets?status=in_progress" },
     { title: "Resolvidos Hoje", value: stats?.resolvedToday ?? 0, icon: CheckCircle, color: "text-success" },
-    { title: "SLA Violado", value: stats?.slaViolated ?? 0, icon: AlertTriangle, color: "text-destructive", href: "/tickets" },
-    { title: "Clientes Ativos", value: stats?.activeClients ?? 0, icon: Users, color: "text-primary", href: "/clients" },
-    { title: "Taxa de Resolução", value: `${stats?.resolutionRate ?? 0}%`, icon: TrendingUp, color: "text-success" },
+    { title: "SLA Violado", value: stats?.slaViolated ?? 0, icon: AlertTriangle, color: "text-destructive", href: "/tickets", adminOnly: true },
+    { title: "Clientes Ativos", value: stats?.activeClients ?? 0, icon: Users, color: "text-primary", href: "/clients", adminOnly: true },
+    { title: "Taxa de Resolução", value: `${stats?.resolutionRate ?? 0}%`, icon: TrendingUp, color: "text-success", adminOnly: true },
   ];
+
+  const statCards = isAdmin
+    ? allStatCards
+    : allStatCards.filter(c => !c.adminOnly);
 
   // Render technician-specific dashboard
   if (isTechnicianOnly) {
     return (
       <AppLayout title="Dashboard">
         <TechnicianDashboard />
+      </AppLayout>
+    );
+  }
+
+  // Render financial-specific dashboard
+  if (isFinancialOnly) {
+    return (
+      <AppLayout title="Dashboard">
+        <FinancialDashboard />
       </AppLayout>
     );
   }
@@ -160,7 +180,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${isAdmin ? "xl:grid-cols-6" : ""} gap-4`}>
           {statCards.map((stat, index) => (
             <AnimatedStatCard
               key={stat.title}
