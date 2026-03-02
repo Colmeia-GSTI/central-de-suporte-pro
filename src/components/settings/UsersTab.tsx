@@ -220,6 +220,22 @@ export function UsersTab() {
         is_active: true,
       });
       if (error) throw error;
+
+      // Atribuir role "client" se o usuário não tem nenhuma role
+      const { data: existingRoles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+
+      const hasClientRole = existingRoles?.some(r => r.role === "client" || r.role === "client_master");
+      const hasStaffRole = existingRoles?.some(r => ["admin", "manager", "technician", "financial"].includes(r.role));
+
+      if (!hasClientRole && !hasStaffRole) {
+        const { error: roleError } = await supabase.from("user_roles").insert({ user_id: userId, role: "client" });
+        if (roleError) {
+          console.error("[LinkClient] Falha ao atribuir role client:", roleError);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });

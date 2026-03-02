@@ -130,8 +130,9 @@ export function AppSidebar() {
   const { data: ticketCount } = useTechnicianTicketCount();
   const { isMobile, setOpenMobile } = useSidebar();
 
-  // Detect if user is a client (only has client/client_master roles)
-  const isClientUser = roles.length > 0 && roles.every(role => role === "client" || role === "client_master");
+  // Detect if user is a client: anyone without a staff role sees client menu
+  const hasStaffRole = roles.some(role => ["admin", "manager", "technician", "financial"].includes(role));
+  const isClientUser = !hasStaffRole;
 
   // Filter menu items based on permissions
   const filterMenuItems = (items: MenuItemType[]): MenuItemType[] => {
