@@ -525,11 +525,6 @@ export function BillingInvoicesTab() {
                       <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
                         {statusLabels[invoice.status]}
                       </Badge>
-                      {nfseInfo && (
-                        <Badge variant="outline" className="text-xs bg-info/20 text-info border-info/40">
-                          NFS-e
-                        </Badge>
-                      )}
                       <InvoiceActionsPopover
                         invoice={invoice}
                         nfseInfo={nfseInfo}
@@ -686,11 +681,6 @@ export function BillingInvoicesTab() {
                             <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
                               {statusLabels[invoice.status]}
                             </Badge>
-                            {nfseInfo && (
-                              <Badge variant="outline" className="text-xs bg-info/20 text-info border-info/40">
-                                NFS-e
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="py-2 text-right text-sm font-medium">
