@@ -30,13 +30,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock } from "lucide-react";
+import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
 import { UserForm } from "./UserForm";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type ProfileWithRoles = Tables<"profiles"> & {
@@ -69,6 +70,9 @@ export function UsersTab() {
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<ProfileWithRoles | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<ProfileWithRoles | null>(null);
+  const [linkClientUser, setLinkClientUser] = useState<ProfileWithRoles | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -120,6 +124,21 @@ export function UsersTab() {
     staleTime: 1000 * 60 * 2,
   });
 
+  // Fetch clients for linking
+  const { data: clients = [] } = useQuery({
+    queryKey: ["clients-for-linking"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
   // Mutation to confirm a user's email
   const confirmEmailMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -169,6 +188,50 @@ export function UsersTab() {
     },
   });
 
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      queryClient.invalidateQueries({ queryKey: ["user-confirmation-status"] });
+      toast({ title: "Usuário excluído com sucesso" });
+      setDeleteConfirmUser(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao excluir usuário", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Link user to client mutation
+  const linkClientMutation = useMutation({
+    mutationFn: async ({ userId, clientId, userName }: { userId: string; clientId: string; userName: string }) => {
+      const { error } = await supabase.from("client_contacts").insert({
+        client_id: clientId,
+        user_id: userId,
+        name: userName,
+        is_primary: false,
+        is_active: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      toast({ title: "Usuário vinculado à empresa com sucesso" });
+      setLinkClientUser(null);
+      setSelectedClientId("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao vincular empresa", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleAddRole = (role: string) => {
     if (selectedUser) {
       addRoleMutation.mutate({ userId: selectedUser.user_id, role: role as Enums<"app_role"> });
@@ -191,7 +254,6 @@ export function UsersTab() {
         body: data,
       });
       
-      // Handle edge function invocation errors
       if (error) {
         logger.error("Edge function error", "Users", { error: error.message });
         throw new Error(
@@ -201,7 +263,6 @@ export function UsersTab() {
         );
       }
       
-      // Handle application-level errors returned by the function
       if (result?.error) {
         const errorMessage = translateErrorMessage(result.error);
         throw new Error(errorMessage);
@@ -223,7 +284,6 @@ export function UsersTab() {
     },
   });
 
-  // Helper function to translate error messages to Portuguese
   const translateErrorMessage = (error: string): string => {
     const errorMap: Record<string, string> = {
       "User already registered": "Este email já está cadastrado no sistema",
@@ -237,7 +297,6 @@ export function UsersTab() {
       "Failed to create user profile": "Erro ao criar perfil do usuário. Tente novamente.",
     };
     
-    // Check for partial matches
     for (const [key, value] of Object.entries(errorMap)) {
       if (error.toLowerCase().includes(key.toLowerCase())) {
         return value;
@@ -290,6 +349,16 @@ export function UsersTab() {
   const handleResetPassword = () => {
     if (resetPasswordUser && newPassword) {
       resetPasswordMutation.mutate({ userId: resetPasswordUser.user_id, password: newPassword });
+    }
+  };
+
+  const handleLinkClient = () => {
+    if (linkClientUser && selectedClientId) {
+      linkClientMutation.mutate({
+        userId: linkClientUser.user_id,
+        clientId: selectedClientId,
+        userName: linkClientUser.full_name || linkClientUser.email || "",
+      });
     }
   };
 
@@ -413,27 +482,74 @@ export function UsersTab() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <PermissionGate module="users" action="edit">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setIsRoleDialogOpen(true);
-                              }}
-                            >
-                              <Shield className="mr-2 h-4 w-4" />
-                              Papel
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setIsRoleDialogOpen(true);
+                                  }}
+                                  aria-label="Gerenciar papéis"
+                                >
+                                  <Shield className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Papéis</TooltipContent>
+                            </Tooltip>
                           </PermissionGate>
                           <PermissionGate module="users" action="edit">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenResetPassword(user)}
-                            >
-                              <KeyRound className="mr-2 h-4 w-4" />
-                              Senha
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => handleOpenResetPassword(user)}
+                                  aria-label="Redefinir senha"
+                                >
+                                  <KeyRound className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Senha</TooltipContent>
+                            </Tooltip>
+                          </PermissionGate>
+                          <PermissionGate module="users" action="edit">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => {
+                                    setLinkClientUser(user);
+                                    setSelectedClientId("");
+                                  }}
+                                  aria-label="Vincular empresa"
+                                >
+                                  <Building2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Vincular Empresa</TooltipContent>
+                            </Tooltip>
+                          </PermissionGate>
+                          <PermissionGate module="users" action="delete">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                  onClick={() => setDeleteConfirmUser(user)}
+                                  aria-label="Excluir usuário"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Excluir</TooltipContent>
+                            </Tooltip>
                           </PermissionGate>
                         </div>
                       </TableCell>
@@ -445,6 +561,7 @@ export function UsersTab() {
           </Table>
         </div>
 
+        {/* Role Dialog */}
         <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -511,6 +628,61 @@ export function UsersTab() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 Redefinir Senha
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete User Confirm */}
+        <ConfirmDialog
+          open={!!deleteConfirmUser}
+          onOpenChange={(open) => !open && setDeleteConfirmUser(null)}
+          title="Excluir Usuário"
+          description={`Tem certeza que deseja excluir o usuário "${deleteConfirmUser?.full_name}"? Esta ação é irreversível e removerá todos os dados associados.`}
+          confirmLabel="Excluir"
+          variant="destructive"
+          onConfirm={() => deleteConfirmUser && deleteUserMutation.mutate(deleteConfirmUser.user_id)}
+          isLoading={deleteUserMutation.isPending}
+        />
+
+        {/* Link Client Dialog */}
+        <Dialog open={!!linkClientUser} onOpenChange={(open) => !open && setLinkClientUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Vincular Empresa</DialogTitle>
+              <DialogDescription>
+                Vincular <strong>{linkClientUser?.full_name}</strong> a uma empresa
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="client-select">Empresa</Label>
+                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setLinkClientUser(null)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleLinkClient}
+                disabled={!selectedClientId || linkClientMutation.isPending}
+              >
+                {linkClientMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Vincular
               </Button>
             </DialogFooter>
           </DialogContent>
