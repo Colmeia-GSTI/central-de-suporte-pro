@@ -1,39 +1,97 @@
 
+# Corrigir Menu Lateral e Investigar Falta de Role
 
-# Adicionar Navegacao para Clientes no Menu Lateral
+## Causa Raiz Identificada
 
-## Problema
+A usuario "Cleissi" (user_id: `33f83785-...`) tem um registro em `client_contacts` vinculando-a a uma empresa, mas **nao possui nenhum registro em `user_roles`**. Isso aconteceu porque ela foi vinculada a uma empresa pelo fluxo "Vincular Empresa" na aba Usuarios das Configuracoes, que apenas insere em `client_contacts` sem atribuir a role `client` em `user_roles`.
 
-Quando um usuario com perfil `client` ou `client_master` acessa paginas como `/profile`, ele entra no layout principal (`AppLayout` + `AppSidebar`). O menu lateral so exibe itens de staff (Chamados, Clientes, Contratos...) que o cliente nao tem permissao de acessar. O cliente fica "preso" sem conseguir voltar ao seu portal.
+O fluxo `create-client-user` (Edge Function) atribui a role corretamente, mas o fluxo de "link" manual no `UsersTab.tsx` nao faz isso.
 
-## Solucao
+## Plano de Correcao (2 partes)
 
-Detectar no `AppSidebar` se o usuario logado e um cliente e, nesse caso, exibir um menu simplificado com apenas os itens relevantes:
+### Parte 1: Corrigir deteccao de cliente no sidebar
 
-- **Dashboard** -> `/portal` (leva de volta ao portal do cliente)
-- **Perfil** -> `/profile` (configuracoes pessoais)
+**Arquivo**: `src/components/layout/AppSidebar.tsx`
 
-Os menus de staff (Principal, Operacoes, Financeiro, Equipe, Administracao) ficam ocultos para clientes.
+Alterar a logica na linha 134 de:
 
-## Alteracoes
+```typescript
+const isClientUser = roles.length > 0 && roles.every(role => role === "client" || role === "client_master");
+```
 
-### 1. Editar `src/components/layout/AppSidebar.tsx`
+Para:
 
-- Importar o hook `useAuth` (ja importado) e verificar se o usuario tem apenas roles de cliente (`client`, `client_master`)
-- Quando `isClientUser` for true, renderizar um menu simplificado com 2 itens:
-  - "Dashboard" com icone `LayoutDashboard` apontando para `/portal`
-  - "Perfil" com icone `User` apontando para `/profile`
-- Os grupos de menu de staff (Principal, Operacoes, Financeiro, Equipe, Administracao) sao renderizados apenas quando o usuario NAO e cliente
-- O footer com avatar e botao de logout permanece igual para todos
+```typescript
+const hasStaffRole = roles.some(role => ["admin", "manager", "technician", "financial"].includes(role));
+const isClientUser = !hasStaffRole;
+```
 
-### 2. Adicionar link "Meu Perfil" no header do ClientPortalPage
+Isso garante que qualquer usuario sem roles de staff (incluindo users com roles vazias como a Cleissi) veja o menu simplificado com "Dashboard" e "Perfil" ao inves de uma sidebar vazia.
 
-No `src/pages/client-portal/ClientPortalPage.tsx`, adicionar um botao/link para `/profile` no header do portal, ao lado do botao "Sair", para que o cliente possa acessar suas configuracoes pessoais e depois voltar ao portal pelo menu lateral.
+### Parte 2: Corrigir fluxo de vinculacao para atribuir role automaticamente
+
+**Arquivo**: `src/components/settings/UsersTab.tsx`
+
+No `linkClientMutation` (linhas 213-233), apos inserir em `client_contacts`, verificar se o usuario ja possui uma role de cliente. Se nao possuir, inserir a role `client` em `user_roles` automaticamente.
+
+**De** (apenas insere contato):
+```typescript
+mutationFn: async ({ userId, clientId, userName }) => {
+  const { error } = await supabase.from("client_contacts").insert({...});
+  if (error) throw error;
+}
+```
+
+**Para** (insere contato + atribui role se necessario):
+```typescript
+mutationFn: async ({ userId, clientId, userName }) => {
+  const { error } = await supabase.from("client_contacts").insert({...});
+  if (error) throw error;
+
+  // Verificar se usuario ja tem role de cliente
+  const { data: existingRoles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+
+  const hasClientRole = existingRoles?.some(r => r.role === "client" || r.role === "client_master");
+  const hasStaffRole = existingRoles?.some(r => ["admin","manager","technician","financial"].includes(r.role));
+
+  // Se nao tem role de cliente nem de staff, atribuir "client"
+  if (!hasClientRole && !hasStaffRole) {
+    await supabase.from("user_roles").insert({ user_id: userId, role: "client" });
+  }
+}
+```
+
+### Parte 3: Corrigir a Cleissi agora (migracao)
+
+Executar uma migracao SQL para atribuir a role `client` a todos os usuarios que estao em `client_contacts` mas nao possuem nenhuma role em `user_roles`:
+
+```sql
+INSERT INTO user_roles (user_id, role)
+SELECT DISTINCT cc.user_id, 'client'::app_role
+FROM client_contacts cc
+WHERE cc.user_id IS NOT NULL
+  AND cc.is_active = true
+  AND NOT EXISTS (
+    SELECT 1 FROM user_roles ur WHERE ur.user_id = cc.user_id
+  );
+```
+
+## Resumo de Impacto
+
+| Cenario | Antes | Depois |
+|---|---|---|
+| Usuario sem roles no sidebar | Sidebar vazia | Menu de cliente (Dashboard + Perfil) |
+| Vincular usuario a empresa | Apenas cria contato | Cria contato + atribui role `client` |
+| Usuarios existentes sem role | Sem acesso | Migracao atribui role `client` |
+| Staff vinculado a empresa | Sem mudanca | Nao recebe role extra (ja tem staff) |
 
 ## Arquivos modificados
 
 | Arquivo | Acao |
 |---|---|
-| `src/components/layout/AppSidebar.tsx` | Editar -- adicionar menu simplificado para clientes |
-| `src/pages/client-portal/ClientPortalPage.tsx` | Editar -- adicionar link para Perfil no header |
-
+| `src/components/layout/AppSidebar.tsx` | Editar -- corrigir deteccao de cliente |
+| `src/components/settings/UsersTab.tsx` | Editar -- atribuir role ao vincular empresa |
+| Migracao SQL | Criar -- corrigir usuarios existentes sem role |
