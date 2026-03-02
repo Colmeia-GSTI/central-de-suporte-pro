@@ -1,53 +1,39 @@
 
 
-# Reestruturar Portal do Cliente
+# Adicionar Navegacao para Clientes no Menu Lateral
 
 ## Problema
 
-O portal do cliente exibe dados internos da operacao (aba Relatorios com SLA, horas trabalhadas, tendencias) que nao agregam valor ao cliente. Alem disso, o botao "Novo Chamado" esta escondido dentro da lista de chamados, dificultando o acesso rapido.
+Quando um usuario com perfil `client` ou `client_master` acessa paginas como `/profile`, ele entra no layout principal (`AppLayout` + `AppSidebar`). O menu lateral so exibe itens de staff (Chamados, Clientes, Contratos...) que o cliente nao tem permissao de acessar. O cliente fica "preso" sem conseguir voltar ao seu portal.
+
+## Solucao
+
+Detectar no `AppSidebar` se o usuario logado e um cliente e, nesse caso, exibir um menu simplificado com apenas os itens relevantes:
+
+- **Dashboard** -> `/portal` (leva de volta ao portal do cliente)
+- **Perfil** -> `/profile` (configuracoes pessoais)
+
+Os menus de staff (Principal, Operacoes, Financeiro, Equipe, Administracao) ficam ocultos para clientes.
 
 ## Alteracoes
 
-### 1. Remover aba "Relatorios"
+### 1. Editar `src/components/layout/AppSidebar.tsx`
 
-**Arquivo**: `src/pages/client-portal/ClientPortalPage.tsx`
+- Importar o hook `useAuth` (ja importado) e verificar se o usuario tem apenas roles de cliente (`client`, `client_master`)
+- Quando `isClientUser` for true, renderizar um menu simplificado com 2 itens:
+  - "Dashboard" com icone `LayoutDashboard` apontando para `/portal`
+  - "Perfil" com icone `User` apontando para `/profile`
+- Os grupos de menu de staff (Principal, Operacoes, Financeiro, Equipe, Administracao) sao renderizados apenas quando o usuario NAO e cliente
+- O footer com avatar e botao de logout permanece igual para todos
 
-- Remover import de `ClientManagementReport` e icone `TrendingUp`
-- Remover botao "Relatorios" da navegacao de secoes (linhas 394-401)
-- Remover bloco condicional que renderiza `ClientManagementReport` (linhas 411-413)
-- Tipo do `activeSection` passa a ser apenas `"chamados" | "financeiro"`
+### 2. Adicionar link "Meu Perfil" no header do ClientPortalPage
 
-### 2. Adicionar botao de destaque "Abrir Chamado" no topo
+No `src/pages/client-portal/ClientPortalPage.tsx`, adicionar um botao/link para `/profile` no header do portal, ao lado do botao "Sair", para que o cliente possa acessar suas configuracoes pessoais e depois voltar ao portal pelo menu lateral.
 
-Adicionar um botao primario grande e visivel logo apos o header (antes dos cards de estatisticas), para que o cliente veja imediatamente ao entrar no portal. O botao abrira o mesmo dialog de criacao de chamado que ja existe.
-
-Posicionamento: entre a navegacao de secoes e os cards de estatisticas, dentro da secao `chamados`. Sera um banner/card de destaque com icone e texto claro:
-
-```text
-+------------------------------------------------------+
-|  [+]  Precisa de ajuda? Abra um novo chamado agora   |
-+------------------------------------------------------+
-```
-
-Implementacao:
-- Um `Card` com fundo primario (ou outline com destaque) contendo um botao grande que aciona `setIsNewTicketOpen(true)`
-- Visivel para todos os clientes (client e client_master)
-- O botao existente "Novo Chamado" dentro da lista de chamados permanece como acesso secundario
-
-### 3. Resumo de impacto
-
-| Item | Antes | Depois |
-|---|---|---|
-| Aba Relatorios | Visivel para client_master | Removida |
-| Metricas internas (SLA, horas, tendencia) | Expostas ao cliente | Ocultas |
-| Botao "Abrir Chamado" no topo | Nao existia | CTA de destaque visivel ao entrar |
-| Aba Financeiro | Visivel para client_master | Sem mudanca |
-| Cards de estatisticas | 4 cards | Sem mudanca |
-| Lista de chamados + botao secundario | Funcional | Sem mudanca |
-
-### 4. Arquivo modificado
+## Arquivos modificados
 
 | Arquivo | Acao |
 |---|---|
-| `src/pages/client-portal/ClientPortalPage.tsx` | Editar -- remover aba Relatorios, adicionar CTA de abertura de chamado no topo |
+| `src/components/layout/AppSidebar.tsx` | Editar -- adicionar menu simplificado para clientes |
+| `src/pages/client-portal/ClientPortalPage.tsx` | Editar -- adicionar link para Perfil no header |
 
