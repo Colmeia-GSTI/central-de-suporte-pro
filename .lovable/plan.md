@@ -1,36 +1,62 @@
 
-
-# CNAE Padrão da Empresa nas Notas Fiscais
+# Causa Raiz: NFS-e autorizada mas fatura continua "processando"
 
 ## Problema
 
-O CNAE cadastrado nas configurações da empresa (`company_settings.nfse_cnae_padrao`) não é utilizado como fallback na emissão de NFS-e. Quando o código de serviço selecionado não possui CNAE ou nenhum código é selecionado, o campo CNAE vai como `null`, podendo causar rejeição.
+O webhook do Asaas (`webhook-asaas-nfse`) atualiza corretamente a tabela `nfse_history` quando a NFS-e e autorizada (status "autorizada"), mas **nao sincroniza** o campo `invoices.nfse_status`. Isso significa que:
 
-## Pontos afetados
+1. A Edge Function `asaas-nfse` emite a NFS-e e define `invoices.nfse_status = "processando"`
+2. O Asaas processa e envia webhook com `AUTHORIZED`
+3. O webhook atualiza `nfse_history.status = "autorizada"` -- OK
+4. **Mas `invoices.nfse_status` permanece como "processando"** -- BUG
 
-1. **`EmitNfseAvulsaDialog`**: Não busca `nfse_cnae_padrao` da empresa. Envia apenas `selectedServiceCode.cnae_principal`, que pode ser `null`.
-2. **`EmitNfseDialog`**: Não busca `nfse_cnae_padrao` da empresa. O `effectiveCnae` não tem fallback para o CNAE padrão.
-3. **Edge Function `asaas-nfse`**: Na ação `emit_standalone`, recebe `cnae` do frontend mas não tem fallback. Na ação `emit`, o CNAE vem do contrato sem fallback.
+Resultado: os indicadores visuais na listagem de faturas nao refletem que a NFS-e foi autorizada.
 
-## Solução
+## Evidencia
 
-### Arquivo 1: `src/components/financial/EmitNfseAvulsaDialog.tsx`
-- Adicionar `nfse_cnae_padrao` na query de `company_settings` (linha 112)
-- Na mutation, usar fallback: `cnae: selectedServiceCode.cnae_principal || companyConfig?.nfse_cnae_padrao`
+- A busca por `nfse_status` no arquivo `webhook-asaas-nfse/index.ts` retorna **zero resultados**
+- A funcao `processInvoiceWebhook` atualiza apenas `nfse_history`, nunca `invoices`
+- Dados reais confirmam: NFS-e #120 esta "autorizada" em `nfse_history`, mas a fatura correspondente ainda mostra indicador de NFS-e pendente
 
-### Arquivo 2: `src/components/financial/EmitNfseDialog.tsx`
-- Adicionar `nfse_cnae_padrao` na query de `company_settings` (linha 116)
-- No `effectiveCnae`, adicionar fallback: `|| companyConfig?.nfse_cnae_padrao`
+## Solucao
 
-### Arquivo 3: `supabase/functions/asaas-nfse/index.ts`
-- Na ação `emit_standalone`, expandir a query de `company_settings` (linha 1042) para incluir `nfse_cnae_padrao`
-- Usar fallback: `cnae || companyData?.nfse_cnae_padrao || null` ao gravar no `nfse_history`
-- Na ação `emit`, aplicar o mesmo fallback buscando `nfse_cnae_padrao` se o contrato não tiver CNAE
+### Arquivo: `supabase/functions/webhook-asaas-nfse/index.ts`
 
-## Arquivos Modificados
+Na funcao `processInvoiceWebhook`, apos atualizar `nfse_history` com sucesso, sincronizar `invoices.nfse_status`:
+
+1. **Quando status = AUTHORIZED**: Atualizar `invoices.nfse_status = "gerada"` e `invoices.nfse_error_msg = null`
+2. **Quando status = ERROR ou CANCELLATION_DENIED**: Atualizar `invoices.nfse_status = "erro"` e `invoices.nfse_error_msg` com a descricao do erro
+3. **Quando status = CANCELED**: Atualizar `invoices.nfse_status = null` (limpar)
+
+A sincronizacao usara o campo `nfseRecord.invoice_id` que ja esta disponivel na query existente.
+
+### Codigo a adicionar (apos o bloco de update do nfse_history):
+
+```text
+// Sincronizar invoices.nfse_status
+if (nfseRecord.invoice_id) {
+  const invoiceUpdate = {};
+  if (invoiceStatus === "AUTHORIZED") {
+    invoiceUpdate.nfse_status = "gerada";
+    invoiceUpdate.nfse_error_msg = null;
+    invoiceUpdate.nfse_generated_at = new Date().toISOString();
+  } else if (invoiceStatus === "ERROR" || invoiceStatus === "CANCELLATION_DENIED") {
+    invoiceUpdate.nfse_status = "erro";
+    invoiceUpdate.nfse_error_msg = errorDescription;
+  } else if (invoiceStatus === "CANCELED") {
+    invoiceUpdate.nfse_status = null;
+    invoiceUpdate.nfse_error_msg = null;
+  }
+  await supabase.from("invoices").update(invoiceUpdate).eq("id", nfseRecord.invoice_id);
+}
+```
+
+### Impacto
+
+- Corrige a dessincronia entre `nfse_history` e `invoices`
+- Os indicadores visuais (badges NFS-e) na listagem de faturas passarao a refletir o estado real
+- Notas autorizadas via webhook mostrarao status correto imediatamente
 
 | Arquivo | Alteracao |
 |---|---|
-| `src/components/financial/EmitNfseAvulsaDialog.tsx` | Buscar `nfse_cnae_padrao`, usar como fallback no envio |
-| `src/components/financial/EmitNfseDialog.tsx` | Buscar `nfse_cnae_padrao`, usar como fallback no `effectiveCnae` |
-| `supabase/functions/asaas-nfse/index.ts` | Fallback para CNAE padrão da empresa em `emit` e `emit_standalone` |
+| `supabase/functions/webhook-asaas-nfse/index.ts` | Adicionar sincronizacao de `invoices.nfse_status` na funcao `processInvoiceWebhook` |
