@@ -1,70 +1,71 @@
 
-# Correção Definitiva: Alíquota ISS nos Contratos (Existentes + Futuros)
+# Edição Completa de NFS-e com Erro
 
-## Problema
+## Problema Identificado
 
-4 contratos ativos com `nfse_enabled = true` possuem `nfse_aliquota = 0`, causando rejeição do Asaas ao emitir NFS-e. A causa raiz está em dois pontos:
+Os dois diálogos de edição de NFS-e (em `NfseDetailsSheet` e `NfseActionsMenu`) permitem editar apenas **3 campos**: valor, competência e descrição. Os campos fiscais que frequentemente causam erros -- **código de tributação**, **CNAE**, **alíquota ISS**, **ISS retido** e **retenções federais** -- são exibidos como somente leitura. Quando uma nota é rejeitada por erro fiscal, o usuário não consegue corrigir a causa raiz visualmente.
 
-1. **Schema do formulário**: O default de `nfse_aliquota` no Zod schema é `0` em vez de usar a alíquota padrão da empresa (`6%`)
-2. **Validação ausente**: O formulário permite salvar contrato com NFS-e habilitada e alíquota zero, sem qualquer aviso
-3. **Dados existentes**: 4 contratos já salvos com valor `0` precisam ser corrigidos no banco
+Além disso, a mutation de "Reenviar" no `NfseDetailsSheet` envia os valores de tributação do **registro antigo** (`nfse.aliquota`, `nfse.iss_retido`, etc.) em vez dos valores editados, tornando a edição ineficaz mesmo que fosse possível.
+
+## Causa Raiz
+
+1. **Formulários de edição incompletos**: Apenas `valor_servico`, `descricao_servico` e `competencia` são editáveis
+2. **Mutation de update incompleta**: Salva apenas 3 campos no banco
+3. **Mutation de resend desconectada**: Envia dados antigos do `nfse` em vez dos valores editados pelo usuário
 
 ## Solução
 
-### 1. Corrigir os 4 contratos existentes no banco de dados
+### 1. Expandir o diálogo de edição no `NfseDetailsSheet` (principal)
 
-Atualizar diretamente os registros com `nfse_aliquota = 0` para usar a alíquota padrão da empresa (`6.00`):
+Transformar o diálogo simples em um formulário completo com:
+- Valor do Serviço (ja existe)
+- Competencia (ja existe)
+- Descricao (ja existe)
+- **Codigo de Servico** (usando `NfseServiceCodeCombobox` existente)
+- **CNAE** (preenchido automaticamente ao selecionar codigo)
+- **Aliquota ISS** (editavel)
+- **ISS Retido** (switch)
+- **Retencoes Federais** (usando `NfseTributacaoSection` existente)
 
-- Cloud BSSoft
-- CVR COMERCIO DE CONFECCOES LTDA
-- Gestão de TI - Remoto
-- RUARO COMERCIO DE CONFECCOES LTDA
+Exibir o erro atual da nota no topo do formulario para o usuario saber o que corrigir.
 
-**Ferramenta**: Insert/Update tool (dados, não schema)
+### 2. Expandir o diálogo de edição no `NfseActionsMenu`
 
-### 2. ContractForm: Carregar alíquota padrão da empresa
+Aplicar as mesmas melhorias ao segundo diálogo de edição, replicando os campos fiscais editáveis.
 
-No `ContractForm.tsx`, buscar `nfse_aliquota_padrao` da tabela `company_settings` e usar como valor default quando o contrato for novo (sem `contractData`).
+### 3. Corrigir a mutation de update
 
-**Mudanças**:
-- Adicionar `useQuery` para buscar `company_settings` (campos: `nfse_aliquota_padrao`, `nfse_cnae_padrao`, `nfse_codigo_tributacao_padrao`)
-- No `defaultValues` do form, substituir o default fixo `0` pela alíquota da empresa
-- Usar `useEffect` para atualizar os valores do form quando os dados da empresa carregarem (apenas para contratos novos)
+Atualizar `updateMutation` em ambos os componentes para salvar **todos** os campos fiscais editados:
+- `codigo_tributacao`
+- `cnae`
+- `aliquota`
+- `iss_retido`
+- `valor_pis`, `valor_cofins`, `valor_csll`, `valor_irrf`, `valor_inss`
 
-### 3. ContractForm: Validação obrigatória quando NFS-e habilitada
+### 4. Corrigir a mutation de resend
 
-Adicionar validação Zod condicional (via `refine`/`superRefine`): quando `nfse_enabled = true`, `nfse_aliquota` deve ser maior que `0`.
-
-**Mudança no schema**:
-```text
-contractSchema com .superRefine:
-  - Se nfse_enabled === true e nfse_aliquota <= 0:
-    -> Adicionar erro no campo nfse_aliquota: "Alíquota ISS obrigatória quando NFS-e está habilitada"
-  - Se nfse_enabled === true e nfse_service_code está vazio:
-    -> Adicionar erro: "Código de serviço obrigatório quando NFS-e está habilitada"
-```
-
-### 4. Fallback no motor de faturamento (já implementado)
-
-A validação de alíquota no `generate-monthly-invoices` já está em produção (implementação anterior). Ela serve como rede de segurança caso um contrato passe sem alíquota.
+Atualizar `resendMutation` no `NfseDetailsSheet` para usar os **valores editados** (do estado local) em vez dos valores antigos do `nfse`:
+- `iss_rate` deve usar a alíquota editada
+- `retain_iss` deve usar o valor editado
+- Retenções federais devem usar valores editados
 
 ## Arquivos Modificados
 
-| Arquivo | Alteração |
+| Arquivo | Alteracao |
 |---|---|
-| Banco de dados (UPDATE) | Atualizar 4 contratos: `nfse_aliquota = 6.00` |
-| `src/components/contracts/ContractForm.tsx` | Buscar alíquota padrão da empresa, aplicar como default, validação condicional no schema |
+| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Adicionar estados para campos fiscais, expandir dialogo de edição com `NfseServiceCodeCombobox` e `NfseTributacaoSection`, corrigir mutations de update e resend |
+| `src/components/nfse/NfseActionsMenu.tsx` | Adicionar campos fiscais ao dialogo de edição, corrigir mutation de update e resend |
 
 ## Fluxo Corrigido
 
 ```text
-Novo Contrato:
-  1. Formulário abre com nfse_aliquota = 6% (da empresa)
-  2. Ao selecionar código de serviço, alíquota sugerida substitui
-  3. Se NFS-e habilitada e alíquota = 0, form BLOQUEIA submissão
-  4. Motor de faturamento valida novamente (rede de segurança)
-
-Contrato Existente (edição):
-  1. Carrega alíquota salva no contrato
-  2. Se era 0, validação impede salvar com NFS-e habilitada
+Usuario abre NFS-e com erro:
+  1. Ve a mensagem de erro no topo
+  2. Clica "Editar"
+  3. Formulario completo abre com:
+     - Erro atual destacado
+     - Todos os campos editaveis (valor, competencia, descricao)
+     - Campos fiscais editaveis (codigo servico, CNAE, aliquota, ISS retido, retencoes)
+  4. Ao salvar, TODOS os campos sao persistidos no banco
+  5. Ao clicar "Validar e Reenviar", os valores EDITADOS sao enviados ao Asaas
 ```
