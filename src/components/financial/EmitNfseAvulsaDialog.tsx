@@ -109,7 +109,7 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
     queryFn: async () => {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("id, cnpj, inscricao_municipal, nfse_ambiente, nfse_aliquota_padrao, nfse_regime_tributario, nfse_optante_simples")
+        .select("id, cnpj, inscricao_municipal, nfse_ambiente, nfse_aliquota_padrao, nfse_regime_tributario, nfse_optante_simples, nfse_cnae_padrao")
         .limit(1)
         .single();
       if (error) return null;
@@ -180,7 +180,7 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
           value: valor,
           service_description: descricao,
           service_code: selectedServiceCode.codigo_tributacao,
-          cnae: selectedServiceCode.cnae_principal,
+          cnae: selectedServiceCode.cnae_principal || companyConfig?.nfse_cnae_padrao,
           aliquota: tributacao.aliquotaIss || selectedServiceCode.aliquota_sugerida,
           competencia,
           invoice_id: invoiceId,

@@ -113,7 +113,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("id, cnpj, razao_social, inscricao_municipal, nfse_ambiente, nfse_regime_tributario, nfse_optante_simples, nfse_aliquota_padrao")
+        .select("id, cnpj, razao_social, inscricao_municipal, nfse_ambiente, nfse_regime_tributario, nfse_optante_simples, nfse_aliquota_padrao, nfse_cnae_padrao")
         .limit(1)
         .single();
       if (error) return null;
@@ -151,8 +151,8 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     ? metadata?.service_code
     : contract?.nfse_service_code;
   const effectiveCnae = isStandaloneNfse
-    ? metadata?.cnae
-    : ((contract as any)?.nfse_service_codes?.cnae_principal || contract?.nfse_cnae);
+    ? (metadata?.cnae || companyConfig?.nfse_cnae_padrao)
+    : ((contract as any)?.nfse_service_codes?.cnae_principal || contract?.nfse_cnae || companyConfig?.nfse_cnae_padrao);
 
   // Computed final description for preview
   const finalDescription = useMemo(() => {

@@ -733,16 +733,18 @@ Deno.serve(async (req) => {
           let emitenteCidade: string | null = null;
           let emitenteOptanteSN: boolean | null = null;
           let emitenteIncentivadorCultural: boolean | null = null;
+          let emitenteCnaePadrao: string | null = null;
           try {
             const { data: companyData } = await supabase
               .from("company_settings")
-              .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural")
+              .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural, nfse_cnae_padrao")
               .limit(1)
               .maybeSingle();
             emitenteCidade = companyData?.endereco_cidade || null;
             emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
             emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
-            log(correlationId, "info", `Cidade do emitente: ${emitenteCidade || "não encontrada"}, Optante SN: ${emitenteOptanteSN}`);
+            emitenteCnaePadrao = companyData?.nfse_cnae_padrao || null;
+            log(correlationId, "info", `Cidade do emitente: ${emitenteCidade || "não encontrada"}, Optante SN: ${emitenteOptanteSN}, CNAE padrão: ${emitenteCnaePadrao || "não definido"}`);
           } catch (e) {
             log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
           }
@@ -1031,24 +1033,27 @@ Deno.serve(async (req) => {
         // 2. Try to resolve municipal service ID
         let municipalServiceId: string | null = null;
         let municipalServiceName: string | null = null;
+
+        // Buscar dados fiscais da empresa (cidade, optante SN, incentivador cultural, CNAE padrão)
+        let emitenteCidade: string | null = null;
+        let emitenteOptanteSN: boolean | null = null;
+        let emitenteIncentivadorCultural: boolean | null = null;
+        let emitenteCnaePadrao: string | null = null;
+        try {
+          const { data: companyData } = await supabase
+            .from("company_settings")
+            .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural, nfse_cnae_padrao")
+            .limit(1)
+            .maybeSingle();
+          emitenteCidade = companyData?.endereco_cidade || null;
+          emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
+          emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
+          emitenteCnaePadrao = companyData?.nfse_cnae_padrao || null;
+        } catch (e) {
+          log(correlationId, "warn", "Erro ao buscar dados fiscais da empresa", { error: String(e) });
+        }
+
         if (service_code) {
-          // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
-          let emitenteCidade: string | null = null;
-          let emitenteOptanteSN: boolean | null = null;
-          let emitenteIncentivadorCultural: boolean | null = null;
-          try {
-            const { data: companyData } = await supabase
-              .from("company_settings")
-              .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural")
-              .limit(1)
-              .maybeSingle();
-            emitenteCidade = companyData?.endereco_cidade || null;
-            emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
-            emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
-          } catch (e) {
-            log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
-          }
-          
           const normalizedTarget = normalizeServiceCode(service_code);
           
           const tryResolveStandalone = async (city?: string): Promise<{ id: string; description: string } | null> => {
@@ -1116,7 +1121,7 @@ Deno.serve(async (req) => {
             valor_servico: parseFloat(value),
             descricao_servico: service_description,
             codigo_tributacao: service_code,
-            cnae: cnae || null,
+            cnae: cnae || emitenteCnaePadrao || null,
             aliquota: aliquotaIss || null,
             provider: "asaas",
             status: "processando",
