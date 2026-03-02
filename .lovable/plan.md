@@ -1,45 +1,53 @@
 
 
-# Dashboard Segmentado por Perfil de Usuario
+# Reestruturar Portal do Cliente
 
-## Regras de Visibilidade
+## Problema
 
-| Papel | O que ve |
-|---|---|
-| **admin** | Dashboard completo da empresa (6 cards: Abertos, Em Andamento, Resolvidos Hoje, SLA Violado, Clientes Ativos, Taxa de Resolucao + graficos + lista recente) |
-| **manager** | Dashboard da empresa simplificado (3 cards: Abertos, Em Andamento, Resolvidos Hoje + graficos + lista recente). Sem SLA Violado, Clientes Ativos, Taxa de Resolucao |
-| **technician** (somente) | TechnicianDashboard pessoal (ja existe, sem mudancas) |
-| **financial** (somente) | Novo FinancialDashboard (faturas pendentes, vencidas, receita do mes, NFS-e pendentes) |
-| **client / client_master** | Redireciona para /portal (ja existe) |
+O portal do cliente exibe dados internos da operacao (aba Relatorios com SLA, horas trabalhadas, tendencias) que nao agregam valor ao cliente. Alem disso, o botao "Novo Chamado" esta escondido dentro da lista de chamados, dificultando o acesso rapido.
 
 ## Alteracoes
 
-### 1. Criar `src/components/dashboard/FinancialDashboard.tsx`
+### 1. Remover aba "Relatorios"
 
-Dashboard focado no setor financeiro:
-- **4 Cards**: Faturas Pendentes, Faturas Vencidas, Receita do Mes, NFS-e Pendentes
-- **Lista**: Proximas faturas a vencer (7 dias)
-- Dados das tabelas `invoices` e `nfse_history`
-- Segue o padrao visual do TechnicianDashboard (cards animados, scroll area, links)
+**Arquivo**: `src/pages/client-portal/ClientPortalPage.tsx`
 
-### 2. Editar `src/pages/Dashboard.tsx`
+- Remover import de `ClientManagementReport` e icone `TrendingUp`
+- Remover botao "Relatorios" da navegacao de secoes (linhas 394-401)
+- Remover bloco condicional que renderiza `ClientManagementReport` (linhas 411-413)
+- Tipo do `activeSection` passa a ser apenas `"chamados" | "financeiro"`
 
-Mudancas na logica de roteamento:
+### 2. Adicionar botao de destaque "Abrir Chamado" no topo
+
+Adicionar um botao primario grande e visivel logo apos o header (antes dos cards de estatisticas), para que o cliente veja imediatamente ao entrar no portal. O botao abrira o mesmo dialog de criacao de chamado que ja existe.
+
+Posicionamento: entre a navegacao de secoes e os cards de estatisticas, dentro da secao `chamados`. Sera um banner/card de destaque com icone e texto claro:
 
 ```text
-client/client_master -> /portal (sem mudanca)
-technician-only -> TechnicianDashboard (sem mudanca)
-financial-only (sem admin/manager) -> FinancialDashboard (NOVO)
-admin -> Dashboard completo com 6 cards + graficos (sem mudanca)
-manager (sem admin) -> Dashboard com apenas 3 cards (Abertos, Em Andamento, Resolvidos Hoje) + graficos + lista recente
++------------------------------------------------------+
+|  [+]  Precisa de ajuda? Abra um novo chamado agora   |
++------------------------------------------------------+
 ```
 
-Implementacao: condicional `isAdmin` para decidir quais cards mostrar. Para manager, filtrar o array `statCards` removendo SLA Violado, Clientes Ativos e Taxa de Resolucao. O grid passa de `xl:grid-cols-6` para `xl:grid-cols-3` quando 3 cards.
+Implementacao:
+- Um `Card` com fundo primario (ou outline com destaque) contendo um botao grande que aciona `setIsNewTicketOpen(true)`
+- Visivel para todos os clientes (client e client_master)
+- O botao existente "Novo Chamado" dentro da lista de chamados permanece como acesso secundario
 
-### 3. Arquivos
+### 3. Resumo de impacto
+
+| Item | Antes | Depois |
+|---|---|---|
+| Aba Relatorios | Visivel para client_master | Removida |
+| Metricas internas (SLA, horas, tendencia) | Expostas ao cliente | Ocultas |
+| Botao "Abrir Chamado" no topo | Nao existia | CTA de destaque visivel ao entrar |
+| Aba Financeiro | Visivel para client_master | Sem mudanca |
+| Cards de estatisticas | 4 cards | Sem mudanca |
+| Lista de chamados + botao secundario | Funcional | Sem mudanca |
+
+### 4. Arquivo modificado
 
 | Arquivo | Acao |
 |---|---|
-| `src/components/dashboard/FinancialDashboard.tsx` | Criar |
-| `src/pages/Dashboard.tsx` | Editar -- adicionar roteamento financial-only e filtrar cards para manager |
+| `src/pages/client-portal/ClientPortalPage.tsx` | Editar -- remover aba Relatorios, adicionar CTA de abertura de chamado no topo |
 
