@@ -30,12 +30,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2 } from "lucide-react";
+import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
 import { UserForm } from "./UserForm";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type ProfileWithRoles = Tables<"profiles"> & {
@@ -75,7 +76,6 @@ export function UsersTab() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users-with-roles", search],
     queryFn: async () => {
-      // First get profiles
       let profilesQuery = supabase
         .from("profiles")
         .select("id, user_id, full_name, email, phone, avatar_url")
@@ -88,7 +88,6 @@ export function UsersTab() {
       const { data: profiles, error: profilesError } = await profilesQuery;
       if (profilesError) throw profilesError;
 
-      // Then get roles for each user
       const userIds = profiles?.map(p => p.user_id) || [];
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
@@ -96,11 +95,47 @@ export function UsersTab() {
         .in("user_id", userIds);
       if (rolesError) throw rolesError;
 
-      // Combine data
       return (profiles || []).map(profile => ({
         ...profile,
         user_roles: (roles || []).filter(r => r.user_id === profile.user_id).map(r => ({ role: r.role })),
       })) as ProfileWithRoles[];
+    },
+  });
+
+  // Fetch email confirmation status for all users
+  const { data: confirmationStatus = {} } = useQuery<Record<string, boolean>>({
+    queryKey: ["user-confirmation-status"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("confirm-user-email", {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        body: undefined,
+      });
+      if (error) {
+        logger.error("Failed to fetch confirmation status", "Users", { error: error.message });
+        return {};
+      }
+      return data?.data || {};
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+
+  // Mutation to confirm a user's email
+  const confirmEmailMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("confirm-user-email?action=confirm", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-confirmation-status"] });
+      toast({ title: "Usuário ativado com sucesso", description: "O email foi confirmado e o usuário já pode acessar o sistema." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao ativar usuário", description: error.message, variant: "destructive" });
     },
   });
 
@@ -291,6 +326,7 @@ export function UsersTab() {
               <TableRow>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Papéis</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -301,67 +337,109 @@ export function UsersTab() {
                   <TableRow key={i}>
                     <TableCell><div className="h-4 w-32 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="h-4 w-40 bg-muted animate-pulse rounded" /></TableCell>
+                    <TableCell><div className="h-6 w-16 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="flex gap-1"><div className="h-6 w-16 bg-muted animate-pulse rounded" /></div></TableCell>
                     <TableCell className="text-right"><div className="h-8 w-28 bg-muted animate-pulse rounded ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
               ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.full_name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {user.user_roles.map((r, i) => (
-                          <Badge
-                            key={i}
-                            className={`${roleColors[r.role]} ${can("users", "edit") ? "cursor-pointer" : ""}`}
-                            onClick={() => can("users", "edit") && handleRemoveRole(user.user_id, r.role)}
-                          >
-                            {roleLabels[r.role]}
-                            {can("users", "edit") && <Trash2 className="ml-1 h-3 w-3" />}
+                users.map((user) => {
+                  const isConfirmed = confirmationStatus[user.user_id] ?? true;
+                  return (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.full_name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        {isConfirmed ? (
+                          <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                            <UserCheck className="mr-1 h-3 w-3" />
+                            Ativo
                           </Badge>
-                        ))}
-                        {user.user_roles.length === 0 && (
-                          <span className="text-sm text-muted-foreground">Sem papéis</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/30">
+                                  <Clock className="mr-1 h-3 w-3" />
+                                  Pendente
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Aguardando confirmação de email</TooltipContent>
+                            </Tooltip>
+                            <PermissionGate module="users" action="edit">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => confirmEmailMutation.mutate(user.user_id)}
+                                disabled={confirmEmailMutation.isPending}
+                              >
+                                {confirmEmailMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <UserCheck className="mr-1 h-3 w-3" />
+                                    Ativar
+                                  </>
+                                )}
+                              </Button>
+                            </PermissionGate>
+                          </div>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <PermissionGate module="users" action="edit">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setIsRoleDialogOpen(true);
-                            }}
-                          >
-                            <Shield className="mr-2 h-4 w-4" />
-                            Papel
-                          </Button>
-                        </PermissionGate>
-                        <PermissionGate module="users" action="edit">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenResetPassword(user)}
-                          >
-                            <KeyRound className="mr-2 h-4 w-4" />
-                            Senha
-                          </Button>
-                        </PermissionGate>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {user.user_roles.map((r, i) => (
+                            <Badge
+                              key={i}
+                              className={`${roleColors[r.role]} ${can("users", "edit") ? "cursor-pointer" : ""}`}
+                              onClick={() => can("users", "edit") && handleRemoveRole(user.user_id, r.role)}
+                            >
+                              {roleLabels[r.role]}
+                              {can("users", "edit") && <Trash2 className="ml-1 h-3 w-3" />}
+                            </Badge>
+                          ))}
+                          {user.user_roles.length === 0 && (
+                            <span className="text-sm text-muted-foreground">Sem papéis</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <PermissionGate module="users" action="edit">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setIsRoleDialogOpen(true);
+                              }}
+                            >
+                              <Shield className="mr-2 h-4 w-4" />
+                              Papel
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate module="users" action="edit">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenResetPassword(user)}
+                            >
+                              <KeyRound className="mr-2 h-4 w-4" />
+                              Senha
+                            </Button>
+                          </PermissionGate>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
