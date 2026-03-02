@@ -210,7 +210,7 @@ export function NfseDetailsSheet(props: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("cnpj, inscricao_municipal, endereco_codigo_ibge")
+        .select("cnpj, inscricao_municipal, endereco_codigo_ibge, nfse_regime_tributario, nfse_aliquota_padrao")
         .limit(1)
         .maybeSingle();
       if (error) throw error;
@@ -929,9 +929,10 @@ export function NfseDetailsSheet(props: {
               {/* Tributação completa */}
               <NfseTributacaoSection
                 valorServico={valor}
-                aliquotaIss={tributacao.aliquotaIss}
+                aliquotaIss={tributacao.aliquotaIss || companyForValidation?.nfse_aliquota_padrao || 0}
                 data={tributacao}
                 onChange={setTributacao}
+                regimeTributario={companyForValidation?.nfse_regime_tributario}
               />
             </div>
           </ScrollArea>

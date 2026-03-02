@@ -731,14 +731,18 @@ Deno.serve(async (req) => {
           
           // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
           let emitenteCidade: string | null = null;
+          let emitenteOptanteSN: boolean | null = null;
+          let emitenteIncentivadorCultural: boolean | null = null;
           try {
             const { data: companyData } = await supabase
               .from("company_settings")
-              .select("endereco_cidade")
+              .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural")
               .limit(1)
               .maybeSingle();
             emitenteCidade = companyData?.endereco_cidade || null;
-            log(correlationId, "info", `Cidade do emitente: ${emitenteCidade || "não encontrada"}`);
+            emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
+            emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
+            log(correlationId, "info", `Cidade do emitente: ${emitenteCidade || "não encontrada"}, Optante SN: ${emitenteOptanteSN}`);
           } catch (e) {
             log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
           }
@@ -892,6 +896,10 @@ Deno.serve(async (req) => {
           invoicePayload.payment = payment_id;
         }
 
+        // Simples Nacional / Incentivador Cultural (obrigatório para cálculo correto)
+        invoicePayload.optanteSimplesNacional = emitenteOptanteSN ?? true;
+        invoicePayload.culturalProjectContributor = emitenteIncentivadorCultural ?? false;
+
         // NFS-e Nacional 2026 - Tributos (OBRIGATÓRIO pela API Asaas)
         invoicePayload.observations = "";
         invoicePayload.deductions = 0;
@@ -1026,13 +1034,17 @@ Deno.serve(async (req) => {
         if (service_code) {
           // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
           let emitenteCidade: string | null = null;
+          let emitenteOptanteSN: boolean | null = null;
+          let emitenteIncentivadorCultural: boolean | null = null;
           try {
             const { data: companyData } = await supabase
               .from("company_settings")
-              .select("endereco_cidade")
+              .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural")
               .limit(1)
               .maybeSingle();
             emitenteCidade = companyData?.endereco_cidade || null;
+            emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
+            emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
           } catch (e) {
             log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
           }
@@ -1164,6 +1176,10 @@ Deno.serve(async (req) => {
           }).eq("id", historyRecord.id);
           throw new AsaasApiError(errorMsg, 400, "MISSING_MUNICIPAL_SERVICE_CODE");
         }
+
+        // Simples Nacional / Incentivador Cultural (obrigatório para cálculo correto)
+        invoicePayload.optanteSimplesNacional = emitenteOptanteSN ?? true;
+        invoicePayload.culturalProjectContributor = emitenteIncentivadorCultural ?? false;
 
         // NFS-e Nacional 2026 - Tributos (OBRIGATÓRIO pela API Asaas)
         invoicePayload.observations = "";

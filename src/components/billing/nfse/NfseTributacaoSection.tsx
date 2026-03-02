@@ -22,6 +22,8 @@ interface NfseTributacaoSectionProps {
   aliquotaIss: number;
   data: TributacaoData;
   onChange: (data: TributacaoData) => void;
+  /** Regime tributário da empresa (ex: "simples_nacional", "lucro_presumido", "lucro_real") */
+  regimeTributario?: string | null;
 }
 
 export function NfseTributacaoSection({
@@ -29,6 +31,7 @@ export function NfseTributacaoSection({
   aliquotaIss,
   data,
   onChange,
+  regimeTributario,
 }: NfseTributacaoSectionProps) {
   const [federaisOpen, setFederaisOpen] = useState(false);
 
@@ -53,17 +56,42 @@ export function NfseTributacaoSection({
     data.valorIrrf > 0 ||
     data.valorInss > 0;
 
+  const isSimplesNacional = regimeTributario === "simples_nacional";
+
   const handleAliquotaChange = (value: string) => {
     const numValue = parseFloat(value.replace(",", ".")) || 0;
-    onChange({ ...data, aliquotaIss: Math.min(Math.max(numValue, 0), 5) });
+    // Simples Nacional: ISS varia de 2% a 5% (LC 123/2006, Anexos III/IV/V)
+    // Outros regimes: alíquota pode variar, limite genérico de 100%
+    const maxAliquota = isSimplesNacional ? 5 : 100;
+    onChange({ ...data, aliquotaIss: Math.min(Math.max(numValue, 0), maxAliquota) });
   };
 
   return (
     <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <DollarSign className="h-4 w-4" />
-        Tributação (Asaas)
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <DollarSign className="h-4 w-4" />
+          Tributação (Asaas)
+        </div>
+        {regimeTributario && (
+          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+            isSimplesNacional
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+          }`}>
+            {isSimplesNacional ? "Simples Nacional" : regimeTributario === "lucro_presumido" ? "Lucro Presumido" : regimeTributario === "lucro_real" ? "Lucro Real" : regimeTributario}
+          </span>
+        )}
       </div>
+
+      {/* Nota informativa para Simples Nacional */}
+      {isSimplesNacional && (
+        <div className="text-xs p-2 rounded bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+          <strong>Simples Nacional:</strong> Os tributos federais (PIS, COFINS, CSLL, IR, INSS) estão inclusos no DAS
+          e <strong>não devem ser retidos</strong> separadamente, exceto quando o tomador for órgão público ou empresa obrigada a reter na fonte.
+          A alíquota ISS varia de 2% a 5% conforme a faixa de faturamento (LC 123/2006).
+        </div>
+      )}
 
       {/* Alíquota ISS - Editável */}
       <div className="flex items-center justify-between">
