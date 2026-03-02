@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,10 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { validateNfseData, type NfseValidationResult } from "@/lib/nfse-validation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { NfseServiceCodeCombobox, type NfseServiceCode } from "@/components/billing/nfse/NfseServiceCodeCombobox";
+import { NfseTributacaoSection, type TributacaoData } from "@/components/billing/nfse/NfseTributacaoSection";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NfseRecord {
   id: string;
@@ -55,6 +60,12 @@ interface NfseRecord {
   codigo_tributacao: string | null;
   cnae: string | null;
   aliquota: number | null;
+  iss_retido?: boolean | null;
+  valor_pis?: number | null;
+  valor_cofins?: number | null;
+  valor_csll?: number | null;
+  valor_irrf?: number | null;
+  valor_inss?: number | null;
   client_id: string | null;
   contract_id: string | null;
   created_at: string;
@@ -90,6 +101,17 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
   const [valor, setValor] = useState(nfse.valor_servico);
   const [descricao, setDescricao] = useState(nfse.descricao_servico || "");
   const [competencia, setCompetencia] = useState(parseCompetencia(nfse.competencia));
+  const [codigoTributacao, setCodigoTributacao] = useState(nfse.codigo_tributacao || "");
+  const [cnae, setCnae] = useState(nfse.cnae || "");
+  const [tributacao, setTributacao] = useState<TributacaoData>({
+    issRetido: nfse.iss_retido ?? false,
+    aliquotaIss: Number(nfse.aliquota) || 0,
+    valorPis: Number(nfse.valor_pis) || 0,
+    valorCofins: Number(nfse.valor_cofins) || 0,
+    valorCsll: Number(nfse.valor_csll) || 0,
+    valorIrrf: Number(nfse.valor_irrf) || 0,
+    valorInss: Number(nfse.valor_inss) || 0,
+  });
 
   const canEdit = ["pendente", "rejeitada", "erro"].includes(nfse.status);
   const canResend = ["pendente", "rejeitada", "erro"].includes(nfse.status);
@@ -172,7 +194,7 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
     resendMutation.mutate();
   };
 
-  // Update mutation
+  // Update mutation - saves ALL fiscal fields
   const updateMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
@@ -181,6 +203,15 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
           valor_servico: valor,
           descricao_servico: descricao,
           competencia: competencia + "-01",
+          codigo_tributacao: codigoTributacao || null,
+          cnae: cnae || null,
+          aliquota: tributacao.aliquotaIss,
+          iss_retido: tributacao.issRetido,
+          valor_pis: tributacao.valorPis,
+          valor_cofins: tributacao.valorCofins,
+          valor_csll: tributacao.valorCsll,
+          valor_irrf: tributacao.valorIrrf,
+          valor_inss: tributacao.valorInss,
           updated_at: new Date().toISOString(),
         })
         .eq("id", nfse.id);
@@ -197,20 +228,26 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
     },
   });
 
-  // Resend mutation (via Asaas)
+  // Resend mutation - uses EDITED values
   const resendMutation = useMutation({
     mutationFn: async () => {
-      // Re-emit via Asaas
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: "emit",
           client_id: nfse.client_id,
-          value: nfse.valor_servico,
-          service_description: nfse.descricao_servico,
+          value: valor,
+          service_description: descricao,
           nfse_history_id: nfse.id,
           contract_id: nfse.contract_id || undefined,
-          competencia: parseCompetencia(nfse.competencia),
-          municipal_service_code: nfse.codigo_tributacao || undefined,
+          competencia: competencia,
+          municipal_service_code: codigoTributacao || nfse.codigo_tributacao || undefined,
+          retain_iss: tributacao.issRetido,
+          iss_rate: tributacao.aliquotaIss,
+          pis_value: tributacao.valorPis,
+          cofins_value: tributacao.valorCofins,
+          csll_value: tributacao.valorCsll,
+          irrf_value: tributacao.valorIrrf,
+          inss_value: tributacao.valorInss,
         },
       });
       
@@ -391,6 +428,17 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
     setValor(nfse.valor_servico);
     setDescricao(nfse.descricao_servico || "");
     setCompetencia(parseCompetencia(nfse.competencia));
+    setCodigoTributacao(nfse.codigo_tributacao || "");
+    setCnae(nfse.cnae || "");
+    setTributacao({
+      issRetido: nfse.iss_retido ?? false,
+      aliquotaIss: Number(nfse.aliquota) || 0,
+      valorPis: Number(nfse.valor_pis) || 0,
+      valorCofins: Number(nfse.valor_cofins) || 0,
+      valorCsll: Number(nfse.valor_csll) || 0,
+      valorIrrf: Number(nfse.valor_irrf) || 0,
+      valorInss: Number(nfse.valor_inss) || 0,
+    });
     setIsEditOpen(true);
     setIsMenuOpen(false);
   };
@@ -584,68 +632,104 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
         isLoading={abortProcessingMutation.isPending}
       />
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - Formulário Completo */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="h-5 w-5" />
               Editar NFS-e
             </DialogTitle>
             <DialogDescription>
-              Corrija os dados antes de reenviar para processamento
+              Corrija os dados fiscais antes de reenviar para processamento
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Alterações só são permitidas para notas ainda não autorizadas.
-              </AlertDescription>
-            </Alert>
+          <ScrollArea className="max-h-[65vh] pr-4">
+            <div className="space-y-4">
+              {/* Erro atual */}
+              {nfse.mensagem_retorno && hasError && (
+                <Alert variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <p className="font-medium">Erro atual:</p>
+                    <pre className="mt-1 whitespace-pre-wrap text-xs">{nfse.mensagem_retorno}</pre>
+                  </AlertDescription>
+                </Alert>
+              )}
 
-            <div className="space-y-2">
-              <Label>Valor do Serviço</Label>
-              <CurrencyInput value={valor} onChange={setValor} />
-            </div>
+              {/* Dados básicos */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Valor do Serviço</Label>
+                  <CurrencyInput value={valor} onChange={setValor} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Competência</Label>
+                  <Select value={competencia} onValueChange={setCompetencia}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {competenciaOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label>Competência</Label>
-              <Select value={competencia} onValueChange={setCompetencia}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {competenciaOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label>Descrição do Serviço</Label>
+                <Textarea
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  rows={3}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label>Descrição do Serviço</Label>
-              <Textarea
-                value={descricao}
-                onChange={(e) => setDescricao(e.target.value)}
-                rows={4}
+              <Separator />
+
+              {/* Código de Serviço */}
+              <div className="space-y-2">
+                <Label>Código de Serviço (LC 116/2003)</Label>
+                <NfseServiceCodeCombobox
+                  value={codigoTributacao}
+                  onChange={(code: NfseServiceCode | null) => {
+                    if (code) {
+                      setCodigoTributacao(code.codigo_tributacao);
+                      if (code.cnae_principal) setCnae(code.cnae_principal);
+                      if (code.aliquota_sugerida !== null && code.aliquota_sugerida !== undefined) {
+                        setTributacao(prev => ({ ...prev, aliquotaIss: code.aliquota_sugerida! }));
+                      }
+                    } else {
+                      setCodigoTributacao("");
+                    }
+                  }}
+                />
+              </div>
+
+              {/* CNAE */}
+              <div className="space-y-2">
+                <Label>CNAE</Label>
+                <Input
+                  value={cnae}
+                  onChange={(e) => setCnae(e.target.value)}
+                  placeholder="Ex: 6202-3/00"
+                />
+              </div>
+
+              {/* Tributação completa */}
+              <NfseTributacaoSection
+                valorServico={valor}
+                aliquotaIss={tributacao.aliquotaIss}
+                data={tributacao}
+                onChange={setTributacao}
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Código Tributação:</span>
-                <span className="ml-2 font-mono">{nfse.codigo_tributacao || "-"}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">CNAE:</span>
-                <span className="ml-2 font-mono">{nfse.cnae || "-"}</span>
-              </div>
-            </div>
-          </div>
+          </ScrollArea>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>

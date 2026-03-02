@@ -34,12 +34,15 @@ import {
 
 import type { Tables } from "@/integrations/supabase/types";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { buildNfseValidation, normalizeCompetencia, type ValidationIssue } from "./nfseValidation";
 import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asaasStatusLabel, isE0014Error, formatNfseErrorMessage, type NfseStatus } from "./nfseFormat";
 import { NfseEventLogsDialog } from "./NfseEventLogsDialog";
 import { NfseProcessingIndicator } from "./NfseProcessingIndicator";
 import { NfseShareMenu } from "./NfseShareMenu";
 import { NfseLinkExternalDialog } from "./NfseLinkExternalDialog";
+import { NfseServiceCodeCombobox, type NfseServiceCode } from "./NfseServiceCodeCombobox";
+import { NfseTributacaoSection, type TributacaoData } from "./NfseTributacaoSection";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
   clients: {
@@ -147,6 +150,17 @@ export function NfseDetailsSheet(props: {
   const [valor, setValor] = useState<number>(nfse?.valor_servico ?? 0);
   const [competencia, setCompetencia] = useState<string>(normalizeCompetencia(nfse?.competencia));
   const [descricao, setDescricao] = useState<string>(nfse?.descricao_servico ?? "");
+  const [codigoTributacao, setCodigoTributacao] = useState<string>(nfse?.codigo_tributacao ?? "");
+  const [cnae, setCnae] = useState<string>(nfse?.cnae ?? "");
+  const [tributacao, setTributacao] = useState<TributacaoData>({
+    issRetido: nfse?.iss_retido ?? false,
+    aliquotaIss: Number(nfse?.aliquota) || 0,
+    valorPis: Number(nfse?.valor_pis) || 0,
+    valorCofins: Number(nfse?.valor_cofins) || 0,
+    valorCsll: Number(nfse?.valor_csll) || 0,
+    valorIrrf: Number(nfse?.valor_irrf) || 0,
+    valorInss: Number(nfse?.valor_inss) || 0,
+  });
 
   const canEdit = nfse ? ["pendente", "rejeitada", "erro"].includes(nfse.status) : false;
   const canResend = canEdit;
@@ -161,8 +175,19 @@ export function NfseDetailsSheet(props: {
       setValor(nfse.valor_servico ?? 0);
       setCompetencia(normalizeCompetencia(nfse.competencia));
       setDescricao(nfse.descricao_servico ?? "");
+      setCodigoTributacao(nfse.codigo_tributacao ?? "");
+      setCnae(nfse.cnae ?? "");
+      setTributacao({
+        issRetido: nfse.iss_retido ?? false,
+        aliquotaIss: Number(nfse.aliquota) || 0,
+        valorPis: Number(nfse.valor_pis) || 0,
+        valorCofins: Number(nfse.valor_cofins) || 0,
+        valorCsll: Number(nfse.valor_csll) || 0,
+        valorIrrf: Number(nfse.valor_irrf) || 0,
+        valorInss: Number(nfse.valor_inss) || 0,
+      });
     }
-  }, [nfse?.id, nfse?.valor_servico, nfse?.competencia, nfse?.descricao_servico]);
+  }, [nfse?.id, nfse?.valor_servico, nfse?.competencia, nfse?.descricao_servico, nfse?.codigo_tributacao, nfse?.cnae, nfse?.aliquota, nfse?.iss_retido, nfse?.valor_pis, nfse?.valor_cofins, nfse?.valor_csll, nfse?.valor_irrf, nfse?.valor_inss]);
 
   const { data: clientForValidation } = useQuery({
     queryKey: ["nfse-client-validation", nfse?.client_id],
@@ -199,19 +224,18 @@ export function NfseDetailsSheet(props: {
       valor_servico: valor,
       competencia,
       descricao_servico: descricao,
-      codigo_tributacao: nfse.codigo_tributacao,
-      cnae: nfse.cnae,
-      aliquota: nfse.aliquota,
+      codigo_tributacao: codigoTributacao || nfse.codigo_tributacao,
+      cnae: cnae || nfse.cnae,
+      aliquota: tributacao.aliquotaIss || nfse.aliquota,
       client: clientForValidation,
       company: companyForValidation,
     });
-  }, [nfse, valor, competencia, descricao, clientForValidation, companyForValidation]);
+  }, [nfse, valor, competencia, descricao, codigoTributacao, cnae, tributacao.aliquotaIss, clientForValidation, companyForValidation]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
       const comp = normalizeCompetencia(competencia);
-      // O banco espera tipo date (YYYY-MM-DD), então adicionamos o dia 01
       const compAsDate = comp ? `${comp}-01` : null;
       const { error } = await supabase
         .from("nfse_history")
@@ -219,6 +243,15 @@ export function NfseDetailsSheet(props: {
           valor_servico: valor,
           descricao_servico: descricao,
           competencia: compAsDate,
+          codigo_tributacao: codigoTributacao || null,
+          cnae: cnae || null,
+          aliquota: tributacao.aliquotaIss,
+          iss_retido: tributacao.issRetido,
+          valor_pis: tributacao.valorPis,
+          valor_cofins: tributacao.valorCofins,
+          valor_csll: tributacao.valorCsll,
+          valor_irrf: tributacao.valorIrrf,
+          valor_inss: tributacao.valorInss,
           updated_at: new Date().toISOString(),
         })
         .eq("id", nfse.id);
@@ -248,6 +281,15 @@ export function NfseDetailsSheet(props: {
           valor_servico: valor,
           descricao_servico: descricao,
           competencia: compAsDate,
+          codigo_tributacao: codigoTributacao || null,
+          cnae: cnae || null,
+          aliquota: tributacao.aliquotaIss,
+          iss_retido: tributacao.issRetido,
+          valor_pis: tributacao.valorPis,
+          valor_cofins: tributacao.valorCofins,
+          valor_csll: tributacao.valorCsll,
+          valor_irrf: tributacao.valorIrrf,
+          valor_inss: tributacao.valorInss,
           status: "processando",
           mensagem_retorno: null,
           updated_at: new Date().toISOString(),
@@ -256,25 +298,23 @@ export function NfseDetailsSheet(props: {
       
       if (updateError) throw updateError;
       
-      // 2. Chamar edge function para reemitir no Asaas
+      // 2. Chamar edge function para reemitir no Asaas - usando valores EDITADOS
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: "emit",
           client_id: nfse.client_id,
           value: valor,
           service_description: descricao,
-          municipal_service_code: nfse.codigo_tributacao || "010701",
+          municipal_service_code: codigoTributacao || nfse.codigo_tributacao || "010701",
           nfse_history_id: nfse.id,
           competencia: comp,
-          // Tributos (caso existam no registro)
-          retain_iss: nfse.iss_retido,
-          iss_rate: nfse.aliquota,
-          pis_value: nfse.valor_pis,
-          cofins_value: nfse.valor_cofins,
-          csll_value: nfse.valor_csll,
-          irrf_value: nfse.valor_irrf,
-          inss_value: nfse.valor_inss,
-          valor_liquido: nfse.valor_liquido,
+          retain_iss: tributacao.issRetido,
+          iss_rate: tributacao.aliquotaIss,
+          pis_value: tributacao.valorPis,
+          cofins_value: tributacao.valorCofins,
+          csll_value: tributacao.valorCsll,
+          irrf_value: tributacao.valorIrrf,
+          inss_value: tributacao.valorInss,
         },
       });
       
@@ -792,52 +832,109 @@ export function NfseDetailsSheet(props: {
         </SheetContent>
       </Sheet>
 
-      {/* Edit */}
+      {/* Edit - Formulário Completo */}
       <Dialog
         open={editOpen}
         onOpenChange={(open) => {
           setEditOpen(open);
-          if (open) {
+          if (open && nfse) {
             setValor(nfse.valor_servico);
             setCompetencia(normalizeCompetencia(nfse.competencia));
             setDescricao(nfse.descricao_servico || "");
+            setCodigoTributacao(nfse.codigo_tributacao ?? "");
+            setCnae(nfse.cnae ?? "");
+            setTributacao({
+              issRetido: nfse.iss_retido ?? false,
+              aliquotaIss: Number(nfse.aliquota) || 0,
+              valorPis: Number(nfse.valor_pis) || 0,
+              valorCofins: Number(nfse.valor_cofins) || 0,
+              valorCsll: Number(nfse.valor_csll) || 0,
+              valorIrrf: Number(nfse.valor_irrf) || 0,
+              valorInss: Number(nfse.valor_inss) || 0,
+            });
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Editar NFS-e</DialogTitle>
-            <DialogDescription>Permitido apenas para notas não autorizadas.</DialogDescription>
+            <DialogDescription>Corrija os dados fiscais e reenvie para processamento.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Valor do serviço</Label>
-              <CurrencyInput value={valor} onChange={setValor} />
-            </div>
+          <ScrollArea className="max-h-[65vh] pr-4">
+            <div className="space-y-4">
+              {/* Erro atual da nota */}
+              {nfse.mensagem_retorno && ["erro", "rejeitada"].includes(nfse.status) && (
+                <Alert variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <p className="font-medium">Erro atual:</p>
+                    <pre className="mt-1 whitespace-pre-wrap text-xs">{nfse.mensagem_retorno}</pre>
+                  </AlertDescription>
+                </Alert>
+              )}
 
-            <div className="space-y-2">
-              <Label>Competência (AAAA-MM)</Label>
-              <input
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={competencia}
-                onChange={(e) => setCompetencia(e.target.value)}
-                placeholder="2026-01"
+              {/* Dados básicos */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Valor do serviço</Label>
+                  <CurrencyInput value={valor} onChange={setValor} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Competência (AAAA-MM)</Label>
+                  <Input
+                    value={competencia}
+                    onChange={(e) => setCompetencia(e.target.value)}
+                    placeholder="2026-01"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Descrição do serviço</Label>
+                <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={3} />
+              </div>
+
+              <Separator />
+
+              {/* Código de Serviço */}
+              <div className="space-y-2">
+                <Label>Código de Serviço (LC 116/2003)</Label>
+                <NfseServiceCodeCombobox
+                  value={codigoTributacao}
+                  onChange={(code: NfseServiceCode | null) => {
+                    if (code) {
+                      setCodigoTributacao(code.codigo_tributacao);
+                      if (code.cnae_principal) setCnae(code.cnae_principal);
+                      if (code.aliquota_sugerida !== null && code.aliquota_sugerida !== undefined) {
+                        setTributacao(prev => ({ ...prev, aliquotaIss: code.aliquota_sugerida! }));
+                      }
+                    } else {
+                      setCodigoTributacao("");
+                    }
+                  }}
+                />
+              </div>
+
+              {/* CNAE */}
+              <div className="space-y-2">
+                <Label>CNAE</Label>
+                <Input
+                  value={cnae}
+                  onChange={(e) => setCnae(e.target.value)}
+                  placeholder="Ex: 6202-3/00"
+                />
+              </div>
+
+              {/* Tributação completa */}
+              <NfseTributacaoSection
+                valorServico={valor}
+                aliquotaIss={tributacao.aliquotaIss}
+                data={tributacao}
+                onChange={setTributacao}
               />
             </div>
-
-            <div className="space-y-2">
-              <Label>Descrição do serviço</Label>
-              <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={4} />
-            </div>
-
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                A competência é armazenada como <strong>AAAA-MM</strong> (sem dia). Isso melhora filtros e relatórios.
-              </AlertDescription>
-            </Alert>
-          </div>
+          </ScrollArea>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>
