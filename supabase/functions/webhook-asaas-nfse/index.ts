@@ -321,6 +321,36 @@ async function processInvoiceWebhook(
   }
 
   console.log(`[WEBHOOK-ASAAS] NFS-e ${nfseRecord.id} atualizada com sucesso`);
+
+  // Sincronizar invoices.nfse_status
+  if (nfseRecord.invoice_id) {
+    const invoiceUpdate: Record<string, unknown> = {};
+    if (invoiceStatus === "AUTHORIZED") {
+      invoiceUpdate.nfse_status = "gerada";
+      invoiceUpdate.nfse_error_msg = null;
+      invoiceUpdate.nfse_generated_at = new Date().toISOString();
+    } else if (invoiceStatus === "ERROR" || invoiceStatus === "CANCELLATION_DENIED") {
+      const errorDescription = (invoice.statusDescription as string) || "Erro no processamento da NFS-e";
+      invoiceUpdate.nfse_status = "erro";
+      invoiceUpdate.nfse_error_msg = errorDescription;
+    } else if (invoiceStatus === "CANCELED") {
+      invoiceUpdate.nfse_status = null;
+      invoiceUpdate.nfse_error_msg = null;
+    }
+
+    if (Object.keys(invoiceUpdate).length > 0) {
+      const { error: invError } = await supabase
+        .from("invoices")
+        .update(invoiceUpdate)
+        .eq("id", nfseRecord.invoice_id);
+
+      if (invError) {
+        console.error(`[WEBHOOK-ASAAS] Erro ao sincronizar invoices.nfse_status:`, invError);
+      } else {
+        console.log(`[WEBHOOK-ASAAS] invoices.nfse_status sincronizado para fatura ${nfseRecord.invoice_id}`);
+      }
+    }
+  }
 }
 
 // Background processing for payment webhooks
