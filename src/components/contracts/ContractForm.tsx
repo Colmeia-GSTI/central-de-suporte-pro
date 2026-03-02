@@ -58,28 +58,40 @@ const contractSchema = z.object({
   hours_included: z.coerce.number().optional(),
   status: z.enum(["active", "expired", "cancelled", "pending", "suspended"]),
   internal_notes: z.string().optional(),
-  // Billing fields
   billing_day: z.coerce.number().min(1).max(28).default(10),
   days_before_due: z.coerce.number().min(1).max(30).default(5),
   billing_provider: z.enum(["banco_inter", "asaas"]).default("banco_inter"),
   payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
-  // Initial invoice generation (only for new contracts)
   generate_initial_invoice: z.boolean().default(false),
   generate_payment: z.boolean().default(true),
   send_notification: z.boolean().default(true),
-  // Adjustment fields
   adjustment_date: z.string().optional(),
   adjustment_index: z.enum(["IGPM", "IPCA", "INPC", "FIXO"]).default("IGPM"),
   adjustment_percentage: z.coerce.number().optional(),
-  // Notification
   notification_message: z.string().optional(),
-  // NFSE fields
   nfse_enabled: z.boolean().default(true),
   nfse_service_code: z.string().optional(),
   nfse_descricao_customizada: z.string().optional(),
   nfse_cnae: z.string().optional(),
   nfse_aliquota: z.coerce.number().min(0).max(25).default(0),
   nfse_iss_retido: z.boolean().default(false),
+}).superRefine((data, ctx) => {
+  if (data.nfse_enabled) {
+    if (!data.nfse_aliquota || data.nfse_aliquota <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Alíquota ISS obrigatória quando NFS-e está habilitada",
+        path: ["nfse_aliquota"],
+      });
+    }
+    if (!data.nfse_service_code || data.nfse_service_code.trim() === "") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Código de serviço obrigatório quando NFS-e está habilitada",
+        path: ["nfse_service_code"],
+      });
+    }
+  }
 });
 
 type ContractFormData = z.infer<typeof contractSchema>;
@@ -103,9 +115,25 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   const queryClient = useQueryClient();
 
   const contractData = contract || initialData;
+  const isNewContract = !contractData;
 
   const [contractServices, setContractServices] = useState<ContractService[]>([]);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
+
+  // Buscar configurações fiscais padrão da empresa
+  const { data: companySettings } = useQuery({
+    queryKey: ["company-settings-nfse-defaults"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("company_settings")
+        .select("nfse_aliquota_padrao, nfse_cnae_padrao, nfse_codigo_tributacao_padrao")
+        .limit(1)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   const form = useForm<ContractFormData>({
     resolver: zodResolver(contractSchema),
@@ -139,6 +167,24 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       nfse_iss_retido: (contractData as Record<string, unknown>)?.nfse_iss_retido as boolean || false,
     },
   });
+
+  // Aplicar defaults da empresa para contratos novos quando os dados carregarem
+  useEffect(() => {
+    if (isNewContract && companySettings) {
+      const currentAliquota = form.getValues("nfse_aliquota");
+      if (!currentAliquota || currentAliquota <= 0) {
+        form.setValue("nfse_aliquota", companySettings.nfse_aliquota_padrao ?? 6);
+      }
+      const currentCnae = form.getValues("nfse_cnae");
+      if (!currentCnae && companySettings.nfse_cnae_padrao) {
+        form.setValue("nfse_cnae", companySettings.nfse_cnae_padrao);
+      }
+      const currentServiceCode = form.getValues("nfse_service_code");
+      if ((!currentServiceCode || currentServiceCode === "010701") && companySettings.nfse_codigo_tributacao_padrao) {
+        form.setValue("nfse_service_code", companySettings.nfse_codigo_tributacao_padrao);
+      }
+    }
+  }, [isNewContract, companySettings, form]);
 
   // Load existing contract services
   const contractId = contractData?.id;
