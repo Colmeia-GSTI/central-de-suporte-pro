@@ -875,7 +875,7 @@ Deno.serve(async (req) => {
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires municipalServiceId AND municipalServiceName
+        // Preferência: usar municipalServiceId resolvido; fallback: usar código municipal direto
         if (resolvedMunicipalServiceId) {
           invoicePayload.municipalServiceId = resolvedMunicipalServiceId;
           if (resolvedMunicipalServiceName) {
@@ -884,9 +884,13 @@ Deno.serve(async (req) => {
           log(correlationId, "info", `Usando municipalServiceId resolvido: ${resolvedMunicipalServiceId}`, {
             municipalServiceName: resolvedMunicipalServiceName,
           });
+        } else if (effectiveServiceCode) {
+          invoicePayload.municipalServiceCode = effectiveServiceCode;
+          log(correlationId, "warn", "municipalServiceId não resolvido; usando municipalServiceCode diretamente", {
+            municipalServiceCode: effectiveServiceCode,
+          });
         } else {
-          // CORREÇÃO CRÍTICA: NÃO usar fallback - rejeitar se não houver código de serviço
-          const errorMsg = "Código de serviço municipal (LC 116) não fornecido. Configure o código de serviço no contrato antes de emitir NFS-e.";
+          const errorMsg = "Código de serviço municipal (LC 116) não fornecido. Configure o código de serviço no contrato ou nas configurações da empresa antes de emitir NFS-e.";
           log(correlationId, "error", errorMsg);
           
           // Log event: validation_error
@@ -1178,23 +1182,17 @@ Deno.serve(async (req) => {
           municipalServiceDescription: service_description || "Serviços de TI",
         };
 
-        // Asaas requires municipalServiceId AND municipalServiceName
+        // Preferência: usar municipalServiceId resolvido; fallback: usar código municipal direto
         if (municipalServiceId) {
           invoicePayload.municipalServiceId = municipalServiceId;
           if (municipalServiceName) {
             invoicePayload.municipalServiceName = municipalServiceName;
           }
         } else if (service_code) {
-          // Sem municipalServiceId resolvido - rejeitar com erro claro
-          const errorMsg = `Código de serviço '${service_code}' não foi encontrado na API Asaas. Verifique o cadastro do código de serviço municipal.`;
-          log(correlationId, "error", errorMsg);
-          await logNfseEvent(supabase, historyRecord.id, "validation_error", "error",
-            errorMsg, correlationId, { reason: "MISSING_MUNICIPAL_SERVICE_CODE", service_code });
-          await supabase.from("nfse_history").update({
-            status: "erro", mensagem_retorno: errorMsg, codigo_retorno: "MISSING_MUNICIPAL_SERVICE_CODE",
-            updated_at: new Date().toISOString(),
-          }).eq("id", historyRecord.id);
-          throw new AsaasApiError(errorMsg, 400, "MISSING_MUNICIPAL_SERVICE_CODE");
+          invoicePayload.municipalServiceCode = service_code;
+          log(correlationId, "warn", "municipalServiceId não resolvido na avulsa; usando municipalServiceCode diretamente", {
+            municipalServiceCode: service_code,
+          });
         }
 
         // Simples Nacional / Incentivador Cultural (obrigatório para cálculo correto)
