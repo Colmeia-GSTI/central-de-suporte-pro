@@ -52,19 +52,6 @@ import {
   Headset,
   User,
 } from "lucide-react";
-  Clock,
-  CheckCircle,
-  Star,
-  DollarSign,
-  Monitor,
-  Laptop,
-  Server,
-  Printer,
-  Network,
-  Wifi,
-  Box,
-  Headset,
-} from "lucide-react";
 import { ClientPortalFinancialTab } from "@/components/client-portal/ClientPortalFinancialTab";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
