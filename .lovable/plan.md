@@ -1,60 +1,92 @@
 
-# Correção de Telas Brancas e Otimização de Performance
+# Correções e Melhorias: Trigger de Perfil, Exclusão de Usuários e Vínculo com Empresa
 
-## Causas Raiz Identificadas
+## Problema 1: Causa raiz dos perfis ausentes
 
-### 1. Sem handler global para erros assíncronos não capturados
-Quando uma Promise falha sem `try/catch` (ex: falha de rede, erro em Edge Function), o React "morre" silenciosamente e exibe tela branca. Não existe nenhum handler `unhandledrejection` no sistema.
+O trigger `handle_new_user` atual faz duas coisas ao criar um usuário via signup:
+1. Insere na tabela `profiles`
+2. Atribui automaticamente o papel `technician`
 
-### 2. Lazy loading sem proteção contra falha de carregamento
-Os ~25 componentes lazy-loaded (`React.lazy`) não têm retry nem Error Boundary dedicado. Se o chunk JS falhar ao carregar (rede instável, deploy novo), a tela fica branca sem feedback.
+O problema: se qualquer parte falhar (ex: conflito de dados, timeout), o INSERT no profiles falha silenciosamente e o usuário fica "invisível". Alem disso, atribuir `technician` automaticamente para qualquer pessoa que se registre pelo formulario publico e incorreto -- deveria ficar sem papel ate o admin definir.
 
-### 3. Possível duplicação de instância do React
-O `vite.config.ts` não tem `resolve.dedupe` para React, o que pode causar hooks corrompidos e crash silencioso.
+**Solucao**: Reescrever o trigger com tratamento de erro (`EXCEPTION`) e remover a atribuicao automatica de papel para auto-registro. O trigger passara a usar `BEGIN...EXCEPTION WHEN OTHERS` para garantir que o perfil seja sempre criado, mesmo se houver algum conflito.
 
-### 4. Conflito de configuração de refetch
-O `usePermissionOverrides` tem `refetchOnWindowFocus: true` enquanto o QueryClient global tem `false`. Isso causa re-render em cascata ao voltar à aba, podendo "piscar" a UI.
+## Problema 2: Falta opcao de excluir usuarios
 
-### 5. ErrorBoundary apenas no nível raiz
-Se um componente de página quebra, o ErrorBoundary raiz captura mas reseta TODA a aplicação. Sem Error Boundaries por rota, qualquer erro em uma página derruba tudo.
+A aba de Usuarios em Configuracoes nao permite excluir usuarios. Sera criada uma Edge Function `delete-user` que:
+- Valida que o solicitante e admin
+- Impede exclusao do proprio usuario
+- Remove o usuario via `admin.deleteUser()` (que cascateia para profiles e user_roles)
+- Registra a acao em audit_logs
 
----
+Na UI, sera adicionado um botao de excluir com `ConfirmDialog` destrutivo.
 
-## Alterações Propostas
+## Problema 3: Vincular usuario a empresa (cliente)
 
-### Arquivo: `src/App.tsx`
-- Adicionar `useEffect` com listener `window.addEventListener("unhandledrejection")` para capturar Promises não tratadas, exibir toast de erro e prevenir crash
-- Envolver em um componente interno (`AppInner`) para poder usar hooks dentro do `QueryClientProvider`
-
-### Arquivo: `vite.config.ts`
-- Adicionar `resolve.dedupe: ["react", "react-dom", "react/jsx-runtime"]` para forçar instância única do React
-
-### Arquivo: `src/components/layout/AnimatedRoutes.tsx`
-- Criar componente `LazyErrorBoundary` que captura erros de chunk com botão "Recarregar"
-- Adicionar lógica de retry automático no `React.lazy` (até 3 tentativas com delay) para chunks que falham ao carregar
-- Envolver cada `LazyPage` com Error Boundary dedicado em vez de depender apenas do raiz
-
-### Arquivo: `src/hooks/usePermissionOverrides.ts`
-- Remover `refetchOnWindowFocus: true` para alinhar com a configuração global e evitar re-renders desnecessários ao voltar à aba
-
-### Arquivo: `src/components/auth/ProtectedRoute.tsx`
-- Reduzir o safety timeout de auth de 5s (em useAuth) para garantir que o loading nunca "trava" -- já existe, mas validar que funciona corretamente com as novas mudanças
+Na aba de Usuarios, ao clicar em um usuario, deve ser possivel vincula-lo a uma empresa. Sera adicionado:
+- Um botao "Vincular Empresa" na linha de acoes do usuario
+- Um Dialog com um Select para escolher o cliente
+- A logica cria/atualiza um registro em `client_contacts` vinculando o `user_id` ao `client_id`
+- Se o usuario nao tiver papel `client` ou `client_master`, oferecer adicionar automaticamente
 
 ---
 
-## Detalhes Técnicos
+## Alteracoes Tecnicas
 
-| Alteração | Impacto |
-|---|---|
-| Handler `unhandledrejection` | Previne crash silencioso, exibe toast amigável |
-| `resolve.dedupe` no Vite | Elimina bugs de hooks por React duplicado |
-| Retry em `React.lazy` | Chunks que falham tentam recarregar 3x antes de mostrar erro |
-| Error Boundary por rota | Erro em uma página não derruba o sistema inteiro |
-| Remover `refetchOnWindowFocus` em overrides | Elimina re-renders em cascata ao voltar à aba |
+### 1. Migracao SQL -- Corrigir trigger `handle_new_user`
 
-| Arquivo | O que muda |
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    INSERT INTO public.profiles (user_id, full_name, email)
+    VALUES (
+      NEW.id, 
+      COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email), 
+      NEW.email
+    )
+    ON CONFLICT (user_id) DO NOTHING;
+    
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING '[handle_new_user] Failed for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
+END;
+$$;
+```
+
+Mudancas:
+- Adicionado `ON CONFLICT (user_id) DO NOTHING` para evitar falha por duplicacao
+- Removida atribuicao automatica de papel `technician` (admin define manualmente)
+- Adicionado `EXCEPTION WHEN OTHERS` para nunca bloquear o signup
+
+### 2. Nova Edge Function: `delete-user`
+
+| Arquivo | `supabase/functions/delete-user/index.ts` |
 |---|---|
-| `src/App.tsx` | Adicionar handler global de unhandled rejections |
-| `vite.config.ts` | Adicionar `resolve.dedupe` para React |
-| `src/components/layout/AnimatedRoutes.tsx` | Retry em lazy imports + Error Boundary por rota |
-| `src/hooks/usePermissionOverrides.ts` | Remover `refetchOnWindowFocus: true` |
+| Metodo | POST |
+| Body | `{ user_id: string }` |
+| Validacoes | Admin autenticado, nao pode excluir a si mesmo |
+| Acao | `adminClient.auth.admin.deleteUser(userId)` |
+| Auditoria | INSERT em `audit_logs` |
+
+### 3. Atualizar `src/components/settings/UsersTab.tsx`
+
+| Funcionalidade | Detalhes |
+|---|---|
+| Excluir usuario | Botao com icone Trash2, abre ConfirmDialog destrutivo, chama edge function `delete-user` |
+| Vincular empresa | Botao com icone Building2, abre Dialog com Select de clientes, insere em `client_contacts` |
+| Query de clientes | Nova `useQuery` para listar clientes ativos (apenas id e name) |
+| Estado | Novos estados: `deleteConfirm`, `linkClientDialogOpen`, `selectedClientId` |
+
+### 4. Arquivos modificados
+
+| Arquivo | Mudanca |
+|---|---|
+| Migracao SQL | Corrigir trigger `handle_new_user` |
+| `supabase/functions/delete-user/index.ts` | Nova Edge Function |
+| `src/components/settings/UsersTab.tsx` | Botoes de excluir e vincular empresa |
