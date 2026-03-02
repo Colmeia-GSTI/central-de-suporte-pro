@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -25,7 +25,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Filter, X, Ban, Eye, MoreHorizontal, Ellipsis,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
@@ -38,6 +38,10 @@ import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialo
 import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
+import { CalendarIcon } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useBatchProcessing } from "@/hooks/useBatchProcessing";
 import { InvoiceProcessingHistory } from "@/components/billing/InvoiceProcessingHistory";
@@ -82,11 +86,39 @@ const statusColors: Record<Enums<"invoice_status">, string> = {
 
 const ITEMS_PER_PAGE = 15;
 
+type PeriodPreset = "month" | "30" | "60" | "90" | "custom";
+
+function getDateRangeForPreset(preset: PeriodPreset): { from: Date; to: Date } {
+  const now = new Date();
+  switch (preset) {
+    case "month":
+      return { from: startOfMonth(now), to: endOfMonth(now) };
+    case "30":
+      return { from: subDays(now, 30), to: now };
+    case "60":
+      return { from: subDays(now, 60), to: now };
+    case "90":
+      return { from: subDays(now, 90), to: now };
+    case "custom":
+      return { from: startOfMonth(now), to: endOfMonth(now) };
+  }
+}
+
+const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
+  { value: "month", label: "Mês Atual" },
+  { value: "30", label: "30 dias" },
+  { value: "60", label: "60 dias" },
+  { value: "90", label: "90 dias" },
+  { value: "custom", label: "Personalizado" },
+];
+
 export function BillingInvoicesTab() {
   const isMobile = useIsMobile();
   const [, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
+  const [dateRange, setDateRange] = useState(() => getDateRangeForPreset("month"));
   const [currentPage, setCurrentPage] = useState(1);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [nfseInvoice, setNfseInvoice] = useState<InvoiceWithClient | null>(null);
@@ -108,6 +140,24 @@ export function BillingInvoicesTab() {
   const [isBatchNotifying, setIsBatchNotifying] = useState(false);
   const queryClient = useQueryClient();
 
+  const fromISO = format(dateRange.from, "yyyy-MM-dd");
+  const toISO = format(dateRange.to, "yyyy-MM-dd");
+
+  const handlePresetChange = useCallback((preset: PeriodPreset) => {
+    setPeriodPreset(preset);
+    if (preset !== "custom") {
+      setDateRange(getDateRangeForPreset(preset));
+    }
+    setCurrentPage(1);
+  }, []);
+
+  const handleCustomDateChange = useCallback((field: "from" | "to", date: Date | undefined) => {
+    if (!date) return;
+    setDateRange((prev) => ({ ...prev, [field]: date }));
+    setPeriodPreset("custom");
+    setCurrentPage(1);
+  }, []);
+
   const {
     generatingPayment,
     processingComplete,
@@ -120,11 +170,13 @@ export function BillingInvoicesTab() {
   } = useInvoiceActions();
 
   const { data: invoices = [], isLoading, isFetching } = useQuery({
-    queryKey: ["invoices", statusFilter],
+    queryKey: ["invoices", statusFilter, fromISO, toISO],
     queryFn: async () => {
       let query = supabase
         .from("invoices")
         .select("*, clients(name), contract_id, billing_provider")
+        .gte("due_date", fromISO)
+        .lte("due_date", toISO)
         .order("due_date", { ascending: false })
         .limit(500);
 
@@ -351,6 +403,73 @@ export function BillingInvoicesTab() {
             </DialogContent>
           </Dialog>
         </div>
+      </div>
+
+      {/* Period Filter Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        {PERIOD_OPTIONS.map((opt) => (
+          <Button
+            key={opt.value}
+            variant={periodPreset === opt.value ? "default" : "outline"}
+            size="sm"
+            className="h-8 text-xs whitespace-nowrap shrink-0"
+            onClick={() => handlePresetChange(opt.value)}
+          >
+            {opt.label}
+          </Button>
+        ))}
+
+        {periodPreset === "custom" && (
+          <>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 shrink-0">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {format(dateRange.from, "dd/MM/yy")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateRange.from}
+                  onSelect={(d) => handleCustomDateChange("from", d)}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+            <span className="text-xs text-muted-foreground shrink-0">até</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 shrink-0">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {format(dateRange.to, "dd/MM/yy")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateRange.to}
+                  onSelect={(d) => handleCustomDateChange("to", d)}
+                  initialFocus
+                  className="p-3 pointer-events-auto"
+                />
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Button
+          variant={statusFilter === "overdue" ? "destructive" : "outline"}
+          size="sm"
+          className="h-8 text-xs whitespace-nowrap shrink-0"
+          onClick={() => setStatusFilter(statusFilter === "overdue" ? "all" : "overdue")}
+        >
+          <AlertTriangle className="mr-1 h-3.5 w-3.5" />
+          Inadimplentes
+        </Button>
       </div>
 
       {/* Summary Chips */}
