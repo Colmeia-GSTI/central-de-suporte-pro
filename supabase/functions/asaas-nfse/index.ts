@@ -738,31 +738,31 @@ Deno.serve(async (req) => {
           }
         }
 
-        // 2. Resolve municipal service ID if only code provided
+        // 2. Buscar dados fiscais da empresa (sempre, pois são usados no payload)
+        let emitenteCidade: string | null = null;
+        let emitenteOptanteSN: boolean | null = null;
+        let emitenteIncentivadorCultural: boolean | null = null;
+        let emitenteCnaePadrao: string | null = null;
+        try {
+          const { data: companyData } = await supabase
+            .from("company_settings")
+            .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural, nfse_cnae_padrao")
+            .limit(1)
+            .maybeSingle();
+          emitenteCidade = companyData?.endereco_cidade || null;
+          emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
+          emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
+          emitenteCnaePadrao = companyData?.nfse_cnae_padrao || null;
+          log(correlationId, "info", `Dados fiscais da empresa: Cidade=${emitenteCidade || "N/A"}, Optante SN=${emitenteOptanteSN}, CNAE padrão=${emitenteCnaePadrao || "N/A"}`);
+        } catch (e) {
+          log(correlationId, "warn", "Erro ao buscar dados fiscais da empresa", { error: String(e) });
+        }
+
+        // 3. Resolve municipal service ID if only code provided
         let resolvedMunicipalServiceId = municipal_service_id;
         let resolvedMunicipalServiceName: string | null = null;
         if (!resolvedMunicipalServiceId && effectiveServiceCode) {
           log(correlationId, "info", `Buscando municipalServiceId para código ${effectiveServiceCode}`);
-          
-          // CORREÇÃO DEFINITIVA: Buscar cidade do emitente para filtrar serviços municipais
-          let emitenteCidade: string | null = null;
-          let emitenteOptanteSN: boolean | null = null;
-          let emitenteIncentivadorCultural: boolean | null = null;
-          let emitenteCnaePadrao: string | null = null;
-          try {
-            const { data: companyData } = await supabase
-              .from("company_settings")
-              .select("endereco_cidade, nfse_optante_simples, nfse_incentivador_cultural, nfse_cnae_padrao")
-              .limit(1)
-              .maybeSingle();
-            emitenteCidade = companyData?.endereco_cidade || null;
-            emitenteOptanteSN = companyData?.nfse_optante_simples ?? null;
-            emitenteIncentivadorCultural = companyData?.nfse_incentivador_cultural ?? null;
-            emitenteCnaePadrao = companyData?.nfse_cnae_padrao || null;
-            log(correlationId, "info", `Cidade do emitente: ${emitenteCidade || "não encontrada"}, Optante SN: ${emitenteOptanteSN}, CNAE padrão: ${emitenteCnaePadrao || "não definido"}`);
-          } catch (e) {
-            log(correlationId, "warn", "Erro ao buscar cidade do emitente", { error: String(e) });
-          }
           
           const normalizedTarget = normalizeServiceCode(effectiveServiceCode);
           
