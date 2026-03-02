@@ -38,6 +38,7 @@ import {
   Briefcase,
   Wrench,
   Bell,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -116,12 +117,21 @@ const specialRoutes: Record<string, AppRole[]> = {
   "/tv-dashboard": ["admin", "manager"],
 };
 
+// Menu simplificado para clientes
+const clientMenuItems: MenuItemType[] = [
+  { title: "Dashboard", icon: LayoutDashboard, path: "/portal", tooltip: "Voltar ao portal do cliente" },
+  { title: "Meu Perfil", icon: User, path: "/profile", tooltip: "Configurações pessoais" },
+];
+
 export function AppSidebar() {
   const location = useLocation();
   const { profile, signOut, roles } = useAuth();
   const { can } = usePermissions();
   const { data: ticketCount } = useTechnicianTicketCount();
   const { isMobile, setOpenMobile } = useSidebar();
+
+  // Detect if user is a client (only has client/client_master roles)
+  const isClientUser = roles.length > 0 && roles.every(role => role === "client" || role === "client_master");
 
   // Filter menu items based on permissions
   const filterMenuItems = (items: MenuItemType[]): MenuItemType[] => {
@@ -277,49 +287,60 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="scrollbar-premium">
-        {filteredMainItems.length > 0 && (
+        {isClientUser ? (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Principal</SidebarGroupLabel>
+            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Menu</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>{filteredMainItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
+              <SidebarMenu>{clientMenuItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        )}
+        ) : (
+          <>
+            {filteredMainItems.length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Principal</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>{filteredMainItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
 
-        {filteredOperationsItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Operações</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>{filteredOperationsItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+            {filteredOperationsItems.length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Operações</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>{filteredOperationsItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
 
-        {filteredFinancialItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Financeiro</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>{filteredFinancialItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+            {filteredFinancialItems.length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Financeiro</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>{filteredFinancialItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
 
-        {filteredTeamItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Equipe</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>{filteredTeamItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+            {filteredTeamItems.length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Equipe</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>{filteredTeamItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
 
-        {filteredAdminItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Administração</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>{filteredAdminItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+            {filteredAdminItems.length > 0 && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] font-semibold tracking-wider">Administração</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>{filteredAdminItems.map((item) => <MenuItem key={item.path} item={item} />)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
+          </>
         )}
       </SidebarContent>
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,6 +38,20 @@ import {
   FileText,
   LogOut,
   MessageSquare,
+  Clock,
+  CheckCircle,
+  Star,
+  DollarSign,
+  Monitor,
+  Laptop,
+  Server,
+  Printer,
+  Network,
+  Wifi,
+  Box,
+  Headset,
+  User,
+} from "lucide-react";
   Clock,
   CheckCircle,
   Star,
@@ -358,10 +373,16 @@ export default function ClientPortalPage() {
             <Ticket className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold">Portal do Cliente</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
               {profile?.full_name}
             </span>
+            <Button variant="ghost" size="sm" asChild className="active:scale-[0.98] transition-transform">
+              <Link to="/profile">
+                <User className="h-4 w-4 mr-2" />
+                Meu Perfil
+              </Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={signOut} className="active:scale-[0.98] transition-transform">
               <LogOut className="h-4 w-4 mr-2" />
               Sair
