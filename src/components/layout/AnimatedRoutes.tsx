@@ -1,41 +1,101 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, Component } from "react";
+import type { ReactNode, ErrorInfo } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PageTransition } from "./PageTransition";
 import { HoneycombLoader } from "@/components/ui/HoneycombLoader";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Eager load - frequently accessed
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
 import TicketsPage from "@/pages/tickets/TicketsPage";
 
-// Lazy load - less frequently accessed (saves ~40% initial bundle)
-const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
-const Register = lazy(() => import("@/pages/Register"));
-const Unauthorized = lazy(() => import("@/pages/Unauthorized"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
-const Setup = lazy(() => import("@/pages/Setup"));
-const ClientsPage = lazy(() => import("@/pages/clients/ClientsPage"));
-const NewTicketPage = lazy(() => import("@/pages/tickets/NewTicketPage"));
-const ClientDetailPage = lazy(() => import("@/pages/clients/ClientDetailPage"));
-const ContractsPage = lazy(() => import("@/pages/contracts/ContractsPage"));
-const NewContractPage = lazy(() => import("@/pages/contracts/NewContractPage"));
-const EditContractPage = lazy(() => import("@/pages/contracts/EditContractPage"));
-const InventoryPage = lazy(() => import("@/pages/inventory/InventoryPage"));
-const MonitoringPage = lazy(() => import("@/pages/monitoring/MonitoringPage"));
-const CalendarPage = lazy(() => import("@/pages/calendar/CalendarPage"));
-const GamificationPage = lazy(() => import("@/pages/gamification/GamificationPage"));
-const KnowledgePage = lazy(() => import("@/pages/knowledge/KnowledgePage"));
-const TVDashboardPage = lazy(() => import("@/pages/tv-dashboard/TVDashboardPage"));
-const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
-const CertificateDashboardPage = lazy(() => import("@/pages/settings/CertificateDashboardPage"));
-const ReportsPage = lazy(() => import("@/pages/reports/ReportsPage"));
-const ClientPortalPage = lazy(() => import("@/pages/client-portal/ClientPortalPage"));
-const ProfilePage = lazy(() => import("@/pages/profile/ProfilePage"));
-const DelinquencyReportPage = lazy(() => import("@/pages/financial/DelinquencyReportPage"));
-const BillingPage = lazy(() => import("@/pages/billing/BillingPage"));
+// Retry wrapper for lazy imports — retries up to 3 times with exponential delay
+function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
+  return lazy(() => {
+    let attempts = 0;
+    const load: () => Promise<{ default: React.ComponentType }> = () =>
+      importFn().catch((error) => {
+        attempts++;
+        if (attempts >= 3) throw error;
+        return new Promise<{ default: React.ComponentType }>((resolve) =>
+          setTimeout(() => resolve(load()), 1000 * attempts)
+        );
+      });
+    return load();
+  });
+}
 
-// Suspense fallback component
+// Lazy load with retry
+const ForgotPassword = lazyWithRetry(() => import("@/pages/ForgotPassword"));
+const Register = lazyWithRetry(() => import("@/pages/Register"));
+const Unauthorized = lazyWithRetry(() => import("@/pages/Unauthorized"));
+const NotFound = lazyWithRetry(() => import("@/pages/NotFound"));
+const Setup = lazyWithRetry(() => import("@/pages/Setup"));
+const ClientsPage = lazyWithRetry(() => import("@/pages/clients/ClientsPage"));
+const NewTicketPage = lazyWithRetry(() => import("@/pages/tickets/NewTicketPage"));
+const ClientDetailPage = lazyWithRetry(() => import("@/pages/clients/ClientDetailPage"));
+const ContractsPage = lazyWithRetry(() => import("@/pages/contracts/ContractsPage"));
+const NewContractPage = lazyWithRetry(() => import("@/pages/contracts/NewContractPage"));
+const EditContractPage = lazyWithRetry(() => import("@/pages/contracts/EditContractPage"));
+const InventoryPage = lazyWithRetry(() => import("@/pages/inventory/InventoryPage"));
+const MonitoringPage = lazyWithRetry(() => import("@/pages/monitoring/MonitoringPage"));
+const CalendarPage = lazyWithRetry(() => import("@/pages/calendar/CalendarPage"));
+const GamificationPage = lazyWithRetry(() => import("@/pages/gamification/GamificationPage"));
+const KnowledgePage = lazyWithRetry(() => import("@/pages/knowledge/KnowledgePage"));
+const TVDashboardPage = lazyWithRetry(() => import("@/pages/tv-dashboard/TVDashboardPage"));
+const SettingsPage = lazyWithRetry(() => import("@/pages/settings/SettingsPage"));
+const CertificateDashboardPage = lazyWithRetry(() => import("@/pages/settings/CertificateDashboardPage"));
+const ReportsPage = lazyWithRetry(() => import("@/pages/reports/ReportsPage"));
+const ClientPortalPage = lazyWithRetry(() => import("@/pages/client-portal/ClientPortalPage"));
+const ProfilePage = lazyWithRetry(() => import("@/pages/profile/ProfilePage"));
+const DelinquencyReportPage = lazyWithRetry(() => import("@/pages/financial/DelinquencyReportPage"));
+const BillingPage = lazyWithRetry(() => import("@/pages/billing/BillingPage"));
+
+// Per-route Error Boundary — isolates crashes to a single page
+interface LazyErrorBoundaryState {
+  hasError: boolean;
+}
+
+class LazyErrorBoundary extends Component<{ children: ReactNode }, LazyErrorBoundaryState> {
+  state: LazyErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): LazyErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[LazyErrorBoundary] Erro na página:", error, info.componentStack);
+  }
+
+  handleReload = () => {
+    this.setState({ hasError: false });
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 p-6 text-center">
+          <AlertTriangle className="h-12 w-12 text-destructive" />
+          <h2 className="text-lg font-semibold text-foreground">Erro ao carregar esta página</h2>
+          <p className="text-sm text-muted-foreground max-w-md">
+            Ocorreu um problema inesperado. Tente recarregar a página.
+          </p>
+          <Button onClick={this.handleReload} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Recarregar
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Suspense fallback
 function LazyFallback() {
   return (
     <div className="flex items-center justify-center min-h-[50vh]">
@@ -44,19 +104,21 @@ function LazyFallback() {
   );
 }
 
-// Wrapper for lazy loaded components
-function LazyPage({ children }: { children: React.ReactNode }) {
+// Wrapper for lazy loaded components with error boundary
+function LazyPage({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<LazyFallback />}>
-      <PageTransition>{children}</PageTransition>
-    </Suspense>
+    <LazyErrorBoundary>
+      <Suspense fallback={<LazyFallback />}>
+        <PageTransition>{children}</PageTransition>
+      </Suspense>
+    </LazyErrorBoundary>
   );
 }
 
 export function AnimatedRoutes() {
   return (
     <Routes>
-      {/* Auth routes - lazy */}
+      {/* Auth routes */}
       <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
       <Route path="/forgot-password" element={<LazyPage><ForgotPassword /></LazyPage>} />
       <Route path="/register" element={<LazyPage><Register /></LazyPage>} />
@@ -86,17 +148,17 @@ export function AnimatedRoutes() {
       <Route path="/gamification" element={<ProtectedRoute requireStaff><LazyPage><GamificationPage /></LazyPage></ProtectedRoute>} />
       <Route path="/knowledge" element={<ProtectedRoute requireStaff><LazyPage><KnowledgePage /></LazyPage></ProtectedRoute>} />
       
-      {/* Financial routes - lazy (admin, manager, financial can view) */}
+      {/* Financial routes */}
       <Route path="/billing" element={<ProtectedRoute allowedRoles={["admin", "manager", "financial"]}><LazyPage><BillingPage /></LazyPage></ProtectedRoute>} />
       <Route path="/billing/delinquency" element={<ProtectedRoute allowedRoles={["admin", "manager", "financial"]}><LazyPage><DelinquencyReportPage /></LazyPage></ProtectedRoute>} />
       
-      {/* Redirects para compatibilidade */}
+      {/* Redirects */}
       <Route path="/financial" element={<Navigate to="/billing" replace />} />
       <Route path="/financial/*" element={<Navigate to="/billing" replace />} />
       <Route path="/services" element={<Navigate to="/billing?tab=services" replace />} />
       <Route path="/services/*" element={<Navigate to="/billing?tab=services" replace />} />
       
-      {/* Admin routes - lazy */}
+      {/* Admin routes */}
       <Route path="/reports" element={<ProtectedRoute allowedRoles={["admin", "manager", "financial"]}><LazyPage><ReportsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LazyPage><SettingsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/settings/certificates" element={<ProtectedRoute allowedRoles={["admin", "financial"]}><LazyPage><CertificateDashboardPage /></LazyPage></ProtectedRoute>} />
