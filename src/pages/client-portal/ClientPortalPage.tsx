@@ -48,10 +48,9 @@ import {
   Network,
   Wifi,
   Box,
-  TrendingUp,
+  Headset,
 } from "lucide-react";
 import { ClientPortalFinancialTab } from "@/components/client-portal/ClientPortalFinancialTab";
-import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -111,7 +110,7 @@ export default function ClientPortalPage() {
   const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"my" | "all">("my");
   const [ratingTicket, setRatingTicket] = useState<{id: string; number: number; title: string} | null>(null);
-  const [activeSection, setActiveSection] = useState<"chamados" | "financeiro" | "relatorios">("chamados");
+  const [activeSection, setActiveSection] = useState<"chamados" | "financeiro">("chamados");
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [assetDescription, setAssetDescription] = useState("");
 
@@ -391,14 +390,6 @@ export default function ClientPortalPage() {
               <DollarSign className="h-4 w-4" />
               Financeiro
             </Button>
-            <Button
-              variant={activeSection === "relatorios" ? "default" : "outline"}
-              onClick={() => setActiveSection("relatorios")}
-              className="gap-2"
-            >
-              <TrendingUp className="h-4 w-4" />
-              Relatórios
-            </Button>
           </div>
         )}
 
@@ -407,14 +398,27 @@ export default function ClientPortalPage() {
           <ClientPortalFinancialTab clientId={clientData.id} />
         )}
 
-        {/* Reports Tab - client_master only */}
-        {isClientMaster && activeSection === "relatorios" && clientData?.id && (
-          <ClientManagementReport clientId={clientData.id} />
-        )}
 
         {/* Tickets Section */}
         {activeSection === "chamados" && (
         <>
+        {/* CTA - Abrir Chamado */}
+        <Card className="mb-6 border-primary/30 bg-primary/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Headset className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">Precisa de ajuda?</p>
+              <p className="text-sm text-muted-foreground">Abra um novo chamado e nossa equipe responderá o mais rápido possível.</p>
+            </div>
+            <Button size="lg" onClick={() => setIsNewTicketOpen(true)} className="shrink-0 gap-2">
+              <Plus className="h-5 w-5" />
+              Abrir Chamado
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4 mb-8">
           <Card>
