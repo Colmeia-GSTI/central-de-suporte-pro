@@ -1,71 +1,102 @@
 
-# Edição Completa de NFS-e com Erro
 
-## Problema Identificado
+# Correção E2E: Tributação Simples Nacional na Emissão de NFS-e
 
-Os dois diálogos de edição de NFS-e (em `NfseDetailsSheet` e `NfseActionsMenu`) permitem editar apenas **3 campos**: valor, competência e descrição. Os campos fiscais que frequentemente causam erros -- **código de tributação**, **CNAE**, **alíquota ISS**, **ISS retido** e **retenções federais** -- são exibidos como somente leitura. Quando uma nota é rejeitada por erro fiscal, o usuário não consegue corrigir a causa raiz visualmente.
+## Problemas Identificados
 
-Além disso, a mutation de "Reenviar" no `NfseDetailsSheet` envia os valores de tributação do **registro antigo** (`nfse.aliquota`, `nfse.iss_retido`, etc.) em vez dos valores editados, tornando a edição ineficaz mesmo que fosse possível.
+### 1. Limite de alíquota ISS hardcoded em 5%
+Em `NfseTributacaoSection.tsx` (linha 58), a alíquota ISS está limitada a `Math.max(numValue, 0), 5)`. Embora o Simples Nacional tenha teto de 5% para ISS, outros regimes (Lucro Presumido/Real) podem ter valores diferentes. Além disso, o componente não exibe nenhuma informação contextual sobre o regime tributário ativo.
 
-## Causa Raiz
+### 2. Regime tributário NÃO enviado ao Asaas
+A Edge Function `asaas-nfse` **não envia** os campos `optanteSimplesNacional` e `incentivadorCultural` no payload da API. A documentação do Asaas exige esses campos no objeto raiz da NFS-e para calcular corretamente os impostos.
 
-1. **Formulários de edição incompletos**: Apenas `valor_servico`, `descricao_servico` e `competencia` são editáveis
-2. **Mutation de update incompleta**: Salva apenas 3 campos no banco
-3. **Mutation de resend desconectada**: Envia dados antigos do `nfse` em vez dos valores editados pelo usuário
+### 3. `EmitNfseAvulsaDialog` não envia dados de tributação
+O diálogo de NFS-e avulsa (linha 145-157) envia apenas `aliquota` do código de serviço ao Edge Function, mas **não envia** `retain_iss`, `iss_rate`, `pis_value`, `cofins_value`, `csll_value`, `irrf_value`, `inss_value`. Os campos existem na Edge Function (`emit_standalone` aceita todos), mas o frontend não os popula.
+
+### 4. `EmitNfseDialog` não busca regime tributário
+O diálogo de emissão vinculada a fatura busca `company_settings` apenas para CNPJ e Inscrição Municipal (linha 114-121), ignorando `nfse_regime_tributario`, `nfse_optante_simples`, `nfse_incentivador_cultural` e `nfse_aliquota_padrao`.
+
+### 5. Alíquota padrão não aplicada automaticamente
+Quando `aliquotaIss` é 0 (sem contrato ou sem código de serviço configurado), nenhum fallback busca a alíquota padrão da empresa (`company_settings.nfse_aliquota_padrao`).
 
 ## Solução
 
-### 1. Expandir o diálogo de edição no `NfseDetailsSheet` (principal)
+### Arquivo 1: `supabase/functions/asaas-nfse/index.ts`
 
-Transformar o diálogo simples em um formulário completo com:
-- Valor do Serviço (ja existe)
-- Competencia (ja existe)
-- Descricao (ja existe)
-- **Codigo de Servico** (usando `NfseServiceCodeCombobox` existente)
-- **CNAE** (preenchido automaticamente ao selecionar codigo)
-- **Aliquota ISS** (editavel)
-- **ISS Retido** (switch)
-- **Retencoes Federais** (usando `NfseTributacaoSection` existente)
+**Ambas as ações `emit` e `emit_standalone`**: Buscar `company_settings` para obter `nfse_optante_simples` e `nfse_incentivador_cultural`, e adicionar ao payload:
 
-Exibir o erro atual da nota no topo do formulario para o usuario saber o que corrigir.
+```text
+invoicePayload.optanteSimplesNacional = companySettings.nfse_optante_simples ?? true;
+invoicePayload.culturalProjectContributor = companySettings.nfse_incentivador_cultural ?? false;
+```
 
-### 2. Expandir o diálogo de edição no `NfseActionsMenu`
+A query de `company_settings` já existe parcialmente (para buscar `endereco_cidade`). Expandir para incluir os campos fiscais.
 
-Aplicar as mesmas melhorias ao segundo diálogo de edição, replicando os campos fiscais editáveis.
+### Arquivo 2: `src/components/billing/nfse/NfseTributacaoSection.tsx`
 
-### 3. Corrigir a mutation de update
+- Remover o limite hardcoded de 5% na alíquota. Usar limite de 100% (validação genérica).
+- Adicionar prop opcional `regimeTributario` para exibir badge informativo ("Simples Nacional", etc.).
+- Quando regime = `simples_nacional`, exibir nota de que tributos federais estão inclusos no DAS e não devem ser retidos separadamente (exceto quando o tomador é órgão público).
 
-Atualizar `updateMutation` em ambos os componentes para salvar **todos** os campos fiscais editados:
-- `codigo_tributacao`
-- `cnae`
-- `aliquota`
-- `iss_retido`
-- `valor_pis`, `valor_cofins`, `valor_csll`, `valor_irrf`, `valor_inss`
+### Arquivo 3: `src/components/financial/EmitNfseAvulsaDialog.tsx`
 
-### 4. Corrigir a mutation de resend
+- Adicionar `NfseTributacaoSection` ao formulário, entre o campo de descrição e a seção "Gerar Fatura".
+- Buscar `company_settings` para `nfse_aliquota_padrao`, `nfse_regime_tributario`, `nfse_optante_simples`.
+- Inicializar `tributacao` com a alíquota sugerida do código de serviço selecionado (ou a padrão da empresa).
+- Enviar todos os campos de tributação no body da mutation: `retain_iss`, `iss_rate`, `pis_value`, `cofins_value`, `csll_value`, `irrf_value`, `inss_value`, `valor_liquido`.
 
-Atualizar `resendMutation` no `NfseDetailsSheet` para usar os **valores editados** (do estado local) em vez dos valores antigos do `nfse`:
-- `iss_rate` deve usar a alíquota editada
-- `retain_iss` deve usar o valor editado
-- Retenções federais devem usar valores editados
+### Arquivo 4: `src/components/financial/EmitNfseDialog.tsx`
 
-## Arquivos Modificados
+- Expandir a query de `company_settings` para incluir `nfse_regime_tributario`, `nfse_optante_simples`, `nfse_aliquota_padrao`.
+- Usar `nfse_aliquota_padrao` como fallback quando nem o contrato nem os metadados fornecem alíquota.
+- Passar `regimeTributario` para o `NfseTributacaoSection`.
+
+### Arquivo 5: `src/components/billing/nfse/NfseDetailsSheet.tsx`
+
+- Buscar `company_settings` para `nfse_regime_tributario` e `nfse_aliquota_padrao`.
+- Usar a alíquota padrão como fallback quando o registro NFS-e tem alíquota 0.
+- Passar `regimeTributario` ao `NfseTributacaoSection` no diálogo de edição.
+
+## Detalhes Técnicos
+
+### Payload Asaas Corrigido (emit/emit_standalone)
+```text
+{
+  customer: "...",
+  value: 420.00,
+  effectiveDate: "2026-03-01",
+  serviceDescription: "...",
+  municipalServiceId: "...",
+  municipalServiceName: "...",
+  observations: "",
+  deductions: 0,
+  optanteSimplesNacional: true,          // NOVO
+  culturalProjectContributor: false,     // NOVO
+  taxes: {
+    retainIss: false,
+    iss: 6.00,
+    pis: 0,
+    cofins: 0,
+    csll: 0,
+    ir: 0,
+    inss: 0
+  }
+}
+```
+
+### Regras do Simples Nacional para NFS-e
+- Empresas optantes pelo Simples Nacional geralmente **não retêm** PIS, COFINS, CSLL, IR e INSS separadamente (esses tributos já estão inclusos no DAS).
+- A exceção é quando o **tomador** é órgão público ou empresa de grande porte que retém na fonte.
+- A alíquota ISS no Simples Nacional varia de 2% a 5% conforme a faixa de faturamento (Anexo III, IV ou V da LC 123/2006).
+- O campo `optanteSimplesNacional: true` no payload do Asaas sinaliza o regime correto para cálculo.
+
+### Arquivos Modificados
 
 | Arquivo | Alteracao |
 |---|---|
-| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Adicionar estados para campos fiscais, expandir dialogo de edição com `NfseServiceCodeCombobox` e `NfseTributacaoSection`, corrigir mutations de update e resend |
-| `src/components/nfse/NfseActionsMenu.tsx` | Adicionar campos fiscais ao dialogo de edição, corrigir mutation de update e resend |
+| `supabase/functions/asaas-nfse/index.ts` | Adicionar `optanteSimplesNacional` e `culturalProjectContributor` ao payload de emit e emit_standalone |
+| `src/components/billing/nfse/NfseTributacaoSection.tsx` | Remover limite de 5%, adicionar prop `regimeTributario`, exibir nota informativa do Simples |
+| `src/components/financial/EmitNfseAvulsaDialog.tsx` | Adicionar `NfseTributacaoSection`, buscar company_settings, enviar tributação completa |
+| `src/components/financial/EmitNfseDialog.tsx` | Expandir query de company_settings, usar alíquota padrão como fallback |
+| `src/components/billing/nfse/NfseDetailsSheet.tsx` | Buscar regime tributário, usar alíquota padrão como fallback |
 
-## Fluxo Corrigido
-
-```text
-Usuario abre NFS-e com erro:
-  1. Ve a mensagem de erro no topo
-  2. Clica "Editar"
-  3. Formulario completo abre com:
-     - Erro atual destacado
-     - Todos os campos editaveis (valor, competencia, descricao)
-     - Campos fiscais editaveis (codigo servico, CNAE, aliquota, ISS retido, retencoes)
-  4. Ao salvar, TODOS os campos sao persistidos no banco
-  5. Ao clicar "Validar e Reenviar", os valores EDITADOS sao enviados ao Asaas
-```
