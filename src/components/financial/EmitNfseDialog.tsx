@@ -113,7 +113,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("id, cnpj, razao_social, inscricao_municipal, nfse_ambiente")
+        .select("id, cnpj, razao_social, inscricao_municipal, nfse_ambiente, nfse_regime_tributario, nfse_optante_simples, nfse_aliquota_padrao")
         .limit(1)
         .single();
       if (error) return null;
@@ -141,10 +141,10 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
   const metadata = invoice.processing_metadata as any;
   const isStandaloneNfse = metadata?.nfse_origin === "avulsa";
 
-  // Alíquota: do contrato ou dos metadados da fatura avulsa
+  // Alíquota: do contrato, dos metadados da fatura avulsa, ou fallback da empresa
   const aliquotaIss = isStandaloneNfse
-    ? (metadata?.aliquota ?? 0)
-    : ((contract as any)?.nfse_service_codes?.aliquota_sugerida ?? 0);
+    ? (metadata?.aliquota ?? companyConfig?.nfse_aliquota_padrao ?? 0)
+    : ((contract as any)?.nfse_service_codes?.aliquota_sugerida ?? companyConfig?.nfse_aliquota_padrao ?? 0);
 
   // Service code and CNAE: from contract or standalone metadata
   const effectiveServiceCode = isStandaloneNfse
@@ -382,6 +382,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
                   aliquotaIss={aliquotaIss}
                   data={tributacao}
                   onChange={setTributacao}
+                  regimeTributario={companyConfig?.nfse_regime_tributario}
                 />
 
                 <Alert>

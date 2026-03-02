@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ClientForm } from "@/components/clients/ClientForm";
+import { NfseTributacaoSection, type TributacaoData } from "@/components/billing/nfse/NfseTributacaoSection";
+import { calcularRetencoes } from "@/lib/nfse-retencoes";
 
 interface EmitNfseAvulsaDialogProps {
   open: boolean;
@@ -62,6 +64,15 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
   const [isClientFormOpen, setIsClientFormOpen] = useState(false);
   const [gerarFatura, setGerarFatura] = useState(false);
   const [vencimentoDias, setVencimentoDias] = useState<number>(30);
+  const [tributacao, setTributacao] = useState<TributacaoData>({
+    issRetido: false,
+    aliquotaIss: 0,
+    valorPis: 0,
+    valorCofins: 0,
+    valorCsll: 0,
+    valorIrrf: 0,
+    valorInss: 0,
+  });
 
   // Check if Asaas integration is active
   const { data: asaasConfig, isLoading: isLoadingAsaas } = useQuery({
@@ -92,19 +103,28 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
     },
   });
 
-  // Check company configuration
+  // Check company configuration (expanded for fiscal data)
   const { data: companyConfig } = useQuery({
-    queryKey: ["company-config-nfse"],
+    queryKey: ["company-config-nfse-avulsa"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("id, cnpj, inscricao_municipal, nfse_ambiente")
+        .select("id, cnpj, inscricao_municipal, nfse_ambiente, nfse_aliquota_padrao, nfse_regime_tributario, nfse_optante_simples")
         .limit(1)
         .single();
       if (error) return null;
       return data;
     },
   });
+
+  // When service code changes, update tributacao aliquota
+  useEffect(() => {
+    if (selectedServiceCode?.aliquota_sugerida) {
+      setTributacao(prev => ({ ...prev, aliquotaIss: selectedServiceCode.aliquota_sugerida! }));
+    } else if (companyConfig?.nfse_aliquota_padrao) {
+      setTributacao(prev => prev.aliquotaIss === 0 ? { ...prev, aliquotaIss: companyConfig.nfse_aliquota_padrao! } : prev);
+    }
+  }, [selectedServiceCode?.aliquota_sugerida, companyConfig?.nfse_aliquota_padrao]);
 
   const isAsaasConfigured = !!asaasConfig?.api_key;
 
@@ -142,6 +162,17 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
         invoiceId = invoice.id;
       }
 
+      const retencoes = calcularRetencoes({
+        valorServico: valor,
+        aliquotaIss: tributacao.aliquotaIss,
+        issRetido: tributacao.issRetido,
+        valorPis: tributacao.valorPis,
+        valorCofins: tributacao.valorCofins,
+        valorCsll: tributacao.valorCsll,
+        valorIrrf: tributacao.valorIrrf,
+        valorInss: tributacao.valorInss,
+      });
+
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: "emit_standalone",
@@ -150,9 +181,18 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
           service_description: descricao,
           service_code: selectedServiceCode.codigo_tributacao,
           cnae: selectedServiceCode.cnae_principal,
-          aliquota: selectedServiceCode.aliquota_sugerida,
+          aliquota: tributacao.aliquotaIss || selectedServiceCode.aliquota_sugerida,
           competencia,
           invoice_id: invoiceId,
+          // Tributação completa
+          retain_iss: tributacao.issRetido,
+          iss_rate: tributacao.aliquotaIss,
+          pis_value: tributacao.valorPis,
+          cofins_value: tributacao.valorCofins,
+          csll_value: tributacao.valorCsll,
+          irrf_value: tributacao.valorIrrf,
+          inss_value: tributacao.valorInss,
+          valor_liquido: retencoes.valorLiquido,
         },
       });
 
@@ -186,6 +226,15 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
     setCompetencia(format(new Date(), "yyyy-MM"));
     setGerarFatura(false);
     setVencimentoDias(30);
+    setTributacao({
+      issRetido: false,
+      aliquotaIss: 0,
+      valorPis: 0,
+      valorCofins: 0,
+      valorCsll: 0,
+      valorIrrf: 0,
+      valorInss: 0,
+    });
   };
 
   const isConfigured = companyConfig?.cnpj && companyConfig?.inscricao_municipal;
@@ -349,6 +398,17 @@ export function EmitNfseAvulsaDialog({ open, onOpenChange }: EmitNfseAvulsaDialo
               rows={3}
             />
           </div>
+
+          {/* Tributação */}
+          {valor > 0 && (
+            <NfseTributacaoSection
+              valorServico={valor}
+              aliquotaIss={tributacao.aliquotaIss || selectedServiceCode?.aliquota_sugerida || companyConfig?.nfse_aliquota_padrao || 0}
+              data={tributacao}
+              onChange={setTributacao}
+              regimeTributario={companyConfig?.nfse_regime_tributario}
+            />
+          )}
 
           {/* Gerar Fatura */}
           <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
