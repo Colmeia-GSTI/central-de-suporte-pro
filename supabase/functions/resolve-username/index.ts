@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
     const { data: contact, error: contactError } = await adminClient
       .from("client_contacts")
       .select("user_id, is_active")
-      .eq("username", username)
+      .eq("username", username.toLowerCase())
       .maybeSingle();
 
     if (contactError) {
