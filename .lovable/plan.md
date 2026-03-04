@@ -1,50 +1,44 @@
 
 
-# Username Case-Insensitive -- Plano de Correção
+# Correção: Exclusão completa de usuários de cliente
 
 ## Problema
 
-Usernames são armazenados e comparados de forma case-sensitive. Se um usuario for criado como "Joao.Silva", o login com "joao.silva" falha.
+A exclusão de usuário de cliente (`ClientUsersList.tsx`) apenas remove o registro `client_contacts`, mas deixa o usuário órfão em `auth.users` e `profiles`. Ao tentar recriar com o mesmo username, o email sintético gerado colide com o registro existente no auth.
 
-## Pontos de Correção
+## Solução
 
-Existem **5 pontos** onde o username precisa ser normalizado para lowercase:
+### 1. Corrigir `deleteUserMutation` em `ClientUsersList.tsx`
 
-### 1. Frontend -- Formulário de criação (`ClientUsersList.tsx`)
-Normalizar o username para lowercase antes de enviar ao backend. Adicionar `.toLowerCase()` no `onSubmit`.
+Antes de deletar o `client_contacts`, verificar se o contato tem `user_id`. Se sim, chamar a edge function `delete-user` para excluir o usuário do auth (que cascateia para profiles e user_roles), e depois deletar o `client_contacts`.
 
-### 2. Edge Function `create-client-user/index.ts`
-- Normalizar `username` para lowercase após validação do Zod (linha 113)
-- A busca de unicidade (linha 137) já usa `.eq()` que é case-sensitive -- com lowercase garantido, fica consistente
-- O email sintético (linha 158) já usa o username, que agora será lowercase
-
-### 3. Edge Function `resolve-username/index.ts`
-- Normalizar o username recebido para lowercase antes da busca (linha 78): `.eq("username", username.toLowerCase())`
-
-### 4. Edge Function `forgot-password/index.ts`
-- Normalizar o identifier para lowercase quando for username (linha 109): `.eq("username", identifier.toLowerCase())`
-
-### 5. Login (`Login.tsx`)
-- Normalizar o username para lowercase antes de enviar ao `resolve-username` (linha 38): `body: { username: loginIdentifier.toLowerCase() }`
-
-### 6. Migração SQL -- Corrigir dados existentes
-Normalizar todos os usernames existentes no banco:
-
-```sql
-UPDATE client_contacts
-SET username = LOWER(username)
-WHERE username IS NOT NULL
-  AND username != LOWER(username);
 ```
+// Pseudocódigo do novo fluxo:
+1. Buscar o client_contact pelo id para obter user_id
+2. Se user_id existir → invocar "delete-user" com { user_id }
+3. Deletar o client_contacts
+```
+
+### 2. Limpar o usuário órfão atual
+
+Executar uma chamada à edge function `delete-user` para remover o usuário auth órfão que ficou para trás (o que tem o email sintético `thais.dickel@...internal`), permitindo que a recriação funcione.
+
+Será necessário consultar o `profiles` ou `auth.users` para encontrar o user_id correto associado ao email sintético.
+
+### 3. Tratamento de erro na `create-client-user`
+
+Melhorar a tradução do erro `email_exists` para uma mensagem mais clara: "Este username já possui um usuário no sistema. Exclua o usuário anterior primeiro."
 
 ## Arquivos modificados
 
 | Arquivo | Ação |
 |---|---|
-| `src/components/clients/ClientUsersList.tsx` | Normalizar username no submit |
-| `supabase/functions/create-client-user/index.ts` | Normalizar username no backend |
-| `supabase/functions/resolve-username/index.ts` | Busca case-insensitive |
-| `supabase/functions/forgot-password/index.ts` | Busca case-insensitive |
-| `src/pages/Login.tsx` | Normalizar input antes de enviar |
-| Migração SQL | Corrigir usernames existentes |
+| `src/components/clients/ClientUsersList.tsx` | Chamar `delete-user` antes de deletar `client_contacts` |
+| `supabase/functions/create-client-user/index.ts` | Melhorar mensagem de erro para `email_exists` |
+| Limpeza manual | Remover usuário auth órfão do thais.dickel |
+
+## Riscos
+
+- A edge function `delete-user` valida que o chamador é admin. Isso é compatível pois apenas staff pode gerenciar contatos de clientes.
+- O cascade do `auth.admin.deleteUser` já remove profiles e user_roles automaticamente.
 
