@@ -162,7 +162,8 @@ Deno.serve(async (req) => {
     console.log(`Creating client user: ${name} (${username}) for client ${clientData.name}`);
     console.log(`Synthetic email: ${syntheticEmail}`);
 
-    // Criar usuário no Supabase Auth
+    // Tentar criar usuário no Supabase Auth
+    let authUserId: string;
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email: syntheticEmail,
       password,
@@ -175,21 +176,73 @@ Deno.serve(async (req) => {
     });
 
     if (createError) {
-      console.error("Error creating auth user:", createError);
+      // Se o email já existe, verificar se é um usuário órfão (sem client_contacts vinculado)
+      const isEmailConflict = createError.message.includes("already been registered") || createError.message.includes("already exists");
       
-      // Traduzir mensagens de erro comuns
-      let errorMessage = createError.message;
-      if (createError.message.includes("already been registered")) {
-        errorMessage = "Este email já está cadastrado no sistema";
+      if (isEmailConflict) {
+        console.log(`Email conflict detected for ${syntheticEmail}, checking for orphan user...`);
+        
+        // Buscar o usuário órfão via profiles (o handle_new_user trigger cria profile com o email)
+        const { data: orphanProfile } = await adminClient
+          .from("profiles")
+          .select("user_id")
+          .eq("email", syntheticEmail)
+          .maybeSingle();
+
+        if (orphanProfile?.user_id) {
+          // Verificar se existe client_contacts apontando para esse user_id
+          const { data: linkedContact } = await adminClient
+            .from("client_contacts")
+            .select("id")
+            .eq("user_id", orphanProfile.user_id)
+            .maybeSingle();
+
+          if (!linkedContact) {
+            // É um órfão! Deletar e recriar
+            console.log(`Orphan user found (${orphanProfile.user_id}), deleting...`);
+            await adminClient.auth.admin.deleteUser(orphanProfile.user_id);
+
+            // Recriar
+            const { data: retryUser, error: retryError } = await adminClient.auth.admin.createUser({
+              email: syntheticEmail,
+              password,
+              email_confirm: true,
+              user_metadata: { full_name: name, is_client_user: true, client_id: clientId },
+            });
+
+            if (retryError) {
+              console.error("Error creating auth user after orphan cleanup:", retryError);
+              return new Response(
+                JSON.stringify({ error: retryError.message }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            authUserId = retryUser.user.id;
+          } else {
+            return new Response(
+              JSON.stringify({ error: "Este username já possui um usuário ativo no sistema." }),
+              { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          // Sem profile = órfão puro no auth. Não conseguimos achar o user_id facilmente.
+          return new Response(
+            JSON.stringify({ error: "Este username já possui um usuário no sistema. Exclua o usuário anterior antes de recriar." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        console.error("Error creating auth user:", createError);
+        return new Response(
+          JSON.stringify({ error: createError.message }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-      
-      return new Response(
-        JSON.stringify({ error: errorMessage }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    } else {
+      authUserId = newUser.user.id;
     }
 
-    const userId = newUser.user.id;
+    const userId = authUserId;
     console.log(`Auth user created: ${userId}`);
 
     // Criar profile
