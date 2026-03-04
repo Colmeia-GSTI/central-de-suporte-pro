@@ -36,19 +36,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check admin role
+    // Check staff role (admin, manager, technician, financial)
     const { data: roles } = await callerClient
       .from("user_roles")
       .select("role")
-      .eq("user_id", caller.id)
-      .eq("role", "admin");
+      .eq("user_id", caller.id);
 
-    if (!roles || roles.length === 0) {
-      return new Response(JSON.stringify({ error: "Apenas administradores podem excluir usuários" }), {
+    const staffRoles = ["admin", "manager", "technician", "financial"];
+    const isStaff = roles?.some((r) => staffRoles.includes(r.role));
+
+    if (!isStaff) {
+      return new Response(JSON.stringify({ error: "Apenas membros da equipe podem excluir usuários" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isAdmin = roles?.some((r) => r.role === "admin");
 
     const { user_id } = await req.json();
     if (!user_id || typeof user_id !== "string") {
@@ -70,11 +74,33 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: { user: targetUser } } = await adminClient.auth.admin.getUserById(user_id);
 
+    // Non-admin staff can only delete client users (not other staff)
+    if (!isAdmin) {
+      const { data: targetRoles } = await adminClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user_id);
+
+      const targetIsStaff = targetRoles?.some((r) => staffRoles.includes(r.role));
+      if (targetIsStaff) {
+        return new Response(JSON.stringify({ error: "Apenas administradores podem excluir membros da equipe" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Delete user (cascades to profiles and user_roles)
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
     if (deleteError) {
       throw deleteError;
     }
+
+    // Also clean up any client_contacts referencing this user
+    await adminClient
+      .from("client_contacts")
+      .update({ user_id: null, is_active: false })
+      .eq("user_id", user_id);
 
     // Audit log
     await adminClient.from("audit_logs").insert({
