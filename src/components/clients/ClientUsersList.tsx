@@ -244,7 +244,7 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
         form.setError("password", { message: "Senha é obrigatória para novos usuários" });
         return;
       }
-      createUserMutation.mutate(data);
+      createUserMutation.mutate({ ...data, username: data.username.toLowerCase() });
     }
   };
 

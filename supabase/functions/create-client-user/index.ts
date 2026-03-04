@@ -110,7 +110,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { clientId, contactId, name, username, password, email, phone, role, isPrimary, isClientMaster } = parsed.data;
+    const { clientId, contactId, name, password, email, phone, role, isPrimary, isClientMaster } = parsed.data;
+    // Normalizar username para lowercase para garantir case-insensitive
+    const username = parsed.data.username.toLowerCase();
 
     // Admin client para operações privilegiadas
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);

@@ -35,7 +35,7 @@ export default function Login() {
       if (!isEmail) {
         // Resolver username para email via edge function
         const { data, error: resolveError } = await supabase.functions.invoke("resolve-username", {
-          body: { username: loginIdentifier },
+          body: { username: loginIdentifier.toLowerCase() },
         });
 
         if (resolveError || data?.error) {
