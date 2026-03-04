@@ -31,10 +31,10 @@ export default function Register() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       toast({
         title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 6 caracteres.",
+        description: "A senha deve ter pelo menos 8 caracteres.",
         variant: "destructive",
       });
       return;
@@ -55,8 +55,8 @@ export default function Register() {
     }
 
     toast({
-      title: "Conta criada!",
-      description: "Você já pode fazer login.",
+      title: "Verifique seu email",
+      description: "Enviamos um link de confirmação para o seu email. Confirme sua conta antes de fazer login.",
     });
     navigate("/login");
   };
