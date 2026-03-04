@@ -613,33 +613,46 @@ Deno.serve(async (req) => {
                 );
               }
               
-              // If error with E0014 (DPS duplicada), block re-emission
+              // If error with E0014 (DPS duplicada), auto-clean and continue re-emission
               if (existingInvoice.status === "ERROR") {
                 const parsed = parseStatusDescription(existingInvoice.statusDescription);
                 
                 if (parsed.codigo === "E0014") {
-                  log(correlationId, "warn", "E0014 detectado - DPS duplicada, não reemitir", {
+                  log(correlationId, "warn", "E0014 detectado - limpando invoice com erro para permitir reemissão", {
                     statusDescription: existingInvoice.statusDescription,
+                    asaas_invoice_id: existing.asaas_invoice_id,
                   });
                   
-                  await logNfseEvent(supabase, nfse_history_id, "dps_duplicada", "warn",
-                    "DPS duplicada detectada - nota possivelmente já emitida no Portal Nacional",
+                  // Try to delete the failed invoice in Asaas
+                  try {
+                    await asaasRequest(settings, `/invoices/${existing.asaas_invoice_id}`, "DELETE", undefined, correlationId);
+                    log(correlationId, "info", "Invoice com erro E0014 deletada no Asaas", { asaas_invoice_id: existing.asaas_invoice_id });
+                  } catch (deleteErr) {
+                    log(correlationId, "warn", "Falha ao deletar invoice E0014 no Asaas (prosseguindo)", {
+                      error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+                    });
+                  }
+                  
+                  // Clear asaas_invoice_id so a new one can be created
+                  await supabase
+                    .from("nfse_history")
+                    .update({
+                      asaas_invoice_id: null,
+                      asaas_status: null,
+                      status: "processando",
+                      mensagem_retorno: null,
+                      codigo_retorno: null,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", nfse_history_id);
+                  
+                  await logNfseEvent(supabase, nfse_history_id, "e0014_auto_cleanup", "info",
+                    "Invoice com erro E0014 limpa automaticamente para reemissão",
                     correlationId, {
-                      asaas_invoice_id: existingInvoice.id,
-                      status_description: existingInvoice.statusDescription,
-                      sugestao: "Use 'Vincular Nota Existente' para sincronizar",
+                      old_asaas_invoice_id: existing.asaas_invoice_id,
                     });
                   
-                  throw new AsaasApiError(
-                    "E0014: Esta nota já foi emitida no Portal Nacional. Use 'Vincular Nota Existente' para sincronizar.",
-                    409,
-                    "DPS_DUPLICADA",
-                    { 
-                      prefeitura_code: "E0014",
-                      action_required: "link_external",
-                      statusDescription: existingInvoice.statusDescription,
-                    }
-                  );
+                  // Continue with normal emission flow (fall through)
                 }
               }
               
