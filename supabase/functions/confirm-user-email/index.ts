@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       }
 
       // Confirm user email using admin API
-      const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
+      const { data: userData, error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
         email_confirm: true,
       });
 
@@ -102,6 +102,25 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: "Erro ao ativar usuário" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Ensure profile exists (upsert) to prevent orphan auth users
+      if (userData?.user) {
+        const u = userData.user;
+        const fullName = u.user_metadata?.full_name || u.email || "Usuário";
+        const { error: profileError } = await adminClient.from("profiles").upsert(
+          {
+            user_id: u.id,
+            full_name: fullName,
+            email: u.email,
+          },
+          { onConflict: "user_id" }
+        );
+        if (profileError) {
+          console.error("[confirm-user-email] Failed to upsert profile:", profileError.message);
+        } else {
+          console.log(`[confirm-user-email] Profile ensured for user ${u.id}`);
+        }
       }
 
       // Log the action
