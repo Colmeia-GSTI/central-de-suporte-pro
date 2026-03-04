@@ -196,21 +196,62 @@ export function BillingErrorsPanel() {
     }
   };
 
+  const isE0014Message = (message: string) =>
+    message.includes("E0014") || message.includes("DPS_DUPLICADA") || message.includes("duplicada");
+
+  const extractFunctionErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
+    const err = error as {
+      message?: string;
+      context?: { body?: ReadableStream<Uint8Array> };
+    };
+
+    if (err?.context?.body) {
+      try {
+        const reader = err.context.body.getReader();
+        const chunks: Uint8Array[] = [];
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+
+        const merged = new Uint8Array(chunks.reduce((acc, c) => acc + c.length, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+
+        const parsed = JSON.parse(new TextDecoder().decode(merged)) as {
+          error?: string;
+          code?: string;
+        };
+
+        if (parsed?.error && parsed?.code) return `${parsed.code}: ${parsed.error}`;
+        if (parsed?.error) return parsed.error;
+      } catch {
+        // fallback below
+      }
+    }
+
+    return String(err?.message || fallback);
+  };
+
   const handleRetryFailedAndReemit = async (nfse: ErrorNfse) => {
     setReprocessingId(nfse.id);
     try {
-      // Step 1: Cancel/clean the failed invoice in Asaas
       const { error: retryErr } = await supabase.functions.invoke("asaas-nfse", {
         body: { action: "retry_failed", nfse_history_id: nfse.id },
       });
-      if (retryErr) throw retryErr;
+      if (retryErr) {
+        const msg = await extractFunctionErrorMessage(retryErr, "Erro ao limpar nota com falha");
+        throw new Error(msg);
+      }
 
-      // Step 2: Re-emit with force_new_emission
       await handleReprocessNfse(nfse, true);
       toast.success("Nota anterior cancelada. Reemissão em andamento.");
     } catch (e: unknown) {
       toast.error("Erro ao cancelar e reemitir", { description: getErrorMessage(e) });
-      // Reset status back to erro if retry failed
       await supabase.from("nfse_history").update({ status: "erro" }).eq("id", nfse.id);
     } finally {
       setReprocessingId(null);
@@ -239,7 +280,7 @@ export function BillingErrorsPanel() {
         }
       }
 
-      const { error } = await supabase.functions.invoke("asaas-nfse", {
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: isStandalone ? "emit_standalone" : "emit",
           nfse_history_id: nfse.id,
@@ -253,11 +294,33 @@ export function BillingErrorsPanel() {
           ...taxParams,
         },
       });
-      if (error) throw error;
+
+      if (error) {
+        const msg = await extractFunctionErrorMessage(error, "Erro ao reprocessar NFS-e");
+
+        // Automatic fallback for E0014 false-positive on first attempt
+        if (!forceNew && isE0014Message(msg)) {
+          await handleRetryFailedAndReemit(nfse);
+          return;
+        }
+
+        throw new Error(msg);
+      }
+
+      if (!data?.success) {
+        const msg = String(data?.error || "Erro ao reprocessar NFS-e");
+        if (!forceNew && isE0014Message(msg)) {
+          await handleRetryFailedAndReemit(nfse);
+          return;
+        }
+        throw new Error(msg);
+      }
+
       if (!forceNew) toast.success("NFS-e reenviada para processamento");
       invalidateAll();
     } catch (e: unknown) {
       toast.error("Erro ao reprocessar", { description: getErrorMessage(e) });
+      await supabase.from("nfse_history").update({ status: "erro" }).eq("id", nfse.id);
     } finally {
       if (!forceNew) setReprocessingId(null);
     }
@@ -343,7 +406,7 @@ export function BillingErrorsPanel() {
     }
   };
 
-  const isE0014 = (msg: string | null) => msg?.includes("E0014") || msg?.includes("duplicada");
+  const isE0014 = (msg: string | null) => msg?.includes("E0014") || msg?.includes("duplicada") || msg?.includes("DPS_DUPLICADA");
 
 
   return (
