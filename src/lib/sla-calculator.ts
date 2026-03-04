@@ -1,4 +1,5 @@
 import { differenceInMinutes, addMinutes, isAfter, isBefore, setHours, setMinutes, getDay, startOfDay } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 
 interface Shift {
   name: string;
@@ -22,6 +23,15 @@ interface PauseEntry {
   resumed_at: string | null;
 }
 
+const DEFAULT_TIMEZONE = "America/Sao_Paulo";
+
+/**
+ * Converte uma data UTC para o timezone configurado
+ */
+function toBusinessTimezone(date: Date, timezone: string): Date {
+  return toZonedTime(date, timezone || DEFAULT_TIMEZONE);
+}
+
 /**
  * Calcula os minutos de trabalho em um único dia, considerando os turnos
  */
@@ -41,23 +51,20 @@ function getWorkMinutesForDay(
     const endH = parseInt(endParts[0], 10);
     const endM = parseInt(endParts[1], 10);
 
-    // Validate parsed time values
     if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) {
-      continue; // Skip invalid shift definitions
+      continue;
     }
 
     let shiftStart = setMinutes(setHours(startOfDay(date), startH), startM);
     let shiftEnd = setMinutes(setHours(startOfDay(date), endH), endM);
 
-    // Ajustar início se necessário
     if (startTime && isAfter(startTime, shiftStart)) {
-      if (isAfter(startTime, shiftEnd)) continue; // Já passou do turno
+      if (isAfter(startTime, shiftEnd)) continue;
       shiftStart = startTime;
     }
 
-    // Ajustar fim se necessário
     if (endTime && isBefore(endTime, shiftEnd)) {
-      if (isBefore(endTime, shiftStart)) continue; // Ainda não chegou no turno
+      if (isBefore(endTime, shiftStart)) continue;
       shiftEnd = endTime;
     }
 
@@ -71,6 +78,7 @@ function getWorkMinutesForDay(
 
 /**
  * Calcula o tempo útil transcorrido entre duas datas considerando horário comercial
+ * Todas as datas são convertidas para o timezone configurado antes do cálculo
  */
 export function calculateElapsedBusinessMinutes(
   startDate: Date,
@@ -78,29 +86,33 @@ export function calculateElapsedBusinessMinutes(
   businessHours: BusinessHours
 ): number {
   if (!businessHours?.shifts?.length || !businessHours?.days) {
-    // Fallback: tempo total em minutos (24/7)
     return differenceInMinutes(endDate, startDate);
   }
 
-  let totalMinutes = 0;
-  let currentDate = new Date(startDate);
+  const tz = businessHours.timezone || DEFAULT_TIMEZONE;
 
-  while (isBefore(currentDate, endDate)) {
+  // Converter para o timezone do negócio
+  const zonedStart = toBusinessTimezone(startDate, tz);
+  const zonedEnd = toBusinessTimezone(endDate, tz);
+
+  let totalMinutes = 0;
+  let currentDate = new Date(zonedStart);
+
+  while (isBefore(currentDate, zonedEnd)) {
     const dayOfWeek = getDay(currentDate).toString();
 
     if (businessHours.days[dayOfWeek]) {
       const dayEnd = addMinutes(startOfDay(currentDate), 24 * 60);
-      const effectiveEnd = isBefore(dayEnd, endDate) ? dayEnd : endDate;
+      const effectiveEnd = isBefore(dayEnd, zonedEnd) ? dayEnd : zonedEnd;
 
       totalMinutes += getWorkMinutesForDay(
         currentDate,
         businessHours.shifts,
-        isBefore(currentDate, startDate) ? startDate : undefined,
+        isBefore(currentDate, zonedStart) ? zonedStart : undefined,
         effectiveEnd
       );
     }
 
-    // Avançar para o próximo dia
     currentDate = addMinutes(startOfDay(currentDate), 24 * 60);
   }
 
@@ -119,21 +131,18 @@ export function calculateRemainingBusinessMinutes(
   const now = new Date();
   const slaMinutes = slaHours * 60;
 
-  // Calcular tempo útil transcorrido
   let elapsedMinutes = calculateElapsedBusinessMinutes(
     ticketCreatedAt,
     now,
     businessHours
   );
 
-  // Descontar tempo de pausas
   if (pauses?.length) {
     let totalPauseMinutes = 0;
     for (const pause of pauses) {
       const pauseStart = new Date(pause.paused_at);
       const pauseEnd = pause.resumed_at ? new Date(pause.resumed_at) : now;
 
-      // Validate that pause start is before pause end
       if (pauseStart >= pauseEnd) continue;
 
       const pauseMinutes = calculateElapsedBusinessMinutes(
@@ -144,7 +153,6 @@ export function calculateRemainingBusinessMinutes(
 
       totalPauseMinutes += pauseMinutes;
     }
-    // Ensure pause time never exceeds elapsed time
     elapsedMinutes = Math.max(0, elapsedMinutes - totalPauseMinutes);
   }
 
@@ -227,7 +235,6 @@ export function calculateSLAStatus(
       new Date(resolvedAt),
       businessHours
     );
-    // Descontar pausas
     if (pauses?.length) {
       let totalPauseMinutes = 0;
       for (const pause of pauses) {

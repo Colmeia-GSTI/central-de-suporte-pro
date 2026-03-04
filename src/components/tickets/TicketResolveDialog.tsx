@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, Clock, Loader2, Timer } from "lucide-react";
@@ -54,7 +53,6 @@ export function TicketResolveDialog({
   clientId,
   ticketTitle,
   ticketCreatedAt,
-  firstResponseAt,
   onSuccess,
 }: TicketResolveDialogProps) {
   const { user } = useAuth();
@@ -63,7 +61,6 @@ export function TicketResolveDialog({
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [extraHours, setExtraHours] = useState(0);
   const [extraMinutes, setExtraMinutes] = useState(0);
-  const [extraBillable, setExtraBillable] = useState(true);
   const [createArticle, setCreateArticle] = useState(false);
 
   // Fetch existing time entries
@@ -72,7 +69,7 @@ export function TicketResolveDialog({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_time_entries")
-        .select("duration_minutes, is_billable")
+        .select("duration_minutes")
         .eq("ticket_id", ticketId);
       
       if (error) throw error;
@@ -112,14 +109,10 @@ export function TicketResolveDialog({
   });
 
   const totalMinutes = timeEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
-  const billableMinutes = timeEntries
-    .filter(e => e.is_billable)
-    .reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
 
-  // Auto-calculate elapsed business minutes since first_response_at (or created_at)
+  // Sempre contar desde a abertura do ticket (ticketCreatedAt)
   const autoElapsedMinutes = useMemo(() => {
-    const startRef = firstResponseAt || ticketCreatedAt;
-    if (!startRef) return 0;
+    if (!ticketCreatedAt) return 0;
 
     const businessHours = companySettings?.business_hours as {
       timezone: string;
@@ -130,12 +123,12 @@ export function TicketResolveDialog({
     if (!businessHours) return 0;
 
     let elapsed = calculateElapsedBusinessMinutes(
-      new Date(startRef),
+      new Date(ticketCreatedAt),
       new Date(),
       businessHours
     );
 
-    // Deduct pause time
+    // Descontar tempo de pausas
     for (const pause of ticketPauses) {
       const pauseStart = new Date(pause.paused_at);
       const pauseEnd = pause.resumed_at ? new Date(pause.resumed_at) : new Date();
@@ -144,7 +137,8 @@ export function TicketResolveDialog({
     }
 
     return Math.max(0, elapsed);
-  }, [firstResponseAt, ticketCreatedAt, companySettings, ticketPauses]);
+  }, [ticketCreatedAt, companySettings, ticketPauses]);
+
   const resolveMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Usuário não autenticado");
@@ -161,7 +155,7 @@ export function TicketResolveDialog({
             duration_minutes: extraMins,
             description: "Tempo adicional registrado na finalização",
             entry_type: "manual",
-            is_billable: extraBillable,
+            is_billable: true,
           });
         
         if (timeError) throw timeError;
@@ -181,7 +175,7 @@ export function TicketResolveDialog({
       
       // 3. Register in history with total time
       const finalTotal = totalMinutes + extraMins;
-      const autoInfo = autoElapsedMinutes > 0 ? `Tempo de atendimento: ${formatDuration(autoElapsedMinutes)}` : "";
+      const autoInfo = autoElapsedMinutes > 0 ? `Tempo total (abertura → agora): ${formatDuration(autoElapsedMinutes)}` : "";
       const manualInfo = finalTotal > 0 ? `Tempo registrado: ${formatDuration(finalTotal)}` : "";
       const timeInfo = [autoInfo, manualInfo].filter(Boolean).join(" | ");
       const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
@@ -213,7 +207,6 @@ export function TicketResolveDialog({
         
         if (articleError) {
           logger.error("Erro ao criar artigo", "Tickets", { error: articleError.message });
-          // Don't fail the resolution if article creation fails
           toast.warning("Chamado resolvido, mas houve erro ao criar o artigo");
         }
       }
@@ -239,7 +232,6 @@ export function TicketResolveDialog({
     setResolutionNotes("");
     setExtraHours(0);
     setExtraMinutes(0);
-    setExtraBillable(true);
     setCreateArticle(false);
   };
 
@@ -270,7 +262,7 @@ export function TicketResolveDialog({
               {autoElapsedMinutes > 0 && (
                 <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border">
                   <Timer className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">Tempo de Atendimento</span>
+                  <span className="text-sm font-medium">Tempo Total (abertura → agora)</span>
                   <span className="ml-auto text-sm font-semibold text-primary">
                     {formatDuration(autoElapsedMinutes)}
                   </span>
@@ -280,15 +272,9 @@ export function TicketResolveDialog({
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Tempo Registrado</span>
               </div>
-              <div className="flex gap-6 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Total: </span>
-                  <span className="font-medium">{formatDuration(totalMinutes)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Faturável: </span>
-                  <span className="font-medium text-green-600">{formatDuration(billableMinutes)}</span>
-                </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Total: </span>
+                <span className="font-medium">{formatDuration(totalMinutes)}</span>
               </div>
             </CardContent>
           </Card>
@@ -318,16 +304,6 @@ export function TicketResolveDialog({
                   className="w-16 text-center"
                 />
                 <span className="text-sm text-muted-foreground">min</span>
-              </div>
-              <div className="flex items-center gap-2 ml-2">
-                <Switch
-                  id="extra-billable"
-                  checked={extraBillable}
-                  onCheckedChange={setExtraBillable}
-                />
-                <Label htmlFor="extra-billable" className="text-sm cursor-pointer">
-                  Faturável
-                </Label>
               </div>
             </div>
           </div>
