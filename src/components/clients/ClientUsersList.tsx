@@ -213,7 +213,7 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
   const resetPasswordMutation = useMutation({
     mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
       const { data, error } = await supabase.functions.invoke("reset-password", {
-        body: { userId, newPassword: password },
+        body: { user_id: userId, new_password: password },
       });
 
       if (error) throw error;
@@ -272,10 +272,10 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
   const handleResetPassword = () => {
     if (!resetPasswordUser?.user_id || !newPassword) return;
     
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       toast({ 
         title: "Senha muito curta", 
-        description: "A senha deve ter pelo menos 6 caracteres",
+        description: "A senha deve ter pelo menos 8 caracteres",
         variant: "destructive" 
       });
       return;
