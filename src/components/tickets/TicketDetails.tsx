@@ -159,7 +159,7 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
         </TabsContent>
 
         <TabsContent value="comments" className="mt-4">
-          <TicketCommentsTab ticketId={ticket.id} />
+          <TicketCommentsTab ticketId={ticket.id} ticketCreatedBy={ticket.created_by} />
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">

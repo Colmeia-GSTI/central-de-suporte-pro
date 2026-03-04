@@ -23,9 +23,10 @@ import { useDebounce } from "@/hooks/useDebounce";
 
 interface TicketCommentsTabProps {
   ticketId: string;
+  ticketCreatedBy?: string | null;
 }
 
-export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
+export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsTabProps) {
   const [comment, setComment] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [macroSearch, setMacroSearch] = useState("");
@@ -227,18 +228,23 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
     <div className="space-y-4">
       {/* Comment List */}
       <div className="space-y-4 max-h-80 overflow-y-auto">
-        {comments.map((c) => (
-          <div key={c.id} className="flex gap-3">
+        {comments.map((c) => {
+          const isRequester = ticketCreatedBy && c.user_id === ticketCreatedBy;
+          return (
+          <div key={c.id} className={`flex gap-3 ${isRequester ? "flex-row-reverse" : ""}`}>
             <Avatar className="h-8 w-8">
-              <AvatarFallback>
+              <AvatarFallback className={isRequester ? "bg-accent" : ""}>
                 <User className="h-4 w-4" />
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
+            <div className={`flex-1 ${isRequester ? "text-right" : ""}`}>
+              <div className={`flex items-center gap-2 ${isRequester ? "justify-end" : ""}`}>
                 <span className="text-sm font-medium">
                   {c.user_full_name || "Usuário"}
                 </span>
+                <Badge variant={isRequester ? "outline" : "secondary"} className="text-[10px] h-4 px-1">
+                  {isRequester ? "Solicitante" : "Equipe"}
+                </Badge>
                 <span className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(c.created_at), {
                     addSuffix: true,
@@ -252,7 +258,11 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
                   </Badge>
                 )}
               </div>
-              <p className="text-sm mt-1 whitespace-pre-wrap bg-muted/50 p-3 rounded-lg">
+              <p className={`text-sm mt-1 whitespace-pre-wrap p-3 rounded-lg ${
+                isRequester
+                  ? "bg-accent/50 border border-accent"
+                  : "bg-muted/50"
+              }`}>
                 {c.content}
               </p>
               {/* Attachments display */}
@@ -281,7 +291,8 @@ export function TicketCommentsTab({ ticketId }: TicketCommentsTabProps) {
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
         {comments.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-8">
             Nenhum comentário ainda

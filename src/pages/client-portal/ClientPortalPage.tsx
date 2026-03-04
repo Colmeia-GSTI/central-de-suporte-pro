@@ -186,7 +186,7 @@ export default function ClientPortalPage() {
     enabled: !!clientData?.id,
   });
 
-  // Fetch ticket comments
+  // Fetch ticket comments with user names
   const { data: comments = [] } = useQuery({
     queryKey: ["ticket-comments", selectedTicket],
     queryFn: async () => {
@@ -199,7 +199,27 @@ export default function ClientPortalPage() {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      return data;
+      const rows = data || [];
+
+      // Resolve user names from profiles
+      const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];
+      const nameMap = new Map<string, string>();
+      if (userIds.length) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", userIds);
+        if (profiles) {
+          for (const p of profiles) {
+            nameMap.set(p.user_id, p.full_name);
+          }
+        }
+      }
+
+      return rows.map((r) => ({
+        ...r,
+        user_full_name: r.user_id ? nameMap.get(r.user_id) ?? null : null,
+      }));
     },
     enabled: !!selectedTicket,
   });
@@ -826,21 +846,30 @@ export default function ClientPortalPage() {
                     </div>
 
                     {/* Comments */}
-                    {comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className={`p-3 rounded-lg ${
-                          comment.user_id === user?.id
-                            ? "bg-primary text-primary-foreground ml-8"
-                            : "bg-muted mr-8"
-                        }`}
-                      >
-                        <p className="text-sm">{comment.content}</p>
-                        <p className="text-xs opacity-70 mt-1">
-                          {format(new Date(comment.created_at), "dd/MM HH:mm", { locale: ptBR })}
-                        </p>
-                      </div>
-                    ))}
+                    {comments.map((comment) => {
+                      const isOwn = comment.user_id === user?.id;
+                      const senderName = isOwn
+                        ? "Você"
+                        : comment.user_full_name || "Equipe de Suporte";
+                      return (
+                        <div
+                          key={comment.id}
+                          className={`p-3 rounded-lg ${
+                            isOwn
+                              ? "bg-primary text-primary-foreground ml-8"
+                              : "bg-muted mr-8"
+                          }`}
+                        >
+                          <p className="text-xs font-semibold mb-1 opacity-80">
+                            {senderName}
+                          </p>
+                          <p className="text-sm">{comment.content}</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            {format(new Date(comment.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </CardContent>
                   {/* Add Comment */}
                   {!["resolved", "closed"].includes(selectedTicketData.status) && (

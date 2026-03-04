@@ -91,7 +91,7 @@ const priorityLabels: Record<Enums<"ticket_priority">, string> = {
 
 export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [formData, setFormData] = useState({
     title: ticket.title,
     description: ticket.description || "",
