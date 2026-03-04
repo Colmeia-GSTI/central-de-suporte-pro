@@ -1,53 +1,46 @@
 
 
-# Correção: Contagem de Tempo e Timezone do Sistema
+# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
 
-## Problemas Identificados
+## Problema
 
-### 1. SLA Calculator ignora timezone
-O `sla-calculator.ts` recebe `businessHours.timezone` mas **nunca o utiliza**. Todas as operações usam `date-fns` com `Date` local do navegador. Se o navegador estiver em timezone diferente de "America/Sao_Paulo", os cálculos de turnos ficam incorretos.
+Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
 
-### 2. Tempo de Atendimento não conta desde a abertura
-No `TicketResolveDialog`, linha 121: `const startRef = firstResponseAt || ticketCreatedAt`. Se `firstResponseAt` existir, conta a partir da primeira resposta e não da abertura. Se o técnico clicou "Iniciar" e isso preencheu `first_response_at`, o tempo ignora o período entre a criação e o início do atendimento. O correto é **sempre contar desde `ticketCreatedAt`** para tempo total de atendimento.
+O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
+1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
+2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
+3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
 
-### 3. "Tempo Faturável" desnecessário
-O usuário disse que tempo faturável não é necessário. Os seguintes elementos precisam ser removidos:
-- `TicketTimeTracker`: remover exibição de "Faturável" no header, o Switch "Faturável" no dialog manual, e o ícone `$` na tabela
-- `TicketResolveDialog`: remover linha "Faturável" do card de resumo e o Switch "Faturável" do tempo extra
+## Solução
 
-### 4. Cronômetro não persiste entre navegações
-O stopwatch usa `useState` local — se o técnico sai da página e volta, perde o tempo. Isso não será corrigido agora (escopo futuro), mas é relevante.
+### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
+Nova ação que:
+- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
+- Limpa o `asaas_invoice_id` do registro `nfse_history`
+- Redefine status para "pendente"
+- Registra evento no `nfse_event_logs`
+- Retorna sucesso para que o frontend possa reemitir em seguida
 
-## Plano de Correção
+### 2. Edge function: relaxar bloqueio E0014 no `emit`
+Adicionar parâmetro `force_new_emission: true` que, quando presente:
+- Ignora a verificação de `asaas_invoice_id` existente
+- Permite criar nova invoice no Asaas do zero
+- Usado internamente após o `retry_failed` limpar o registro
 
-### 1. Corrigir `sla-calculator.ts` para respeitar timezone
-- Usar `date-fns` com conversão explícita para "America/Sao_Paulo"
-- Como `date-fns` não suporta timezones nativamente, usar uma abordagem de offset manual ou instalar `date-fns-tz` (já que o projeto não tem)
-- Alternativa pragmática: como o sistema opera exclusivamente em "America/Sao_Paulo", normalizar as datas para esse fuso antes de calcular turnos
+### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
+No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
+- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
+- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
+- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
 
-### 2. Corrigir `TicketResolveDialog` — contar desde abertura
-- Alterar `startRef` para sempre usar `ticketCreatedAt` (não `firstResponseAt`)
-- Renomear label de "Tempo de Atendimento" para "Tempo Total (abertura → agora)"
-
-### 3. Remover elementos de "Faturável"
-**`TicketTimeTracker.tsx`:**
-- Remover exibição `billableMinutes` no header
-- Remover Switch "Faturável" do dialog manual (manter `is_billable: true` como default silencioso)
-- Remover ícone `DollarSign` da tabela de entries
-
-**`TicketResolveDialog.tsx`:**
-- Remover linha "Faturável" do card de resumo de tempo
-- Remover Switch "Faturável" do campo de tempo extra
-
-### 4. Ajustar timezone padrão do sistema
-- Garantir que `company_settings.business_hours.timezone` seja "America/Sao_Paulo"
-- No `sla-calculator.ts`, usar o timezone configurado para calcular corretamente os limites de turnos
+### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
+Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
 
 ## Arquivos modificados
 
 | Arquivo | Ação |
 |---|---|
-| `src/lib/sla-calculator.ts` | Respeitar timezone "America/Sao_Paulo" nos cálculos |
-| `src/components/tickets/TicketResolveDialog.tsx` | Contar desde abertura, remover "faturável" |
-| `src/components/tickets/TicketTimeTracker.tsx` | Remover UI de "faturável" |
+| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
+| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
+| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
 
