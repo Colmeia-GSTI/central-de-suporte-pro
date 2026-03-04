@@ -1,44 +1,43 @@
 
 
-# Correção: Exclusão completa de usuários de cliente
+# Correção: Email de confirmação não recebido no cadastro
 
-## Problema
+## Diagnóstico
 
-A exclusão de usuário de cliente (`ClientUsersList.tsx`) apenas remove o registro `client_contacts`, mas deixa o usuário órfão em `auth.users` e `profiles`. Ao tentar recriar com o mesmo username, o email sintético gerado colide com o registro existente no auth.
+Analisando os logs de autenticação, o signup de `engenharia1@airduto.com.br` foi processado com sucesso (status 200) e o hook de email do Lovable executou sem erros. Porém o usuário não recebeu o email. Os problemas identificados são:
 
-## Solução
+### Problema 1: Falta de `emailRedirectTo` no signUp
+O `signUp()` em `useAuth.tsx` não inclui `emailRedirectTo`, o que significa que o link de confirmação no email não terá uma URL de retorno válida. Sem isso, mesmo que o email chegue, o link pode redirecionar para lugar nenhum.
 
-### 1. Corrigir `deleteUserMutation` em `ClientUsersList.tsx`
+### Problema 2: Mensagem enganosa no Register.tsx
+Após o cadastro, o toast diz "Você já pode fazer login" -- mas como a confirmação de email está ativada, o usuário **não pode** fazer login até confirmar. Isso causa confusão.
 
-Antes de deletar o `client_contacts`, verificar se o contato tem `user_id`. Se sim, chamar a edge function `delete-user` para excluir o usuário do auth (que cascateia para profiles e user_roles), e depois deletar o `client_contacts`.
+### Problema 3: Login não trata erro "Email not confirmed"
+O `Login.tsx` traduz apenas `"Invalid login credentials"`, mas não trata o erro `"Email not confirmed"` que é retornado quando o email não foi confirmado. O usuário vê uma mensagem genérica em inglês.
 
-```
-// Pseudocódigo do novo fluxo:
-1. Buscar o client_contact pelo id para obter user_id
-2. Se user_id existir → invocar "delete-user" com { user_id }
-3. Deletar o client_contacts
-```
+### Problema 4: Página de cadastro público sem controle
+O sistema é uma central de suporte de TI onde usuários devem ser criados por admins. A página `/register` está aberta publicamente sem nenhum controle, permitindo que qualquer pessoa crie uma conta -- mas sem role atribuída, ficará sem acesso útil e com email pendente.
 
-### 2. Limpar o usuário órfão atual
+## Plano de Correção
 
-Executar uma chamada à edge function `delete-user` para remover o usuário auth órfão que ficou para trás (o que tem o email sintético `thais.dickel@...internal`), permitindo que a recriação funcione.
+### 1. Corrigir `signUp` em `useAuth.tsx`
+Adicionar `emailRedirectTo: window.location.origin` nas options do `signUp()` para que o link de confirmação redirecione corretamente.
 
-Será necessário consultar o `profiles` ou `auth.users` para encontrar o user_id correto associado ao email sintético.
+### 2. Corrigir mensagem no `Register.tsx`
+- Alterar toast de sucesso para: "Verifique seu email para confirmar sua conta antes de fazer login."
+- Alterar descrição do toast para informar que um email de confirmação foi enviado.
 
-### 3. Tratamento de erro na `create-client-user`
+### 3. Tratar erro "Email not confirmed" no `Login.tsx`
+Adicionar tradução para o erro `"Email not confirmed"` → "Seu email ainda não foi confirmado. Verifique sua caixa de entrada."
 
-Melhorar a tradução do erro `email_exists` para uma mensagem mais clara: "Este username já possui um usuário no sistema. Exclua o usuário anterior primeiro."
+### 4. Confirmar manualmente o usuário `engenharia1@airduto.com.br`
+Usar a edge function `confirm-user-email` já existente para confirmar o email do usuário que ficou pendente, **ou** orientar o admin a confirmar via a tela de Usuários nas Configurações.
 
 ## Arquivos modificados
 
 | Arquivo | Ação |
 |---|---|
-| `src/components/clients/ClientUsersList.tsx` | Chamar `delete-user` antes de deletar `client_contacts` |
-| `supabase/functions/create-client-user/index.ts` | Melhorar mensagem de erro para `email_exists` |
-| Limpeza manual | Remover usuário auth órfão do thais.dickel |
-
-## Riscos
-
-- A edge function `delete-user` valida que o chamador é admin. Isso é compatível pois apenas staff pode gerenciar contatos de clientes.
-- O cascade do `auth.admin.deleteUser` já remove profiles e user_roles automaticamente.
+| `src/hooks/useAuth.tsx` | Adicionar `emailRedirectTo` ao `signUp` |
+| `src/pages/Register.tsx` | Corrigir mensagem de sucesso pós-cadastro |
+| `src/pages/Login.tsx` | Traduzir erro "Email not confirmed" |
 
