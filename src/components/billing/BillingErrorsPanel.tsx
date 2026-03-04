@@ -196,8 +196,29 @@ export function BillingErrorsPanel() {
     }
   };
 
-  const handleReprocessNfse = async (nfse: ErrorNfse) => {
+  const handleRetryFailedAndReemit = async (nfse: ErrorNfse) => {
     setReprocessingId(nfse.id);
+    try {
+      // Step 1: Cancel/clean the failed invoice in Asaas
+      const { error: retryErr } = await supabase.functions.invoke("asaas-nfse", {
+        body: { action: "retry_failed", nfse_history_id: nfse.id },
+      });
+      if (retryErr) throw retryErr;
+
+      // Step 2: Re-emit with force_new_emission
+      await handleReprocessNfse(nfse, true);
+      toast.success("Nota anterior cancelada. Reemissão em andamento.");
+    } catch (e: unknown) {
+      toast.error("Erro ao cancelar e reemitir", { description: getErrorMessage(e) });
+      // Reset status back to erro if retry failed
+      await supabase.from("nfse_history").update({ status: "erro" }).eq("id", nfse.id);
+    } finally {
+      setReprocessingId(null);
+    }
+  };
+
+  const handleReprocessNfse = async (nfse: ErrorNfse, forceNew = false) => {
+    if (!forceNew) setReprocessingId(nfse.id);
     try {
       await supabase.from("nfse_history").update({ status: "processando" }).eq("id", nfse.id);
       const isStandalone = !nfse.contract_id;
@@ -228,16 +249,17 @@ export function BillingErrorsPanel() {
           value: nfse.valor_servico,
           service_description: nfse.descricao_servico,
           municipal_service_code: nfse.codigo_tributacao || undefined,
+          ...(forceNew ? { force_new_emission: true } : {}),
           ...taxParams,
         },
       });
       if (error) throw error;
-      toast.success("NFS-e reenviada para processamento");
+      if (!forceNew) toast.success("NFS-e reenviada para processamento");
       invalidateAll();
     } catch (e: unknown) {
       toast.error("Erro ao reprocessar", { description: getErrorMessage(e) });
     } finally {
-      setReprocessingId(null);
+      if (!forceNew) setReprocessingId(null);
     }
   };
 
@@ -575,15 +597,31 @@ export function BillingErrorsPanel() {
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {isDuplicate ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs"
-                                onClick={() => setLinkNfse(nfse as any)}
-                              >
-                                <Link2 className="h-3 w-3 mr-1" />
-                                Vincular
-                              </Button>
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  disabled={reprocessingId === nfse.id}
+                                  onClick={() => handleRetryFailedAndReemit(nfse)}
+                                >
+                                  {reprocessingId === nfse.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3 w-3 mr-1" />
+                                  )}
+                                  Cancelar e Reemitir
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => setLinkNfse(nfse as unknown as NfseWithRelations)}
+                                >
+                                  <Link2 className="h-3 w-3 mr-1" />
+                                  Vincular
+                                </Button>
+                              </>
                             ) : (
                               <Button
                                 variant="outline"

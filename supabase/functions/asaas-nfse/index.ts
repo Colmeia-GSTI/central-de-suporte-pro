@@ -551,7 +551,9 @@ Deno.serve(async (req) => {
         // ============ PRE-EMISSION VALIDATION FOR RE-EMISSION ============
         // If nfse_history_id provided, check if it already has an asaas_invoice_id
         // This prevents E0014 (DPS duplicada) errors when re-emitting
-        if (nfse_history_id) {
+        // Skip this check if force_new_emission is set (used after retry_failed)
+        const force_new_emission = params.force_new_emission === true;
+        if (nfse_history_id && !force_new_emission) {
           const { data: existing, error: existingError } = await supabase
             .from("nfse_history")
             .select("asaas_invoice_id, asaas_status, status, numero_nfse")
@@ -2043,6 +2045,76 @@ Deno.serve(async (req) => {
             status: payment.status,
             boleto_url: payment.bankSlipUrl,
             invoice_url: payment.invoiceUrl,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "retry_failed": {
+        // Cancels/deletes a failed invoice in Asaas (e.g. E0014 false positive),
+        // clears asaas_invoice_id, resets status to "pendente" so user can re-emit.
+        const { nfse_history_id: retryHistoryId } = params;
+        if (!retryHistoryId) {
+          throw new AsaasApiError("nfse_history_id é obrigatório", 400, "MISSING_PARAM");
+        }
+
+        const { data: nfseRecord, error: fetchErr } = await supabase
+          .from("nfse_history")
+          .select("id, asaas_invoice_id, status, client_id, invoice_id")
+          .eq("id", retryHistoryId)
+          .single();
+
+        if (fetchErr || !nfseRecord) {
+          throw new AsaasApiError(ERROR_CODES.RECORD_NOT_FOUND, 404, "RECORD_NOT_FOUND");
+        }
+
+        // Try to delete the failed invoice in Asaas if it exists
+        if (nfseRecord.asaas_invoice_id) {
+          try {
+            await asaasRequest(settings, `/invoices/${nfseRecord.asaas_invoice_id}`, "DELETE", undefined, correlationId);
+            log(correlationId, "info", "Invoice com erro deletada no Asaas", { asaas_invoice_id: nfseRecord.asaas_invoice_id });
+          } catch (deleteErr) {
+            // Log but don't block — the invoice may already be gone or in a non-deletable state
+            log(correlationId, "warn", "Falha ao deletar invoice no Asaas (prosseguindo com limpeza local)", {
+              error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+              asaas_invoice_id: nfseRecord.asaas_invoice_id,
+            });
+          }
+        }
+
+        // Clear asaas_invoice_id and reset status
+        await supabase
+          .from("nfse_history")
+          .update({
+            asaas_invoice_id: null,
+            asaas_status: null,
+            status: "pendente",
+            mensagem_retorno: null,
+            codigo_retorno: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", retryHistoryId);
+
+        // Clear nfse error on linked invoice
+        if (nfseRecord.invoice_id) {
+          await supabase
+            .from("invoices")
+            .update({ nfse_status: null, nfse_error_msg: null, updated_at: new Date().toISOString() })
+            .eq("id", nfseRecord.invoice_id);
+        }
+
+        await logNfseEvent(supabase, retryHistoryId, "retry_failed", "info",
+          "Invoice com erro cancelada/limpa para permitir reemissão",
+          correlationId, { old_asaas_id: nfseRecord.asaas_invoice_id });
+
+        log(correlationId, "info", "retry_failed concluído com sucesso", { nfse_history_id: retryHistoryId });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: "Registro limpo. Pronto para reemissão.",
+            nfse_history_id: retryHistoryId,
             correlation_id: correlationId,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
