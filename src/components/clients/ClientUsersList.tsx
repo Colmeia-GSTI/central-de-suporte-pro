@@ -168,6 +168,26 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Buscar o contato para verificar se tem user_id vinculado
+      const { data: contact, error: fetchError } = await supabase
+        .from("client_contacts")
+        .select("id, user_id")
+        .eq("id", id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Se tem user_id, excluir o usuário auth primeiro (cascateia para profiles e user_roles)
+      if (contact.user_id) {
+        const { data: deleteResult, error: fnError } = await supabase.functions.invoke("delete-user", {
+          body: { user_id: contact.user_id },
+        });
+
+        if (fnError) throw fnError;
+        if (deleteResult?.error) throw new Error(deleteResult.error);
+      }
+
+      // Deletar o registro client_contacts
       const { error } = await supabase
         .from("client_contacts")
         .delete()
@@ -181,6 +201,7 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
       setDeleteConfirm(null);
     },
     onError: (error: Error) => {
+      console.error("[DeleteClientUser] Falha ao remover usuário:", error);
       toast({ 
         title: "Erro ao remover usuário", 
         description: error.message,
