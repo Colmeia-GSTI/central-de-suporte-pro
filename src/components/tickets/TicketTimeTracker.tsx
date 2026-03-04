@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
@@ -36,7 +35,6 @@ import {
   Plus,
   Clock,
   Trash2,
-  DollarSign,
   User,
   ChevronDown,
   ChevronUp,
@@ -88,7 +86,6 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
   const [manualHours, setManualHours] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
   const [manualDescription, setManualDescription] = useState("");
-  const [manualBillable, setManualBillable] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
@@ -96,7 +93,7 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
   const queryClient = useQueryClient();
 
   // Fetch time entries
-  const { data: timeEntries = [], isLoading } = useQuery({
+  const { data: timeEntries = [] } = useQuery({
     queryKey: ["ticket-time-entries", ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -122,9 +119,6 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
   });
 
   const totalMinutes = timeEntries.reduce((sum, entry) => sum + entry.duration_minutes, 0);
-  const billableMinutes = timeEntries
-    .filter((entry) => entry.is_billable)
-    .reduce((sum, entry) => sum + entry.duration_minutes, 0);
 
   useEffect(() => {
     if (isRunning) {
@@ -186,7 +180,7 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
         duration_minutes: totalMins,
         description: manualDescription || null,
         entry_type: "manual",
-        is_billable: manualBillable,
+        is_billable: true,
       });
       if (error) throw error;
     },
@@ -251,7 +245,6 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
     setManualHours("");
     setManualMinutes("");
     setManualDescription("");
-    setManualBillable(true);
   };
 
   return (
@@ -264,12 +257,6 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
             <span className="font-medium">{formatDuration(totalMinutes)}</span>
             <span className="text-muted-foreground">total</span>
           </div>
-          {billableMinutes > 0 && (
-            <div className="flex items-center gap-1 text-sm text-green-600">
-              <DollarSign className="h-3 w-3" />
-              <span>{formatDuration(billableMinutes)}</span>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -350,17 +337,6 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
                     rows={3}
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="billable"
-                    checked={manualBillable}
-                    onCheckedChange={setManualBillable}
-                  />
-                  <Label htmlFor="billable" className="flex items-center gap-1">
-                    <DollarSign className="h-3 w-3" />
-                    Faturável
-                  </Label>
-                </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setIsManualDialogOpen(false)}>
                     Cancelar
@@ -421,14 +397,9 @@ export function TicketTimeTracker({ ticketId }: TicketTimeTrackerProps) {
                         </Badge>
                       </TableCell>
                       <TableCell className="py-2">
-                        <div className="flex items-center gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            {entry.entry_type === "stopwatch" ? "⏱" : "✍"}
-                          </Badge>
-                          {entry.is_billable && (
-                            <DollarSign className="h-3 w-3 text-green-600" />
-                          )}
-                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {entry.entry_type === "stopwatch" ? "⏱" : "✍"}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate py-2">
                         {entry.description || "—"}
