@@ -288,11 +288,11 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
     onError: (error: unknown) => {
       const msg = error instanceof Error ? error.message : String(error);
       
-      // Detect E0014 - DPS Duplicada
+      // Detect E0014 - DPS Duplicada: offer cancel and re-emit
       if (msg.includes("E0014") || msg.includes("DPS_DUPLICADA") || msg.includes("Vincular Nota")) {
-        toast.error("Esta nota já existe no provedor", {
-          description: "Use 'Vincular Nota Existente' para sincronizar o registro.",
-          duration: 8000,
+        toast.error("Nota com erro E0014 (DPS duplicada)", {
+          description: "Clique em 'Cancelar e Reemitir' no painel de erros, ou use 'Vincular Nota Existente' se a nota já existe.",
+          duration: 10000,
         });
       } else {
         toast.error("Erro ao reenviar", { description: msg });
