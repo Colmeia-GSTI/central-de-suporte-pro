@@ -84,6 +84,47 @@ const parseCompetencia = (competencia: string | null): string => {
   return competencia;
 };
 
+const isE0014Error = (message: string): boolean =>
+  message.includes("E0014") || message.includes("DPS_DUPLICADA") || message.includes("Vincular Nota");
+
+const extractFunctionErrorMessage = async (error: unknown, fallback: string): Promise<string> => {
+  const err = error as {
+    message?: string;
+    context?: { body?: ReadableStream<Uint8Array> };
+  };
+
+  if (err?.context?.body) {
+    try {
+      const reader = err.context.body.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) chunks.push(value);
+      }
+
+      const merged = new Uint8Array(chunks.reduce((acc, c) => acc + c.length, 0));
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      const parsed = JSON.parse(new TextDecoder().decode(merged)) as {
+        error?: string;
+        code?: string;
+      };
+
+      if (parsed?.error && parsed?.code) return `${parsed.code}: ${parsed.error}`;
+      if (parsed?.error) return parsed.error;
+    } catch {
+      // fallback below
+    }
+  }
+
+  return String(err?.message || fallback);
+};
+
 export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
   const queryClient = useQueryClient();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -231,72 +272,80 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
   // Resend mutation - uses EDITED values
   const resendMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
-        body: {
-          action: "emit",
-          client_id: nfse.client_id,
-          value: valor,
-          service_description: descricao,
-          nfse_history_id: nfse.id,
-          contract_id: nfse.contract_id || undefined,
-          competencia: competencia,
-          municipal_service_code: codigoTributacao || nfse.codigo_tributacao || undefined,
-          retain_iss: tributacao.issRetido,
-          iss_rate: tributacao.aliquotaIss,
-          pis_value: tributacao.valorPis,
-          cofins_value: tributacao.valorCofins,
-          csll_value: tributacao.valorCsll,
-          irrf_value: tributacao.valorIrrf,
-          inss_value: tributacao.valorInss,
-        },
-      });
-      
-      if (error) {
-        // For FunctionsHttpError (409, etc.), try to extract the JSON body
-        if (error.context?.body) {
-          try {
-            const reader = error.context.body.getReader?.();
-            if (reader) {
-              const { value } = await reader.read();
-              const text = new TextDecoder().decode(value);
-              const parsed = JSON.parse(text);
-              throw new Error(parsed.error || error.message);
-            }
-          } catch (parseErr) {
-            if (parseErr instanceof Error && parseErr.message !== error.message) {
-              throw parseErr;
-            }
-          }
+      const invokeEmit = async (forceNewEmission = false) => {
+        const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+          body: {
+            action: "emit",
+            client_id: nfse.client_id,
+            value: valor,
+            service_description: descricao,
+            nfse_history_id: nfse.id,
+            contract_id: nfse.contract_id || undefined,
+            competencia: competencia,
+            municipal_service_code: codigoTributacao || nfse.codigo_tributacao || undefined,
+            retain_iss: tributacao.issRetido,
+            iss_rate: tributacao.aliquotaIss,
+            pis_value: tributacao.valorPis,
+            cofins_value: tributacao.valorCofins,
+            csll_value: tributacao.valorCsll,
+            irrf_value: tributacao.valorIrrf,
+            inss_value: tributacao.valorInss,
+            ...(forceNewEmission ? { force_new_emission: true } : {}),
+          },
+        });
+
+        if (error) {
+          const parsedMsg = await extractFunctionErrorMessage(error, "Erro ao reenviar NFS-e");
+          throw new Error(parsedMsg);
         }
-        // Fallback: check if data was returned despite error flag
-        if (data && typeof data === "object" && "error" in data) {
-          throw new Error(String(data.error));
+
+        if (!data?.success) {
+          throw new Error(data?.error || "Erro ao reenviar NFS-e");
         }
-        throw new Error(String(error.message || error));
+
+        return data;
+      };
+
+      try {
+        return await invokeEmit(false);
+      } catch (initialError) {
+        const initialMessage = initialError instanceof Error ? initialError.message : String(initialError);
+
+        // E0014 can be false-positive: cleanup failed invoice and force new emission
+        if (!isE0014Error(initialMessage)) {
+          throw initialError;
+        }
+
+        const { error: retryError } = await supabase.functions.invoke("asaas-nfse", {
+          body: {
+            action: "retry_failed",
+            nfse_history_id: nfse.id,
+          },
+        });
+
+        if (retryError) {
+          const retryMessage = await extractFunctionErrorMessage(retryError, "Erro ao limpar nota com falha");
+          throw new Error(retryMessage);
+        }
+
+        const forcedResult = await invokeEmit(true);
+        return { ...forcedResult, recovered_e0014: true };
       }
-      if (!data.success) throw new Error(data.error || "Erro ao reenviar NFS-e");
-      return data;
     },
     onSuccess: (data) => {
-      toast.success("NFS-e reenviada para processamento", {
-        description: `ID: ${data.invoice_id || data.history_id}`,
-      });
+      toast.success(
+        data?.recovered_e0014 ? "Nota anterior limpa e reemitida" : "NFS-e reenviada para processamento",
+        {
+          description: `ID: ${data.invoice_id || data.history_id}`,
+        }
+      );
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       onRefresh();
     },
     onError: (error: unknown) => {
       const msg = error instanceof Error ? error.message : String(error);
-      
-      // Detect E0014 - DPS Duplicada: offer cancel and re-emit
-      if (msg.includes("E0014") || msg.includes("DPS_DUPLICADA") || msg.includes("Vincular Nota")) {
-        toast.error("Nota com erro E0014 (DPS duplicada)", {
-          description: "Clique em 'Cancelar e Reemitir' no painel de erros, ou use 'Vincular Nota Existente' se a nota já existe.",
-          duration: 10000,
-        });
-      } else {
-        toast.error("Erro ao reenviar", { description: msg });
-      }
+      toast.error("Erro ao reenviar", { description: msg });
     },
   });
 
