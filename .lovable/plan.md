@@ -1,63 +1,50 @@
 
-# Correcao Automatizada - Fatura Quaza (Vencimento 07 para 14)
 
-## Dados Identificados
+# Username Case-Insensitive -- Plano de Correção
 
-| Item | Valor |
-|---|---|
-| Contrato | Gestao de TI - Remoto (`2bc9ffab-...`) |
-| billing_day atual | 7 |
-| Fatura | #57 (`36e4ab47-...`) - R$ 650,00 |
-| Vencimento atual | 07/03/2026 |
-| Boleto | Banco Inter, status "enviado", com barcode e PDF |
-| codigoSolicitacao | `05b4be38-b160-4242-ad7e-41ba10d9720a` |
+## Problema
 
-## Etapas da Correcao
+Usernames são armazenados e comparados de forma case-sensitive. Se um usuario for criado como "Joao.Silva", o login com "joao.silva" falha.
 
-### Etapa 1: Atualizar contrato
-Alterar `billing_day` de 7 para 14 no contrato, para que futuras faturas sejam geradas com vencimento no dia 14.
+## Pontos de Correção
+
+Existem **5 pontos** onde o username precisa ser normalizado para lowercase:
+
+### 1. Frontend -- Formulário de criação (`ClientUsersList.tsx`)
+Normalizar o username para lowercase antes de enviar ao backend. Adicionar `.toLowerCase()` no `onSubmit`.
+
+### 2. Edge Function `create-client-user/index.ts`
+- Normalizar `username` para lowercase após validação do Zod (linha 113)
+- A busca de unicidade (linha 137) já usa `.eq()` que é case-sensitive -- com lowercase garantido, fica consistente
+- O email sintético (linha 158) já usa o username, que agora será lowercase
+
+### 3. Edge Function `resolve-username/index.ts`
+- Normalizar o username recebido para lowercase antes da busca (linha 78): `.eq("username", username.toLowerCase())`
+
+### 4. Edge Function `forgot-password/index.ts`
+- Normalizar o identifier para lowercase quando for username (linha 109): `.eq("username", identifier.toLowerCase())`
+
+### 5. Login (`Login.tsx`)
+- Normalizar o username para lowercase antes de enviar ao `resolve-username` (linha 38): `body: { username: loginIdentifier.toLowerCase() }`
+
+### 6. Migração SQL -- Corrigir dados existentes
+Normalizar todos os usernames existentes no banco:
 
 ```sql
-UPDATE contracts SET billing_day = 14, updated_at = now()
-WHERE id = '2bc9ffab-b382-4d77-b821-e40460f985ef';
+UPDATE client_contacts
+SET username = LOWER(username)
+WHERE username IS NOT NULL
+  AND username != LOWER(username);
 ```
 
-### Etapa 2: Cancelar boleto antigo no Banco Inter
-Invocar a Edge Function `banco-inter` com action `cancel` para cancelar o boleto no provedor, usando o `codigoSolicitacao` ja armazenado na fatura.
+## Arquivos modificados
 
-### Etapa 3: Atualizar fatura
-Alterar o `due_date` para 14/03/2026 e limpar os campos do boleto cancelado para permitir a geracao de um novo.
-
-```sql
-UPDATE invoices SET
-  due_date = '2026-03-14',
-  boleto_url = NULL,
-  boleto_barcode = NULL,
-  boleto_status = NULL,
-  boleto_sent_at = NULL,
-  boleto_error_msg = NULL,
-  auto_payment_generated = false,
-  updated_at = now()
-WHERE id = '36e4ab47-7c23-44d5-98fa-90a63faf4093';
-```
-
-### Etapa 4: Gerar novo boleto
-Invocar a Edge Function `banco-inter` para gerar um novo boleto com vencimento 14/03/2026.
-
-### Etapa 5: Registrar auditoria
-Inserir registro em `audit_logs` documentando a correcao realizada.
-
-## Resumo
-
-| Acao | Detalhe |
+| Arquivo | Ação |
 |---|---|
-| Contrato | billing_day: 7 -> 14 |
-| Fatura #57 | due_date: 07/03 -> 14/03 |
-| Boleto antigo | Cancelado no Banco Inter |
-| Boleto novo | Gerado com vencimento 14/03 |
-| Auditoria | Registrada |
+| `src/components/clients/ClientUsersList.tsx` | Normalizar username no submit |
+| `supabase/functions/create-client-user/index.ts` | Normalizar username no backend |
+| `supabase/functions/resolve-username/index.ts` | Busca case-insensitive |
+| `supabase/functions/forgot-password/index.ts` | Busca case-insensitive |
+| `src/pages/Login.tsx` | Normalizar input antes de enviar |
+| Migração SQL | Corrigir usernames existentes |
 
-## Riscos e Mitigacoes
-
-- O cancelamento do boleto depende da API do Banco Inter estar disponivel. Se falhar, o boleto antigo continua valido ate o vencimento e a geracao do novo sera tentada apos a limpeza dos campos.
-- O cliente deve ser informado do novo boleto (envio de notificacao pode ser feito apos a geracao).
