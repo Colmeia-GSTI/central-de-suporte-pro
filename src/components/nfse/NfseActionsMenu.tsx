@@ -251,7 +251,29 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
         },
       });
       
-      if (error) throw error;
+      if (error) {
+        // For FunctionsHttpError (409, etc.), try to extract the JSON body
+        if (error.context?.body) {
+          try {
+            const reader = error.context.body.getReader?.();
+            if (reader) {
+              const { value } = await reader.read();
+              const text = new TextDecoder().decode(value);
+              const parsed = JSON.parse(text);
+              throw new Error(parsed.error || error.message);
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message !== error.message) {
+              throw parseErr;
+            }
+          }
+        }
+        // Fallback: check if data was returned despite error flag
+        if (data && typeof data === "object" && "error" in data) {
+          throw new Error(String(data.error));
+        }
+        throw new Error(String(error.message || error));
+      }
       if (!data.success) throw new Error(data.error || "Erro ao reenviar NFS-e");
       return data;
     },
@@ -263,8 +285,18 @@ export function NfseActionsMenu({ nfse, onRefresh }: NfseActionsMenuProps) {
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       onRefresh();
     },
-    onError: (error: Error) => {
-      toast.error("Erro ao reenviar", { description: error.message });
+    onError: (error: unknown) => {
+      const msg = error instanceof Error ? error.message : String(error);
+      
+      // Detect E0014 - DPS Duplicada
+      if (msg.includes("E0014") || msg.includes("DPS_DUPLICADA") || msg.includes("Vincular Nota")) {
+        toast.error("Esta nota já existe no provedor", {
+          description: "Use 'Vincular Nota Existente' para sincronizar o registro.",
+          duration: 8000,
+        });
+      } else {
+        toast.error("Erro ao reenviar", { description: msg });
+      }
     },
   });
 
