@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX idx_client_contacts_username_lower ON client_contacts (LOWER(username)) WHERE username IS NOT NULL;
