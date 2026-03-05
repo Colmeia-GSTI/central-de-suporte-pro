@@ -30,11 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2 } from "lucide-react";
+import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
 import { UserForm } from "./UserForm";
+import { UserProfileSheet } from "./UserProfileSheet";
 import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -73,6 +74,7 @@ export function UsersTab() {
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<ProfileWithRoles | null>(null);
   const [linkClientUser, setLinkClientUser] = useState<ProfileWithRoles | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [editProfileUser, setEditProfileUser] = useState<ProfileWithRoles | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -438,7 +440,12 @@ export function UsersTab() {
                   const isConfirmed = confirmationStatus[user.user_id] ?? true;
                   return (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.full_name}</TableCell>
+                      <TableCell
+                        className="font-medium cursor-pointer hover:underline hover:text-primary transition-colors"
+                        onClick={() => can("users", "edit") && setEditProfileUser(user)}
+                      >
+                        {user.full_name}
+                      </TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
                         {isConfirmed ? (
@@ -497,6 +504,22 @@ export function UsersTab() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <PermissionGate module="users" action="edit">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => setEditProfileUser(user)}
+                                  aria-label="Editar perfil"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Editar Perfil</TooltipContent>
+                            </Tooltip>
+                          </PermissionGate>
                           <PermissionGate module="users" action="edit">
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -703,6 +726,13 @@ export function UsersTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* User Profile Edit Sheet */}
+        <UserProfileSheet
+          userId={editProfileUser?.user_id ?? null}
+          userRoles={editProfileUser?.user_roles.map(r => r.role)}
+          open={!!editProfileUser}
+          onOpenChange={(open) => !open && setEditProfileUser(null)}
+        />
       </CardContent>
     </Card>
   );
