@@ -100,7 +100,7 @@ export function LogsViewerTab() {
     queryFn: async () => {
       let query = supabase
         .from("application_logs")
-        .select("*")
+        .select("id, level, module, action, message, execution_id, duration_ms, created_at, context, error_details")
         .order("created_at", { ascending: false })
         .limit(100);
 

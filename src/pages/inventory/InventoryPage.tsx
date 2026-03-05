@@ -125,7 +125,7 @@ export default function InventoryPage() {
       // Query the safe view which masks license_key
       const { data: licensesData, error: licensesError } = await supabase
         .from("software_licenses_safe")
-        .select("*")
+        .select("id, name, vendor, license_key, expire_date, max_activations, current_activations, client_id, status")
         .order("name");
 
       if (licensesError) throw licensesError;

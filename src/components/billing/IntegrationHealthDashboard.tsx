@@ -75,7 +75,7 @@ export function IntegrationHealthDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_incident_slas")
-        .select("*")
+        .select("id, incident_type, sla_hours, is_active")
         .eq("is_active", true);
       if (error) throw error;
       return data;
@@ -169,7 +169,7 @@ export function IntegrationHealthDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("storage_retention_policies")
-        .select("*")
+        .select("id, bucket_name, retention_days, is_active")
         .eq("bucket_name", "nfse-files")
         .maybeSingle();
       if (error) throw error;

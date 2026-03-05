@@ -84,7 +84,7 @@ export function SubcategoriesSection({ categories }: SubcategoriesSectionProps) 
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_subcategories")
-        .select("*")
+        .select("id, name, category_id, is_active")
         .order("name");
       if (error) throw error;
       return data as Subcategory[];

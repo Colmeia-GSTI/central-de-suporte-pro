@@ -31,7 +31,7 @@ export function BillingBankAccountsTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bank_accounts")
-        .select("*")
+        .select("id, name, bank_name, agency, account_number, account_type, initial_balance, current_balance, is_active, created_at")
         .order("name");
       if (error) throw error;
       return data as BankAccount[];

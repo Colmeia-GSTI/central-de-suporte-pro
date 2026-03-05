@@ -78,7 +78,7 @@ export function ContractAdditionalChargeDialog({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contract_additional_charges")
-        .select("*")
+        .select("id, contract_id, description, amount, reference_month, applied, applied_invoice_id, created_by, created_at")
         .eq("contract_id", contractId)
         .order("reference_month", { ascending: false });
       if (error) throw error;

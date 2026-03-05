@@ -22,7 +22,7 @@ export function BankAccountSelector({ value, onChange }: BankAccountSelectorProp
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bank_accounts")
-        .select("*")
+        .select("id, name, bank_name, current_balance")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;

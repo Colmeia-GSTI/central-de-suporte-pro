@@ -81,7 +81,7 @@ export function TagsTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_tags")
-        .select("*")
+        .select("id, name, color, is_system")
         .order("is_system", { ascending: false })
         .order("name");
       if (error) throw error;

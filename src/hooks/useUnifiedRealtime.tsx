@@ -34,13 +34,6 @@ interface NotificationPayload {
   created_at: string;
 }
 
-interface AlertPayload {
-  id: string;
-  title: string;
-  message: string;
-  level: string;
-  device_id: string;
-}
 
 const priorityConfig = {
   critical: { 
@@ -252,65 +245,27 @@ export function useUnifiedRealtime() {
     }
   }, [user, invalidateQueries, playNotificationSound]);
 
-  // Handle alert events
-  const handleAlertEvent = useCallback((payload: { new: AlertPayload }) => {
-    const alert = payload.new;
-    
-    invalidateQueries([
-      ["monitoring-alerts"],
-      ["alerts"],
-      ["devices"],
-    ]);
-
-    const levelConfig = {
-      critical: { icon: AlertTriangle, color: "text-destructive", label: "Crítico" },
-      warning: { icon: AlertTriangle, color: "text-warning", label: "Aviso" },
-      info: { icon: Bell, color: "text-primary", label: "Info" },
-    };
-    
-    const config = levelConfig[alert.level as keyof typeof levelConfig] || levelConfig.info;
-    const LevelIcon = config.icon;
-    
-    toast(`🚨 Alerta de Monitoramento`, {
-      description: (
-        <div className="flex flex-col gap-1 mt-1">
-          <p className="text-sm font-medium">{alert.title}</p>
-          <p className="text-xs text-muted-foreground">{alert.message}</p>
-          <span className={`text-xs ${config.color}`}>
-            <LevelIcon className="inline h-3 w-3 mr-1" />
-            {config.label}
-          </span>
-        </div>
-      ),
-      duration: 8000,
-      action: {
-        label: "Ver",
-        onClick: () => window.location.href = "/monitoring",
-      },
-    });
-    
-    if (alert.level === "critical") {
-      playNotificationSound();
-    }
-  }, [invalidateQueries, playNotificationSound]);
-
-  // Handle device events
-  const handleDeviceEvent = useCallback(() => {
-    invalidateQueries([["devices"]]);
-  }, [invalidateQueries]);
 
   useEffect(() => {
     // Only subscribe for staff users to reduce overhead for clients
     if (!user || !isStaff) return;
 
     // Single multiplexed channel for essential realtime events only
-    // Removed: monitoring_alerts, monitored_devices (now polled hourly)
+    // Tickets: INSERT + UPDATE only (no DELETE tracking needed)
+    // Notifications: INSERT only, filtered by user_id
     const channel = supabase
       .channel("unified-realtime")
-      // Tickets - all events (essential for helpdesk)
+      // Tickets - INSERT events (new tickets)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "tickets" },
+        { event: "INSERT", schema: "public", table: "tickets" },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        handleTicketEvent as (payload: any) => void
+      )
+      // Tickets - UPDATE events (status changes, assignments)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tickets" },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         handleTicketEvent as (payload: any) => void
       )

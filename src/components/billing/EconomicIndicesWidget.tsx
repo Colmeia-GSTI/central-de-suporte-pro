@@ -27,7 +27,7 @@ export function EconomicIndicesWidget() {
     queryFn: async () => {
       const { data } = await supabase
         .from("economic_indices")
-        .select("*")
+        .select("id, index_type, reference_date, value, accumulated_12m, fetched_at")
         .in("index_type", ["IGPM", "IPCA", "INPC"])
         .order("reference_date", { ascending: false })
         .limit(10);

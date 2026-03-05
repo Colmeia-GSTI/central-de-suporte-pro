@@ -61,7 +61,7 @@ export function EmailTemplateEditor({ template, onBack }: EmailTemplateEditorPro
     queryFn: async () => {
       const { data, error } = await supabase
         .from("email_settings")
-        .select("*")
+        .select("id, logo_url, primary_color, secondary_color, footer_text, show_social_links, social_links")
         .limit(1)
         .single();
       
