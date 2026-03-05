@@ -34,13 +34,6 @@ interface NotificationPayload {
   created_at: string;
 }
 
-interface AlertPayload {
-  id: string;
-  title: string;
-  message: string;
-  level: string;
-  device_id: string;
-}
 
 const priorityConfig = {
   critical: { 
