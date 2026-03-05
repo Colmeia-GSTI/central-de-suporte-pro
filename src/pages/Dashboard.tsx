@@ -47,6 +47,7 @@ export default function Dashboard() {
     !roles.includes("manager");
 
   const isAdmin = roles.includes("admin");
+  const isAdminOrTechnician = roles.includes("admin") || roles.includes("technician");
   const { data: stats, isLoading } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async (): Promise<DashboardStats> => {
@@ -115,7 +116,6 @@ export default function Dashboard() {
       const { data, error } = await supabase.rpc("get_weekly_ticket_trend");
       
       if (error) {
-        // Fallback to empty array silently
         return [];
       }
       
@@ -125,7 +125,8 @@ export default function Dashboard() {
         resolved: Number(row.resolved) || 0,
       }));
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: isAdminOrTechnician,
+    staleTime: 1000 * 60 * 5,
   });
 
   const allStatCards = [
@@ -195,22 +196,24 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TicketStatusChart
-            data={{
-              open: stats?.openTickets ?? 0,
-              inProgress: stats?.inProgressTickets ?? 0,
-              waiting: stats?.waitingTickets ?? 0,
-              resolved: stats?.resolvedToday ?? 0,
-            }}
-            isLoading={isLoading}
-          />
-          <WeeklyTrendChart
-            data={weeklyData || []}
-            isLoading={isLoadingWeekly}
-          />
-        </div>
+        {/* Charts Row — only for admin/technician */}
+        {isAdminOrTechnician && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <TicketStatusChart
+              data={{
+                open: stats?.openTickets ?? 0,
+                inProgress: stats?.inProgressTickets ?? 0,
+                waiting: stats?.waitingTickets ?? 0,
+                resolved: stats?.resolvedToday ?? 0,
+              }}
+              isLoading={isLoading}
+            />
+            <WeeklyTrendChart
+              data={weeklyData || []}
+              isLoading={isLoadingWeekly}
+            />
+          </div>
+        )}
 
         {/* Recent Tickets */}
         <RecentTicketsList
