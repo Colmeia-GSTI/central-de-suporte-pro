@@ -1,9 +1,8 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "https://suporte.colmeiagsti.com",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -71,53 +70,33 @@ function validateEmail(email: string): boolean {
   return EMAIL_REGEX.test(email);
 }
 
-// Send email via SMTP
+// Send email via send-email-smtp edge function (delegates to the unified SMTP sender)
 async function sendEmail(
-  settings: {
-    host: string;
-    port: number;
-    username: string;
-    password: string;
-    from_email: string;
-    from_name: string;
-    use_tls: boolean;
-  },
+  // deno-lint-ignore no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
   to: string | string[],
   subject: string,
   html: string,
-  text?: string
+  _text?: string
 ): Promise<NotificationResult> {
   try {
     const emails = Array.isArray(to) ? to : [to];
 
-    // Validate all emails before sending
     for (const email of emails) {
       if (!validateEmail(email)) {
         return { channel: "email", success: false, error: `Email inválido: ${email}` };
       }
     }
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: settings.host,
-        port: settings.port || 587,
-        tls: settings.port === 465 || settings.use_tls !== false,
-        auth: {
-          username: settings.username,
-          password: settings.password,
-        },
-      },
+    const { data, error } = await supabase.functions.invoke("send-email-smtp", {
+      body: { to: emails, subject, html },
     });
 
-    await client.send({
-      from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
-      to: emails,
-      subject,
-      content: text || html.replace(/<[^>]*>/g, ""),
-      html,
-    });
+    if (error || data?.error) {
+      const errMsg = data?.error || error?.message || "Erro ao enviar email";
+      return { channel: "email", success: false, error: errMsg };
+    }
 
-    await client.close();
     return { channel: "email", success: true };
   } catch (error) {
     console.error("Email send error:", error);
@@ -265,25 +244,12 @@ Deno.serve(async (req) => {
             results.push({ channel: "email", success: false, error: "SMTP não configurado ou inativo" });
             break;
           }
-          const smtpSettings = smtp.settings as {
-            host: string;
-            port: number;
-            username: string;
-            password: string;
-            from_email: string;
-            from_name: string;
-            use_tls: boolean;
-          };
-          if (!smtpSettings.host || !smtpSettings.username || !smtpSettings.password) {
-            results.push({ channel: "email", success: false, error: "Configuração SMTP incompleta" });
-            break;
-          }
           if (!request.email_to || !request.email_subject || !request.email_html) {
             results.push({ channel: "email", success: false, error: "Campos de email incompletos" });
             break;
           }
           promises.push(
-            sendEmail(smtpSettings, request.email_to, request.email_subject, request.email_html, request.email_text)
+            sendEmail(supabase, request.email_to, request.email_subject, request.email_html, request.email_text)
           );
           break;
         }
@@ -362,12 +328,10 @@ Deno.serve(async (req) => {
         if (result.status === "fulfilled") {
           results.push(result.value);
         } else {
-          // Handle rejected promises
+          // Handle rejected promises - the channel info comes from the NotificationResult shape
           console.error("Promise rejected:", result.reason);
-          // Add a failure result for the rejected promise
-          const channel = results[results.length] ? results[results.length].channel : "unknown";
           results.push({
-            channel,
+            channel: "unknown",
             success: false,
             error: result.reason instanceof Error ? result.reason.message : "Unknown error",
           });
