@@ -1,46 +1,39 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+## Plano: Sheet de Edição de Perfil do Usuário na Gestão de Usuários
 
-## Problema
+### Objetivo
+Ao clicar no nome do usuário na tabela de `UsersTab`, abrir um `Sheet` lateral com os dados editáveis do perfil (nome, email, telefone, WhatsApp, Telegram), permitindo correções rápidas sem sair da página.
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+### Mudanças
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+**1. Criar `UserProfileSheet.tsx`** (`src/components/settings/UserProfileSheet.tsx`)
+- Sheet lateral (Shadcn `Sheet`) que recebe o `user_id` e carrega o perfil completo da tabela `profiles`
+- Campos editáveis: `full_name`, `email`, `phone`, `whatsapp_number`, `telegram_chat_id`
+- Mutation para `supabase.from("profiles").update(...)` com invalidação de `["users-with-roles"]`
+- Se o email do auth precisar ser atualizado, isso NÃO será feito (requer admin API) — apenas o email no perfil
+- Validação com formatação de telefone e feedback via toast
 
-## Solução
+**2. Modificar `UsersTab.tsx`**
+- Adicionar estado `editProfileUser` para controlar qual usuário está com o Sheet aberto
+- Tornar o nome do usuário na `TableCell` clicável (cursor-pointer, hover underline)
+- `onClick` no nome → abre o Sheet com os dados daquele usuário
+- Adicionar ícone de edição (Pencil) nos botões de ação como atalho alternativo
+- Importar e renderizar `<UserProfileSheet />`
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+### Campos do Sheet
+| Campo | Origem | Editável |
+|-------|--------|----------|
+| Nome completo | `profiles.full_name` | Sim |
+| Email | `profiles.email` | Sim (apenas perfil) |
+| Telefone | `profiles.phone` | Sim |
+| WhatsApp | `profiles.whatsapp_number` | Sim |
+| Telegram ID | `profiles.telegram_chat_id` | Sim |
+| Papéis | `user_roles` | Somente leitura (badges) |
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
-
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
-
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
-
-## Arquivos modificados
-
-| Arquivo | Ação |
-|---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
+### Detalhes Técnicos
+- Query: `select('full_name, email, phone, whatsapp_number, telegram_chat_id, avatar_url')` — egress otimizado
+- Mutation: update direto no `profiles` com `eq('user_id', userId)`, protegido por RLS (admin tem permissão via staff policies existentes)
+- Invalidação: `queryClient.invalidateQueries({ queryKey: ["users-with-roles"] })`
+- Permissão: envolver o Sheet em `PermissionGate` module="users" action="edit"
 
