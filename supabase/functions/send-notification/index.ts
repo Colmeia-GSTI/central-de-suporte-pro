@@ -244,25 +244,12 @@ Deno.serve(async (req) => {
             results.push({ channel: "email", success: false, error: "SMTP não configurado ou inativo" });
             break;
           }
-          const smtpSettings = smtp.settings as {
-            host: string;
-            port: number;
-            username: string;
-            password: string;
-            from_email: string;
-            from_name: string;
-            use_tls: boolean;
-          };
-          if (!smtpSettings.host || !smtpSettings.username || !smtpSettings.password) {
-            results.push({ channel: "email", success: false, error: "Configuração SMTP incompleta" });
-            break;
-          }
           if (!request.email_to || !request.email_subject || !request.email_html) {
             results.push({ channel: "email", success: false, error: "Campos de email incompletos" });
             break;
           }
           promises.push(
-            sendEmail(smtpSettings, request.email_to, request.email_subject, request.email_html, request.email_text)
+            sendEmail(supabase, request.email_to, request.email_subject, request.email_html, request.email_text)
           );
           break;
         }
@@ -341,12 +328,10 @@ Deno.serve(async (req) => {
         if (result.status === "fulfilled") {
           results.push(result.value);
         } else {
-          // Handle rejected promises
+          // Handle rejected promises - the channel info comes from the NotificationResult shape
           console.error("Promise rejected:", result.reason);
-          // Add a failure result for the rejected promise
-          const channel = results[results.length] ? results[results.length].channel : "unknown";
           results.push({
-            channel,
+            channel: "unknown",
             success: false,
             error: result.reason instanceof Error ? result.reason.message : "Unknown error",
           });
