@@ -10,6 +10,7 @@ import {
   Heading,
   Html,
   Preview,
+  Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
 
@@ -22,23 +23,29 @@ export const RecoveryEmail = ({
   siteName,
   confirmationUrl,
 }: RecoveryEmailProps) => (
-  <Html lang="en" dir="ltr">
+  <Html lang="pt-BR" dir="ltr">
     <Head />
-    <Preview>Reset your password for {siteName}</Preview>
+    <Preview>Redefinição de senha — Colmeia</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Reset your password</Heading>
-        <Text style={text}>
-          We received a request to reset your password for {siteName}. Click
-          the button below to choose a new password.
-        </Text>
-        <Button style={button} href={confirmationUrl}>
-          Reset Password
-        </Button>
-        <Text style={footer}>
-          If you didn't request a password reset, you can safely ignore this
-          email. Your password will not be changed.
-        </Text>
+        <Section style={header}>
+          <Text style={brandName}>⬡ Colmeia</Text>
+          <Text style={brandSubtitle}>Central de Atendimento</Text>
+        </Section>
+        <Section style={content}>
+          <Heading style={h1}>Redefinir sua senha</Heading>
+          <Text style={text}>
+            Recebemos uma solicitação para redefinir a senha da sua conta na
+            Colmeia. Clique no botão abaixo para escolher uma nova senha.
+          </Text>
+          <Button style={button} href={confirmationUrl}>
+            Redefinir Senha
+          </Button>
+          <Text style={footer}>
+            Se você não solicitou a redefinição, pode ignorar este e-mail. Sua
+            senha permanecerá a mesma.
+          </Text>
+        </Section>
       </Container>
     </Body>
   </Html>
@@ -46,26 +53,49 @@ export const RecoveryEmail = ({
 
 export default RecoveryEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
-const container = { padding: '20px 25px' }
+const main = { backgroundColor: '#ffffff', fontFamily: 'Montserrat, Arial, sans-serif' }
+const container = { maxWidth: '560px', margin: '0 auto' }
+const header = {
+  backgroundColor: '#E8A914',
+  padding: '24px 25px',
+  textAlign: 'center' as const,
+  borderRadius: '12px 12px 0 0',
+}
+const brandName = {
+  fontSize: '22px',
+  fontWeight: 'bold' as const,
+  color: '#1a1d21',
+  margin: '0',
+  letterSpacing: '1px',
+}
+const brandSubtitle = {
+  fontSize: '11px',
+  color: '#1a1d21',
+  margin: '2px 0 0',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '2px',
+  opacity: '0.7',
+}
+const content = { padding: '32px 25px 20px' }
 const h1 = {
   fontSize: '22px',
   fontWeight: 'bold' as const,
-  color: '#000000',
+  color: '#212529',
   margin: '0 0 20px',
 }
 const text = {
   fontSize: '14px',
-  color: '#55575d',
-  lineHeight: '1.5',
-  margin: '0 0 25px',
+  color: '#6B7280',
+  lineHeight: '1.6',
+  margin: '0 0 20px',
 }
 const button = {
-  backgroundColor: '#000000',
-  color: '#ffffff',
+  backgroundColor: '#E8A914',
+  color: '#1a1d21',
   fontSize: '14px',
-  borderRadius: '8px',
-  padding: '12px 20px',
+  fontWeight: 'bold' as const,
+  borderRadius: '12px',
+  padding: '12px 24px',
   textDecoration: 'none',
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const footer = { fontSize: '12px', color: '#9CA3AF', margin: '30px 0 0' }
