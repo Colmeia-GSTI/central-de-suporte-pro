@@ -70,53 +70,33 @@ function validateEmail(email: string): boolean {
   return EMAIL_REGEX.test(email);
 }
 
-// Send email via SMTP
+// Send email via send-email-smtp edge function (delegates to the unified SMTP sender)
 async function sendEmail(
-  settings: {
-    host: string;
-    port: number;
-    username: string;
-    password: string;
-    from_email: string;
-    from_name: string;
-    use_tls: boolean;
-  },
+  // deno-lint-ignore no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
   to: string | string[],
   subject: string,
   html: string,
-  text?: string
+  _text?: string
 ): Promise<NotificationResult> {
   try {
     const emails = Array.isArray(to) ? to : [to];
 
-    // Validate all emails before sending
     for (const email of emails) {
       if (!validateEmail(email)) {
         return { channel: "email", success: false, error: `Email inválido: ${email}` };
       }
     }
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: settings.host,
-        port: settings.port || 587,
-        tls: settings.port === 465 || settings.use_tls !== false,
-        auth: {
-          username: settings.username,
-          password: settings.password,
-        },
-      },
+    const { data, error } = await supabase.functions.invoke("send-email-smtp", {
+      body: { to: emails, subject, html },
     });
 
-    await client.send({
-      from: `${settings.from_name || "Sistema"} <${settings.from_email || settings.username}>`,
-      to: emails,
-      subject,
-      content: text || html.replace(/<[^>]*>/g, ""),
-      html,
-    });
+    if (error || data?.error) {
+      const errMsg = data?.error || error?.message || "Erro ao enviar email";
+      return { channel: "email", success: false, error: errMsg };
+    }
 
-    await client.close();
     return { channel: "email", success: true };
   } catch (error) {
     console.error("Email send error:", error);
