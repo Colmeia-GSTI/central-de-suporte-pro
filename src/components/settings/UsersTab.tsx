@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2 } from "lucide-react";
+import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
