@@ -116,7 +116,6 @@ export default function Dashboard() {
       const { data, error } = await supabase.rpc("get_weekly_ticket_trend");
       
       if (error) {
-        // Fallback to empty array silently
         return [];
       }
       
@@ -126,7 +125,8 @@ export default function Dashboard() {
         resolved: Number(row.resolved) || 0,
       }));
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: isAdminOrTechnician,
+    staleTime: 1000 * 60 * 5,
   });
 
   const allStatCards = [
