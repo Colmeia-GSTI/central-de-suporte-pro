@@ -7,9 +7,10 @@ import { TacticalRmmConfigForm } from "./integrations/TacticalRmmConfigForm";
 import { EvolutionApiConfigForm } from "./integrations/EvolutionApiConfigForm";
 import { TelegramConfigForm } from "./integrations/TelegramConfigForm";
 import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigForm";
+import { ResendConfigForm } from "./integrations/ResendConfigForm";
 import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
 import { LogsViewerTab } from "./LogsViewerTab";
-import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar } from "lucide-react";
+import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail } from "lucide-react";
 
 export function IntegrationsTab() {
   return (
@@ -22,10 +23,14 @@ export function IntegrationsTab() {
       </div>
 
       <Tabs defaultValue="status" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="status" className="flex items-center gap-2">
             <LayoutDashboard className="h-4 w-4" />
             Status
+          </TabsTrigger>
+          <TabsTrigger value="email" className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Email
           </TabsTrigger>
           <TabsTrigger value="comunicacao" className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
@@ -51,6 +56,10 @@ export function IntegrationsTab() {
 
         <TabsContent value="status" className="space-y-4 mt-4">
           <IntegrationStatusPanel />
+        </TabsContent>
+
+        <TabsContent value="email" className="space-y-4 mt-4">
+          <ResendConfigForm />
         </TabsContent>
 
         <TabsContent value="comunicacao" className="space-y-4 mt-4">

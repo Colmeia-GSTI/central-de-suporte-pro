@@ -85,11 +85,31 @@ Deno.serve(async (req) => {
       );
     }
 
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    let resendApiKey = Deno.env.get("RESEND_API_KEY");
+    
+    // Fallback: read API key from integration_settings if secret is not set
+    if (!resendApiKey) {
+      const supabaseFallback = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
+      const { data: intSettings } = await supabaseFallback
+        .from("integration_settings")
+        .select("settings")
+        .eq("integration_type", "resend")
+        .eq("is_active", true)
+        .maybeSingle();
+      
+      if (intSettings?.settings) {
+        const s = intSettings.settings as Record<string, string>;
+        resendApiKey = s.api_key;
+      }
+    }
+
     if (!resendApiKey) {
       console.error("[send-email-resend] RESEND_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "Serviço de email não configurado", configured: false }),
+        JSON.stringify({ error: "Serviço de email não configurado. Configure a API Key do Resend em Configurações > Integrações > Email.", configured: false }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
