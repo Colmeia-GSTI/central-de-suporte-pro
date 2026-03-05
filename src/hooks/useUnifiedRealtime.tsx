@@ -245,52 +245,6 @@ export function useUnifiedRealtime() {
     }
   }, [user, invalidateQueries, playNotificationSound]);
 
-  // Handle alert events
-  const handleAlertEvent = useCallback((payload: { new: AlertPayload }) => {
-    const alert = payload.new;
-    
-    invalidateQueries([
-      ["monitoring-alerts"],
-      ["alerts"],
-      ["devices"],
-    ]);
-
-    const levelConfig = {
-      critical: { icon: AlertTriangle, color: "text-destructive", label: "Crítico" },
-      warning: { icon: AlertTriangle, color: "text-warning", label: "Aviso" },
-      info: { icon: Bell, color: "text-primary", label: "Info" },
-    };
-    
-    const config = levelConfig[alert.level as keyof typeof levelConfig] || levelConfig.info;
-    const LevelIcon = config.icon;
-    
-    toast(`🚨 Alerta de Monitoramento`, {
-      description: (
-        <div className="flex flex-col gap-1 mt-1">
-          <p className="text-sm font-medium">{alert.title}</p>
-          <p className="text-xs text-muted-foreground">{alert.message}</p>
-          <span className={`text-xs ${config.color}`}>
-            <LevelIcon className="inline h-3 w-3 mr-1" />
-            {config.label}
-          </span>
-        </div>
-      ),
-      duration: 8000,
-      action: {
-        label: "Ver",
-        onClick: () => window.location.href = "/monitoring",
-      },
-    });
-    
-    if (alert.level === "critical") {
-      playNotificationSound();
-    }
-  }, [invalidateQueries, playNotificationSound]);
-
-  // Handle device events
-  const handleDeviceEvent = useCallback(() => {
-    invalidateQueries([["devices"]]);
-  }, [invalidateQueries]);
 
   useEffect(() => {
     // Only subscribe for staff users to reduce overhead for clients
