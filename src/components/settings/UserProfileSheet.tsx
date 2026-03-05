@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Save, User } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, Save, User, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Enums } from "@/integrations/supabase/types";
 
@@ -53,6 +54,9 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
   const [whatsapp, setWhatsapp] = useState("");
   const [telegramId, setTelegramId] = useState("");
 
+  // Track the original email to detect changes
+  const originalEmailRef = useRef("");
+
   const { data: profile, isLoading } = useQuery({
     queryKey: ["user-profile-edit", userId],
     queryFn: async () => {
@@ -69,7 +73,6 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
     staleTime: 0,
   });
 
-  // Sync form state when profile loads
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || "");
@@ -77,17 +80,31 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
       setPhone(profile.phone || "");
       setWhatsapp(profile.whatsapp_number || "");
       setTelegramId(profile.telegram_chat_id || "");
+      originalEmailRef.current = profile.email || "";
     }
   }, [profile]);
+
+  const emailChanged = email.trim().toLowerCase() !== originalEmailRef.current.trim().toLowerCase();
 
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!userId) throw new Error("ID do usuário ausente");
+
+      // If email changed, call edge function to sync auth + profile
+      if (emailChanged) {
+        const { data, error } = await supabase.functions.invoke("update-user-email", {
+          body: { user_id: userId, new_email: email.trim() },
+        });
+        if (error) throw new Error(error.message || "Erro ao atualizar email de login");
+        if (data?.error) throw new Error(data.error);
+      }
+
+      // Update remaining profile fields
       const { error } = await supabase
         .from("profiles")
         .update({
           full_name: fullName.trim(),
-          email: email.trim(),
+          ...(emailChanged ? {} : { email: email.trim() }),
           phone: phone.trim() || null,
           whatsapp_number: whatsapp.trim() || null,
           telegram_chat_id: telegramId.trim() || null,
@@ -102,6 +119,7 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
       onOpenChange(false);
     },
     onError: (error: Error) => {
+      console.error("[UserProfileSheet] Update failed:", error);
       toast({ title: "Erro ao atualizar perfil", description: error.message, variant: "destructive" });
     },
   });
@@ -123,7 +141,7 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
             Editar Perfil
           </SheetTitle>
           <SheetDescription>
-            Altere os dados do usuário abaixo. O email de login não será alterado.
+            Altere os dados do usuário abaixo.
           </SheetDescription>
         </SheetHeader>
 
@@ -165,7 +183,7 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-email">Email (perfil)</Label>
+              <Label htmlFor="edit-email">Email</Label>
               <Input
                 id="edit-email"
                 type="email"
@@ -173,9 +191,14 @@ export function UserProfileSheet({ userId, userRoles = [], open, onOpenChange }:
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@exemplo.com"
               />
-              <p className="text-xs text-muted-foreground">
-                Altera apenas o email do perfil, não o email de login.
-              </p>
+              {emailChanged && (
+                <Alert variant="default" className="border-status-warning/50 bg-status-warning/10">
+                  <AlertTriangle className="h-4 w-4 text-status-warning" />
+                  <AlertDescription className="text-xs">
+                    O email de <strong>login</strong> também será atualizado para o novo endereço.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <div className="space-y-2">
