@@ -13,6 +13,7 @@ interface RequesterContact {
 
 interface RequesterContactCardProps {
   contact: RequesterContact | null;
+  contactPhone?: string | null;
 }
 
 function formatPhoneForWhatsApp(phone: string): string {
@@ -31,14 +32,14 @@ function formatPhoneForDisplay(phone: string): string {
   return phone;
 }
 
-export function RequesterContactCard({ contact }: RequesterContactCardProps) {
-  if (!contact) {
+export function RequesterContactCard({ contact, contactPhone }: RequesterContactCardProps) {
+  if (!contact && !contactPhone) {
     return null;
   }
 
-  const phoneNumber = contact.whatsapp || contact.phone;
+  const phoneNumber = contact?.whatsapp || contact?.phone;
   const hasPhone = !!phoneNumber;
-  const hasEmail = !!contact.email;
+  const hasEmail = !!contact?.email;
 
   return (
     <Card className="border-primary/20 bg-primary/5">
@@ -49,12 +50,43 @@ export function RequesterContactCard({ contact }: RequesterContactCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div>
-          <p className="font-medium">{contact.name}</p>
-          {contact.role && (
-            <p className="text-sm text-muted-foreground">{contact.role}</p>
-          )}
-        </div>
+        {contact && (
+          <div>
+            <p className="font-medium">{contact.name}</p>
+            {contact.role && (
+              <p className="text-sm text-muted-foreground">{contact.role}</p>
+            )}
+          </div>
+        )}
+
+        {/* Contact phone provided on ticket creation */}
+        {contactPhone && (
+          <div className="flex items-center gap-2 p-2 rounded-md bg-accent/50 border border-accent">
+            <Phone className="h-4 w-4 text-primary shrink-0" />
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Telefone informado no chamado</p>
+              <div className="flex gap-2 mt-1">
+                <Button variant="outline" size="sm" className="gap-2 h-7" asChild>
+                  <a href={`tel:${contactPhone}`}>
+                    <Phone className="h-3 w-3" />
+                    {formatPhoneForDisplay(contactPhone)}
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 h-7 text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                  asChild
+                >
+                  <a href={`https://wa.me/55${contactPhone}`} target="_blank" rel="noopener noreferrer">
+                    <MessageCircle className="h-3 w-3" />
+                    WhatsApp
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2">
           {hasPhone && (
