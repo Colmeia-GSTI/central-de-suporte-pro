@@ -163,51 +163,42 @@ Deno.serve(async (req) => {
     // Send Email notification
     if (ticket.client?.email) {
       try {
-        const { data: smtpSettings } = await supabase
-          .from("integration_settings")
-          .select("settings, is_active")
-          .eq("integration_type", "smtp")
-          .eq("is_active", true)
-          .maybeSingle();
+        let emailSubject: string;
+        let emailHtml: string;
 
-        if (smtpSettings?.is_active) {
-          let emailSubject: string;
-          let emailHtml: string;
-
-          if (emailTemplate) {
-            emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
-            const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
-            emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
-          } else {
-            emailSubject = `[Chamado #${ticket.ticket_number}] ${eventMessages[event_type]}`;
-            const defaultContent = `
-              <p>Olá <strong>${ticket.client.name}</strong>,</p>
-              <p>${eventMessages[event_type]}</p>
-              <div class="ticket-info">
-                <p><strong>Chamado:</strong> #${ticket.ticket_number}</p>
-                <p><strong>Título:</strong> ${ticket.title}</p>
-                <p><strong>Status:</strong> <span class="status">${statusLabels[ticket.status] || ticket.status}</span></p>
-                <p><strong>Prioridade:</strong> ${ticket.priority}</p>
+        if (emailTemplate) {
+          emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
+          const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
+          emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+        } else {
+          emailSubject = `[Chamado #${ticket.ticket_number}] ${eventMessages[event_type]}`;
+          const defaultContent = `
+            <p>Olá <strong>${ticket.client.name}</strong>,</p>
+            <p>${eventMessages[event_type]}</p>
+            <div class="ticket-info">
+              <p><strong>Chamado:</strong> #${ticket.ticket_number}</p>
+              <p><strong>Título:</strong> ${ticket.title}</p>
+              <p><strong>Status:</strong> <span class="status">${statusLabels[ticket.status] || ticket.status}</span></p>
+              <p><strong>Prioridade:</strong> ${ticket.priority}</p>
+            </div>
+            ${comment ? `<div class="comment-box"><p><strong>Comentário:</strong></p><p>${escapeHtml(comment)}</p></div>` : ''}
+            ${event_type === 'resolved' ? `
+              <div style="background: #dcfce7; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 15px 0; text-align: center;">
+                <p style="color: #166534; font-weight: 600; margin-bottom: 10px;">⭐ Avalie nosso atendimento</p>
+                <a href="${portalUrl}" style="display: inline-block; background: #16a34a; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none;">
+                  Avaliar e Encerrar Chamado
+                </a>
               </div>
-              ${comment ? `<div class="comment-box"><p><strong>Comentário:</strong></p><p>${escapeHtml(comment)}</p></div>` : ''}
-              ${event_type === 'resolved' ? `
-                <div style="background: #dcfce7; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 15px 0; text-align: center;">
-                  <p style="color: #166534; font-weight: 600; margin-bottom: 10px;">⭐ Avalie nosso atendimento</p>
-                  <a href="${portalUrl}" style="display: inline-block; background: #16a34a; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none;">
-                    Avaliar e Encerrar Chamado
-                  </a>
-                </div>
-              ` : ''}
-              <p>Acesse o portal do cliente para mais detalhes.</p>
-            `;
-            emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
-          }
-
-          const { data: emailResult, error: emailError } = await supabase.functions.invoke("send-email-smtp", {
-            body: { to: ticket.client.email, subject: emailSubject, html: emailHtml },
-          });
-          results.email = emailError ? { error: emailError.message } : emailResult;
+            ` : ''}
+            <p>Acesse o portal do cliente para mais detalhes.</p>
+          `;
+          emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
         }
+
+        const { data: emailResult, error: emailError } = await supabase.functions.invoke("send-email-resend", {
+          body: { to: ticket.client.email, subject: emailSubject, html: emailHtml },
+        });
+        results.email = emailError ? { error: emailError.message } : emailResult;
       } catch (e) {
         console.error("Email error:", e);
       }

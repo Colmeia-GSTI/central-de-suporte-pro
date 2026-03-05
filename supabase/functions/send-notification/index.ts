@@ -46,7 +46,7 @@ async function getIntegrationSettings(supabase: SupabaseClient<any, any, any>) {
   const { data, error } = await supabase
     .from("integration_settings")
     .select("integration_type, settings, is_active")
-    .in("integration_type", ["smtp", "evolution_api", "telegram"]);
+    .in("integration_type", ["evolution_api", "telegram"]);
 
   if (error) {
     console.error("Error fetching integration settings:", error);
@@ -70,7 +70,7 @@ function validateEmail(email: string): boolean {
   return EMAIL_REGEX.test(email);
 }
 
-// Send email via send-email-smtp edge function (delegates to the unified SMTP sender)
+// Send email via send-email-resend edge function (delegates to Resend API)
 async function sendEmail(
   // deno-lint-ignore no-explicit-any
   supabase: SupabaseClient<any, any, any>,
@@ -88,7 +88,7 @@ async function sendEmail(
       }
     }
 
-    const { data, error } = await supabase.functions.invoke("send-email-smtp", {
+    const { data, error } = await supabase.functions.invoke("send-email-resend", {
       body: { to: emails, subject, html },
     });
 
@@ -239,11 +239,6 @@ Deno.serve(async (req) => {
     for (const channel of channels) {
       switch (channel) {
         case "email": {
-          const smtp = integrations["smtp"];
-          if (!smtp?.is_active) {
-            results.push({ channel: "email", success: false, error: "SMTP não configurado ou inativo" });
-            break;
-          }
           if (!request.email_to || !request.email_subject || !request.email_html) {
             results.push({ channel: "email", success: false, error: "Campos de email incompletos" });
             break;

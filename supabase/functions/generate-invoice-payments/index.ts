@@ -297,7 +297,7 @@ Deno.serve(async (req) => {
                   `;
                 }
 
-                await supabase.functions.invoke("send-email-smtp", {
+                await supabase.functions.invoke("send-email-resend", {
                   body: {
                     to: clientEmail,
                     subject: `Dados de Pagamento - Fatura #${invoice.invoice_number}`,
