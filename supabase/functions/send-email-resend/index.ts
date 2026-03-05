@@ -85,36 +85,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Priority: 1) integration_settings (UI-configured), 2) env secret (fallback)
-    let resendApiKey: string | undefined;
-
-    const supabaseForKey = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
-    const { data: intSettings } = await supabaseForKey
-      .from("integration_settings")
-      .select("settings")
-      .eq("integration_type", "resend")
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (intSettings?.settings) {
-      const s = intSettings.settings as Record<string, string>;
-      if (s.api_key && !s.api_key.startsWith("re_****")) {
-        resendApiKey = s.api_key;
-      }
-    }
-
-    // Fallback to env secret
-    if (!resendApiKey) {
-      resendApiKey = Deno.env.get("RESEND_API_KEY");
-    }
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
     if (!resendApiKey) {
       console.error("[send-email-resend] RESEND_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "Serviço de email não configurado. Configure a API Key do Resend em Configurações > Integrações > Email.", configured: false }),
+        JSON.stringify({ error: "Serviço de email não configurado. Atualize o segredo RESEND_API_KEY no Lovable Cloud.", configured: false }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
