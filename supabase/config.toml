@@ -1,43 +1,33 @@
 project_id = "silefpsayliwqtoskkdz"
 
-[functions.bootstrap-admin]
-verify_jwt = false
-
-[functions.checkmk-sync]
-verify_jwt = false
-
-[functions.apply-contract-adjustment]
-verify_jwt = false
-
-[functions.check-contract-adjustments]
-verify_jwt = false
-
-[functions.send-nfse-notification]
-verify_jwt = false
-
-[functions.send-email-smtp]
-verify_jwt = false
-
-[functions.send-whatsapp]
-verify_jwt = false
-
-[functions.batch-process-invoices]
-verify_jwt = false
-
-[functions.fetch-economic-indices]
-verify_jwt = false
-
-[functions.calculate-invoice-penalties]
-verify_jwt = false
-
-[functions.manual-payment]
-verify_jwt = false
-
-[functions.generate-second-copy]
-verify_jwt = false
-
-[functions.renegotiate-invoice]
-verify_jwt = false
-
-[functions.update-user-email]
-verify_jwt = false
+[functions]
+  [functions.apply-contract-adjustment]
+    verify_jwt = false
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.batch-process-invoices]
+    verify_jwt = false
+  [functions.bootstrap-admin]
+    verify_jwt = false
+  [functions.calculate-invoice-penalties]
+    verify_jwt = false
+  [functions.check-contract-adjustments]
+    verify_jwt = false
+  [functions.checkmk-sync]
+    verify_jwt = false
+  [functions.fetch-economic-indices]
+    verify_jwt = false
+  [functions.generate-second-copy]
+    verify_jwt = false
+  [functions.manual-payment]
+    verify_jwt = false
+  [functions.renegotiate-invoice]
+    verify_jwt = false
+  [functions.send-email-smtp]
+    verify_jwt = false
+  [functions.send-nfse-notification]
+    verify_jwt = false
+  [functions.send-whatsapp]
+    verify_jwt = false
+  [functions.update-user-email]
+    verify_jwt = false
