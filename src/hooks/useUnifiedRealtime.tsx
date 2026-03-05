@@ -304,13 +304,21 @@ export function useUnifiedRealtime() {
     if (!user || !isStaff) return;
 
     // Single multiplexed channel for essential realtime events only
-    // Removed: monitoring_alerts, monitored_devices (now polled hourly)
+    // Tickets: INSERT + UPDATE only (no DELETE tracking needed)
+    // Notifications: INSERT only, filtered by user_id
     const channel = supabase
       .channel("unified-realtime")
-      // Tickets - all events (essential for helpdesk)
+      // Tickets - INSERT events (new tickets)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "tickets" },
+        { event: "INSERT", schema: "public", table: "tickets" },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        handleTicketEvent as (payload: any) => void
+      )
+      // Tickets - UPDATE events (status changes, assignments)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tickets" },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         handleTicketEvent as (payload: any) => void
       )
