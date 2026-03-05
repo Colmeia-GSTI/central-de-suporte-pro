@@ -71,7 +71,7 @@ export default function ClientsPage() {
     queryFn: async () => {
       let query = supabase
         .from("clients")
-        .select("*", { count: "exact" })
+        .select("id, name, nickname, trade_name, document, email, phone, whatsapp, whatsapp_validated, city, state, is_active", { count: "exact" })
         .order("name")
         .limit(PAGE_SIZE + 1);
 
