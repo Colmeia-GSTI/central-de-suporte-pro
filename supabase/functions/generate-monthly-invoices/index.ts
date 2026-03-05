@@ -770,7 +770,7 @@ Deno.serve(async (req) => {
                   </div>`;
               }
 
-              await supabase.functions.invoke("send-email-smtp", {
+              await supabase.functions.invoke("send-email-resend", {
                 body: {
                   to: clientEmail,
                   subject: `Nova Fatura #${newInvoice.invoice_number} - ${referenceMonth}`,

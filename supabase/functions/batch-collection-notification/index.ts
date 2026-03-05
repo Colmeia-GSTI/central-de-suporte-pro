@@ -116,11 +116,10 @@ Deno.serve(async (req) => {
     const templateType = templateTypeMap[message_template];
 
     // Fetch settings, template, invoices, and integrations in parallel
-    const [settingsRes, templateRes, invoicesRes, smtpRes, whatsappRes] = await Promise.all([
+    const [settingsRes, templateRes, invoicesRes, whatsappRes] = await Promise.all([
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", templateType).maybeSingle(),
       supabase.from("invoices").select(`id, invoice_number, amount, due_date, clients(name, email, financial_email, whatsapp)`).in("id", invoice_ids),
-      supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "smtp").single(),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
     ]);
 
@@ -185,7 +184,7 @@ Deno.serve(async (req) => {
       };
 
       // Send Email
-      if (channels.includes("email") && smtpRes.data?.is_active) {
+      if (channels.includes("email")) {
         const email = client.financial_email || client.email;
         if (email) {
           try {
@@ -203,7 +202,7 @@ Deno.serve(async (req) => {
               emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
             }
 
-            const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
+            const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
               body: { to: email, subject: emailSubject, html: emailHtml },
             });
 

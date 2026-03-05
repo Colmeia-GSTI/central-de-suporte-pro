@@ -105,14 +105,13 @@ Deno.serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
 
     // Fetch settings, template, and invoices in parallel
-    const [settingsRes, templateRes, invoicesRes, smtpRes, evolutionRes] = await Promise.all([
+    const [settingsRes, templateRes, invoicesRes, evolutionRes] = await Promise.all([
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "invoice_reminder").maybeSingle(),
       supabase.from("invoices").select(`
         id, invoice_number, amount, due_date, status, client_id,
         clients (id, name, email, financial_email, whatsapp)
       `).eq("status", "pending").gte("due_date", today).lte("due_date", targetDateStr),
-      supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "smtp").single(),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
     ]);
 
@@ -125,7 +124,6 @@ Deno.serve(async (req) => {
 
     const emailTemplate: EmailTemplate | null = templateRes.data?.is_active ? templateRes.data : null;
     const invoices = invoicesRes.data;
-    const smtpActive = smtpRes.data?.is_active;
     const whatsappActive = evolutionRes.data?.is_active;
 
     if (invoicesRes.error) {
@@ -201,7 +199,7 @@ Deno.serve(async (req) => {
 
       // Send email
       const clientEmail = client.financial_email || client.email;
-      if (smtpActive && clientEmail) {
+      if (clientEmail) {
         try {
           let emailSubject: string;
           let emailHtml: string;
@@ -227,7 +225,7 @@ Deno.serve(async (req) => {
             emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
           }
 
-          const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
+          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
             body: { to: clientEmail, subject: emailSubject, html: emailHtml },
           });
 

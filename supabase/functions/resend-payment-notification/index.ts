@@ -307,7 +307,7 @@ Deno.serve(async (req) => {
         }
 
         try {
-          const { error: emailError } = await supabase.functions.invoke("send-email-smtp", {
+          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
             body: { to: emailTo, subject: emailSubject, html: emailHtml },
           });
 

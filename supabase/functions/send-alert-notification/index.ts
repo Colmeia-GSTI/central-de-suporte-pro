@@ -1,6 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -223,7 +221,7 @@ async function sendTelegram(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -336,86 +334,34 @@ ${alert.message ? `\n${alert.message}` : ""}
     const notificationPromises: Promise<boolean>[] = [];
     
     for (const profile of (profiles || []) as UserProfile[]) {
-      // WhatsApp
       if (profile.notify_whatsapp && profile.whatsapp_number) {
         console.log(`Queueing WhatsApp for ${profile.full_name}`);
         notificationPromises.push(sendWhatsApp(supabase, profile.user_id, profile.whatsapp_number, textMessage, alert.id));
       }
-
-      // Telegram
       if (profile.notify_telegram && profile.telegram_chat_id) {
         console.log(`Queueing Telegram for ${profile.full_name}`);
         notificationPromises.push(sendTelegram(supabase, profile.user_id, profile.telegram_chat_id, htmlMessage, alert.id));
       }
     }
     
-    // Execute all notifications in parallel
     if (notificationPromises.length > 0) {
       const results = await Promise.allSettled(notificationPromises);
       const successful = results.filter(r => r.status === "fulfilled" && r.value).length;
       console.log(`Sent ${successful}/${notificationPromises.length} notifications`);
     }
 
-    // Only send email for critical and warning alerts
-    if (alert.level === "info") {
-      console.log("Skipping email for info-level alert");
-      return new Response(
-        JSON.stringify({ success: true, message: "Notifications sent" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Send email for critical and warning alerts via Resend
+    if (alert.level !== "info") {
+      const emails = (profiles || [])
+        .filter((p: UserProfile) => p.notify_email !== false && p.email)
+        .map((p: UserProfile) => p.email);
 
-    // Check if SMTP is configured
-    const { data: smtpSettings } = await supabase
-      .from("integration_settings")
-      .select("settings, is_active")
-      .eq("integration_type", "smtp")
-      .single();
+      if (emails.length > 0) {
+        console.log(`Sending email to ${emails.length} recipients via Resend`);
 
-    if (!smtpSettings?.is_active) {
-      console.log("SMTP not configured, skipping email");
-      return new Response(
-        JSON.stringify({ success: true, message: "Notifications sent (no SMTP)" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+        const levelColors = { critical: "#dc2626", warning: "#f59e0b", info: "#3b82f6" };
 
-    const settings = smtpSettings.settings as {
-      host: string;
-      port: number;
-      username: string;
-      password: string;
-      from_email: string;
-      from_name: string;
-      use_tls: boolean;
-    };
-
-    if (!settings.host || !settings.username || !settings.password) {
-      console.log("SMTP settings incomplete");
-      return new Response(
-        JSON.stringify({ success: true, message: "Notifications sent (SMTP incomplete)" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Get emails from users who have email notifications enabled
-    const emails = (profiles || [])
-      .filter((p: UserProfile) => p.notify_email !== false && p.email)
-      .map((p: UserProfile) => p.email);
-
-    if (emails.length === 0) {
-      console.log("No users with email notifications enabled");
-      return new Response(
-        JSON.stringify({ success: true, message: "Notifications sent (no email recipients)" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Sending email to ${emails.length} recipients`);
-
-    const levelColors = { critical: "#dc2626", warning: "#f59e0b", info: "#3b82f6" };
-
-    const htmlEmail = `
+        const htmlEmail = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -448,42 +394,28 @@ ${alert.message ? `\n${alert.message}` : ""}
 </body>
 </html>`;
 
-    try {
-      const client = new SMTPClient({
-        connection: {
-          hostname: settings.host,
-          port: settings.port || 587,
-          tls: settings.use_tls !== false,
-          auth: { username: settings.username, password: settings.password },
-        },
-      });
+        try {
+          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
+            body: {
+              to: emails,
+              subject: `[${levelLabels[alert.level]}] ${alert.title} - ${deviceName}`,
+              html: htmlEmail,
+            },
+          });
 
-      await client.send({
-        from: `${settings.from_name || "Sistema de Monitoramento"} <${settings.from_email || settings.username}>`,
-        to: emails,
-        subject: `[${levelLabels[alert.level]}] ${alert.title} - ${deviceName}`,
-        content: textMessage.replace(/\*/g, ""),
-        html: htmlEmail,
-      });
-
-      await client.close();
-      console.log("Email sent successfully");
-
-      // Log email sends
-      for (const profile of (profiles || []).filter((p: UserProfile) => p.notify_email !== false && p.email)) {
-        await logMessage(
-          supabase,
-          profile.user_id,
-          "email",
-          profile.email,
-          `[${levelLabels[alert.level]}] ${alert.title}`,
-          "sent",
-          "monitoring_alert",
-          alert.id
-        );
+          if (emailError) {
+            console.error("Email send error:", emailError);
+          } else {
+            console.log("Email sent successfully via Resend");
+            // Log email sends
+            for (const profile of (profiles || []).filter((p: UserProfile) => p.notify_email !== false && p.email)) {
+              await logMessage(supabase, profile.user_id, "email", profile.email, `[${levelLabels[alert.level]}] ${alert.title}`, "sent", "monitoring_alert", alert.id);
+            }
+          }
+        } catch (emailError) {
+          console.error("Error sending email:", emailError);
+        }
       }
-    } catch (emailError) {
-      console.error("Error sending email:", emailError);
     }
 
     return new Response(
