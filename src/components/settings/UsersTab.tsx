@@ -726,6 +726,13 @@ export function UsersTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* User Profile Edit Sheet */}
+        <UserProfileSheet
+          userId={editProfileUser?.user_id ?? null}
+          userRoles={editProfileUser?.user_roles.map(r => r.role)}
+          open={!!editProfileUser}
+          onOpenChange={(open) => !open && setEditProfileUser(null)}
+        />
       </CardContent>
     </Card>
   );
