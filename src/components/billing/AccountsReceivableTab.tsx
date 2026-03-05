@@ -66,7 +66,7 @@ export function AccountsReceivableTab() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("accounts_receivable")
-        .select("*")
+        .select("id, invoice_number, client_name, amount, due_date, days_overdue, ar_status, paid_date, paid_amount")
         .order("due_date", { ascending: false })
         .limit(500);
       if (error) throw error;
