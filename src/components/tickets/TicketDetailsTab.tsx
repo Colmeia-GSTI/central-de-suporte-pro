@@ -396,7 +396,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
   return (
     <div className="space-y-6">
       {/* Requester Contact Card */}
-      <RequesterContactCard contact={ticket.requester_contact || null} />
+      <RequesterContactCard contact={ticket.requester_contact || null} contactPhone={(ticket as Record<string, unknown>).contact_phone as string | null} />
       {/* Edit Toggle */}
       <div className="flex justify-end">
         {isEditing ? (

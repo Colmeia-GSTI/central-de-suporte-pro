@@ -115,6 +115,7 @@ export default function ClientPortalPage() {
   const [activeSection, setActiveSection] = useState<"chamados" | "financeiro">("chamados");
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [assetDescription, setAssetDescription] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
 
   const isClient = roles.includes("client") || roles.includes("client_master");
   const isClientMaster = roles.includes("client_master");
@@ -261,6 +262,7 @@ export default function ClientPortalPage() {
       title: string;
       description: string;
       priority: Enums<"ticket_priority">;
+      contact_phone: string;
       category_id?: string;
       asset_id?: string | null;
       asset_description?: string | null;
@@ -271,6 +273,7 @@ export default function ClientPortalPage() {
         title: ticketData.title,
         description: ticketData.description,
         priority: ticketData.priority,
+        contact_phone: ticketData.contact_phone,
         category_id: ticketData.category_id || null,
         asset_id: ticketData.asset_id || null,
         asset_description: ticketData.asset_description || null,
@@ -287,6 +290,7 @@ export default function ClientPortalPage() {
       setIsNewTicketOpen(false);
       setSelectedAssetId("");
       setAssetDescription("");
+      setContactPhone("");
       toast({ title: "Chamado aberto com sucesso!" });
     },
     onError: () => {
@@ -326,13 +330,31 @@ export default function ClientPortalPage() {
     other: <Box className="h-4 w-4" />,
   };
 
+  const formatPhone = (value: string): string => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
+  const isPhoneValid = (phone: string): boolean => {
+    const digits = phone.replace(/\D/g, "");
+    return digits.length === 10 || digits.length === 11;
+  };
+
   const handleNewTicket = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!isPhoneValid(contactPhone)) {
+      toast({ title: "Telefone inválido", description: "Informe um número com DDD válido.", variant: "destructive" });
+      return;
+    }
     const formData = new FormData(e.currentTarget);
     createTicketMutation.mutate({
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       priority: formData.get("priority") as Enums<"ticket_priority">,
+      contact_phone: contactPhone.replace(/\D/g, ""),
       category_id: formData.get("category_id") as string || undefined,
       asset_id: selectedAssetId && selectedAssetId !== "other" ? selectedAssetId : null,
       asset_description: selectedAssetId === "other" ? assetDescription : null,
@@ -552,6 +574,22 @@ export default function ClientPortalPage() {
                           required
                         />
                       </div>
+                      {/* Contact Phone - required */}
+                      <div className="space-y-2">
+                        <Label htmlFor="contact_phone" className="font-medium">
+                          Qual número devemos utilizar para entrar em contato com você? <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="contact_phone"
+                          placeholder="(00) 00000-0000"
+                          value={contactPhone}
+                          onChange={(e) => setContactPhone(formatPhone(e.target.value))}
+                          required
+                          maxLength={15}
+                          inputMode="tel"
+                        />
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="priority">Prioridade</Label>
