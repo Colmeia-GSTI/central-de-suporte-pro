@@ -47,6 +47,7 @@ export default function Dashboard() {
     !roles.includes("manager");
 
   const isAdmin = roles.includes("admin");
+  const isAdminOrTechnician = roles.includes("admin") || roles.includes("technician");
   const { data: stats, isLoading } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async (): Promise<DashboardStats> => {
