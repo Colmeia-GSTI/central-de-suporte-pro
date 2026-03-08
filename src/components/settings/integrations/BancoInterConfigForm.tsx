@@ -246,6 +246,22 @@ export function BancoInterConfigForm() {
 
       if (error) throw error;
       toast.success("Configurações do Banco Inter salvas!");
+
+      // Auto-registrar webhook após salvar com sucesso
+      if (isActive && settings.client_id && settings.certificate_crt && settings.certificate_key) {
+        try {
+          const { data: whData, error: whError } = await supabase.functions.invoke("banco-inter", {
+            body: { action: "register_webhook" },
+          });
+          if (!whError && !whData?.error) {
+            setWebhookStatus({ state: "registered", webhookUrl: whData.webhookUrl });
+            console.log("[BancoInterConfig] Webhook registrado automaticamente");
+          }
+        } catch {
+          // Webhook registration failure is non-critical
+          console.warn("[BancoInterConfig] Falha ao registrar webhook automaticamente");
+        }
+      }
     } catch (error: unknown) {
       toast.error("Erro ao salvar: " + getErrorMessage(error));
     } finally {

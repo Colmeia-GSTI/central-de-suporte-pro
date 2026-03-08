@@ -768,6 +768,7 @@ export function BillingInvoicesTab() {
                             onCancelNfse={() => setCancelNfseInvoice(invoice)}
                             onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
+                            onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                           />
                         </TableCell>
                       </TableRow>
