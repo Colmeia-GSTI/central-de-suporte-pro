@@ -533,6 +533,7 @@ export function BillingInvoicesTab() {
                         generatingPayment={generatingPayment}
                         processingComplete={processingComplete}
                         sendingNotification={sendingNotification}
+                        checkingPayment={checkingPayment}
                         onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                         onGeneratePayment={handleGeneratePayment}
                         onManualPayment={() => setManualPaymentInvoice(invoice)}
@@ -545,6 +546,7 @@ export function BillingInvoicesTab() {
                         onCancelNfse={() => setCancelNfseInvoice(invoice)}
                         onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                         onViewHistory={() => setHistoryInvoice(invoice)}
+                        onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                       />
                     </div>
                   </div>
