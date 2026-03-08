@@ -167,6 +167,28 @@ export function InvoiceInlineActions({
         </TooltipContent>
       </Tooltip>
 
+      {/* Check Payment Status */}
+      {isPendingOrOverdue && hasBoleto && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={onCheckPayment}
+              disabled={isChecking}
+              className="h-7 w-7 p-0 hover:bg-muted"
+            >
+              {isChecking ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <RefreshCw className={`${iconClass} text-muted-foreground`} />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Verificar Pagamento no Banco</TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Payment indicator */}
       <Tooltip>
         <TooltipTrigger asChild>

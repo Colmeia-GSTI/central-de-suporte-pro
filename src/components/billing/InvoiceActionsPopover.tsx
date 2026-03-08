@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   Barcode, QrCode, MoreHorizontal, Loader2, FileText, Mail, MessageCircle,
   Send, Zap, XCircle, Building2, HandCoins, Ban, CheckCircle2, Clock, Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 interface InvoiceForActions {
