@@ -37,11 +37,7 @@ export default function Register() {
     const { error } = await signUp(email, password, fullName);
 
     if (error) {
-      toast({
-        title: "Erro ao cadastrar",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error(error.message);
       setIsLoading(false);
       return;
     }
