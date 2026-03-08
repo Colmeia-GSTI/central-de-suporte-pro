@@ -156,7 +156,10 @@ Deno.serve(async (req) => {
       await supabase.from("nfse_event_logs").insert({
         nfse_history_id,
         event_type: "envio_bloqueado",
-        event_data: { motivo: "pdf_ausente", checked_at: new Date().toISOString() },
+        event_level: "warn",
+        message: "Envio bloqueado: PDF não disponível",
+        source: "send-nfse-notification",
+        details: { motivo: "pdf_ausente", checked_at: new Date().toISOString() },
       });
       return new Response(
         JSON.stringify({ error: "NFS-e não possui PDF disponível", blocked: true, blocked_reason: "pdf_ausente" }),
@@ -168,7 +171,10 @@ Deno.serve(async (req) => {
       await supabase.from("nfse_event_logs").insert({
         nfse_history_id,
         event_type: "envio_bloqueado",
-        event_data: { motivo: "xml_ausente", checked_at: new Date().toISOString() },
+        event_level: "warn",
+        message: "Envio bloqueado: XML não disponível",
+        source: "send-nfse-notification",
+        details: { motivo: "xml_ausente", checked_at: new Date().toISOString() },
       });
       await supabase.from("application_logs").insert({
         module: "billing_notification",
@@ -304,7 +310,10 @@ Deno.serve(async (req) => {
             await supabase.from("nfse_event_logs").insert({
               nfse_history_id,
               event_type: "compartilhamento",
-              event_data: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
+              event_level: "info",
+              message: `NFS-e #${nfseNumber} enviada por email para ${emailTo}`,
+              source: "send-nfse-notification",
+              details: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
           }
         } catch (e: unknown) {
@@ -347,7 +356,10 @@ Atenciosamente,
             await supabase.from("nfse_event_logs").insert({
               nfse_history_id,
               event_type: "compartilhamento",
-              event_data: { channel: "whatsapp", recipient: whatsappTo, sent_at: new Date().toISOString() },
+              event_level: "info",
+              message: `NFS-e #${nfseNumber} enviada por WhatsApp para ${whatsappTo}`,
+              source: "send-nfse-notification",
+              details: { channel: "whatsapp", recipient: whatsappTo, sent_at: new Date().toISOString() },
             });
           }
         } catch (e: unknown) {
