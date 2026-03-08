@@ -188,11 +188,13 @@ export default function CalendarPage() {
               Gerencie visitas, reuniões e plantões
             </p>
           </div>
-          <Button onClick={() => setIsFormOpen(true)} size={isMobile ? "sm" : "default"}>
-            <Plus className="h-4 w-4 mr-1 md:mr-2" />
-            <span className="hidden sm:inline">Novo Evento</span>
-            <span className="sm:hidden">Novo</span>
-          </Button>
+          {canCreate && (
+            <Button onClick={() => setIsFormOpen(true)} size={isMobile ? "sm" : "default"}>
+              <Plus className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Novo Evento</span>
+              <span className="sm:hidden">Novo</span>
+            </Button>
+          )}
         </div>
 
         {/* Calendar */}
