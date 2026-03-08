@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
+import { usePermissions } from "@/hooks/usePermissions";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

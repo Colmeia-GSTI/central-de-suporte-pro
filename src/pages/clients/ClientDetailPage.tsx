@@ -40,8 +40,7 @@ export default function ClientDetailPage() {
   const initialTab = searchParams.get("tab") || "info";
   const [activeTab, setActiveTab] = useState(initialTab);
   
-  // Check if user is technician only (no admin/manager/financial roles)
-  const isTechnicianOnly = useIsTechnicianOnly();
+  const { isTechnicianOnly } = usePermissions();
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", id],

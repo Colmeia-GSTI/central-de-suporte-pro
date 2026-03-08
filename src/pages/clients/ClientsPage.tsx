@@ -71,8 +71,7 @@ export default function ClientsPage() {
     }
   }, [searchParams, setSearchParams]);
   
-  // Check if user is technician only (no admin/manager/financial roles)
-  const isTechnicianOnly = useIsTechnicianOnly();
+  const { isTechnicianOnly } = usePermissions();
   
   const debouncedSearch = useDebounce(search, 300);
 
