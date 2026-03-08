@@ -78,8 +78,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const [whatsAppStatus, setWhatsAppStatus] = useState<'idle' | 'valid' | 'invalid' | 'error'>('idle');
   const [whatsAppMessage, setWhatsAppMessage] = useState<string>("");
   
-  // Check if user is technician only (no admin/manager/financial roles)
-  const isTechnicianOnly = useIsTechnicianOnly();
+  const { isTechnicianOnly } = usePermissions();
 
   const form = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),
