@@ -49,6 +49,16 @@ export default function CalendarPage() {
 
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open creation form when navigating with ?action=new
+  useEffect(() => {
+    if (searchParams.get("action") === "new" && canCreate) {
+      setIsFormOpen(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, canCreate]);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const { can } = usePermissions();

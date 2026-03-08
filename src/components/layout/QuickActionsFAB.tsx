@@ -26,7 +26,7 @@ const allActions: QuickAction[] = [
   { 
     icon: Ticket, 
     label: "Novo Chamado", 
-    path: "/tickets",
+    path: "/tickets/new",
     color: "from-blue-500 to-cyan-500",
     delay: "0ms",
     module: "tickets",
@@ -35,7 +35,7 @@ const allActions: QuickAction[] = [
   { 
     icon: Users, 
     label: "Novo Cliente", 
-    path: "/clients",
+    path: "/clients?action=new",
     color: "from-emerald-500 to-teal-500",
     delay: "50ms",
     module: "clients",
@@ -44,7 +44,7 @@ const allActions: QuickAction[] = [
   { 
     icon: DollarSign, 
     label: "Nova Fatura", 
-    path: "/billing",
+    path: "/billing?action=new",
     color: "from-amber-500 to-orange-500",
     delay: "100ms",
     module: "financial",
@@ -53,7 +53,7 @@ const allActions: QuickAction[] = [
   { 
     icon: FileText, 
     label: "Novo Contrato", 
-    path: "/contracts",
+    path: "/contracts/new",
     color: "from-purple-500 to-violet-500",
     delay: "150ms",
     module: "contracts",
@@ -62,7 +62,7 @@ const allActions: QuickAction[] = [
   { 
     icon: Calendar, 
     label: "Novo Evento", 
-    path: "/calendar",
+    path: "/calendar?action=new",
     color: "from-pink-500 to-rose-500",
     delay: "200ms",
     module: "calendar",
@@ -71,7 +71,7 @@ const allActions: QuickAction[] = [
   { 
     icon: Package, 
     label: "Novo Ativo", 
-    path: "/inventory",
+    path: "/inventory?action=new",
     color: "from-indigo-500 to-blue-500",
     delay: "250ms",
     module: "inventory",

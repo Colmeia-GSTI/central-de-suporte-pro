@@ -60,6 +60,16 @@ export default function ClientsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open creation form when navigating with ?action=new
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setIsFormOpen(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   
   // Check if user is technician only (no admin/manager/financial roles)
   const isTechnicianOnly = useIsTechnicianOnly();

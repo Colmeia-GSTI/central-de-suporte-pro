@@ -65,6 +65,16 @@ export default function BillingPage() {
   const rawTab = (searchParams.get("tab") as TabId) || "invoices";
   const { data: counters } = useBillingCounters();
   const { can } = usePermissions();
+
+  // Auto-open invoice creation when navigating with ?action=new
+  const [shouldOpenNewInvoice, setShouldOpenNewInvoice] = useState(false);
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setShouldOpenNewInvoice(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   
   const canManage = can("financial", "edit");
   const canManageServices = can("services", "edit");
