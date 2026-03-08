@@ -208,6 +208,183 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
   return { processed, updated };
 }
 
+// ============ BOLETO PAYMENT STATUS POLLING ============
+
+async function pollBoletoPayments(
+  supabase: SupabaseClient,
+  specificInvoiceId?: string
+): Promise<{ processed: number; updated: number }> {
+  console.log("[POLL-SERVICES] Verificando pagamentos de boletos...");
+
+  const { data: settingsData } = await supabase
+    .from("integration_settings")
+    .select("settings, is_active")
+    .eq("integration_type", "banco_inter")
+    .maybeSingle();
+
+  if (!settingsData?.is_active) {
+    console.log("[POLL-SERVICES] Banco Inter não configurado");
+    return { processed: 0, updated: 0 };
+  }
+
+  const settings = settingsData.settings as InterSettings;
+  if (!settings.certificate_crt || !settings.certificate_key) {
+    return { processed: 0, updated: 0 };
+  }
+
+  // Build query for invoices with boleto that are still unpaid
+  let query = supabase
+    .from("invoices")
+    .select("id, invoice_number, notes, amount, client_id, boleto_barcode")
+    .not("boleto_barcode", "is", null)
+    .in("status", ["pending", "overdue"]);
+
+  if (specificInvoiceId) {
+    query = query.eq("id", specificInvoiceId);
+  } else {
+    // Only check invoices older than 2 hours (fallback mode)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    query = query.lt("created_at", twoHoursAgo);
+  }
+
+  const { data: pendingInvoices } = await query.limit(20);
+
+  if (!pendingInvoices?.length) {
+    console.log("[POLL-SERVICES] Nenhum boleto pendente de verificação de pagamento");
+    return { processed: 0, updated: 0 };
+  }
+
+  const httpClient = createMtlsClient(settings.certificate_crt, settings.certificate_key);
+  const baseUrl = settings.environment === "production"
+    ? "https://cdpj.partners.bancointer.com.br"
+    : "https://cdpj-sandbox.partners.bancointer.com.br";
+
+  const mtlsFetch = (url: string, options: RequestInit) =>
+    fetch(url, { ...options, client: httpClient } as RequestInit);
+
+  // Get OAuth token with read scope
+  const tokenResponse = await mtlsFetch(`${baseUrl}/oauth/v2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: settings.client_id,
+      client_secret: settings.client_secret,
+      grant_type: "client_credentials",
+      scope: "boleto-cobranca.read",
+    }),
+  });
+
+  if (!tokenResponse.ok) {
+    console.error("[POLL-SERVICES] Erro auth Banco Inter para verificação de pagamentos");
+    return { processed: 0, updated: 0 };
+  }
+
+  const { access_token } = await tokenResponse.json();
+  let processed = 0, updated = 0;
+
+  for (const invoice of pendingInvoices) {
+    processed++;
+    try {
+      // Try to find codigoSolicitacao from notes
+      const match = invoice.notes?.match(/codigoSolicitacao:([a-f0-9-]+)/i);
+      
+      let data;
+      if (match) {
+        const statusResponse = await mtlsFetch(
+          `${baseUrl}/cobranca/v3/cobrancas/${match[1]}`,
+          { headers: { Authorization: `Bearer ${access_token}` } }
+        );
+        if (!statusResponse.ok) continue;
+        data = await statusResponse.json();
+      } else {
+        // Fallback: search by seuNumero (invoice_number)
+        const searchResponse = await mtlsFetch(
+          `${baseUrl}/cobranca/v3/cobrancas?filtrarPor=NOSSONUMERO&valorFiltro=${invoice.invoice_number}`,
+          { headers: { Authorization: `Bearer ${access_token}` } }
+        );
+        if (!searchResponse.ok) continue;
+        const searchData = await searchResponse.json();
+        const items = searchData.cobrancas || searchData.content || [];
+        if (!items.length) continue;
+        data = items[0];
+      }
+
+      const cobranca = data.cobranca || data;
+      const situacao = cobranca.situacao || data.situacao;
+
+      // Check if paid
+      if (situacao === "PAGO" || situacao === "RECEBIDO" || situacao === "LIQUIDADO") {
+        const paidAmount = cobranca.valorTotalRecebimento || cobranca.valorNominal || invoice.amount;
+        const paidDate = cobranca.dataSituacao || new Date().toISOString().split("T")[0];
+
+        console.log(`[POLL-SERVICES] Fatura #${invoice.invoice_number} PAGA! Valor: R$ ${paidAmount}`);
+
+        // Update invoice status
+        const { error: updateError } = await supabase
+          .from("invoices")
+          .update({
+            status: "paid",
+            paid_date: paidDate,
+            paid_amount: paidAmount,
+            payment_method: "boleto",
+          })
+          .eq("id", invoice.id);
+
+        if (updateError) {
+          console.error(`[POLL-SERVICES] Erro ao atualizar fatura ${invoice.id}:`, updateError);
+          continue;
+        }
+
+        // Create financial entry with correct columns
+        const { error: feError } = await supabase.from("financial_entries").insert({
+          client_id: invoice.client_id,
+          invoice_id: invoice.id,
+          type: "receita",
+          amount: paidAmount,
+          description: `Pagamento automático (boleto) - Fatura #${invoice.invoice_number}`,
+          date: paidDate,
+          category: "pagamento_automatico",
+        });
+
+        if (feError) {
+          console.error(`[POLL-SERVICES] Erro financial_entry ${invoice.id}:`, feError);
+        }
+
+        // Audit log
+        await supabase.from("audit_logs").insert({
+          table_name: "invoices",
+          record_id: invoice.id,
+          action: "POLLING_PAYMENT_CONFIRMED",
+          new_data: {
+            paid_amount: paidAmount,
+            paid_date: paidDate,
+            payment_method: "boleto",
+            source: "poll_services",
+            situacao,
+          },
+        });
+
+        // Notify admins
+        await notifyAdmins(
+          supabase,
+          "Pagamento Confirmado",
+          `Fatura #${invoice.invoice_number} paga via boleto (R$ ${paidAmount})`,
+          "success",
+          "invoice",
+          invoice.id
+        );
+
+        updated++;
+      }
+    } catch (e) {
+      console.error(`[POLL-SERVICES] Erro verificação pagamento ${invoice.id}:`, e);
+    }
+  }
+
+  console.log(`[POLL-SERVICES] Pagamentos: ${processed} verificados, ${updated} confirmados`);
+  return { processed, updated };
+}
+
 // ============ ASAAS NFS-E POLLING ============
 
 async function pollAsaasNfse(supabase: SupabaseClient): Promise<{ processed: number; updated: number }> {
