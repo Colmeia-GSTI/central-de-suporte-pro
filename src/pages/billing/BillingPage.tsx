@@ -68,6 +68,7 @@ export default function BillingPage() {
 
   // Auto-open invoice creation when navigating with ?action=new
   const [shouldOpenNewInvoice, setShouldOpenNewInvoice] = useState(false);
+  const handleAutoOpenConsumed = useCallback(() => setShouldOpenNewInvoice(false), []);
   useEffect(() => {
     if (searchParams.get("action") === "new") {
       setShouldOpenNewInvoice(true);
