@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus, CheckCircle2, AlertTriangle, MoreHorizontal } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ContractAdjustmentDialog } from "@/components/contracts/ContractAdjustmentDialog";
