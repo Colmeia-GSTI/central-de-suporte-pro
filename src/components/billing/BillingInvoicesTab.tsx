@@ -162,11 +162,13 @@ export function BillingInvoicesTab() {
     generatingPayment,
     processingComplete,
     sendingNotification,
+    checkingPayment,
     markAsPaidMutation,
     cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,
+    handleCheckPaymentStatus,
   } = useInvoiceActions();
 
   const { data: invoices = [], isLoading, isFetching } = useQuery({
