@@ -390,7 +390,7 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
           />
 
           {/* Fatura - compacto */}
-          <div className="rounded-md border p-3 space-y-2 bg-muted/30">
+          <div className="rounded-md border border-border/70 p-3 space-y-2 bg-muted/40">
             <div className="flex items-center justify-between">
               <Label className="text-sm flex items-center gap-2">
                 <Receipt className="h-4 w-4" />
