@@ -214,6 +214,9 @@ export function SystemTab() {
         </CardContent>
       </Card>
 
+      {/* Business Hours */}
+      <BusinessHoursForm />
+
       {/* About */}
       <Card>
         <CardHeader>

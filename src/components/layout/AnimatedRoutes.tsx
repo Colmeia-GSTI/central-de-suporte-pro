@@ -125,8 +125,8 @@ export function AnimatedRoutes() {
       <Route path="/unauthorized" element={<LazyPage><Unauthorized /></LazyPage>} />
       <Route path="/setup" element={<LazyPage><Setup /></LazyPage>} />
       
-      {/* Public routes */}
-      <Route path="/tv-dashboard" element={<LazyPage><TVDashboardPage /></LazyPage>} />
+      {/* TV Dashboard - protected */}
+      <Route path="/tv-dashboard" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LazyPage><TVDashboardPage /></LazyPage></ProtectedRoute>} />
       
       {/* Client portal */}
       <Route path="/portal" element={<ProtectedRoute allowedRoles={["client", "client_master"]}><LazyPage><ClientPortalPage /></LazyPage></ProtectedRoute>} />

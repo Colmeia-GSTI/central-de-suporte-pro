@@ -249,6 +249,40 @@ export function IntegrationStatusPanel() {
           </CardContent>
         </Card>
       )}
+
+      {/* Scheduled Automations (CRONs) */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          Automações Agendadas
+        </h4>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[
+            { name: "Verificação de SLA", description: "Notifica sobre chamados próximos de violar o SLA", fn: "notify-sla-breach" },
+            { name: "Reajuste de Contratos", description: "Verifica contratos com reajuste pendente", fn: "check-contract-adjustments" },
+            { name: "Geração de Faturas", description: "Gera faturas mensais automaticamente", fn: "generate-invoice-payments" },
+            { name: "Polling de Serviços", description: "Monitora status de serviços externos", fn: "poll-services" },
+          ].map((cron) => (
+            <Card key={cron.fn}>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <RefreshCw className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{cron.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{cron.description}</p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <Badge variant="outline" className="text-xs">
+                    Automático (CRON)
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -88,6 +88,10 @@ export function IntegrationsTab() {
         <TabsContent value="automacao" className="space-y-4 mt-4">
           <NoContactCheckConfigForm />
         </TabsContent>
+
+        <TabsContent value="logs" className="space-y-4 mt-4">
+          <LogsViewerTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
