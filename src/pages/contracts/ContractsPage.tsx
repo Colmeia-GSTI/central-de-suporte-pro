@@ -106,7 +106,7 @@ export default function ContractsPage() {
     open: false,
     contract: null,
   });
-  const { toast } = useToast();
+  
   const queryClient = useQueryClient();
 
   const { data: contracts = [], isLoading } = useQuery({
