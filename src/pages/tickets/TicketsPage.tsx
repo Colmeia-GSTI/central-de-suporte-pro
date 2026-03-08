@@ -627,7 +627,7 @@ export default function TicketsPage() {
             Kanban
           </Button>
 
-          {selectedIds.size > 0 && (
+          {selectedIds.size > 0 && canManageTickets && (
             <div className="ml-4 flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-lg px-3 py-1.5">
               <span className="text-sm font-medium text-primary">
                 {selectedIds.size} selecionado(s)
