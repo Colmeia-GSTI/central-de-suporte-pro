@@ -22,12 +22,14 @@ interface InvoiceInlineActionsProps {
   processingComplete: string | null;
   generatingPayment: string | null;
   sendingNotification: string | null;
+  checkingPayment: string | null;
   onViewHistory: () => void;
   onEmitComplete: () => void;
   onBoletoClick: () => void;
   onNfseClick: () => void;
   onEmailClick: () => void;
   onManualPayment: () => void;
+  onCheckPayment: () => void;
 }
 
 export function InvoiceInlineActions({
