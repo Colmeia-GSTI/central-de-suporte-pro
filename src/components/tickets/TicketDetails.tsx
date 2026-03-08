@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, MessageSquare, History, ArrowRightLeft, Pause, CheckCircle, PhoneOff } from "lucide-react";
 import { NoContactButton } from "./NoContactButton";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 import { TicketDetailsTab } from "./TicketDetailsTab";
 import { TicketCommentsTab } from "./TicketCommentsTab";
