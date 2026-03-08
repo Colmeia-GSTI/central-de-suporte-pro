@@ -50,6 +50,7 @@ import { AssetSelectionDialog } from "@/components/tickets/AssetSelectionDialog"
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { SLAIndicator } from "@/components/tickets/SLAIndicator";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -128,6 +129,8 @@ export default function TicketsPage() {
   
   const { toast } = useToast();
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const canManageTickets = can("tickets", "manage");
   const queryClient = useQueryClient();
   const { views: savedViews, saveView, deleteView } = useSavedViews();
 
@@ -624,7 +627,7 @@ export default function TicketsPage() {
             Kanban
           </Button>
 
-          {selectedIds.size > 0 && (
+          {selectedIds.size > 0 && canManageTickets && (
             <div className="ml-4 flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-lg px-3 py-1.5">
               <span className="text-sm font-medium text-primary">
                 {selectedIds.size} selecionado(s)

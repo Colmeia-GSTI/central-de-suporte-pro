@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,6 +50,9 @@ export default function CalendarPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const { can } = usePermissions();
+  const canCreate = can("calendar", "create");
+  const canEdit = can("calendar", "edit");
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["calendar-events", dateRange.start.toISOString(), dateRange.end.toISOString()],
@@ -105,9 +109,10 @@ export default function CalendarPage() {
   }, []);
 
   const handleDateClick = useCallback((date: Date) => {
+    if (!canCreate) return;
     setSelectedDate(date);
     setIsFormOpen(true);
-  }, []);
+  }, [canCreate]);
 
   const handleEventDrop = useCallback(
     (eventId: string, start: Date, end: Date) => {
@@ -184,11 +189,13 @@ export default function CalendarPage() {
               Gerencie visitas, reuniões e plantões
             </p>
           </div>
-          <Button onClick={() => setIsFormOpen(true)} size={isMobile ? "sm" : "default"}>
-            <Plus className="h-4 w-4 mr-1 md:mr-2" />
-            <span className="hidden sm:inline">Novo Evento</span>
-            <span className="sm:hidden">Novo</span>
-          </Button>
+          {canCreate && (
+            <Button onClick={() => setIsFormOpen(true)} size={isMobile ? "sm" : "default"}>
+              <Plus className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Novo Evento</span>
+              <span className="sm:hidden">Novo</span>
+            </Button>
+          )}
         </div>
 
         {/* Calendar */}

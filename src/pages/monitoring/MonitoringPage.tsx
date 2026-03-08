@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useDebounce } from "@/hooks/useDebounce";
 // Removed: useRealtimeMonitoring - now handled by unified realtime hook
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -82,6 +83,8 @@ export default function MonitoringPage() {
     return saved === "client" || saved === "device" ? saved : "none";
   });
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canManageMonitoring = can("monitoring", "manage");
 
   // Persist preferences to localStorage
   useEffect(() => {
@@ -459,7 +462,7 @@ export default function MonitoringPage() {
           </TabsContent>
 
           <TabsContent value="alerts">
-            {selectedAlerts.length > 0 && (
+            {selectedAlerts.length > 0 && canManageMonitoring && (
               <div className="flex items-center gap-2 p-4 mb-4 bg-muted/50 rounded-lg">
                 <span className="text-sm font-medium">
                   {selectedAlerts.length} selecionado(s)
@@ -487,7 +490,7 @@ export default function MonitoringPage() {
               isLoading={loadingAlerts}
               selectedAlerts={selectedAlerts}
               setSelectedAlerts={setSelectedAlerts}
-              onAcknowledge={(alertId) => acknowledgeAlertMutation.mutate(alertId)}
+              onAcknowledge={canManageMonitoring ? (alertId) => acknowledgeAlertMutation.mutate(alertId) : undefined}
               groupBy={groupBy}
             />
           </TabsContent>

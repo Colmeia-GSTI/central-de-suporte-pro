@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, MessageSquare, History, ArrowRightLeft, Pause, CheckCircle, PhoneOff } from "lucide-react";
 import { NoContactButton } from "./NoContactButton";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 import { TicketDetailsTab } from "./TicketDetailsTab";
 import { TicketCommentsTab } from "./TicketCommentsTab";
@@ -60,13 +61,16 @@ const canResolveStatuses: Enums<"ticket_status">[] = [
 export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause, onResolve }: TicketDetailsProps) {
   const [activeTab, setActiveTab] = useState(initialTab || "details");
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
 
   const handleUpdate = () => {
     queryClient.invalidateQueries({ queryKey: ["tickets"] });
   };
 
-  const canPause = canPauseStatuses.includes(ticket.status);
-  const canResolve = canResolveStatuses.includes(ticket.status);
+  const canEditTicket = can("tickets", "edit");
+  const canManageTicket = can("tickets", "manage");
+  const canPause = canEditTicket && canPauseStatuses.includes(ticket.status);
+  const canResolve = canEditTicket && canResolveStatuses.includes(ticket.status);
 
   return (
     <div className="space-y-4">
@@ -112,12 +116,14 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
                 Pausar
               </Button>
             )}
-            <NoContactButton
-              ticketId={ticket.id}
-              ticketNumber={ticket.ticket_number}
-              currentStatus={ticket.status}
-            />
-            {onTransfer && (
+            {canEditTicket && (
+              <NoContactButton
+                ticketId={ticket.id}
+                ticketNumber={ticket.ticket_number}
+                currentStatus={ticket.status}
+              />
+            )}
+            {canManageTicket && onTransfer && (
               <Button
                 variant="outline"
                 size="sm"

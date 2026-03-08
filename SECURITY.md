@@ -17,7 +17,7 @@ This document describes the security architecture and best practices for this ap
 1. **Frontend (UI Control)**
    - `PermissionGate` component hides/shows UI elements
    - `usePermissions` hook checks if user can perform actions
-   - `useSecureAction` hook wraps mutations with permission validation
+   - `useSecureAction` hook wraps mutations with permission validation (implemented in `src/hooks/useSecureAction.ts`)
    - **IMPORTANT**: Frontend permissions are for UX only, never security!
 
 2. **Backend (Data Protection)**
@@ -77,12 +77,17 @@ This document describes the security architecture and best practices for this ap
 ### Sensitive Data Views
 - `software_licenses_safe` - Masks license keys for non-admins
 - `nfse_history_safe` - Restricts fiscal data visibility
+- `certificates_safe` - Hides `senha_hash` and `arquivo_url` from non-admin staff
+- `company_settings_safe` - Hides `certificado_senha_hash` from non-admin staff
 
 ### RLS Policies
 All tables have appropriate RLS policies:
 - Staff-only tables require `is_staff(auth.uid())`
 - User-specific data uses `auth.uid() = user_id`
 - Client data is scoped by `client_id`
+- `nfse_cancellation_log` UPDATE restricted to `is_financial_admin()`
+- `application_logs` INSERT restricted to `is_staff()`
+- `storage_config` SELECT restricted to admin only
 
 ## Security Checklist for New Features
 
