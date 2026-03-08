@@ -34,7 +34,7 @@ import { logger, retryWithBackoff } from "@/lib/logger";
 import { downloadStorageFileSafe } from "@/lib/storage-utils";
 import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
-import { EmitNfseAvulsaDialog } from "@/components/financial/EmitNfseAvulsaDialog";
+import { NfseAvulsaDialog } from "@/components/billing/nfse/NfseAvulsaDialog";
 import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -970,7 +970,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
         />
       )}
 
-      <EmitNfseAvulsaDialog
+      <NfseAvulsaDialog
         open={isNfseAvulsaOpen}
         onOpenChange={setIsNfseAvulsaOpen}
       />

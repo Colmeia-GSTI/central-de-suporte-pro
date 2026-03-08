@@ -28,14 +28,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Plus, Search, Building2, Edit, Trash2, Phone, Mail, MessageCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ClientForm } from "@/components/clients/ClientForm";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPhone } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients"> & {
@@ -57,7 +57,7 @@ export default function ClientsPage() {
   });
   const [cursor, setCursor] = useState<string | null>(null);
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);
-  const { toast } = useToast();
+  
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -71,8 +71,7 @@ export default function ClientsPage() {
     }
   }, [searchParams, setSearchParams]);
   
-  // Check if user is technician only (no admin/manager/financial roles)
-  const isTechnicianOnly = useIsTechnicianOnly();
+  const { isTechnicianOnly } = usePermissions();
   
   const debouncedSearch = useDebounce(search, 300);
 
@@ -143,11 +142,11 @@ export default function ClientsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["clients-select"] });
-      toast({ title: "Cliente excluído com sucesso" });
+      toast.success("Cliente excluído com sucesso");
       setDeleteConfirm({ open: false, client: null });
     },
     onError: () => {
-      toast({ title: "Erro ao excluir cliente", variant: "destructive" });
+      toast.error("Erro ao excluir cliente");
     },
   });
 

@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus, CheckCircle2, AlertTriangle, MoreHorizontal } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ContractAdjustmentDialog } from "@/components/contracts/ContractAdjustmentDialog";
@@ -106,7 +106,7 @@ export default function ContractsPage() {
     open: false,
     contract: null,
   });
-  const { toast } = useToast();
+  
   const queryClient = useQueryClient();
 
   const { data: contracts = [], isLoading } = useQuery({
@@ -152,11 +152,11 @@ export default function ContractsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
-      toast({ title: "Contrato excluído com sucesso" });
+      toast.success("Contrato excluído com sucesso");
       setDeleteConfirm({ open: false, contract: null });
     },
     onError: () => {
-      toast({ title: "Erro ao excluir contrato", variant: "destructive" });
+      toast.error("Erro ao excluir contrato");
     },
   });
 
@@ -190,15 +190,15 @@ export default function ContractsPage() {
 
       const stats = data.stats || { generated: 0, skipped: 0 };
       if (stats.generated > 0) {
-        toast({ title: "Fatura gerada com sucesso!", description: `${stats.generated} fatura(s) criada(s)` });
+        toast.success(`${stats.generated} fatura(s) criada(s)`);
       } else if (stats.skipped > 0) {
-        toast({ title: "Fatura já existe para este mês", variant: "default" });
+        toast.info("Fatura já existe para este mês");
       } else {
-        toast({ title: data.message || "Nenhuma fatura gerada" });
+        toast.info(data.message || "Nenhuma fatura gerada");
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Erro ao gerar fatura", description: error.message, variant: "destructive" });
+      toast.error(error.message || "Erro ao gerar fatura");
     },
   });
 

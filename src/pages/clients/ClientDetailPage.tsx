@@ -28,7 +28,7 @@ import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
 import { formatPhone } from "@/lib/utils";
-import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients">;
@@ -40,8 +40,7 @@ export default function ClientDetailPage() {
   const initialTab = searchParams.get("tab") || "info";
   const [activeTab, setActiveTab] = useState(initialTab);
   
-  // Check if user is technician only (no admin/manager/financial roles)
-  const isTechnicianOnly = useIsTechnicianOnly();
+  const { isTechnicianOnly } = usePermissions();
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", id],

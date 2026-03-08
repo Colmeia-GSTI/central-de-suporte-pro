@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Ticket, Loader2, Eye, EyeOff } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 export default function Register() {
   const [fullName, setFullName] = useState("");
@@ -17,26 +17,18 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (password !== confirmPassword) {
-      toast({
-        title: "Senhas não conferem",
-        description: "Por favor, verifique se as senhas são iguais.",
-        variant: "destructive",
-      });
+      toast.error("Por favor, verifique se as senhas são iguais.");
       return;
     }
 
     if (password.length < 8) {
-      toast({
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 8 caracteres.",
-        variant: "destructive",
-      });
+      toast.error("A senha deve ter pelo menos 8 caracteres.");
       return;
     }
 
@@ -45,19 +37,12 @@ export default function Register() {
     const { error } = await signUp(email, password, fullName);
 
     if (error) {
-      toast({
-        title: "Erro ao cadastrar",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error(error.message);
       setIsLoading(false);
       return;
     }
 
-    toast({
-      title: "Verifique seu email",
-      description: "Enviamos um link de confirmação para o seu email. Confirme sua conta antes de fazer login.",
-    });
+    toast.success("Enviamos um link de confirmação para o seu email. Confirme sua conta antes de fazer login.");
     navigate("/login");
   };
 

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
+import { usePermissions } from "@/hooks/usePermissions";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,8 +78,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const [whatsAppStatus, setWhatsAppStatus] = useState<'idle' | 'valid' | 'invalid' | 'error'>('idle');
   const [whatsAppMessage, setWhatsAppMessage] = useState<string>("");
   
-  // Check if user is technician only (no admin/manager/financial roles)
-  const isTechnicianOnly = useIsTechnicianOnly();
+  const { isTechnicianOnly } = usePermissions();
 
   const form = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),

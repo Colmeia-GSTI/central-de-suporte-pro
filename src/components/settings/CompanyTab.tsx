@@ -5,7 +5,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { getErrorMessage } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import {
   Form,
@@ -76,7 +76,7 @@ const UF_OPTIONS = [
 ];
 
 export default function CompanyTab() {
-  const { toast } = useToast();
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export default function CompanyTab() {
     try {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("*")
+        .select("id, razao_social, nome_fantasia, cnpj, inscricao_municipal, inscricao_estadual, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cidade, endereco_uf, endereco_cep, endereco_codigo_ibge, telefone, email, nfse_ambiente, nfse_regime_tributario, nfse_optante_simples, nfse_incentivador_cultural, nfse_aliquota_padrao, nfse_cnae_padrao, nfse_codigo_tributacao_padrao, nfse_descricao_servico_padrao, business_hours")
         .limit(1)
         .single();
 
@@ -158,11 +158,7 @@ export default function CompanyTab() {
       }
     } catch (error) {
       logger.error("Erro ao carregar configurações", "Settings", { error: String(error) });
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as configurações da empresa.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível carregar as configurações da empresa.");
     } finally {
       setLoading(false);
     }
@@ -193,19 +189,12 @@ export default function CompanyTab() {
         setCompanyId(newData.id);
       }
 
-      toast({
-        title: "Sucesso",
-        description: "Configurações da empresa salvas com sucesso.",
-      });
+      toast.success("Configurações da empresa salvas com sucesso.");
 
       clearDraft();
     } catch (error) {
       logger.error("Erro ao salvar", "Settings", { error: String(error) });
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar as configurações.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível salvar as configurações.");
     } finally {
       setSaving(false);
     }
@@ -237,11 +226,7 @@ export default function CompanyTab() {
     const cnpj = form.getValues("cnpj")?.replace(/\D/g, "");
     
     if (!cnpj || cnpj.length !== 14) {
-      toast({
-        title: "CNPJ inválido",
-        description: "Digite um CNPJ válido com 14 dígitos",
-        variant: "destructive",
-      });
+      toast.error("Digite um CNPJ válido com 14 dígitos");
       return;
     }
 
@@ -254,11 +239,7 @@ export default function CompanyTab() {
       if (error) throw error;
 
       if (data.status === "ERROR") {
-        toast({
-          title: "CNPJ não encontrado",
-          description: data.message || "Não foi possível encontrar o CNPJ informado",
-          variant: "destructive",
-        });
+        toast.error(data.message || "Não foi possível encontrar o CNPJ informado");
         return;
       }
 
@@ -275,17 +256,10 @@ export default function CompanyTab() {
       form.setValue("endereco_uf", data.uf || "");
       form.setValue("endereco_cep", formatCEP(data.cep?.replace(/\D/g, "") || ""));
 
-      toast({
-        title: "Dados preenchidos",
-        description: "Os dados do CNPJ foram carregados com sucesso",
-      });
+      toast.success("Os dados do CNPJ foram carregados com sucesso");
     } catch (error: unknown) {
       logger.error("CNPJ lookup error", "Settings", { error: String(error) });
-      toast({
-        title: "Erro na consulta",
-        description: "Não foi possível consultar o CNPJ. Tente novamente.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível consultar o CNPJ. Tente novamente.");
     } finally {
       setIsSearchingCnpj(false);
     }

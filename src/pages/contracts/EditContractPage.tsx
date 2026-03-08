@@ -18,7 +18,7 @@ export default function EditContractPage() {
       if (!id) throw new Error("Contract ID not provided");
       const { data, error } = await supabase
         .from("contracts")
-        .select("*")
+        .select("id, name, client_id, description, start_date, end_date, monthly_value, status, support_model, auto_renew, billing_day, hours_included, adjustment_index, adjustment_date, adjustment_percentage, billing_provider, payment_preference, days_before_due, notification_message, internal_notes, nfse_enabled, nfse_service_code, nfse_service_code_id, nfse_cnae, nfse_aliquota, nfse_iss_retido, nfse_descricao_customizada, created_at, updated_at")
         .eq("id", id)
         .single();
       if (error) throw error;
