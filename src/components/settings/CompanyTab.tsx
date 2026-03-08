@@ -194,11 +194,7 @@ export default function CompanyTab() {
       clearDraft();
     } catch (error) {
       logger.error("Erro ao salvar", "Settings", { error: String(error) });
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar as configurações.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível salvar as configurações.");
     } finally {
       setSaving(false);
     }
