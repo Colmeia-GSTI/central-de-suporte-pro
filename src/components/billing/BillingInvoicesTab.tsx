@@ -736,6 +736,7 @@ export function BillingInvoicesTab() {
                             generatingPayment={generatingPayment}
                             processingComplete={processingComplete}
                             sendingNotification={sendingNotification}
+                            checkingPayment={checkingPayment}
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                             onGeneratePayment={handleGeneratePayment}
                             onManualPayment={() => setManualPaymentInvoice(invoice)}
