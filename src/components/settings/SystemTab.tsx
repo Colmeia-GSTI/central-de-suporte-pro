@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Tv, RefreshCw, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { BusinessHoursForm } from "./BusinessHoursForm";
 import type { Tables } from "@/integrations/supabase/types";
 
 export function SystemTab() {
@@ -212,6 +213,9 @@ export function SystemTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Business Hours */}
+      <BusinessHoursForm />
 
       {/* About */}
       <Card>

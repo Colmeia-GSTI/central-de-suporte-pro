@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { Users, Tags, Shield, Sliders, Plug, History, Link2, Bell, MessageSquare, BarChart3, Building2, Layers, KeyRound, Tag, Mail } from "lucide-react";
 import { UsersTab } from "@/components/settings/UsersTab";
 import { CategoriesTab } from "@/components/settings/CategoriesTab";
@@ -37,19 +38,29 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue={canManage ? "users" : "categories"} className="space-y-6">
-          <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsList className="flex flex-wrap h-auto gap-1 p-2">
+            {/* GESTÃO */}
             {canManage && (
-              <TabsTrigger value="users" className="gap-2">
-                <Users className="h-4 w-4" />
-                Usuários
-              </TabsTrigger>
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1 w-full sm:w-auto">Gestão</span>
+                <TabsTrigger value="users" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  Usuários
+                </TabsTrigger>
+                <TabsTrigger value="permissions" className="gap-2">
+                  <KeyRound className="h-4 w-4" />
+                  Permissões
+                </TabsTrigger>
+                <TabsTrigger value="departments" className="gap-2">
+                  <Layers className="h-4 w-4" />
+                  Departamentos
+                </TabsTrigger>
+                <Separator orientation="vertical" className="h-6 hidden sm:block" />
+              </>
             )}
-            {canManage && (
-              <TabsTrigger value="permissions" className="gap-2">
-                <KeyRound className="h-4 w-4" />
-                Permissões
-              </TabsTrigger>
-            )}
+
+            {/* OPERAÇÕES */}
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1 w-full sm:w-auto">Operações</span>
             <TabsTrigger value="categories" className="gap-2">
               <Tags className="h-4 w-4" />
               Categorias
@@ -62,38 +73,50 @@ export default function SettingsPage() {
               <Shield className="h-4 w-4" />
               SLA
             </TabsTrigger>
+            <TabsTrigger value="mappings" className="gap-2">
+              <Link2 className="h-4 w-4" />
+              Mapeamentos
+            </TabsTrigger>
+            <Separator orientation="vertical" className="h-6 hidden sm:block" />
+
+            {/* EMPRESA */}
             {canManage && (
-              <TabsTrigger value="company" className="gap-2">
-                <Building2 className="h-4 w-4" />
-                Empresa
-              </TabsTrigger>
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1 w-full sm:w-auto">Empresa</span>
+                <TabsTrigger value="company" className="gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Dados
+                </TabsTrigger>
+                <TabsTrigger value="integrations" className="gap-2">
+                  <Plug className="h-4 w-4" />
+                  Integrações
+                </TabsTrigger>
+                <TabsTrigger value="system" className="gap-2">
+                  <Sliders className="h-4 w-4" />
+                  Sistema
+                </TabsTrigger>
+                {isAdmin && (
+                  <TabsTrigger value="audit" className="gap-2">
+                    <History className="h-4 w-4" />
+                    Auditoria
+                  </TabsTrigger>
+                )}
+                <Separator orientation="vertical" className="h-6 hidden sm:block" />
+              </>
             )}
-            {canManage && (
-              <TabsTrigger value="departments" className="gap-2">
-                <Layers className="h-4 w-4" />
-                Departamentos
-              </TabsTrigger>
-            )}
-            {canManage && (
-              <TabsTrigger value="integrations" className="gap-2">
-                <Plug className="h-4 w-4" />
-                Integrações
-              </TabsTrigger>
-            )}
+
+            {/* COMUNICAÇÃO */}
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1 w-full sm:w-auto">Comunicação</span>
+            <TabsTrigger value="notifications" className="gap-2">
+              <Bell className="h-4 w-4" />
+              Regras
+            </TabsTrigger>
             {canManage && (
               <TabsTrigger value="email-templates" className="gap-2">
                 <Mail className="h-4 w-4" />
                 Templates
               </TabsTrigger>
             )}
-            <TabsTrigger value="mappings" className="gap-2">
-              <Link2 className="h-4 w-4" />
-              Mapeamentos
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
-              <Bell className="h-4 w-4" />
-              Regras
-            </TabsTrigger>
             <TabsTrigger value="message-logs" className="gap-2">
               <MessageSquare className="h-4 w-4" />
               Histórico
@@ -102,95 +125,76 @@ export default function SettingsPage() {
               <BarChart3 className="h-4 w-4" />
               Métricas
             </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="audit" className="gap-2">
-                <History className="h-4 w-4" />
-                Auditoria
-              </TabsTrigger>
-            )}
-            {canManage && (
-              <TabsTrigger value="system" className="gap-2">
-                <Sliders className="h-4 w-4" />
-                Sistema
-              </TabsTrigger>
-            )}
           </TabsList>
 
+          {/* GESTÃO */}
           {canManage && (
             <TabsContent value="users">
               <UsersTab />
             </TabsContent>
           )}
-
           {canManage && (
             <TabsContent value="permissions">
               <RolePermissionsTab />
             </TabsContent>
           )}
-
-          <TabsContent value="categories">
-            <CategoriesTab />
-          </TabsContent>
-
-          <TabsContent value="tags">
-            <TagsTab />
-          </TabsContent>
-
-          <TabsContent value="sla">
-            <SLATab />
-          </TabsContent>
-
-          {canManage && (
-            <TabsContent value="company">
-              <CompanyTab />
-            </TabsContent>
-          )}
-
           {canManage && (
             <TabsContent value="departments">
               <DepartmentsTab />
             </TabsContent>
           )}
 
+          {/* OPERAÇÕES */}
+          <TabsContent value="categories">
+            <CategoriesTab />
+          </TabsContent>
+          <TabsContent value="tags">
+            <TagsTab />
+          </TabsContent>
+          <TabsContent value="sla">
+            <SLATab />
+          </TabsContent>
+          <TabsContent value="mappings">
+            <ClientMappingsTab />
+          </TabsContent>
+
+          {/* EMPRESA */}
+          {canManage && (
+            <TabsContent value="company">
+              <CompanyTab />
+            </TabsContent>
+          )}
           {canManage && (
             <TabsContent value="integrations">
               <IntegrationsTab />
             </TabsContent>
           )}
-
           {canManage && (
-            <TabsContent value="email-templates">
-              <EmailTemplatesTab />
+            <TabsContent value="system">
+              <SystemTab />
             </TabsContent>
           )}
-
-          <TabsContent value="mappings">
-            <ClientMappingsTab />
-          </TabsContent>
-
-          <TabsContent value="notifications">
-            <NotificationRulesTab />
-          </TabsContent>
-
-          <TabsContent value="message-logs">
-            <MessageLogsTab />
-          </TabsContent>
-
-          <TabsContent value="message-metrics">
-            <MessageMetricsDashboard />
-          </TabsContent>
-
           {isAdmin && (
             <TabsContent value="audit">
               <AuditLogsTab />
             </TabsContent>
           )}
 
+          {/* COMUNICAÇÃO */}
+          <TabsContent value="notifications">
+            <NotificationRulesTab />
+          </TabsContent>
           {canManage && (
-            <TabsContent value="system">
-              <SystemTab />
+            <TabsContent value="email-templates">
+              <EmailTemplatesTab />
             </TabsContent>
           )}
+          <TabsContent value="message-logs">
+            <MessageLogsTab />
+          </TabsContent>
+          <TabsContent value="message-metrics">
+            <MessageMetricsDashboard />
+          </TabsContent>
         </Tabs>
       </div>
     </AppLayout>

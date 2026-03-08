@@ -350,11 +350,30 @@ export default function ContractsPage() {
                       </TableCell>
                       {/* Próx. Reajuste */}
                       <TableCell>
-                        {contract.adjustment_date ? (
-                          <span className="text-sm">
-                            {format(new Date(contract.adjustment_date), "dd/MM/yyyy", { locale: ptBR })}
-                          </span>
-                        ) : (
+                        {contract.adjustment_date ? (() => {
+                          const adjustDate = new Date(contract.adjustment_date);
+                          const now = new Date();
+                          const diffDays = Math.ceil((adjustDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                          const isPending = diffDays <= 30 && diffDays >= 0;
+                          const isOverdue = diffDays < 0;
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-sm ${isOverdue ? "text-destructive font-medium" : isPending ? "text-status-warning font-medium" : ""}`}>
+                                {format(adjustDate, "dd/MM/yyyy", { locale: ptBR })}
+                              </span>
+                              {isOverdue && (
+                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                  Vencido
+                                </Badge>
+                              )}
+                              {isPending && !isOverdue && (
+                                <Badge className="bg-status-warning text-white text-[10px] px-1.5 py-0">
+                                  Próximo
+                                </Badge>
+                              )}
+                            </div>
+                          );
+                        })() : (
                           <span className="text-muted-foreground text-sm">—</span>
                         )}
                       </TableCell>
