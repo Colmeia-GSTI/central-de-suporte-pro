@@ -156,7 +156,7 @@ export default function ContractsPage() {
       setDeleteConfirm({ open: false, contract: null });
     },
     onError: () => {
-      toast({ title: "Erro ao excluir contrato", variant: "destructive" });
+      toast.error("Erro ao excluir contrato");
     },
   });
 
