@@ -970,7 +970,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
         />
       )}
 
-      <EmitNfseAvulsaDialog
+      <NfseAvulsaDialog
         open={isNfseAvulsaOpen}
         onOpenChange={setIsNfseAvulsaOpen}
       />

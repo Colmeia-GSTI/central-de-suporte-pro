@@ -64,6 +64,15 @@ export function usePermissions() {
     return can(module, "manage");
   };
 
+  const isTechnicianOnly = (() => {
+    const userRoles = roles as AppRole[];
+    const hasTechnician = userRoles.includes("technician");
+    const hasHigherRole = userRoles.some(r => 
+      ["admin", "manager", "financial"].includes(r)
+    );
+    return hasTechnician && !hasHigherRole;
+  })();
+
   return {
     can,
     canAny,
@@ -72,6 +81,7 @@ export function usePermissions() {
     canViewModule,
     canEditModule,
     canManageModule,
+    isTechnicianOnly,
     roles: roles as AppRole[],
   };
 }

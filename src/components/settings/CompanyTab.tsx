@@ -116,7 +116,7 @@ export default function CompanyTab() {
     try {
       const { data, error } = await supabase
         .from("company_settings")
-        .select("*")
+        .select("id, razao_social, nome_fantasia, cnpj, inscricao_municipal, inscricao_estadual, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cidade, endereco_uf, endereco_cep, endereco_codigo_ibge, telefone, email, nfse_ambiente, nfse_regime_tributario, nfse_optante_simples, nfse_incentivador_cultural, nfse_aliquota_padrao, nfse_cnae_padrao, nfse_codigo_tributacao_padrao, nfse_descricao_servico_padrao, business_hours")
         .limit(1)
         .single();
 
