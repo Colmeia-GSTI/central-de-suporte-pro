@@ -1,46 +1,91 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+# Auditoria de Segurança & Plano de Blindagem (Guardian)
 
-## Problema
+## Achados da Investigação
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+### Vulnerabilidades Críticas (ERRO — Security Scan)
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+| # | Problema | Risco |
+|---|---|---|
+| 1 | **`nfse_cancellation_log` UPDATE com `USING (true)`** | Qualquer usuário autenticado (inclusive clientes) pode sobrescrever registros de cancelamento de NFS-e |
+| 2 | **`storage_config` expõe `access_key`/`secret_key` ao role `financial`** | Credenciais de armazenamento cloud legíveis por não-admins |
+| 3 | **`application_logs` INSERT com `WITH CHECK (true)`** | Qualquer requisição (inclusive anon) pode inserir logs falsos |
+| 4 | **Leaked Password Protection desabilitada** | Senhas comprometidas em vazamentos não são bloqueadas |
 
-## Solução
+### Vulnerabilidades Médias (WARN)
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+| # | Problema | Risco |
+|---|---|---|
+| 5 | **`certificates.senha_hash` legível por todos os staff** | Técnicos acessam hash de senha de certificados digitais |
+| 6 | **`company_settings.certificado_senha_hash` legível por todos os staff** | Idem para certificado da empresa |
+| 7 | **`software_licenses.license_key` em texto plano para todos os staff** | View `software_licenses_safe` existe mas tabela base não é restrita |
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+### Lacunas de Frontend (Sem PermissionGate)
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
-
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
-
-## Arquivos modificados
-
-| Arquivo | Ação |
+| Página/Componente | Ações sem proteção |
 |---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
+| `CalendarPage.tsx` | Create, Edit, Delete de eventos — nenhum gate |
+| `src/components/tickets/*` | TicketDetails, TicketCommentsTab, TicketTimeTracker — mutações sem gate |
+| `MonitoringPage.tsx` | Acknowledge alerts — sem verificação de permissão |
+| Bulk actions em `TicketsPage.tsx` | Mutations de status/prioridade/atribuição em lote sem `can()` check |
+
+### Lacuna Arquitetural
+
+- **`useSecureAction` referenciado no SECURITY.md e `permissions.ts` mas NUNCA implementado.** Mutations no frontend confiam apenas em RLS, sem validação de permissão client-side antes de tentar a operação.
+
+---
+
+## Plano de Correção (6 Tarefas)
+
+### Tarefa 1: Corrigir RLS — Políticas Permissivas Demais
+**Migration SQL:**
+- `nfse_cancellation_log`: Restringir UPDATE a `admin`/`financial` via `is_financial_admin(auth.uid())`
+- `application_logs`: Restringir INSERT a `authenticated` com `is_staff(auth.uid())`
+- `storage_config`: Remover política SELECT do `financial`, manter apenas admin
+
+### Tarefa 2: Restringir Acesso a Dados Sensíveis
+**Migration SQL:**
+- `certificates`: Criar VIEW `certificates_safe` sem `senha_hash`/`arquivo_url`, restringir tabela base a `admin`/`financial`
+- `company_settings`: Restringir SELECT de `certificado_senha_hash` a `admin`/`financial` via policy refinada
+- `software_licenses`: Restringir tabela base a `admin`, redirecionar staff para `software_licenses_safe`
+
+### Tarefa 3: Criar Hook `useSecureAction`
+**Arquivo:** `src/hooks/useSecureAction.ts`
+```text
+Hook que wrapa mutations com verificação de permissão:
+- Recebe module + action
+- Valida via usePermissions().can() ANTES de executar
+- Se negado: toast de erro + log + aborta
+- Se permitido: executa a mutation normalmente
+```
+Refatorar mutations críticas (delete em contratos, clientes, inventário, tickets) para usar este hook.
+
+### Tarefa 4: Adicionar PermissionGate nas Páginas Descobertas
+- **CalendarPage.tsx**: Gates em botões de criar/editar/deletar eventos
+- **TicketDetails e sub-componentes**: Gates em edição de status, comentários, time entries
+- **MonitoringPage.tsx**: Gate em acknowledge de alertas
+- **TicketsPage.tsx bulk actions**: Verificação `can('tickets', 'manage')` antes de executar bulk mutations
+
+### Tarefa 5: Habilitar Leaked Password Protection
+Usar configuração de auth para ativar proteção contra senhas vazadas.
+
+### Tarefa 6: Sanitização — Auditoria de `dangerouslySetInnerHTML`
+- `chart.tsx`: Injeção de CSS via `dangerouslySetInnerHTML` — verificar que o conteúdo é 100% gerado internamente (sem input do usuário). Se necessário, migrar para `insertRule()`.
+
+---
+
+## Arquivos Modificados
+
+| Arquivo | Mudança |
+|---|---|
+| **Migration SQL** | RLS fixes (nfse_cancellation_log, storage_config, application_logs, certificates, software_licenses) |
+| `src/hooks/useSecureAction.ts` | Novo hook |
+| `src/pages/calendar/CalendarPage.tsx` | Adicionar PermissionGate |
+| `src/components/tickets/TicketDetails.tsx` | Adicionar PermissionGate |
+| `src/components/tickets/TicketCommentsTab.tsx` | Adicionar PermissionGate |
+| `src/components/tickets/TicketTimeTracker.tsx` | Adicionar PermissionGate |
+| `src/pages/monitoring/MonitoringPage.tsx` | Adicionar PermissionGate |
+| `src/pages/tickets/TicketsPage.tsx` | Guard em bulk actions |
+| `SECURITY.md` | Atualizar documentação |
 
