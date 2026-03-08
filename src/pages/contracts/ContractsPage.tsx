@@ -190,11 +190,11 @@ export default function ContractsPage() {
 
       const stats = data.stats || { generated: 0, skipped: 0 };
       if (stats.generated > 0) {
-        toast({ title: "Fatura gerada com sucesso!", description: `${stats.generated} fatura(s) criada(s)` });
+        toast.success(`${stats.generated} fatura(s) criada(s)`);
       } else if (stats.skipped > 0) {
-        toast({ title: "Fatura já existe para este mês", variant: "default" });
+        toast.info("Fatura já existe para este mês");
       } else {
-        toast({ title: data.message || "Nenhuma fatura gerada" });
+        toast.info(data.message || "Nenhuma fatura gerada");
       }
     },
     onError: (error: Error) => {
