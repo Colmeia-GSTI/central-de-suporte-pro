@@ -61,13 +61,16 @@ const canResolveStatuses: Enums<"ticket_status">[] = [
 export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause, onResolve }: TicketDetailsProps) {
   const [activeTab, setActiveTab] = useState(initialTab || "details");
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
 
   const handleUpdate = () => {
     queryClient.invalidateQueries({ queryKey: ["tickets"] });
   };
 
-  const canPause = canPauseStatuses.includes(ticket.status);
-  const canResolve = canResolveStatuses.includes(ticket.status);
+  const canEditTicket = can("tickets", "edit");
+  const canManageTicket = can("tickets", "manage");
+  const canPause = canEditTicket && canPauseStatuses.includes(ticket.status);
+  const canResolve = canEditTicket && canResolveStatuses.includes(ticket.status);
 
   return (
     <div className="space-y-4">
