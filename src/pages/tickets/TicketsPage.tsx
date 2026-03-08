@@ -129,6 +129,8 @@ export default function TicketsPage() {
   
   const { toast } = useToast();
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const canManageTickets = can("tickets", "manage");
   const queryClient = useQueryClient();
   const { views: savedViews, saveView, deleteView } = useSavedViews();
 
