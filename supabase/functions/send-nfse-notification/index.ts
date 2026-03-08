@@ -310,7 +310,10 @@ Deno.serve(async (req) => {
             await supabase.from("nfse_event_logs").insert({
               nfse_history_id,
               event_type: "compartilhamento",
-              event_data: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
+              event_level: "info",
+              message: `NFS-e #${nfseNumber} enviada por email para ${emailTo}`,
+              source: "send-nfse-notification",
+              details: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
           }
         } catch (e: unknown) {
