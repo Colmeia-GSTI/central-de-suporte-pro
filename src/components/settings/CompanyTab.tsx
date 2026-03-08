@@ -76,7 +76,7 @@ const UF_OPTIONS = [
 ];
 
 export default function CompanyTab() {
-  const { toast } = useToast();
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
