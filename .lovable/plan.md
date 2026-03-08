@@ -1,46 +1,36 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+# Correção: Histórico de Eventos NFS-e Nunca Registra Nada
 
-## Problema
+## Causa Raiz (2 bugs)
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+### Bug 1 — Frontend: Coluna inexistente na query
+`NfseEventLogsDialog.tsx` linha 202 faz:
+```
+.select("id, event_type, level, message, correlation_id, details, created_at")
+```
+A coluna real é `event_level`, não `level`. Isso retorna erro 400 em **todas** as consultas — confirmado nos network requests repetidos com `"column nfse_event_logs.level does not exist"`.
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+### Bug 2 — Backend: `send-nfse-notification` insere com campo errado
+As inserções nas linhas 156-160, 168-172, 304-308, 347-351 usam `event_data` (campo que **não existe** na tabela). Campos obrigatórios `event_level` e `message` estão ausentes. O insert falha silenciosamente (sem throw, sem catch visível), então o envio de email/WhatsApp funciona mas **nenhum evento é registrado**.
 
-## Solução
+A Edge Function `asaas-nfse` usa os campos corretos (`event_level`, `message`, `source`) — por isso os eventos de emissão funcionam, mas os de notificação não.
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+## Correções
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+### 1. `src/components/billing/nfse/NfseEventLogsDialog.tsx`
+- Alterar select de `level` para `event_level`
+- Atualizar interface `NfseEventLog` para remover campo `source` (não existe na tabela) e alinhar com schema real
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
+### 2. `supabase/functions/send-nfse-notification/index.ts`
+- Corrigir todas as inserções em `nfse_event_logs` para usar os campos corretos:
+  - `event_level` (ex: `"info"`, `"warn"`)
+  - `message` (texto descritivo)
+  - `source: "send-nfse-notification"`
+  - `details` em vez de `event_data`
 
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
-
-## Arquivos modificados
-
-| Arquivo | Ação |
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
+| `src/components/billing/nfse/NfseEventLogsDialog.tsx` | Fix select query: `level` → `event_level`; alinhar interface |
+| `supabase/functions/send-nfse-notification/index.ts` | Fix 4 inserts: usar `event_level`, `message`, `source`, `details` |
 
