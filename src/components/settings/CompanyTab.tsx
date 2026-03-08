@@ -239,11 +239,7 @@ export default function CompanyTab() {
       if (error) throw error;
 
       if (data.status === "ERROR") {
-        toast({
-          title: "CNPJ não encontrado",
-          description: data.message || "Não foi possível encontrar o CNPJ informado",
-          variant: "destructive",
-        });
+        toast.error(data.message || "Não foi possível encontrar o CNPJ informado");
         return;
       }
 
