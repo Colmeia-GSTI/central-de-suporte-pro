@@ -166,6 +166,21 @@ export function InvoiceActionsPopover({
           </DropdownMenuSub>
         )}
 
+        {/* Verificar Pagamento no Banco */}
+        {isPendingOrOverdue && hasBoleto && (
+          <DropdownMenuItem
+            onClick={onCheckPayment}
+            disabled={checkingPayment !== null}
+          >
+            {checkingPayment === invoice.id ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Verificar Pagamento
+          </DropdownMenuItem>
+        )}
+
         {/* Baixa Manual / Marcar como Pago */}
         {isPendingOrOverdue && (
           <>
