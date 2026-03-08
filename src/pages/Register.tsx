@@ -42,10 +42,7 @@ export default function Register() {
       return;
     }
 
-    toast({
-      title: "Verifique seu email",
-      description: "Enviamos um link de confirmação para o seu email. Confirme sua conta antes de fazer login.",
-    });
+    toast.success("Enviamos um link de confirmação para o seu email. Confirme sua conta antes de fazer login.");
     navigate("/login");
   };
 
