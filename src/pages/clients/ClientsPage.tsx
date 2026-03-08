@@ -35,7 +35,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPhone } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useIsTechnicianOnly } from "@/hooks/useIsTechnicianOnly";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients"> & {
