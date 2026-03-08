@@ -171,7 +171,10 @@ Deno.serve(async (req) => {
       await supabase.from("nfse_event_logs").insert({
         nfse_history_id,
         event_type: "envio_bloqueado",
-        event_data: { motivo: "xml_ausente", checked_at: new Date().toISOString() },
+        event_level: "warn",
+        message: "Envio bloqueado: XML não disponível",
+        source: "send-nfse-notification",
+        details: { motivo: "xml_ausente", checked_at: new Date().toISOString() },
       });
       await supabase.from("application_logs").insert({
         module: "billing_notification",
