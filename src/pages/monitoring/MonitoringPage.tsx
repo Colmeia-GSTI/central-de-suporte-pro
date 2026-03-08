@@ -490,7 +490,7 @@ export default function MonitoringPage() {
               isLoading={loadingAlerts}
               selectedAlerts={selectedAlerts}
               setSelectedAlerts={setSelectedAlerts}
-              onAcknowledge={(alertId) => acknowledgeAlertMutation.mutate(alertId)}
+              onAcknowledge={canManageMonitoring ? (alertId) => acknowledgeAlertMutation.mutate(alertId) : undefined}
               groupBy={groupBy}
             />
           </TabsContent>
