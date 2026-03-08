@@ -28,11 +28,7 @@ export default function Register() {
     }
 
     if (password.length < 8) {
-      toast({
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 8 caracteres.",
-        variant: "destructive",
-      });
+      toast.error("A senha deve ter pelo menos 8 caracteres.");
       return;
     }
 
