@@ -171,7 +171,7 @@ export default function BillingPage() {
           <TabsContent value="invoices" className="mt-6">
             <BillingInvoicesTab 
               autoOpenNew={shouldOpenNewInvoice} 
-              onAutoOpenConsumed={useCallback(() => setShouldOpenNewInvoice(false), [])} 
+              onAutoOpenConsumed={handleAutoOpenConsumed} 
             />
           </TabsContent>
 
