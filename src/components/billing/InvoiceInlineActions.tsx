@@ -38,12 +38,14 @@ export function InvoiceInlineActions({
   processingComplete,
   generatingPayment,
   sendingNotification,
+  checkingPayment,
   onViewHistory,
   onEmitComplete,
   onBoletoClick,
   onNfseClick,
   onEmailClick,
   onManualPayment,
+  onCheckPayment,
 }: InvoiceInlineActionsProps) {
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
   const isProcessing = processingComplete === invoice.id;
