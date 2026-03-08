@@ -146,7 +146,7 @@ export default function ClientsPage() {
       setDeleteConfirm({ open: false, client: null });
     },
     onError: () => {
-      toast({ title: "Erro ao excluir cliente", variant: "destructive" });
+      toast.error("Erro ao excluir cliente");
     },
   });
 
