@@ -259,11 +259,7 @@ export default function CompanyTab() {
       toast.success("Os dados do CNPJ foram carregados com sucesso");
     } catch (error: unknown) {
       logger.error("CNPJ lookup error", "Settings", { error: String(error) });
-      toast({
-        title: "Erro na consulta",
-        description: "Não foi possível consultar o CNPJ. Tente novamente.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível consultar o CNPJ. Tente novamente.");
     } finally {
       setIsSearchingCnpj(false);
     }
