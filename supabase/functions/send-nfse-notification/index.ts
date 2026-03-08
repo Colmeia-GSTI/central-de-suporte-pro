@@ -356,7 +356,10 @@ Atenciosamente,
             await supabase.from("nfse_event_logs").insert({
               nfse_history_id,
               event_type: "compartilhamento",
-              event_data: { channel: "whatsapp", recipient: whatsappTo, sent_at: new Date().toISOString() },
+              event_level: "info",
+              message: `NFS-e #${nfseNumber} enviada por WhatsApp para ${whatsappTo}`,
+              source: "send-nfse-notification",
+              details: { channel: "whatsapp", recipient: whatsappTo, sent_at: new Date().toISOString() },
             });
           }
         } catch (e: unknown) {

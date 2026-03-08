@@ -199,12 +199,12 @@ export function NfseEventLogsDialog({ nfseHistoryId, nfseNumber, trigger }: Nfse
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nfse_event_logs")
-        .select("id, event_type, level, message, correlation_id, details, created_at")
+        .select("id, event_type, event_level, message, correlation_id, source, details, created_at")
         .eq("nfse_history_id", nfseHistoryId)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      return data as NfseEventLog[];
+      return (data ?? []) as NfseEventLog[];
     },
     enabled: open,
   });
