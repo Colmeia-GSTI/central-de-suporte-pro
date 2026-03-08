@@ -527,6 +527,13 @@ export type Database = {
             referencedRelation: "company_settings"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "certificates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company_settings_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       client_contacts: {
@@ -4086,6 +4093,69 @@ export type Database = {
           },
         ]
       }
+      certificates_safe: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          descricao: string | null
+          emissor: string | null
+          id: string | null
+          is_primary: boolean | null
+          nome: string | null
+          numero_serie: string | null
+          tipo: string | null
+          titular: string | null
+          updated_at: string | null
+          uploaded_at: string | null
+          validade: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          emissor?: string | null
+          id?: string | null
+          is_primary?: boolean | null
+          nome?: string | null
+          numero_serie?: string | null
+          tipo?: string | null
+          titular?: string | null
+          updated_at?: string | null
+          uploaded_at?: string | null
+          validade?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          emissor?: string | null
+          id?: string | null
+          is_primary?: boolean | null
+          nome?: string | null
+          numero_serie?: string | null
+          tipo?: string | null
+          titular?: string | null
+          updated_at?: string | null
+          uploaded_at?: string | null
+          validade?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company_settings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "company_settings_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients_contact_only: {
         Row: {
           address: string | null
@@ -4140,6 +4210,108 @@ export type Database = {
           whatsapp?: string | null
           whatsapp_validated?: boolean | null
           zip_code?: string | null
+        }
+        Relationships: []
+      }
+      company_settings_safe: {
+        Row: {
+          business_hours: Json | null
+          certificado_arquivo_url: string | null
+          certificado_tipo: string | null
+          certificado_uploaded_at: string | null
+          certificado_validade: string | null
+          cnpj: string | null
+          created_at: string | null
+          email: string | null
+          endereco_bairro: string | null
+          endereco_cep: string | null
+          endereco_cidade: string | null
+          endereco_codigo_ibge: string | null
+          endereco_complemento: string | null
+          endereco_logradouro: string | null
+          endereco_numero: string | null
+          endereco_uf: string | null
+          id: string | null
+          inscricao_estadual: string | null
+          inscricao_municipal: string | null
+          nfse_aliquota_padrao: number | null
+          nfse_ambiente: string | null
+          nfse_cnae_padrao: string | null
+          nfse_codigo_tributacao_padrao: string | null
+          nfse_descricao_servico_padrao: string | null
+          nfse_incentivador_cultural: boolean | null
+          nfse_optante_simples: boolean | null
+          nfse_regime_tributario: string | null
+          nome_fantasia: string | null
+          razao_social: string | null
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          business_hours?: Json | null
+          certificado_arquivo_url?: string | null
+          certificado_tipo?: string | null
+          certificado_uploaded_at?: string | null
+          certificado_validade?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          endereco_bairro?: string | null
+          endereco_cep?: string | null
+          endereco_cidade?: string | null
+          endereco_codigo_ibge?: string | null
+          endereco_complemento?: string | null
+          endereco_logradouro?: string | null
+          endereco_numero?: string | null
+          endereco_uf?: string | null
+          id?: string | null
+          inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
+          nfse_aliquota_padrao?: number | null
+          nfse_ambiente?: string | null
+          nfse_cnae_padrao?: string | null
+          nfse_codigo_tributacao_padrao?: string | null
+          nfse_descricao_servico_padrao?: string | null
+          nfse_incentivador_cultural?: boolean | null
+          nfse_optante_simples?: boolean | null
+          nfse_regime_tributario?: string | null
+          nome_fantasia?: string | null
+          razao_social?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          business_hours?: Json | null
+          certificado_arquivo_url?: string | null
+          certificado_tipo?: string | null
+          certificado_uploaded_at?: string | null
+          certificado_validade?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          endereco_bairro?: string | null
+          endereco_cep?: string | null
+          endereco_cidade?: string | null
+          endereco_codigo_ibge?: string | null
+          endereco_complemento?: string | null
+          endereco_logradouro?: string | null
+          endereco_numero?: string | null
+          endereco_uf?: string | null
+          id?: string | null
+          inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
+          nfse_aliquota_padrao?: number | null
+          nfse_ambiente?: string | null
+          nfse_cnae_padrao?: string | null
+          nfse_codigo_tributacao_padrao?: string | null
+          nfse_descricao_servico_padrao?: string | null
+          nfse_incentivador_cultural?: boolean | null
+          nfse_optante_simples?: boolean | null
+          nfse_regime_tributario?: string | null
+          nome_fantasia?: string | null
+          razao_social?: string | null
+          telefone?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
