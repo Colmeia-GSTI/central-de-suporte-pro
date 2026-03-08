@@ -31,6 +31,7 @@ export function useInvoiceActions() {
   const [generatingPayment, setGeneratingPayment] = useState<string | null>(null);
   const [processingComplete, setProcessingComplete] = useState<string | null>(null);
   const [sendingNotification, setSendingNotification] = useState<string | null>(null);
+  const [checkingPayment, setCheckingPayment] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const isProcessing = generatingPayment !== null || processingComplete !== null || sendingNotification !== null;
@@ -408,16 +409,45 @@ export function useInvoiceActions() {
     },
   });
 
+  const handleCheckPaymentStatus = async (invoiceId: string) => {
+    setCheckingPayment(invoiceId);
+    try {
+      const { data, error } = await supabase.functions.invoke("poll-services", {
+        body: { services: ["boleto_payments"], invoice_id: invoiceId },
+      });
+
+      if (error) throw error;
+
+      const paymentResult = data?.details?.boleto_payments;
+      if (paymentResult?.updated > 0) {
+        invalidateAll();
+        toast.success("Pagamento confirmado!", {
+          description: "A fatura foi atualizada para paga.",
+        });
+      } else {
+        toast.info("Nenhum pagamento detectado", {
+          description: "O boleto ainda não foi compensado pelo banco.",
+        });
+      }
+    } catch (error: unknown) {
+      toast.error("Erro ao verificar pagamento", { description: getErrorMessage(error) });
+    } finally {
+      setCheckingPayment(null);
+    }
+  };
+
   return {
     generatingPayment,
     processingComplete,
     sendingNotification,
+    checkingPayment,
     isProcessing,
     markAsPaidMutation,
     cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,
+    handleCheckPaymentStatus,
     checkArtifactReadiness,
   };
 }

@@ -162,11 +162,13 @@ export function BillingInvoicesTab() {
     generatingPayment,
     processingComplete,
     sendingNotification,
+    checkingPayment,
     markAsPaidMutation,
     cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
     handleEmitComplete,
+    handleCheckPaymentStatus,
   } = useInvoiceActions();
 
   const { data: invoices = [], isLoading, isFetching } = useQuery({
@@ -531,6 +533,7 @@ export function BillingInvoicesTab() {
                         generatingPayment={generatingPayment}
                         processingComplete={processingComplete}
                         sendingNotification={sendingNotification}
+                        checkingPayment={checkingPayment}
                         onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                         onGeneratePayment={handleGeneratePayment}
                         onManualPayment={() => setManualPaymentInvoice(invoice)}
@@ -543,6 +546,7 @@ export function BillingInvoicesTab() {
                         onCancelNfse={() => setCancelNfseInvoice(invoice)}
                         onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                         onViewHistory={() => setHistoryInvoice(invoice)}
+                        onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                       />
                     </div>
                   </div>
@@ -560,6 +564,7 @@ export function BillingInvoicesTab() {
                       processingComplete={processingComplete}
                       generatingPayment={generatingPayment}
                       sendingNotification={sendingNotification}
+                      checkingPayment={checkingPayment}
                       onViewHistory={() => setHistoryInvoice(invoice)}
                       onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                       onBoletoClick={async () => {
@@ -586,6 +591,7 @@ export function BillingInvoicesTab() {
                       }}
                       onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
                       onManualPayment={() => setManualPaymentInvoice(invoice)}
+                      onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                     />
                   </div>
                 </div>
@@ -693,6 +699,7 @@ export function BillingInvoicesTab() {
                             processingComplete={processingComplete}
                             generatingPayment={generatingPayment}
                             sendingNotification={sendingNotification}
+                            checkingPayment={checkingPayment}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                             onBoletoClick={async () => {
@@ -719,6 +726,7 @@ export function BillingInvoicesTab() {
                             }}
                             onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
                             onManualPayment={() => setManualPaymentInvoice(invoice)}
+                            onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                           />
                         </TableCell>
                         <TableCell className="py-2 w-10">
@@ -728,6 +736,7 @@ export function BillingInvoicesTab() {
                             generatingPayment={generatingPayment}
                             processingComplete={processingComplete}
                             sendingNotification={sendingNotification}
+                            checkingPayment={checkingPayment}
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                             onGeneratePayment={handleGeneratePayment}
                             onManualPayment={() => setManualPaymentInvoice(invoice)}
@@ -759,6 +768,7 @@ export function BillingInvoicesTab() {
                             onCancelNfse={() => setCancelNfseInvoice(invoice)}
                             onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
+                            onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                           />
                         </TableCell>
                       </TableRow>

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   Barcode, QrCode, MoreHorizontal, Loader2, FileText, Mail, MessageCircle,
   Send, Zap, XCircle, Building2, HandCoins, Ban, CheckCircle2, Clock, Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 interface InvoiceForActions {
@@ -38,6 +39,7 @@ interface InvoiceActionsPopoverProps {
   generatingPayment: string | null;
   processingComplete: string | null;
   sendingNotification: string | null;
+  checkingPayment: string | null;
   onEmitComplete: () => void;
   onGeneratePayment: (invoiceId: string, type: "boleto" | "pix", provider: "banco_inter" | "asaas") => void;
   onManualPayment: () => void;
@@ -50,6 +52,7 @@ interface InvoiceActionsPopoverProps {
   onCancelNfse: () => void;
   onCancelInvoice: () => void;
   onViewHistory: () => void;
+  onCheckPayment: () => void;
 }
 
 export function InvoiceActionsPopover({
@@ -58,6 +61,7 @@ export function InvoiceActionsPopover({
   generatingPayment,
   processingComplete,
   sendingNotification,
+  checkingPayment,
   onEmitComplete,
   onGeneratePayment,
   onManualPayment,
@@ -70,6 +74,7 @@ export function InvoiceActionsPopover({
   onCancelNfse,
   onCancelInvoice,
   onViewHistory,
+  onCheckPayment,
 }: InvoiceActionsPopoverProps) {
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
   const hasPaymentMethod = !!invoice.boleto_url || !!invoice.pix_code;
@@ -160,6 +165,21 @@ export function InvoiceActionsPopover({
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+        )}
+
+        {/* Verificar Pagamento no Banco */}
+        {isPendingOrOverdue && hasBoleto && (
+          <DropdownMenuItem
+            onClick={onCheckPayment}
+            disabled={checkingPayment !== null}
+          >
+            {checkingPayment === invoice.id ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Verificar Pagamento
+          </DropdownMenuItem>
         )}
 
         {/* Baixa Manual / Marcar como Pago */}

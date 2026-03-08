@@ -22,12 +22,14 @@ interface InvoiceInlineActionsProps {
   processingComplete: string | null;
   generatingPayment: string | null;
   sendingNotification: string | null;
+  checkingPayment: string | null;
   onViewHistory: () => void;
   onEmitComplete: () => void;
   onBoletoClick: () => void;
   onNfseClick: () => void;
   onEmailClick: () => void;
   onManualPayment: () => void;
+  onCheckPayment: () => void;
 }
 
 export function InvoiceInlineActions({
@@ -36,17 +38,21 @@ export function InvoiceInlineActions({
   processingComplete,
   generatingPayment,
   sendingNotification,
+  checkingPayment,
   onViewHistory,
   onEmitComplete,
   onBoletoClick,
   onNfseClick,
   onEmailClick,
   onManualPayment,
+  onCheckPayment,
 }: InvoiceInlineActionsProps) {
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
   const isProcessing = processingComplete === invoice.id;
   const isGenerating = generatingPayment?.startsWith(invoice.id);
   const isSending = sendingNotification?.startsWith(invoice.id);
+  const isChecking = checkingPayment === invoice.id;
+  const hasBoleto = !!invoice.boleto_barcode || !!invoice.boleto_url;
 
   // CORREÇÃO DEFINITIVA: Usar funções centralizadas de invoiceIndicators.ts
   const sendBlocked = getSendBlockedStatus({ nfseInfo });
@@ -160,6 +166,28 @@ export function InvoiceInlineActions({
           {isSendBlocked ? `Envio bloqueado: ${sendBlockedReasons.join(". ")}` : emailIndicator.tooltip}
         </TooltipContent>
       </Tooltip>
+
+      {/* Check Payment Status */}
+      {isPendingOrOverdue && hasBoleto && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={onCheckPayment}
+              disabled={isChecking}
+              className="h-7 w-7 p-0 hover:bg-muted"
+            >
+              {isChecking ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <RefreshCw className={`${iconClass} text-muted-foreground`} />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Verificar Pagamento no Banco</TooltipContent>
+        </Tooltip>
+      )}
 
       {/* Payment indicator */}
       <Tooltip>
