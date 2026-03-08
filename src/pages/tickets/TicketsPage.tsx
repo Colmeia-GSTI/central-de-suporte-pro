@@ -50,6 +50,7 @@ import { AssetSelectionDialog } from "@/components/tickets/AssetSelectionDialog"
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { SLAIndicator } from "@/components/tickets/SLAIndicator";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useDebounce } from "@/hooks/useDebounce";
