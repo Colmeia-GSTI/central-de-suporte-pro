@@ -1,67 +1,46 @@
 
 
-# QA: Correção de Bugs, Links Quebrados e Fluxos Incompletos
+# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
 
-## Bugs Encontrados
+## Problema
 
-### Bug 1 (CRÍTICO): FAB "Ações Rápidas" navega para páginas de listagem em vez de criação
+Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
 
-O `QuickActionsFAB.tsx` tem 6 botões rotulados como "Novo Chamado", "Novo Cliente", etc., mas todos navegam para a página de **listagem** (`/tickets`, `/clients`, `/contracts`, `/billing`, `/calendar`, `/inventory`).
+O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
+1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
+2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
+3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
 
-| Botão FAB | Navega para | Deveria navegar para |
-|---|---|---|
-| Novo Chamado | `/tickets` | `/tickets/new` |
-| Novo Cliente | `/clients` (abre lista, sem ação) | `/clients?action=new` ou abrir dialog |
-| Nova Fatura | `/billing` (abre lista) | `/billing?action=new` ou abrir dialog |
-| Novo Contrato | `/contracts` (abre lista) | `/contracts/new` |
-| Novo Evento | `/calendar` (abre lista) | `/calendar?action=new` |
-| Novo Ativo | `/inventory` (abre lista) | `/inventory?action=new` |
+## Solução
 
-**Solução pragmática**: Corrigir os paths do FAB para as rotas de criação que existem (`/tickets/new`, `/contracts/new`) e adicionar query param `?action=new` para as páginas que usam Dialog inline (`/clients`, `/billing`, `/calendar`, `/inventory`). Nas respectivas páginas, detectar o param e abrir o formulário automaticamente.
+### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
+Nova ação que:
+- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
+- Limpa o `asaas_invoice_id` do registro `nfse_history`
+- Redefine status para "pendente"
+- Registra evento no `nfse_event_logs`
+- Retorna sucesso para que o frontend possa reemitir em seguida
 
-### Bug 2: Clientes — sem auto-abertura do formulário via URL
+### 2. Edge function: relaxar bloqueio E0014 no `emit`
+Adicionar parâmetro `force_new_emission: true` que, quando presente:
+- Ignora a verificação de `asaas_invoice_id` existente
+- Permite criar nova invoice no Asaas do zero
+- Usado internamente após o `retry_failed` limpar o registro
 
-`ClientsPage.tsx` não lê nenhum query param para abrir automaticamente o Dialog de criação.
+### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
+No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
+- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
+- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
+- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
 
-**Correção**: Ler `searchParams.get("action") === "new"` e chamar `setIsFormOpen(true)`.
+### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
+Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
 
-### Bug 3: Calendário — sem auto-abertura do formulário via URL  
+## Arquivos modificados
 
-Mesma situação. Precisa ler param e abrir form de evento.
-
-### Bug 4: Inventário — sem auto-abertura do formulário via URL
-
-Mesma situação.
-
-### Bug 5: Billing — sem auto-abertura do formulário de fatura via URL
-
-Mesma situação.
-
-## Plano de Correções
-
-### 1. `src/components/layout/QuickActionsFAB.tsx`
-- Atualizar paths: `"/tickets"` → `"/tickets/new"`, `"/contracts"` → `"/contracts/new"`
-- Para páginas com Dialog inline: `"/clients"` → `"/clients?action=new"`, `"/billing"` → `"/billing?action=new"`, `"/calendar"` → `"/calendar?action=new"`, `"/inventory"` → `"/inventory?action=new"`
-
-### 2. `src/pages/clients/ClientsPage.tsx`  
-- Adicionar `useEffect` que lê `searchParams.get("action") === "new"` e executa `setIsFormOpen(true)`
-
-### 3. `src/pages/calendar/CalendarPage.tsx`
-- Adicionar leitura de `?action=new` para abrir form de evento
-
-### 4. `src/pages/inventory/InventoryPage.tsx`
-- Adicionar leitura de `?action=new` para abrir form de ativo
-
-### 5. `src/pages/billing/BillingPage.tsx`
-- Adicionar leitura de `?action=new` para abrir form de fatura (tab invoices)
-
-## Arquivos Modificados
-
-| Arquivo | Mudança |
+| Arquivo | Ação |
 |---|---|
-| `src/components/layout/QuickActionsFAB.tsx` | Corrigir todos os 6 paths de navegação |
-| `src/pages/clients/ClientsPage.tsx` | Auto-abrir Dialog via `?action=new` |
-| `src/pages/calendar/CalendarPage.tsx` | Auto-abrir form via `?action=new` |
-| `src/pages/inventory/InventoryPage.tsx` | Auto-abrir form via `?action=new` |
-| `src/pages/billing/BillingPage.tsx` | Auto-abrir form via `?action=new` |
+| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
+| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
+| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
 

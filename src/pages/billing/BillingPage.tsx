@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -65,6 +65,17 @@ export default function BillingPage() {
   const rawTab = (searchParams.get("tab") as TabId) || "invoices";
   const { data: counters } = useBillingCounters();
   const { can } = usePermissions();
+
+  // Auto-open invoice creation when navigating with ?action=new
+  const [shouldOpenNewInvoice, setShouldOpenNewInvoice] = useState(false);
+  const handleAutoOpenConsumed = useCallback(() => setShouldOpenNewInvoice(false), []);
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setShouldOpenNewInvoice(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   
   const canManage = can("financial", "edit");
   const canManageServices = can("services", "edit");
@@ -158,7 +169,10 @@ export default function BillingPage() {
           </TabsList>
 
           <TabsContent value="invoices" className="mt-6">
-            <BillingInvoicesTab />
+            <BillingInvoicesTab 
+              autoOpenNew={shouldOpenNewInvoice} 
+              onAutoOpenConsumed={handleAutoOpenConsumed} 
+            />
           </TabsContent>
 
           <TabsContent value="receivable" className="mt-6">

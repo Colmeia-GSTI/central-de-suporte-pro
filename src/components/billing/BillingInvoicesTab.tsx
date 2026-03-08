@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -112,7 +112,12 @@ const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
   { value: "custom", label: "Personalizado" },
 ];
 
-export function BillingInvoicesTab() {
+interface BillingInvoicesTabProps {
+  autoOpenNew?: boolean;
+  onAutoOpenConsumed?: () => void;
+}
+
+export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingInvoicesTabProps = {}) {
   const isMobile = useIsMobile();
   const [, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
@@ -121,6 +126,14 @@ export function BillingInvoicesTab() {
   const [dateRange, setDateRange] = useState(() => getDateRangeForPreset("month"));
   const [currentPage, setCurrentPage] = useState(1);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // Auto-open form when triggered by parent (FAB ?action=new)
+  useEffect(() => {
+    if (autoOpenNew) {
+      setIsFormOpen(true);
+      onAutoOpenConsumed?.();
+    }
+  }, [autoOpenNew, onAutoOpenConsumed]);
   const [nfseInvoice, setNfseInvoice] = useState<InvoiceWithClient | null>(null);
   const [pixDialogInvoice, setPixDialogInvoice] = useState<InvoiceWithClient | null>(null);
   const [isNfseAvulsaOpen, setIsNfseAvulsaOpen] = useState(false);

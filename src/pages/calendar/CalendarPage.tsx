@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +49,16 @@ export default function CalendarPage() {
 
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open creation form when navigating with ?action=new
+  useEffect(() => {
+    if (searchParams.get("action") === "new" && canCreate) {
+      setIsFormOpen(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, canCreate]);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const { can } = usePermissions();

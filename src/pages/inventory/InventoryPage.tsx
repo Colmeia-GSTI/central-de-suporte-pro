@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -85,6 +86,16 @@ const assetTypeLabels: Record<Enums<"asset_type">, string> = {
 export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [isAssetFormOpen, setIsAssetFormOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open creation form when navigating with ?action=new
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      setIsAssetFormOpen(true);
+      searchParams.delete("action");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [isLicenseFormOpen, setIsLicenseFormOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetWithClient | null>(null);
   const [editingLicense, setEditingLicense] = useState<LicenseWithClientSafe | null>(null);
