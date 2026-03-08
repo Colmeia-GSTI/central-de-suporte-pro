@@ -23,11 +23,7 @@ export default function Register() {
     e.preventDefault();
 
     if (password !== confirmPassword) {
-      toast({
-        title: "Senhas não conferem",
-        description: "Por favor, verifique se as senhas são iguais.",
-        variant: "destructive",
-      });
+      toast.error("Por favor, verifique se as senhas são iguais.");
       return;
     }
 
