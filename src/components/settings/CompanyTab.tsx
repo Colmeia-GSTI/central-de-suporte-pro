@@ -189,10 +189,7 @@ export default function CompanyTab() {
         setCompanyId(newData.id);
       }
 
-      toast({
-        title: "Sucesso",
-        description: "Configurações da empresa salvas com sucesso.",
-      });
+      toast.success("Configurações da empresa salvas com sucesso.");
 
       clearDraft();
     } catch (error) {
