@@ -158,11 +158,7 @@ export default function CompanyTab() {
       }
     } catch (error) {
       logger.error("Erro ao carregar configurações", "Settings", { error: String(error) });
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as configurações da empresa.",
-        variant: "destructive",
-      });
+      toast.error("Não foi possível carregar as configurações da empresa.");
     } finally {
       setLoading(false);
     }
