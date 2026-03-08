@@ -699,6 +699,7 @@ export function BillingInvoicesTab() {
                             processingComplete={processingComplete}
                             generatingPayment={generatingPayment}
                             sendingNotification={sendingNotification}
+                            checkingPayment={checkingPayment}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                             onBoletoClick={async () => {
@@ -725,6 +726,7 @@ export function BillingInvoicesTab() {
                             }}
                             onEmailClick={() => handleResendNotification(invoice.id, ["email"])}
                             onManualPayment={() => setManualPaymentInvoice(invoice)}
+                            onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                           />
                         </TableCell>
                         <TableCell className="py-2 w-10">
