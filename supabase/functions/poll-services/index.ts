@@ -14,7 +14,8 @@ const corsHeaders = {
 };
 
 interface PollRequest {
-  services?: ("boleto" | "asaas_nfse")[];
+  services?: ("boleto" | "asaas_nfse" | "boleto_payments")[];
+  invoice_id?: string; // Optional: check a specific invoice
 }
 
 interface InterSettings {
