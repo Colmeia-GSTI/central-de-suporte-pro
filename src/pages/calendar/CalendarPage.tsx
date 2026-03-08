@@ -109,9 +109,10 @@ export default function CalendarPage() {
   }, []);
 
   const handleDateClick = useCallback((date: Date) => {
+    if (!canCreate) return;
     setSelectedDate(date);
     setIsFormOpen(true);
-  }, []);
+  }, [canCreate]);
 
   const handleEventDrop = useCallback(
     (eventId: string, start: Date, end: Date) => {
