@@ -156,7 +156,10 @@ Deno.serve(async (req) => {
       await supabase.from("nfse_event_logs").insert({
         nfse_history_id,
         event_type: "envio_bloqueado",
-        event_data: { motivo: "pdf_ausente", checked_at: new Date().toISOString() },
+        event_level: "warn",
+        message: "Envio bloqueado: PDF não disponível",
+        source: "send-nfse-notification",
+        details: { motivo: "pdf_ausente", checked_at: new Date().toISOString() },
       });
       return new Response(
         JSON.stringify({ error: "NFS-e não possui PDF disponível", blocked: true, blocked_reason: "pdf_ausente" }),
