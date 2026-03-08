@@ -493,19 +493,22 @@ Deno.serve(async (req) => {
       // Default to all services
     }
 
-    const services = body.services || ["boleto", "asaas_nfse"];
-    console.log(`[POLL-SERVICES] Iniciando polling: ${services.join(", ")}`);
+    const services = body.services || ["boleto", "asaas_nfse", "boleto_payments"];
+    const specificInvoiceId = body.invoice_id;
+    console.log(`[POLL-SERVICES] Iniciando polling: ${services.join(", ")}${specificInvoiceId ? ` (invoice: ${specificInvoiceId})` : ""}`);
 
     const results: Record<string, { processed: number; updated: number }> = {};
 
     // Run all services in parallel
-    const [boletoResult, asaasResult] = await Promise.all([
+    const [boletoResult, asaasResult, paymentResult] = await Promise.all([
       services.includes("boleto") ? pollBoletos(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
       services.includes("asaas_nfse") ? pollAsaasNfse(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
+      services.includes("boleto_payments") ? pollBoletoPayments(supabase, specificInvoiceId) : Promise.resolve({ processed: 0, updated: 0 }),
     ]);
 
     results.boleto = boletoResult;
     results.asaas_nfse = asaasResult;
+    results.boleto_payments = paymentResult;
 
     const totalProcessed = Object.values(results).reduce((a, b) => a + b.processed, 0);
     const totalUpdated = Object.values(results).reduce((a, b) => a + b.updated, 0);

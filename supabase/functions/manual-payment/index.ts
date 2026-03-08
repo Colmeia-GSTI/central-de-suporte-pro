@@ -127,19 +127,20 @@ Deno.serve(async (req) => {
       throw updateError;
     }
 
-    // Create financial entry
-    await supabase.from("financial_entries").insert({
+    // Create financial entry (using correct financial_entries columns)
+    const { error: feError } = await supabase.from("financial_entries").insert({
       client_id: invoice.client_id,
       invoice_id: invoice.id,
       type: "receita",
       amount: paid_amount,
-      description: `Pagamento manual - Fatura #${invoice.invoice_number}`,
-      entry_date: effectiveDate,
-      is_paid: true,
-      paid_date: effectiveDate,
-      payment_method: payment_method || "manual",
-      notes: payment_notes || null,
+      description: `Pagamento manual (${payment_method || "manual"}) - Fatura #${invoice.invoice_number}${payment_notes ? ` - ${payment_notes}` : ""}`,
+      date: effectiveDate,
+      category: "pagamento_manual",
     });
+
+    if (feError) {
+      console.error("[MANUAL-PAYMENT] Erro ao criar financial_entry:", feError);
+    }
 
     // Create audit log
     await supabase.from("audit_logs").insert({
