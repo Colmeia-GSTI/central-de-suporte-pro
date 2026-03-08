@@ -462,7 +462,7 @@ export default function MonitoringPage() {
           </TabsContent>
 
           <TabsContent value="alerts">
-            {selectedAlerts.length > 0 && (
+            {selectedAlerts.length > 0 && canManageMonitoring && (
               <div className="flex items-center gap-2 p-4 mb-4 bg-muted/50 rounded-lg">
                 <span className="text-sm font-medium">
                   {selectedAlerts.length} selecionado(s)
