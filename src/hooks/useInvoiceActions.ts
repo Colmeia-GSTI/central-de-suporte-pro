@@ -31,6 +31,7 @@ export function useInvoiceActions() {
   const [generatingPayment, setGeneratingPayment] = useState<string | null>(null);
   const [processingComplete, setProcessingComplete] = useState<string | null>(null);
   const [sendingNotification, setSendingNotification] = useState<string | null>(null);
+  const [checkingPayment, setCheckingPayment] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const isProcessing = generatingPayment !== null || processingComplete !== null || sendingNotification !== null;
