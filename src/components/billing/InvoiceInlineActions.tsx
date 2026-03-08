@@ -51,6 +51,8 @@ export function InvoiceInlineActions({
   const isProcessing = processingComplete === invoice.id;
   const isGenerating = generatingPayment?.startsWith(invoice.id);
   const isSending = sendingNotification?.startsWith(invoice.id);
+  const isChecking = checkingPayment === invoice.id;
+  const hasBoleto = !!invoice.boleto_barcode || !!invoice.boleto_url;
 
   // CORREÇÃO DEFINITIVA: Usar funções centralizadas de invoiceIndicators.ts
   const sendBlocked = getSendBlockedStatus({ nfseInfo });
