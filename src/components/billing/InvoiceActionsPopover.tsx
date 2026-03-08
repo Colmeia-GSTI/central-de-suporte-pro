@@ -38,6 +38,7 @@ interface InvoiceActionsPopoverProps {
   generatingPayment: string | null;
   processingComplete: string | null;
   sendingNotification: string | null;
+  checkingPayment: string | null;
   onEmitComplete: () => void;
   onGeneratePayment: (invoiceId: string, type: "boleto" | "pix", provider: "banco_inter" | "asaas") => void;
   onManualPayment: () => void;
@@ -50,6 +51,7 @@ interface InvoiceActionsPopoverProps {
   onCancelNfse: () => void;
   onCancelInvoice: () => void;
   onViewHistory: () => void;
+  onCheckPayment: () => void;
 }
 
 export function InvoiceActionsPopover({
