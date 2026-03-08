@@ -1,46 +1,48 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+# Plano: Correção de baixa automática de pagamentos + prevenção futura
 
-## Problema
+## Problema raiz (confirmado)
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+1. **`manual-payment` insere colunas inexistentes** em `financial_entries`: usa `entry_date`, `is_paid`, `paid_date`, `payment_method`, `notes` — que não existem. A tabela só tem `date`, `category`, `is_reconciled`. O insert falha silenciosamente.
+2. **Polling não verifica pagamentos**: `poll-services` só busca boletos SEM barcode. Boletos já emitidos que foram pagos nunca são verificados.
+3. **Webhook não registrado**: O Banco Inter nunca recebeu o endpoint do webhook, então pagamentos confirmados não chegam ao sistema.
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+## Correções
 
-## Solução
+### 1. Corrigir `manual-payment/index.ts` — colunas do `financial_entries`
+Trocar o insert para usar as colunas corretas:
+```
+entry_date → date
+is_paid, paid_date, payment_method, notes → REMOVER
+category → "pagamento_manual"
+```
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+### 2. Adicionar `pollBoletoPayments` ao `poll-services/index.ts`
+Nova função que busca faturas com `boleto_barcode IS NOT NULL` e `status IN ('pending', 'overdue')` criadas há mais de 2h. Para cada uma, consulta a API do Banco Inter via `codigoSolicitacao` (ou busca por `seuNumero`) para verificar se `situacao = PAGO/RECEBIDO/LIQUIDADO`. Se sim:
+- Atualiza `invoices.status = 'paid'`, `paid_date`, `paid_amount`
+- Cria `financial_entries` com colunas corretas
+- Cria `audit_logs`
+- Notifica admins
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+Adicionar `"boleto_payments"` como serviço no handler principal.
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
+### 3. Adicionar ação "Verificar Pagamento" na UI
+- **`useInvoiceActions.ts`**: novo handler `handleCheckPaymentStatus(invoiceId)` que chama `poll-services` com `services: ["boleto_payments"]` e `invoice_id` específico
+- **`InvoiceActionsPopover.tsx`**: novo item "Verificar Pagamento" para faturas pending/overdue com boleto
+- **`InvoiceInlineActions.tsx`**: botão de refresh no indicador de pagamento
 
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
+### 4. Auto-registro de webhook no `BancoInterConfigForm.tsx`
+Após salvar/testar com sucesso, chamar automaticamente `register_webhook` para garantir que o webhook esteja sempre registrado.
 
 ## Arquivos modificados
 
-| Arquivo | Ação |
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
+| `supabase/functions/manual-payment/index.ts` | Corrigir colunas `financial_entries` |
+| `supabase/functions/poll-services/index.ts` | Adicionar `pollBoletoPayments` |
+| `src/hooks/useInvoiceActions.ts` | Adicionar `handleCheckPaymentStatus` |
+| `src/components/billing/InvoiceActionsPopover.tsx` | Item "Verificar Pagamento" |
+| `src/components/billing/InvoiceInlineActions.tsx` | Botão refresh no DollarSign |
+| `src/components/settings/integrations/BancoInterConfigForm.tsx` | Auto-registrar webhook ao salvar |
 
