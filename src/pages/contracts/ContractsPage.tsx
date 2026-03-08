@@ -152,7 +152,7 @@ export default function ContractsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
-      toast({ title: "Contrato excluído com sucesso" });
+      toast.success("Contrato excluído com sucesso");
       setDeleteConfirm({ open: false, contract: null });
     },
     onError: () => {
