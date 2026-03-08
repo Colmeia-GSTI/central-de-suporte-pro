@@ -67,7 +67,7 @@ export function NfseTributacaoSection({
   };
 
   return (
-    <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+    <div className="rounded-lg border border-border/70 bg-muted/40 p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <DollarSign className="h-4 w-4" />
