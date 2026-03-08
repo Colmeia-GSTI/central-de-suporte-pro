@@ -1,46 +1,74 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+# Auditoria UX: Funções Fantasmas, Navegação e Organização Visual
 
-## Problema
+## 1. Funções Fantasmas Encontradas
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+| Função/Componente | Situação | Ação |
+|---|---|---|
+| **`LogsViewerTab`** | Importado em `IntegrationsTab.tsx` mas **nunca renderizado** | Adicionar aba "Logs" no `IntegrationsTab` |
+| **`notify-sla-breach`** | Edge function sem UI de status ou trigger manual | CRON-only — adicionar card de status em `IntegrationStatusPanel` |
+| **`check-contract-adjustments`** | Edge function sem trigger manual | CRON-only — adicionar indicador visual em `ContractsPage` para contratos com reajuste pendente |
+| **`generate-invoice-payments`** | Edge function sem trigger manual | CRON-only — OK (executado automaticamente) |
+| **`apply-contract-adjustment`** | Chamado pelo `ContractAdjustmentDialog` | OK — tem UI |
+| **`BusinessHoursForm`** | Componente existe mas **não aparece em nenhuma tab de Settings** | Adicionar na aba "Sistema" do `SettingsPage` |
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+## 2. Problemas de Organização Visual
 
-## Solução
+| Problema | Onde | Correção |
+|---|---|---|
+| **Aba Integrações com 7 tabs inline** | `IntegrationsTab.tsx` | Grid de 8 colunas (adicionar "Logs") |
+| **Settings com 14+ tabs em `flex-wrap`** | `SettingsPage.tsx` | Agrupar logicamente em seções colapsáveis ou sub-tabs categorizadas |
+| **Sidebar "Serviços" aponta para `/billing?tab=services`** | Confuso — item financeiro dentro de operações | Mover para dentro do grupo Financeiro (já está, OK) |
+| **"Dashboard TV" sem gate de permissão** | `specialRoutes` usa roles inline, mas a rota em `AnimatedRoutes` não tem `ProtectedRoute` | Adicionar `ProtectedRoute` com `allowedRoles` |
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+## 3. Plano de Correções
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+### Tarefa 1: Renderizar `LogsViewerTab` no `IntegrationsTab`
+- Adicionar 8ª aba "Logs" com ícone `FileText`
+- Atualizar grid de `grid-cols-7` → `grid-cols-8`
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
+### Tarefa 2: Adicionar `BusinessHoursForm` ao Settings
+- Importar e renderizar dentro da aba "Sistema" (`SystemTab`) ou como nova aba "Horários"
+- Verificar se o componente já está funcional
 
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
+### Tarefa 3: Reorganizar `SettingsPage` em categorias
+Agrupar as 14+ abas em **4 seções lógicas** usando um layout mais claro:
 
-## Arquivos modificados
+```text
+┌─────────────────────────────────────────┐
+│ GESTÃO          │ OPERAÇÕES             │
+│ • Usuários      │ • Categorias          │
+│ • Permissões    │ • Tags                │
+│ • Departamentos │ • SLA                 │
+│                 │ • Mapeamentos         │
+├─────────────────┼───────────────────────┤
+│ EMPRESA         │ COMUNICAÇÃO           │
+│ • Dados         │ • Regras Notificação  │
+│ • Integrações   │ • Templates Email     │
+│ • Sistema       │ • Histórico Mensagens │
+│ • Auditoria     │ • Métricas            │
+└─────────────────┴───────────────────────┘
+```
 
-| Arquivo | Ação |
+Implementação: Manter `Tabs` mas com `TabsList` visualmente segmentado usando separadores e labels de grupo.
+
+### Tarefa 4: Proteger rota `/tv-dashboard`
+- Em `AnimatedRoutes.tsx`: envolver com `<ProtectedRoute allowedRoles={["admin", "manager"]}>` 
+
+### Tarefa 5: Indicador de Reajuste Pendente em Contratos
+- Em `ContractsPage.tsx`: Adicionar badge visual em contratos com `adjustment_date` próximo (< 30 dias), para que a função `check-contract-adjustments` tenha representação visual
+
+### Tarefa 6: Card de Status de CRONs em IntegrationStatusPanel
+- Adicionar seção "Automações Agendadas" mostrando status das funções CRON: `notify-sla-breach`, `check-contract-adjustments`, `generate-invoice-payments`, `poll-services`
+
+## Arquivos Modificados
+
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
+| `src/components/settings/IntegrationsTab.tsx` | Renderizar `LogsViewerTab`, grid-cols-8 |
+| `src/pages/settings/SettingsPage.tsx` | Reorganizar tabs em seções visuais com separadores |
+| `src/components/layout/AnimatedRoutes.tsx` | `ProtectedRoute` no `/tv-dashboard` |
+| `src/pages/contracts/ContractsPage.tsx` | Badge de reajuste pendente |
+| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Seção de CRONs agendados |
 
