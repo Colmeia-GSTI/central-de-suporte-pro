@@ -226,11 +226,7 @@ export default function CompanyTab() {
     const cnpj = form.getValues("cnpj")?.replace(/\D/g, "");
     
     if (!cnpj || cnpj.length !== 14) {
-      toast({
-        title: "CNPJ inválido",
-        description: "Digite um CNPJ válido com 14 dígitos",
-        variant: "destructive",
-      });
+      toast.error("Digite um CNPJ válido com 14 dígitos");
       return;
     }
 
