@@ -116,12 +116,14 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
                 Pausar
               </Button>
             )}
-            <NoContactButton
-              ticketId={ticket.id}
-              ticketNumber={ticket.ticket_number}
-              currentStatus={ticket.status}
-            />
-            {onTransfer && (
+            {canEditTicket && (
+              <NoContactButton
+                ticketId={ticket.id}
+                ticketNumber={ticket.ticket_number}
+                currentStatus={ticket.status}
+              />
+            )}
+            {canManageTicket && onTransfer && (
               <Button
                 variant="outline"
                 size="sm"
