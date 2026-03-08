@@ -198,7 +198,7 @@ export default function ContractsPage() {
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Erro ao gerar fatura", description: error.message, variant: "destructive" });
+      toast.error(error.message || "Erro ao gerar fatura");
     },
   });
 
