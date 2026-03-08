@@ -50,6 +50,9 @@ export default function CalendarPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const { can } = usePermissions();
+  const canCreate = can("calendar", "create");
+  const canEdit = can("calendar", "edit");
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["calendar-events", dateRange.start.toISOString(), dateRange.end.toISOString()],
