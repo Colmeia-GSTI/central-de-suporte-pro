@@ -17,7 +17,7 @@ This document describes the security architecture and best practices for this ap
 1. **Frontend (UI Control)**
    - `PermissionGate` component hides/shows UI elements
    - `usePermissions` hook checks if user can perform actions
-   - `useSecureAction` hook wraps mutations with permission validation
+   - `useSecureAction` hook wraps mutations with permission validation (implemented in `src/hooks/useSecureAction.ts`)
    - **IMPORTANT**: Frontend permissions are for UX only, never security!
 
 2. **Backend (Data Protection)**
