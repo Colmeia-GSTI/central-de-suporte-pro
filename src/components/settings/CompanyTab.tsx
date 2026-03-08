@@ -256,10 +256,7 @@ export default function CompanyTab() {
       form.setValue("endereco_uf", data.uf || "");
       form.setValue("endereco_cep", formatCEP(data.cep?.replace(/\D/g, "") || ""));
 
-      toast({
-        title: "Dados preenchidos",
-        description: "Os dados do CNPJ foram carregados com sucesso",
-      });
+      toast.success("Os dados do CNPJ foram carregados com sucesso");
     } catch (error: unknown) {
       logger.error("CNPJ lookup error", "Settings", { error: String(error) });
       toast({
