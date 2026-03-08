@@ -83,6 +83,8 @@ export default function MonitoringPage() {
     return saved === "client" || saved === "device" ? saved : "none";
   });
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canManageMonitoring = can("monitoring", "manage");
 
   // Persist preferences to localStorage
   useEffect(() => {
