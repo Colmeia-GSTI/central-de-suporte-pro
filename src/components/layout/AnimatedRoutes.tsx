@@ -45,6 +45,7 @@ const MonitoringPage = lazyWithRetry(() => import("@/pages/monitoring/Monitoring
 const CalendarPage = lazyWithRetry(() => import("@/pages/calendar/CalendarPage"));
 const GamificationPage = lazyWithRetry(() => import("@/pages/gamification/GamificationPage"));
 const KnowledgePage = lazyWithRetry(() => import("@/pages/knowledge/KnowledgePage"));
+const KnowledgeArticlePage = lazyWithRetry(() => import("@/pages/knowledge/KnowledgeArticlePage"));
 const TVDashboardPage = lazyWithRetry(() => import("@/pages/tv-dashboard/TVDashboardPage"));
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings/SettingsPage"));
 const CertificateDashboardPage = lazyWithRetry(() => import("@/pages/settings/CertificateDashboardPage"));
