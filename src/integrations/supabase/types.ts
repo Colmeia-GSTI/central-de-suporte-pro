@@ -2866,7 +2866,10 @@ export type Database = {
       notifications: {
         Row: {
           created_at: string
+          group_count: number | null
+          grouped_id: string | null
           id: string
+          is_grouped: boolean | null
           is_read: boolean
           message: string
           related_id: string | null
@@ -2877,7 +2880,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          group_count?: number | null
+          grouped_id?: string | null
           id?: string
+          is_grouped?: boolean | null
           is_read?: boolean
           message: string
           related_id?: string | null
@@ -2888,7 +2894,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          group_count?: number | null
+          grouped_id?: string | null
           id?: string
+          is_grouped?: boolean | null
           is_read?: boolean
           message?: string
           related_id?: string | null
