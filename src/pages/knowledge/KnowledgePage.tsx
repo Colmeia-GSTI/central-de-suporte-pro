@@ -1,11 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -13,24 +10,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Search, BookOpen, Eye, Edit, Trash2, Globe, Lock } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { ArticleForm } from "@/components/knowledge/ArticleForm";
 import { ArticleViewer } from "@/components/knowledge/ArticleViewer";
+import { KnowledgeHero } from "@/components/knowledge/KnowledgeHero";
+import { KnowledgeCategoryGrid } from "@/components/knowledge/KnowledgeCategoryGrid";
+import { KnowledgePinnedCarousel } from "@/components/knowledge/KnowledgePinnedCarousel";
+import { KnowledgeArticleList } from "@/components/knowledge/KnowledgeArticleList";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { CardSkeleton } from "@/components/ui/loading-skeleton";
 import type { Tables } from "@/integrations/supabase/types";
 
 type ArticleWithCategory = Tables<"knowledge_articles"> & {
+  knowledge_categories: { name: string; icon: string } | null;
   ticket_categories: { name: string } | null;
 };
 
+type SortOption = "recent" | "popular" | "helpful" | "alphabetical";
+
 export default function KnowledgePage() {
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<ArticleWithCategory | null>(null);
   const [viewingArticle, setViewingArticle] = useState<ArticleWithCategory | null>(null);
@@ -38,20 +42,25 @@ export default function KnowledgePage() {
     open: false,
     article: null,
   });
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const debouncedSearch = useDebounce(search, 300);
 
+  // Fetch all articles
   const { data: articles = [], isLoading } = useQuery({
-    queryKey: ["knowledge-articles", debouncedSearch],
+    queryKey: ["knowledge-articles", debouncedSearch, selectedCategory],
     queryFn: async () => {
       let query = supabase
         .from("knowledge_articles")
-        .select("*, ticket_categories(name)")
-        .order("updated_at", { ascending: false });
+        .select("*, knowledge_categories(name, icon), ticket_categories(name)");
 
       if (debouncedSearch) {
         query = query.or(`title.ilike.%${debouncedSearch}%,content.ilike.%${debouncedSearch}%`);
+      }
+
+      if (selectedCategory) {
+        query = query.eq("knowledge_category_id", selectedCategory);
       }
 
       const { data, error } = await query;
@@ -60,6 +69,30 @@ export default function KnowledgePage() {
     },
   });
 
+  // Sort articles
+  const sortedArticles = useMemo(() => {
+    const sorted = [...articles];
+    
+    switch (sortBy) {
+      case "popular":
+        sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
+        break;
+      case "helpful":
+        sorted.sort((a, b) => (b.helpful_count || 0) - (a.helpful_count || 0));
+        break;
+      case "alphabetical":
+        sorted.sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+        break;
+      case "recent":
+      default:
+        sorted.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+        break;
+    }
+    
+    return sorted;
+  }, [articles, sortBy]);
+
+  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("knowledge_articles").delete().eq("id", id);
@@ -67,6 +100,7 @@ export default function KnowledgePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-categories"] });
       toast({ title: "Artigo excluído com sucesso" });
       setDeleteConfirm({ open: false, article: null });
     },
@@ -89,31 +123,28 @@ export default function KnowledgePage() {
     setEditingArticle(null);
   };
 
-  const handleDeleteClick = (e: React.MouseEvent, article: ArticleWithCategory) => {
-    e.stopPropagation();
+  const handleDeleteClick = (article: ArticleWithCategory) => {
     setDeleteConfirm({ open: true, article });
   };
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Base de Conhecimento</h1>
-            <p className="text-muted-foreground">
-              Documentação e artigos de suporte
-            </p>
-          </div>
+      <div className="space-y-8 pb-8">
+        {/* Hero with Search */}
+        <KnowledgeHero search={search} onSearchChange={setSearch} />
+
+        {/* Create Article Button */}
+        <div className="flex justify-end">
           <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <PermissionGate module="knowledge" action="create">
               <DialogTrigger asChild>
-                <Button onClick={() => setEditingArticle(null)}>
-                  <Plus className="mr-2 h-4 w-4" />
+                <Button onClick={() => setEditingArticle(null)} className="gap-2">
+                  <Plus className="h-4 w-4" />
                   Novo Artigo
                 </Button>
               </DialogTrigger>
             </PermissionGate>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingArticle ? "Editar Artigo" : "Novo Artigo"}
@@ -128,124 +159,39 @@ export default function KnowledgePage() {
           </Dialog>
         </div>
 
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar artigos..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        {/* Articles Grid */}
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <CardSkeleton key={i} />
-            ))}
-          </div>
-        ) : articles.length === 0 ? (
-          <div className="text-center py-12">
-            <BookOpen className="mx-auto h-12 w-12 text-muted-foreground/50" />
-            <p className="mt-2 text-muted-foreground">
-              Nenhum artigo encontrado
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {articles.map((article) => (
-              <Card
-                key={article.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => setViewingArticle(article)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-lg line-clamp-2">
-                      {article.title}
-                    </CardTitle>
-                    {article.is_public ? (
-                      <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-                    ) : (
-                      <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
-                    {(() => {
-                      try {
-                        const doc = new DOMParser().parseFromString(article.content, "text/html");
-                        return (doc.body.textContent || "").slice(0, 150);
-                      } catch {
-                        return article.content.replace(/<[^>]*>/g, "").slice(0, 150);
-                      }
-                    })()}
-                    {article.content.length > 150 ? "..." : ""}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {article.ticket_categories && (
-                        <Badge variant="outline">
-                          {article.ticket_categories.name}
-                        </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Eye className="h-3 w-3" />
-                        {article.views}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <PermissionGate module="knowledge" action="edit">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(article);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </PermissionGate>
-                      <PermissionGate module="knowledge" action="delete">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => handleDeleteClick(e, article)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </PermissionGate>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {(() => {
-                      try {
-                        return `Atualizado ${formatDistanceToNow(new Date(article.updated_at), {
-                          addSuffix: true,
-                          locale: ptBR,
-                        })}`;
-                      } catch {
-                        return "Data indisponível";
-                      }
-                    })()}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        {/* Pinned Articles Carousel */}
+        {!debouncedSearch && !selectedCategory && (
+          <KnowledgePinnedCarousel onSelectArticle={setViewingArticle} />
         )}
 
-        {/* Article Viewer Dialog */}
-        <Dialog open={!!viewingArticle} onOpenChange={() => setViewingArticle(null)}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            {viewingArticle && <ArticleViewer article={viewingArticle} />}
-          </DialogContent>
-        </Dialog>
+        {/* Category Grid */}
+        <KnowledgeCategoryGrid
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+        />
+
+        {/* Article List */}
+        <KnowledgeArticleList
+          articles={sortedArticles}
+          isLoading={isLoading}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          onSelectArticle={setViewingArticle}
+          onEditArticle={handleEdit}
+          onDeleteArticle={handleDeleteClick}
+          searchHighlight={debouncedSearch}
+        />
       </div>
+
+      {/* Article Viewer Sheet (mobile-friendly) */}
+      <Sheet open={!!viewingArticle} onOpenChange={() => setViewingArticle(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl lg:max-w-3xl overflow-y-auto">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{viewingArticle?.title}</SheetTitle>
+          </SheetHeader>
+          {viewingArticle && <ArticleViewer article={viewingArticle} />}
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
