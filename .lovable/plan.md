@@ -1,69 +1,133 @@
 
-# Melhorias no Sistema de Notificações
 
-## Diagnóstico Completo
+# Implementação de Agrupamento Inteligente de Notificações
 
-Após análise profunda do `NotificationDropdown`, `useNotifications`, `useUnifiedRealtime` e banco de dados, identifiquei 6 problemas críticos:
+## Análise do Sistema Atual
 
-### Problemas Encontrados
+Analisando o código existente:
+- `useNotifications.tsx`: Busca notificações individuais da tabela `notifications`
+- `NotificationDropdown.tsx`: Exibe lista simples de notificações, uma por linha
+- `NotificationsPage.tsx`: Página completa sem agrupamento
+- `useUnifiedRealtime.tsx`: Cria notificações individuais para cada evento
 
-**1. Dropdown sem ação ao clicar em notificação com `related_id`**
-Clicar em uma notificação com `related_type: "invoice"` apenas marca como lida — não navega para a entidade. O campo `related_id` existe mas nunca é usado para navegação. Com 60 notificações no banco todas de `type: invoice`, o usuário não consegue chegar na fatura clicando na notificação.
+**Problema identificado**: Cada evento gera uma notificação separada. Se 10 faturas são geradas simultaneamente, aparecem 10 notificações individuais, causando spam visual.
 
-**2. Sem opção de deletar / limpar notificações**
-O hook `useNotifications` só tem `markAsRead` e `markAllAsRead`. Não há como excluir notificações individuais nem limpar todas. Com 30 não lidas acumuladas, não há saída.
+## Arquitetura da Solução
 
-**3. Sem filtro por tipo no dropdown**
-Todas as notificações aparecem misturadas. Sem tabs ou filtros por tipo (info, warning, success, error).
+### 1. Estratégia de Agrupamento por Intervalo Temporal
+- **Janela de agrupamento**: 15 minutos
+- **Critérios de agrupamento**: `type` + `related_type` + janela temporal
+- **Exemplo**: "3 novas faturas geradas há 5 min" em vez de 3 entradas separadas
 
-**4. `usePushNotifications` ainda usa `useToast` (sistema legado)**
-O hook usa `useToast` em vez de `sonner`, inconsistente com o resto do sistema.
+### 2. Estrutura de Dados Agrupada
+```typescript
+interface GroupedNotification {
+  id: string;
+  type: string;
+  related_type: string | null;
+  count: number;
+  latest_created_at: string;
+  oldest_created_at: string;
+  sample_title: string;
+  sample_message: string;
+  individual_ids: string[];
+  is_read: boolean; // todos lidos = true
+  related_ids: string[]; // IDs das entidades relacionadas
+}
+```
 
-**5. Sem página dedicada de notificações**
-O dropdown está limitado a 350px de altura. Com 50+ notificações, é impossível navegar. Não existe `/notifications` com histórico completo.
+### 3. Lógica de Agrupamento (Frontend)
+- **useMemo** no `useNotifications.tsx` para processar notificações brutas
+- **Algoritmo**: Agrupar por `type + related_type` dentro de janela de 15min
+- **Ordenação**: Por `latest_created_at` desc
 
-**6. Notificações com `related_type` não têm ícones específicos**
-`related_type: "invoice"` deveria mostrar ícone de fatura (Receipt), mas cai no ícone padrão Bell.
+### 4. Interface Inteligente
 
-## Plano de Implementação
+#### NotificationDropdown
+- **Entrada agrupada**: "🎫 3 novos chamados criados" (expandível)
+- **Click para expandir**: Mostra lista das 3 notificações individuais
+- **Navegação inteligente**: 
+  - Se `count = 1`: navega direto para a entidade
+  - Se `count > 1`: navega para listagem com filtro
 
-### 1. `src/hooks/useNotifications.tsx`
-- Adicionar `deleteNotification(id)` e `clearAllRead()` mutations
-- Retornar `isMarkingAll` e `isDeletingAll` para estados de loading dos botões
+#### NotificationsPage
+- **Seção "Agrupadas"**: Mostra grupos com opção de expandir
+- **Seção "Individuais"**: Notificações que não se agrupam
+- **Filtro temporal**: "Últimas 24h", "Última semana", etc.
 
-### 2. `src/components/notifications/NotificationDropdown.tsx`
-- **Navegação ao clicar**: usar `useNavigate` para rotear baseado em `related_type`:
-  - `invoice` → `/billing?tab=invoices`
-  - `ticket` → `/tickets?id={related_id}`
-  - `contract` → `/contracts`
-- **Ícones por `related_type`**: Receipt para invoice, Ticket para ticket, FileText para contract
-- **Botão "Limpar lidas"**: no header do dropdown com ícone Trash2
-- **Tabs de filtro**: Todas | Não lidas (usando contagem como badge)
-- **Botão "Ver todas"**: link para `/notifications` no footer do dropdown
-- **Excluir individual**: ícone X em cada item no hover
+### 5. Ações de Limpeza Inteligente
 
-### 3. `src/pages/notifications/NotificationsPage.tsx` (novo)
-- Página completa `/notifications` com lista paginada (20 por vez, scroll infinito)
-- Filtros por tipo: Todas, Não lidas, Por tipo (warning, info, success, error)
-- Ações em lote: selecionar múltiplas → marcar lidas / deletar
-- Empty state elegante quando sem notificações
+#### Limpeza Automática (Background)
+- **Edge Function**: `cleanup-old-notifications` (executa diariamente)
+- **Regras**: 
+  - Notificações lidas > 30 dias: deletar
+  - Notificações não lidas > 90 dias: arquivar
+  - Manter max 500 notificações por usuário
 
-### 4. `src/components/layout/AnimatedRoutes.tsx`
-- Adicionar rota `/notifications` (lazy) protegida para staff
+#### Limpeza Manual
+- **"Limpar tudo lido"**: Remove todas as notificações marcadas como lidas
+- **"Arquivar grupo"**: Marca grupo inteiro como lido e arquiva
+- **"Limpar antigas"**: Remove notificações > 7 dias automaticamente
 
-### 5. `src/hooks/usePushNotifications.ts`
-- Migrar de `useToast` para `toast` do `sonner`
+### 6. Otimização de Realtime
 
-### 6. `src/hooks/useNotifications.tsx` — Realtime para clientes
-- Adicionar subscription de notificações também para usuários com role `client`/`client_master` (hoje o realtime é só para `isStaff`)
+#### Debounce de Notificações no `useUnifiedRealtime`
+- **Problema atual**: Cada evento dispara notificação imediata
+- **Solução**: Buffer de 30 segundos para eventos similares
+- **Implementação**: Acumular eventos por tipo, enviar notificação consolidada
 
-## Arquivos Modificados
+```typescript
+// Exemplo de debounce no realtime
+const notificationBuffer = useRef<Map<string, NotificationEvent[]>>(new Map());
 
-| Arquivo | Ação |
-|---|---|
-| `src/hooks/useNotifications.tsx` | + delete + clearAllRead mutations |
-| `src/components/notifications/NotificationDropdown.tsx` | Navegação + ícones + limpar + tabs |
-| `src/pages/notifications/NotificationsPage.tsx` | Novo — página completa |
-| `src/components/layout/AnimatedRoutes.tsx` | + rota `/notifications` |
-| `src/hooks/usePushNotifications.ts` | Migrar para sonner |
-| `src/hooks/useUnifiedRealtime.tsx` | Notificações para clientes também |
+const flushNotifications = useCallback(() => {
+  notificationBuffer.current.forEach((events, key) => {
+    if (events.length === 1) {
+      // Enviar notificação individual
+      createSingleNotification(events[0]);
+    } else {
+      // Enviar notificação agrupada
+      createGroupedNotification(key, events);
+    }
+  });
+  notificationBuffer.current.clear();
+}, []);
+```
+
+## Implementação Técnica
+
+### Arquivos Novos
+- `src/lib/notification-grouping.ts` - Lógica de agrupamento
+- `src/components/notifications/GroupedNotificationItem.tsx` - Componente para grupo
+- `supabase/functions/cleanup-old-notifications/index.ts` - Limpeza automática
+
+### Arquivos Modificados
+- `src/hooks/useNotifications.tsx` - Adicionar lógica de agrupamento e limpeza
+- `src/components/notifications/NotificationDropdown.tsx` - Exibir grupos expansíveis
+- `src/pages/notifications/NotificationsPage.tsx` - Interface de limpeza avançada
+- `src/hooks/useUnifiedRealtime.tsx` - Implementar debounce de notificações
+
+### Database Changes
+Adicionar colunas na tabela `notifications`:
+```sql
+ALTER TABLE notifications 
+ADD COLUMN grouped_id uuid,
+ADD COLUMN is_grouped boolean DEFAULT false,
+ADD COLUMN group_count integer DEFAULT 1;
+```
+
+## Benefícios
+
+1. **Redução de Ruído Visual**: 5 notificações → 1 entrada agrupada
+2. **Performance**: Menos DOM nodes, consultas mais eficientes
+3. **UX Melhorada**: Informação mais digestível, navegação contextual
+4. **Limpeza Automática**: Sistema não acumula lixo indefinidamente
+5. **Realtime Otimizado**: Menos spam de notificações em eventos em lote
+
+## Fases de Implementação
+
+**Fase 1**: Agrupamento básico no frontend (2-3 arquivos)
+**Fase 2**: Interface expandível e navegação inteligente (2-3 arquivos)
+**Fase 3**: Limpeza manual e automática (2-3 arquivos + edge function)
+**Fase 4**: Otimização de realtime com debounce (1 arquivo)
+
