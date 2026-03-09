@@ -45,6 +45,7 @@ const MonitoringPage = lazyWithRetry(() => import("@/pages/monitoring/Monitoring
 const CalendarPage = lazyWithRetry(() => import("@/pages/calendar/CalendarPage"));
 const GamificationPage = lazyWithRetry(() => import("@/pages/gamification/GamificationPage"));
 const KnowledgePage = lazyWithRetry(() => import("@/pages/knowledge/KnowledgePage"));
+const KnowledgeArticlePage = lazyWithRetry(() => import("@/pages/knowledge/KnowledgeArticlePage"));
 const TVDashboardPage = lazyWithRetry(() => import("@/pages/tv-dashboard/TVDashboardPage"));
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings/SettingsPage"));
 const CertificateDashboardPage = lazyWithRetry(() => import("@/pages/settings/CertificateDashboardPage"));
@@ -147,6 +148,7 @@ export function AnimatedRoutes() {
       <Route path="/calendar" element={<ProtectedRoute requireStaff><LazyPage><CalendarPage /></LazyPage></ProtectedRoute>} />
       <Route path="/gamification" element={<ProtectedRoute requireStaff><LazyPage><GamificationPage /></LazyPage></ProtectedRoute>} />
       <Route path="/knowledge" element={<ProtectedRoute requireStaff><LazyPage><KnowledgePage /></LazyPage></ProtectedRoute>} />
+      <Route path="/knowledge/:slug" element={<ProtectedRoute requireStaff><LazyPage><KnowledgeArticlePage /></LazyPage></ProtectedRoute>} />
       
       {/* Financial routes */}
       <Route path="/billing" element={<ProtectedRoute allowedRoles={["admin", "manager", "financial"]}><LazyPage><BillingPage /></LazyPage></ProtectedRoute>} />

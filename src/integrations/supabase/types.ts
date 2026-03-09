@@ -101,6 +101,41 @@ export type Database = {
         }
         Relationships: []
       }
+      article_feedback: {
+        Row: {
+          article_id: string
+          comment: string | null
+          created_at: string | null
+          id: string
+          is_helpful: boolean
+          user_id: string
+        }
+        Insert: {
+          article_id: string
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          is_helpful: boolean
+          user_id: string
+        }
+        Update: {
+          article_id?: string
+          comment?: string | null
+          created_at?: string | null
+          id?: string
+          is_helpful?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_feedback_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           asset_type: Database["public"]["Enums"]["asset_type"]
@@ -2159,8 +2194,16 @@ export type Database = {
           client_id: string | null
           content: string
           created_at: string
+          excerpt: string | null
+          helpful_count: number | null
           id: string
+          is_pinned: boolean | null
           is_public: boolean
+          knowledge_category_id: string | null
+          not_helpful_count: number | null
+          order_index: number | null
+          slug: string | null
+          tags: string[] | null
           title: string
           updated_at: string
           views: number
@@ -2171,8 +2214,16 @@ export type Database = {
           client_id?: string | null
           content: string
           created_at?: string
+          excerpt?: string | null
+          helpful_count?: number | null
           id?: string
+          is_pinned?: boolean | null
           is_public?: boolean
+          knowledge_category_id?: string | null
+          not_helpful_count?: number | null
+          order_index?: number | null
+          slug?: string | null
+          tags?: string[] | null
           title: string
           updated_at?: string
           views?: number
@@ -2183,13 +2234,28 @@ export type Database = {
           client_id?: string | null
           content?: string
           created_at?: string
+          excerpt?: string | null
+          helpful_count?: number | null
           id?: string
+          is_pinned?: boolean | null
           is_public?: boolean
+          knowledge_category_id?: string | null
+          not_helpful_count?: number | null
+          order_index?: number | null
+          slug?: string | null
+          tags?: string[] | null
           title?: string
           updated_at?: string
           views?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_knowledge_category"
+            columns: ["knowledge_category_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "knowledge_articles_category_id_fkey"
             columns: ["category_id"]
@@ -2209,6 +2275,56 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_categories: {
+        Row: {
+          article_count: number | null
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          order_index: number | null
+          parent_id: string | null
+          slug: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          article_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          order_index?: number | null
+          parent_id?: string | null
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          article_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          order_index?: number | null
+          parent_id?: string | null
+          slug?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -4584,6 +4700,7 @@ export type Database = {
         Args: { p_bucket: string; p_expires_in?: number; p_path: string }
         Returns: string
       }
+      generate_slug: { Args: { title: string }; Returns: string }
       get_additional_charges_report: {
         Args: { end_date: string; start_date: string }
         Returns: Json

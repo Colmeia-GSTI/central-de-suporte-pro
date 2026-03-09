@@ -6,11 +6,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -26,7 +27,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
+import { MarkdownEditor } from "./MarkdownEditor";
+import { X, Pin } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
+import { useState, KeyboardEvent } from "react";
 
 const articleSchema = z.object({
   title: z.string()
@@ -35,8 +39,11 @@ const articleSchema = z.object({
   content: z.string()
     .min(20, "Conteúdo deve ter pelo menos 20 caracteres")
     .max(50000, "Conteúdo deve ter no máximo 50.000 caracteres"),
-  category_id: z.string().optional(),
+  excerpt: z.string().max(300, "Resumo deve ter no máximo 300 caracteres").optional(),
+  knowledge_category_id: z.string().optional(),
   is_public: z.boolean().default(true),
+  is_pinned: z.boolean().default(false),
+  tags: z.array(z.string()).default([]),
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -51,14 +58,18 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [tagInput, setTagInput] = useState("");
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
     defaultValues: {
       title: article?.title || "",
       content: article?.content || "",
-      category_id: article?.category_id || "",
+      excerpt: article?.excerpt || "",
+      knowledge_category_id: article?.knowledge_category_id || "",
       is_public: article?.is_public ?? true,
+      is_pinned: article?.is_pinned ?? false,
+      tags: article?.tags || [],
     },
   });
 
@@ -69,14 +80,15 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
     enabled: !article,
   });
 
+  // Fetch knowledge categories
   const { data: categories = [] } = useQuery({
-    queryKey: ["categories-select"],
+    queryKey: ["knowledge-categories-select"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("ticket_categories")
-        .select("id, name")
+        .from("knowledge_categories")
+        .select("id, name, icon")
         .eq("is_active", true)
-        .order("name");
+        .order("order_index");
       if (error) throw error;
       return data;
     },
@@ -91,8 +103,11 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
       const payload = {
         title: data.title.trim(),
         content: data.content,
-        category_id: data.category_id || null,
+        excerpt: data.excerpt?.trim() || null,
+        knowledge_category_id: data.knowledge_category_id || null,
         is_public: data.is_public,
+        is_pinned: data.is_pinned,
+        tags: data.tags,
         author_id: user.id,
       };
 
@@ -110,6 +125,7 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-categories"] });
       toast({ title: article ? "Artigo atualizado" : "Artigo criado" });
       onSuccess();
     },
@@ -123,10 +139,34 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
     onCancel();
   };
 
+  // Tag management
+  const tags = form.watch("tags");
+
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim().toLowerCase();
+    if (trimmed && !tags.includes(trimmed) && tags.length < 10) {
+      form.setValue("tags", [...tags, trimmed]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    form.setValue("tags", tags.filter((t) => t !== tagToRemove));
+  };
+
+  const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTag(tagInput);
+    }
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
+      <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-6">
         {wasRestored && <DraftRecoveryBanner onClear={clearDraft} />}
+        
+        {/* Title */}
         <FormField
           control={form.control}
           name="title"
@@ -141,17 +181,18 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
           )}
         />
 
+        {/* Category and Pinned */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
-            name="category_id"
+            name="knowledge_category_id"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Categoria</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
+                      <SelectValue placeholder="Selecione uma categoria" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -167,20 +208,99 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="is_public"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-2 pt-8">
-                <FormControl>
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-                <FormLabel className="!mt-0">Público</FormLabel>
-              </FormItem>
-            )}
-          />
+          <div className="flex items-center gap-6 pt-8">
+            <FormField
+              control={form.control}
+              name="is_public"
+              render={({ field }) => (
+                <FormItem className="flex items-center gap-2">
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <FormLabel className="!mt-0">Público</FormLabel>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="is_pinned"
+              render={({ field }) => (
+                <FormItem className="flex items-center gap-2">
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                  <FormLabel className="!mt-0 flex items-center gap-1">
+                    <Pin className="h-3 w-3" />
+                    Fixar
+                  </FormLabel>
+                </FormItem>
+              )}
+            />
+          </div>
         </div>
 
+        {/* Excerpt */}
+        <FormField
+          control={form.control}
+          name="excerpt"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Resumo</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="Breve descrição do artigo (exibido na listagem)" 
+                  maxLength={300}
+                  {...field} 
+                />
+              </FormControl>
+              <FormDescription>
+                {field.value?.length || 0}/300 caracteres
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Tags */}
+        <FormField
+          control={form.control}
+          name="tags"
+          render={() => (
+            <FormItem>
+              <FormLabel>Tags</FormLabel>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="gap-1">
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <Input
+                  placeholder="Digite uma tag e pressione Enter"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  onBlur={() => tagInput && addTag(tagInput)}
+                />
+                <FormDescription>
+                  Adicione até 10 tags para facilitar a busca
+                </FormDescription>
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Content with Markdown Editor */}
         <FormField
           control={form.control}
           name="content"
@@ -188,10 +308,11 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
             <FormItem>
               <FormLabel>Conteúdo *</FormLabel>
               <FormControl>
-                <Textarea
-                  placeholder="Conteúdo do artigo (suporta Markdown)"
-                  rows={12}
-                  {...field}
+                <MarkdownEditor
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Escreva o conteúdo do artigo em Markdown..."
+                  rows={16}
                 />
               </FormControl>
               <FormMessage />
@@ -199,12 +320,13 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
           )}
         />
 
-        <div className="flex justify-end gap-2 pt-4">
+        {/* Actions */}
+        <div className="flex justify-end gap-2 pt-4 border-t">
           <Button type="button" variant="outline" onClick={handleCancel}>
             Cancelar
           </Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Salvando..." : article ? "Atualizar" : "Criar"}
+            {mutation.isPending ? "Salvando..." : article ? "Atualizar" : "Criar Artigo"}
           </Button>
         </div>
       </form>
