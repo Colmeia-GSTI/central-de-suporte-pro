@@ -1,46 +1,143 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+# Modernização da Base de Conhecimento — Inspirado nos Líderes de Mercado
 
-## Problema
+## Análise Comparativa
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+| Funcionalidade | Zendesk/Freshdesk/Notion | Colmeia HD (Atual) |
+|---|---|---|
+| Editor rico (WYSIWYG/Markdown) | Editor rico com toolbar, preview live | Textarea simples sem toolbar |
+| Categorias hierárquicas | Árvore de categorias/seções | Flat (1 nível, reusa ticket_categories) |
+| Tags nos artigos | Sistema de tags dedicado | Inexistente |
+| Artigos relacionados | Sugestões automáticas | Inexistente |
+| Feedback (útil/não útil) | Votação por artigo | Inexistente |
+| Busca full-text destacada | Highlight nos resultados | Busca ILIKE básica |
+| Navegação lateral (TOC) | Table of Contents automático | Inexistente |
+| Fixar artigos populares | Pin/destaque | Inexistente |
+| Versionamento | Histórico de edições | Inexistente |
+| Ordenação/filtro avançado | Por categoria, popularidade, data | Apenas data |
+| Layout da listagem | Cards com thumbnails + sidebar de categorias | Grid simples sem filtro lateral |
+| Breadcrumbs na visualização | Categoria > Subcategoria > Artigo | Inexistente |
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+## Plano de Implementação
 
-## Solução
+### Fase 1 — Database (Migração SQL)
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+Adicionar à tabela `knowledge_articles`:
+- `tags text[]` — array de tags
+- `is_pinned boolean DEFAULT false` — artigos fixados no topo
+- `helpful_count integer DEFAULT 0` — votos "útil"
+- `not_helpful_count integer DEFAULT 0` — votos "não útil"
+- `slug text` — URL amigável gerada do título
+- `excerpt text` — resumo curto (150 chars)
+- `order_index integer DEFAULT 0` — ordenação manual
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+Nova tabela `knowledge_categories`:
+- `id uuid PK`
+- `name text NOT NULL`
+- `slug text`
+- `description text`
+- `icon text` (nome do ícone Lucide)
+- `parent_id uuid FK` (hierarquia)
+- `order_index integer DEFAULT 0`
+- `article_count integer DEFAULT 0` (cache counter)
+- `created_at, updated_at`
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
+Nova tabela `article_feedback`:
+- `id uuid PK`
+- `article_id uuid FK`
+- `user_id uuid`
+- `is_helpful boolean`
+- `comment text` (opcional)
+- `created_at`
+- Unique constraint em `(article_id, user_id)`
 
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
+RLS: Staff pode CRUD tudo; authenticated pode dar feedback; público pode ler artigos `is_public = true`.
 
-## Arquivos modificados
+### Fase 2 — KnowledgePage Redesenhada
 
-| Arquivo | Ação |
-|---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
+Layout inspirado em Zendesk Guide / Notion:
+
+```text
+┌─────────────────────────────────────────────────┐
+│ 🔍 Buscar na Base de Conhecimento...            │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ [Busca full-width com ícone + atalho /]     │ │
+│ └─────────────────────────────────────────────┘ │
+│                                                 │
+│ 📌 Artigos em Destaque (pinned, carousel)       │
+│ ┌────────┐ ┌────────┐ ┌────────┐               │
+│ │ Card 1 │ │ Card 2 │ │ Card 3 │               │
+│ └────────┘ └────────┘ └────────┘               │
+│                                                 │
+│ 📂 Categorias                                    │
+│ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐    │
+│ │🖥 Infra│ │🌐 Rede │ │📧 Email│ │🔧 Geral│    │
+│ │ 12 art.│ │ 8 art. │ │ 5 art. │ │ 15 art.│    │
+│ └────────┘ └────────┘ └────────┘ └────────┘    │
+│                                                 │
+│ 📄 Artigos Recentes                              │
+│ ┌───────────────────────────────────────────┐   │
+│ │ Título · Categoria · 👁 123 · 2 dias atrás│   │
+│ │ Título · Categoria · 👁 89  · 5 dias atrás│   │
+│ └───────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘
+```
+
+Componentes novos:
+- **KnowledgeHero**: Busca centralizada com fundo gradiente, estilo "Help Center"
+- **KnowledgeCategoryGrid**: Cards de categorias com ícone, contagem, click para filtrar
+- **KnowledgePinnedCarousel**: Artigos fixados em destaque horizontal
+- **KnowledgeArticleList**: Lista com filtros (categoria, tags, ordenação por popularidade/data)
+- **KnowledgeFilterSidebar**: Sidebar com categorias em árvore + tags como chips
+
+### Fase 3 — ArticleViewer Modernizado
+
+- **Table of Contents (TOC)** lateral automático: extrai headings do Markdown e gera navegação sticky
+- **Breadcrumbs**: Categoria > Artigo
+- **Feedback widget**: "Este artigo foi útil?" com botões 👍/👎 + campo de comentário opcional
+- **Artigos relacionados**: Query por mesma categoria + tags similares (bottom section)
+- **Metadata rica**: Autor (com avatar), data de criação, última atualização, contagem de views
+- **Copiar link / Compartilhar**: Botão de copiar URL do artigo
+- **Tempo de leitura estimado**: Baseado em word count (~200 palavras/min)
+
+### Fase 4 — ArticleForm com Editor Markdown Avançado
+
+Substituir o Textarea por um editor com:
+- **Toolbar Markdown**: Bold, Italic, Heading 1-3, Code block, Link, Lista, Quote, Separador
+- **Preview split-screen**: Igual ao ClientDocumentation (já existe o padrão)
+- **Seletor de tags**: Input de tags com autocomplete (chips)
+- **Toggle "Fixar artigo"**: Switch para `is_pinned`
+- **Campo de resumo**: Input para `excerpt` com contador de caracteres
+- **Seletor de categoria dedicada**: Usando `knowledge_categories` em vez de `ticket_categories`
+
+### Fase 5 — Melhorias de UX Global
+
+1. **Busca com highlight**: Termos buscados destacados em amarelo nos resultados
+2. **Ordenação**: Por popularidade (views), data, alfabético
+3. **Filtro por tags**: Chips clicáveis para filtrar por tag
+4. **Empty state melhorado**: Ilustração + CTA contextual ("Crie seu primeiro artigo")
+5. **Animações**: Cards com `animate-in fade-in slide-in-from-bottom` escalonado
+6. **Rota dedicada para artigo**: `/knowledge/:slug` em vez de dialog modal (melhor SEO e compartilhamento)
+7. **Mobile**: Cards responsivos, busca sticky no topo
+
+## Arquivos
+
+### Novos (7 arquivos)
+- `src/components/knowledge/KnowledgeHero.tsx`
+- `src/components/knowledge/KnowledgeCategoryGrid.tsx`
+- `src/components/knowledge/KnowledgePinnedCarousel.tsx`
+- `src/components/knowledge/KnowledgeArticleList.tsx`
+- `src/components/knowledge/ArticleFeedback.tsx`
+- `src/components/knowledge/ArticleTableOfContents.tsx`
+- `src/components/knowledge/MarkdownEditor.tsx`
+
+### Modificados (4 arquivos)
+- `src/pages/knowledge/KnowledgePage.tsx` — Layout completamente redesenhado
+- `src/components/knowledge/ArticleViewer.tsx` — TOC, feedback, artigos relacionados
+- `src/components/knowledge/ArticleForm.tsx` — Editor markdown com toolbar, tags, pinned
+- `src/components/layout/AnimatedRoutes.tsx` — Rota `/knowledge/:slug`
+
+### Migração SQL
+- 1 migration: novas tabelas + colunas + RLS + índices full-text
 
