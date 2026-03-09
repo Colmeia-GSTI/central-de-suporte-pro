@@ -1,46 +1,69 @@
 
+# Melhorias no Sistema de Notificações
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+## Diagnóstico Completo
 
-## Problema
+Após análise profunda do `NotificationDropdown`, `useNotifications`, `useUnifiedRealtime` e banco de dados, identifiquei 6 problemas críticos:
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+### Problemas Encontrados
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+**1. Dropdown sem ação ao clicar em notificação com `related_id`**
+Clicar em uma notificação com `related_type: "invoice"` apenas marca como lida — não navega para a entidade. O campo `related_id` existe mas nunca é usado para navegação. Com 60 notificações no banco todas de `type: invoice`, o usuário não consegue chegar na fatura clicando na notificação.
 
-## Solução
+**2. Sem opção de deletar / limpar notificações**
+O hook `useNotifications` só tem `markAsRead` e `markAllAsRead`. Não há como excluir notificações individuais nem limpar todas. Com 30 não lidas acumuladas, não há saída.
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+**3. Sem filtro por tipo no dropdown**
+Todas as notificações aparecem misturadas. Sem tabs ou filtros por tipo (info, warning, success, error).
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+**4. `usePushNotifications` ainda usa `useToast` (sistema legado)**
+O hook usa `useToast` em vez de `sonner`, inconsistente com o resto do sistema.
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
+**5. Sem página dedicada de notificações**
+O dropdown está limitado a 350px de altura. Com 50+ notificações, é impossível navegar. Não existe `/notifications` com histórico completo.
 
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
+**6. Notificações com `related_type` não têm ícones específicos**
+`related_type: "invoice"` deveria mostrar ícone de fatura (Receipt), mas cai no ícone padrão Bell.
 
-## Arquivos modificados
+## Plano de Implementação
+
+### 1. `src/hooks/useNotifications.tsx`
+- Adicionar `deleteNotification(id)` e `clearAllRead()` mutations
+- Retornar `isMarkingAll` e `isDeletingAll` para estados de loading dos botões
+
+### 2. `src/components/notifications/NotificationDropdown.tsx`
+- **Navegação ao clicar**: usar `useNavigate` para rotear baseado em `related_type`:
+  - `invoice` → `/billing?tab=invoices`
+  - `ticket` → `/tickets?id={related_id}`
+  - `contract` → `/contracts`
+- **Ícones por `related_type`**: Receipt para invoice, Ticket para ticket, FileText para contract
+- **Botão "Limpar lidas"**: no header do dropdown com ícone Trash2
+- **Tabs de filtro**: Todas | Não lidas (usando contagem como badge)
+- **Botão "Ver todas"**: link para `/notifications` no footer do dropdown
+- **Excluir individual**: ícone X em cada item no hover
+
+### 3. `src/pages/notifications/NotificationsPage.tsx` (novo)
+- Página completa `/notifications` com lista paginada (20 por vez, scroll infinito)
+- Filtros por tipo: Todas, Não lidas, Por tipo (warning, info, success, error)
+- Ações em lote: selecionar múltiplas → marcar lidas / deletar
+- Empty state elegante quando sem notificações
+
+### 4. `src/components/layout/AnimatedRoutes.tsx`
+- Adicionar rota `/notifications` (lazy) protegida para staff
+
+### 5. `src/hooks/usePushNotifications.ts`
+- Migrar de `useToast` para `toast` do `sonner`
+
+### 6. `src/hooks/useNotifications.tsx` — Realtime para clientes
+- Adicionar subscription de notificações também para usuários com role `client`/`client_master` (hoje o realtime é só para `isStaff`)
+
+## Arquivos Modificados
 
 | Arquivo | Ação |
 |---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
-
+| `src/hooks/useNotifications.tsx` | + delete + clearAllRead mutations |
+| `src/components/notifications/NotificationDropdown.tsx` | Navegação + ícones + limpar + tabs |
+| `src/pages/notifications/NotificationsPage.tsx` | Novo — página completa |
+| `src/components/layout/AnimatedRoutes.tsx` | + rota `/notifications` |
+| `src/hooks/usePushNotifications.ts` | Migrar para sonner |
+| `src/hooks/useUnifiedRealtime.tsx` | Notificações para clientes também |
