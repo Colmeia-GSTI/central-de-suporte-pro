@@ -148,6 +148,7 @@ export function AnimatedRoutes() {
       <Route path="/calendar" element={<ProtectedRoute requireStaff><LazyPage><CalendarPage /></LazyPage></ProtectedRoute>} />
       <Route path="/gamification" element={<ProtectedRoute requireStaff><LazyPage><GamificationPage /></LazyPage></ProtectedRoute>} />
       <Route path="/knowledge" element={<ProtectedRoute requireStaff><LazyPage><KnowledgePage /></LazyPage></ProtectedRoute>} />
+      <Route path="/knowledge/:slug" element={<ProtectedRoute requireStaff><LazyPage><KnowledgeArticlePage /></LazyPage></ProtectedRoute>} />
       
       {/* Financial routes */}
       <Route path="/billing" element={<ProtectedRoute allowedRoles={["admin", "manager", "financial"]}><LazyPage><BillingPage /></LazyPage></ProtectedRoute>} />
