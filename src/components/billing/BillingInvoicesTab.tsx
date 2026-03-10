@@ -571,6 +571,11 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                     <span className="text-xs text-muted-foreground">
                       Venc: {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
                     </span>
+                    {invoice.paid_date && (
+                      <span className="text-xs text-emerald-400">
+                        Pago: {(() => { const [y,m,d] = invoice.paid_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })()}
+                      </span>
+                    )}
                     <InvoiceInlineActions
                       invoice={invoice}
                       nfseInfo={nfseInfo}
