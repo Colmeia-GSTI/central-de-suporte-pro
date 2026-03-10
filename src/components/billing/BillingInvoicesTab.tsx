@@ -647,6 +647,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                   <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Faturamento</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Vencimento</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Situação</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Dt. Pagamento</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider text-right py-2">Valor (R$)</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider text-center py-2">Ações</TableHead>
                   <TableHead className="w-10 py-2"></TableHead>
