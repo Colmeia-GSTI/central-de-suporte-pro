@@ -703,6 +703,9 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             </Badge>
                           </div>
                         </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {invoice.paid_date ? (() => { const [y,m,d] = invoice.paid_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                        </TableCell>
                         <TableCell className="py-2 text-right text-sm font-medium">
                           {formatCurrency(invoice.amount)}
                         </TableCell>
