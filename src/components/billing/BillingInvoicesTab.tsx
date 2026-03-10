@@ -662,6 +662,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                       <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-5 w-16" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell className="py-2 text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-4 w-4" /></TableCell>
