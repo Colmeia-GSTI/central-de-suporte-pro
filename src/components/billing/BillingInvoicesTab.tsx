@@ -571,6 +571,11 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                     <span className="text-xs text-muted-foreground">
                       Venc: {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
                     </span>
+                    {invoice.paid_date && (
+                      <span className="text-xs text-emerald-400">
+                        Pago: {(() => { const [y,m,d] = invoice.paid_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })()}
+                      </span>
+                    )}
                     <InvoiceInlineActions
                       invoice={invoice}
                       nfseInfo={nfseInfo}
@@ -647,6 +652,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                   <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Faturamento</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Vencimento</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Situação</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider py-2">Dt. Pagamento</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider text-right py-2">Valor (R$)</TableHead>
                   <TableHead className="text-xs font-semibold uppercase tracking-wider text-center py-2">Ações</TableHead>
                   <TableHead className="w-10 py-2"></TableHead>
@@ -661,6 +667,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                       <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-5 w-16" /></TableCell>
+                      <TableCell className="py-2"><Skeleton className="h-4 w-20" /></TableCell>
                       <TableCell className="py-2 text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-4 w-32" /></TableCell>
                       <TableCell className="py-2"><Skeleton className="h-4 w-4" /></TableCell>
@@ -668,7 +675,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                   ))
                 ) : paginatedInvoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                       Nenhuma fatura encontrada
                     </TableCell>
                   </TableRow>
@@ -701,6 +708,9 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                               {statusLabels[invoice.status]}
                             </Badge>
                           </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-xs">
+                          {invoice.paid_date ? (() => { const [y,m,d] = invoice.paid_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
                         </TableCell>
                         <TableCell className="py-2 text-right text-sm font-medium">
                           {formatCurrency(invoice.amount)}
