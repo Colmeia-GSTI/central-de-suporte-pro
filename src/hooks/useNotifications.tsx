@@ -71,11 +71,26 @@ export function useNotifications() {
     },
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) return;
+      const { error } = await supabase
+        .from("notifications")
+        .delete()
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications", user?.id] });
+    },
+  });
+
   return {
     notifications,
     unreadCount,
     isLoading,
     markAsRead: markAsReadMutation.mutate,
     markAllAsRead: markAllAsReadMutation.mutate,
+    clearAll: clearAllMutation.mutate,
   };
 }

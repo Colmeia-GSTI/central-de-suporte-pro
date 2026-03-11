@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, Check, CheckCheck, Ticket, AlertTriangle, MessageSquare, Sparkles } from "lucide-react";
+import { Bell, Check, CheckCheck, Ticket, AlertTriangle, MessageSquare, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,7 +43,7 @@ const getNotificationIcon = (type: string, relatedType: string | null) => {
 };
 
 export function NotificationDropdown() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotifications();
   const navigate = useNavigate();
 
   const handleNotificationClick = (notification: { id: string; is_read: boolean; related_type: string | null; related_id: string | null }) => {
@@ -73,12 +73,7 @@ export function NotificationDropdown() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative group">
-          <motion.div
-            animate={unreadCount > 0 ? { rotate: [0, -10, 10, -10, 10, 0] } : {}}
-            transition={{ duration: 0.5, repeat: unreadCount > 0 ? Infinity : 0, repeatDelay: 3 }}
-          >
-            <Bell className="h-5 w-5 transition-colors group-hover:text-primary" />
-          </motion.div>
+          <Bell className="h-5 w-5 transition-colors group-hover:text-primary" />
           <AnimatePresence>
             {unreadCount > 0 && (
               <motion.div
@@ -89,7 +84,7 @@ export function NotificationDropdown() {
               >
                 <Badge
                   variant="destructive"
-                  className="h-5 min-w-5 flex items-center justify-center p-0 text-xs animate-pulse"
+                  className="h-5 min-w-5 flex items-center justify-center p-0 text-xs"
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </Badge>
@@ -104,17 +99,30 @@ export function NotificationDropdown() {
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="font-semibold">Notificações</span>
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto px-2 py-1 text-xs hover:bg-primary/10 hover:text-primary"
-              onClick={() => markAllAsRead()}
-            >
-              <CheckCheck className="h-3 w-3 mr-1" />
-              Marcar todas como lidas
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto px-2 py-1 text-xs hover:bg-primary/10 hover:text-primary"
+                onClick={() => markAllAsRead()}
+              >
+                <CheckCheck className="h-3 w-3 mr-1" />
+                Marcar lidas
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto px-2 py-1 text-xs hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => clearAll()}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Limpar
+              </Button>
+            )}
+          </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-border/50" />
         <ScrollArea className="h-[350px]">
@@ -171,11 +179,7 @@ export function NotificationDropdown() {
                             {notification.title}
                           </p>
                           {!notification.is_read && (
-                            <motion.div 
-                              className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1"
-                              animate={{ scale: [1, 1.2, 1] }}
-                              transition={{ duration: 1, repeat: Infinity }}
-                            />
+                            <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
