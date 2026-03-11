@@ -298,7 +298,9 @@ async function processInvoiceWebhook(
       supabase,
       "Erro na NFS-e via Asaas",
       `Erro ao processar NFS-e: ${parsed.descricao.slice(0, 100)}`,
-      "error"
+      "error",
+      "nfse",
+      nfseRecord.id
     );
   }
 
