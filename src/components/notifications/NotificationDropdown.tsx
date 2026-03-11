@@ -84,7 +84,7 @@ export function NotificationDropdown() {
               >
                 <Badge
                   variant="destructive"
-                  className="h-5 min-w-5 flex items-center justify-center p-0 text-xs animate-pulse"
+                  className="h-5 min-w-5 flex items-center justify-center p-0 text-xs"
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </Badge>
