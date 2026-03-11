@@ -150,7 +150,7 @@ export function NotificationDropdown() {
                         !notification.is_read && "bg-primary/5 hover:bg-primary/10",
                         notification.is_read && "hover:bg-muted/50"
                       )}
-                      onClick={() => !notification.is_read && markAsRead(notification.id)}
+                      onClick={() => handleNotificationClick(notification)}
                     >
                       <div className={cn(
                         "p-2 rounded-lg flex-shrink-0",
