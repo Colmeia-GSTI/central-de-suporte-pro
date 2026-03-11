@@ -33,6 +33,7 @@ const assetSchema = z.object({
   brand: z.string().optional(),
   model: z.string().optional(),
   serial_number: z.string().optional(),
+  ip_address: z.string().optional(),
   location: z.string().optional(),
   status: z.enum(["active", "maintenance", "disposed", "loaned"]),
   purchase_date: z.string().optional(),
