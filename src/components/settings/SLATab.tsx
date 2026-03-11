@@ -190,6 +190,7 @@ export function SLATab() {
       resolution_hours: sla.resolution_hours,
       client_id: sla.client_id || "",
       category_id: sla.category_id || "",
+      contract_id: (sla as Record<string, unknown>).contract_id as string || "",
     });
     setIsFormOpen(true);
   };

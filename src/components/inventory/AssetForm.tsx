@@ -271,6 +271,20 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
 
           <FormField
             control={form.control}
+            name="ip_address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Endereço IP</FormLabel>
+                <FormControl>
+                  <Input placeholder="Ex: 192.168.1.100" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="location"
             render={({ field }) => (
               <FormItem>
