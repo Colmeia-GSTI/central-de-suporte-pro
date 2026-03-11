@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, Check, CheckCheck, Ticket, AlertTriangle, MessageSquare, Sparkles } from "lucide-react";
+import { Bell, Check, CheckCheck, Ticket, AlertTriangle, MessageSquare, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
