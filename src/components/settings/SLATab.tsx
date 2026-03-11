@@ -95,8 +95,22 @@ export function SLATab() {
         .select("*, clients(name), ticket_categories(name)")
         .order("priority");
       if (error) throw error;
-      return data as SLAWithRelations[];
+      return data as (SLAWithRelations & { contract_id?: string | null })[];
     },
+  });
+
+  const { data: contracts = [] } = useQuery({
+    queryKey: ["contracts-select-active"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, name")
+        .eq("status", "active")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: clients = [] } = useQuery({
