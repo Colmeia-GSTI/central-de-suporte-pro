@@ -33,6 +33,7 @@ const assetSchema = z.object({
   brand: z.string().optional(),
   model: z.string().optional(),
   serial_number: z.string().optional(),
+  ip_address: z.string().optional(),
   location: z.string().optional(),
   status: z.enum(["active", "maintenance", "disposed", "loaned"]),
   purchase_date: z.string().optional(),
@@ -61,6 +62,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
       brand: asset?.brand || "",
       model: asset?.model || "",
       serial_number: asset?.serial_number || "",
+      ip_address: (asset as Record<string, unknown>)?.ip_address as string || "",
       location: asset?.location || "",
       status: asset?.status || "active",
       purchase_date: asset?.purchase_date || "",
@@ -98,6 +100,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
         brand: data.brand || null,
         model: data.model || null,
         serial_number: data.serial_number || null,
+        ip_address: data.ip_address || null,
         location: data.location || null,
         status: data.status as Enums<"asset_status">,
         purchase_date: data.purchase_date || null,
@@ -260,6 +263,20 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
                 <FormLabel>Número de Série</FormLabel>
                 <FormControl>
                   <Input placeholder="S/N" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="ip_address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Endereço IP</FormLabel>
+                <FormControl>
+                  <Input placeholder="Ex: 192.168.1.100" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

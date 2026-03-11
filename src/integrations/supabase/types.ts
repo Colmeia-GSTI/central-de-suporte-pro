@@ -143,6 +143,7 @@ export type Database = {
           client_id: string
           created_at: string
           id: string
+          ip_address: string | null
           location: string | null
           model: string | null
           name: string
@@ -160,6 +161,7 @@ export type Database = {
           client_id: string
           created_at?: string
           id?: string
+          ip_address?: string | null
           location?: string | null
           model?: string | null
           name: string
@@ -177,6 +179,7 @@ export type Database = {
           client_id?: string
           created_at?: string
           id?: string
+          ip_address?: string | null
           location?: string | null
           model?: string | null
           name?: string
@@ -3213,6 +3216,7 @@ export type Database = {
         Row: {
           category_id: string | null
           client_id: string | null
+          contract_id: string | null
           created_at: string
           id: string
           priority: Database["public"]["Enums"]["ticket_priority"]
@@ -3222,6 +3226,7 @@ export type Database = {
         Insert: {
           category_id?: string | null
           client_id?: string | null
+          contract_id?: string | null
           created_at?: string
           id?: string
           priority: Database["public"]["Enums"]["ticket_priority"]
@@ -3231,6 +3236,7 @@ export type Database = {
         Update: {
           category_id?: string | null
           client_id?: string | null
+          contract_id?: string | null
           created_at?: string
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
@@ -3257,6 +3263,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sla_configs_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
             referencedColumns: ["id"]
           },
         ]

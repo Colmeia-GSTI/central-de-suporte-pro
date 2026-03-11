@@ -53,6 +53,7 @@ const slaSchema = z.object({
   resolution_hours: z.coerce.number().min(1),
   client_id: z.string().optional(),
   category_id: z.string().optional(),
+  contract_id: z.string().optional(),
 });
 
 type SLAFormData = z.infer<typeof slaSchema>;
@@ -94,8 +95,22 @@ export function SLATab() {
         .select("*, clients(name), ticket_categories(name)")
         .order("priority");
       if (error) throw error;
-      return data as SLAWithRelations[];
+      return data as (SLAWithRelations & { contract_id?: string | null })[];
     },
+  });
+
+  const { data: contracts = [] } = useQuery({
+    queryKey: ["contracts-select-active"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, name")
+        .eq("status", "active")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: clients = [] } = useQuery({
@@ -132,6 +147,7 @@ export function SLATab() {
         resolution_hours: data.resolution_hours,
         client_id: data.client_id || null,
         category_id: data.category_id || null,
+        contract_id: data.contract_id || null,
       };
 
       if (editingSLA) {
@@ -174,6 +190,7 @@ export function SLATab() {
       resolution_hours: sla.resolution_hours,
       client_id: sla.client_id || "",
       category_id: sla.category_id || "",
+      contract_id: (sla as Record<string, unknown>).contract_id as string || "",
     });
     setIsFormOpen(true);
   };
@@ -310,6 +327,30 @@ export function SLATab() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="contract_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contrato (opcional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos os contratos" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {contracts.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={handleCloseForm}>
                     Cancelar
@@ -332,6 +373,7 @@ export function SLATab() {
                 <TableHead>Resposta</TableHead>
                 <TableHead>Resolução</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Contrato</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -339,13 +381,13 @@ export function SLATab() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : slaConfigs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <Clock className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <p className="mt-2 text-muted-foreground">Nenhum SLA configurado</p>
                   </TableCell>
@@ -361,6 +403,9 @@ export function SLATab() {
                     <TableCell>{sla.response_hours}h</TableCell>
                     <TableCell>{sla.resolution_hours}h</TableCell>
                     <TableCell>{sla.clients?.name || "Todos"}</TableCell>
+                    <TableCell>
+                      {contracts.find((c) => c.id === (sla as Record<string, unknown>).contract_id)?.name || "Todos"}
+                    </TableCell>
                     <TableCell>{sla.ticket_categories?.name || "Todas"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">

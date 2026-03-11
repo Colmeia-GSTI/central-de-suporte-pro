@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { KBSuggestions } from "@/components/tickets/KBSuggestions";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -366,6 +367,12 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                       </div>
                     </FormItem>
                   )}
+                />
+
+                {/* KB Suggestions */}
+                <KBSuggestions
+                  title={form.watch("title")}
+                  description={form.watch("description")}
                 />
               </div>
             )}
