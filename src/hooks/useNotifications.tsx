@@ -91,5 +91,6 @@ export function useNotifications() {
     isLoading,
     markAsRead: markAsReadMutation.mutate,
     markAllAsRead: markAllAsReadMutation.mutate,
+    clearAll: clearAllMutation.mutate,
   };
 }
