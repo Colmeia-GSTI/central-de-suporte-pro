@@ -15,6 +15,25 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+
+function getNotificationRoute(relatedType: string | null, relatedId: string | null): string | null {
+  if (!relatedType || !relatedId) return null;
+  switch (relatedType) {
+    case "ticket":
+      return `/tickets?open=${relatedId}`;
+    case "invoice":
+      return `/billing?tab=invoices&invoice=${relatedId}`;
+    case "contract":
+      return `/contracts?contract=${relatedId}`;
+    case "monitoring_alert":
+      return `/monitoring?alert=${relatedId}`;
+    case "nfse":
+      return `/billing?tab=nfse&nfse=${relatedId}`;
+    default:
+      return null;
+  }
+}
 
 const getNotificationIcon = (type: string, relatedType: string | null) => {
   if (relatedType === "ticket") return Ticket;
@@ -25,7 +44,17 @@ const getNotificationIcon = (type: string, relatedType: string | null) => {
 
 export function NotificationDropdown() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const navigate = useNavigate();
 
+  const handleNotificationClick = (notification: { id: string; is_read: boolean; related_type: string | null; related_id: string | null }) => {
+    if (!notification.is_read) {
+      markAsRead(notification.id);
+    }
+    const route = getNotificationRoute(notification.related_type, notification.related_id);
+    if (route) {
+      navigate(route);
+    }
+  };
   const getTypeColor = (type: string) => {
     switch (type) {
       case "error":
@@ -121,7 +150,7 @@ export function NotificationDropdown() {
                         !notification.is_read && "bg-primary/5 hover:bg-primary/10",
                         notification.is_read && "hover:bg-muted/50"
                       )}
-                      onClick={() => !notification.is_read && markAsRead(notification.id)}
+                      onClick={() => handleNotificationClick(notification)}
                     >
                       <div className={cn(
                         "p-2 rounded-lg flex-shrink-0",

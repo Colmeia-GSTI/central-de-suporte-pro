@@ -154,7 +154,9 @@ async function createNotification(
   supabase: SupabaseClient,
   title: string,
   message: string,
-  type: "info" | "success" | "warning" | "error"
+  type: "info" | "success" | "warning" | "error",
+  relatedType?: string,
+  relatedId?: string
 ) {
   try {
     const { data: adminUsers } = await supabase
@@ -169,7 +171,9 @@ async function createNotification(
       title,
       message,
       type,
-      read: false,
+      is_read: false,
+      related_type: relatedType || null,
+      related_id: relatedId || null,
     }));
 
     await supabase.from("notifications").insert(notifications);
@@ -258,7 +262,9 @@ async function processInvoiceWebhook(
       supabase,
       "NFS-e Autorizada via Asaas",
       `NFS-e #${invoice.number} foi autorizada. Valor: R$ ${nfseRecord.valor_servico?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-      "success"
+      "success",
+      "nfse",
+      nfseRecord.id
     );
   }
 
@@ -292,7 +298,9 @@ async function processInvoiceWebhook(
       supabase,
       "Erro na NFS-e via Asaas",
       `Erro ao processar NFS-e: ${parsed.descricao.slice(0, 100)}`,
-      "error"
+      "error",
+      "nfse",
+      nfseRecord.id
     );
   }
 
@@ -306,7 +314,9 @@ async function processInvoiceWebhook(
       supabase,
       "NFS-e Cancelada",
       `NFS-e #${invoice.number || nfseRecord.numero_nfse} foi cancelada`,
-      "warning"
+      "warning",
+      "nfse",
+      nfseRecord.id
     );
   }
 
@@ -432,12 +442,14 @@ async function processPaymentWebhook(
         }
         
         // Create notification for staff
-        await createNotification(
-          supabase,
-          "Pagamento Confirmado via Asaas",
-          `Fatura recebeu confirmação de pagamento. Valor: R$ ${(payment.value as number)?.toFixed(2)}`,
-          "success"
-        );
+    await createNotification(
+      supabase,
+      "Pagamento Confirmado via Asaas",
+      `Fatura recebeu confirmação de pagamento. Valor: R$ ${(payment.value as number)?.toFixed(2)}`,
+      "success",
+      "invoice",
+      externalReference
+    );
       }
     } else if (newStatus === "vencida") {
       console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como vencida`);
