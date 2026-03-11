@@ -100,6 +100,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
         brand: data.brand || null,
         model: data.model || null,
         serial_number: data.serial_number || null,
+        ip_address: data.ip_address || null,
         location: data.location || null,
         status: data.status as Enums<"asset_status">,
         purchase_date: data.purchase_date || null,

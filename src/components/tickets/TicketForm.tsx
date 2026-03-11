@@ -368,6 +368,12 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                     </FormItem>
                   )}
                 />
+
+                {/* KB Suggestions */}
+                <KBSuggestions
+                  title={form.watch("title")}
+                  description={form.watch("description")}
+                />
               </div>
             )}
 
