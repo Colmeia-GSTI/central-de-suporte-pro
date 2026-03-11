@@ -381,13 +381,13 @@ export function SLATab() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     Carregando...
                   </TableCell>
                 </TableRow>
               ) : slaConfigs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <Clock className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <p className="mt-2 text-muted-foreground">Nenhum SLA configurado</p>
                   </TableCell>
