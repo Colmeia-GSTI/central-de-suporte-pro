@@ -53,6 +53,7 @@ const slaSchema = z.object({
   resolution_hours: z.coerce.number().min(1),
   client_id: z.string().optional(),
   category_id: z.string().optional(),
+  contract_id: z.string().optional(),
 });
 
 type SLAFormData = z.infer<typeof slaSchema>;
