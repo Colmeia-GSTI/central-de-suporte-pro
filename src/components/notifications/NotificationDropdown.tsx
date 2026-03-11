@@ -179,11 +179,7 @@ export function NotificationDropdown() {
                             {notification.title}
                           </p>
                           {!notification.is_read && (
-                            <motion.div 
-                              className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1"
-                              animate={{ scale: [1, 1.2, 1] }}
-                              transition={{ duration: 1, repeat: Infinity }}
-                            />
+                            <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0 mt-1" />
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
