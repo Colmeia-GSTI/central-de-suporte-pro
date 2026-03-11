@@ -73,12 +73,7 @@ export function NotificationDropdown() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative group">
-          <motion.div
-            animate={unreadCount > 0 ? { rotate: [0, -10, 10, -10, 10, 0] } : {}}
-            transition={{ duration: 0.5, repeat: unreadCount > 0 ? Infinity : 0, repeatDelay: 3 }}
-          >
-            <Bell className="h-5 w-5 transition-colors group-hover:text-primary" />
-          </motion.div>
+          <Bell className="h-5 w-5 transition-colors group-hover:text-primary" />
           <AnimatePresence>
             {unreadCount > 0 && (
               <motion.div
