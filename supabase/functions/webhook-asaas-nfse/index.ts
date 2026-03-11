@@ -262,7 +262,9 @@ async function processInvoiceWebhook(
       supabase,
       "NFS-e Autorizada via Asaas",
       `NFS-e #${invoice.number} foi autorizada. Valor: R$ ${nfseRecord.valor_servico?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-      "success"
+      "success",
+      "nfse",
+      nfseRecord.id
     );
   }
 
