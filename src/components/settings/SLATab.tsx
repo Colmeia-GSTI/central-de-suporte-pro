@@ -373,6 +373,7 @@ export function SLATab() {
                 <TableHead>Resposta</TableHead>
                 <TableHead>Resolução</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Contrato</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
