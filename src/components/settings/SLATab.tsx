@@ -327,6 +327,30 @@ export function SLATab() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="contract_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contrato (opcional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos os contratos" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {contracts.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="flex justify-end gap-2 pt-4">
                   <Button type="button" variant="outline" onClick={handleCloseForm}>
                     Cancelar
