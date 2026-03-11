@@ -99,17 +99,30 @@ export function NotificationDropdown() {
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="font-semibold">Notificações</span>
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto px-2 py-1 text-xs hover:bg-primary/10 hover:text-primary"
-              onClick={() => markAllAsRead()}
-            >
-              <CheckCheck className="h-3 w-3 mr-1" />
-              Marcar todas como lidas
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto px-2 py-1 text-xs hover:bg-primary/10 hover:text-primary"
+                onClick={() => markAllAsRead()}
+              >
+                <CheckCheck className="h-3 w-3 mr-1" />
+                Marcar lidas
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto px-2 py-1 text-xs hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => clearAll()}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Limpar
+              </Button>
+            )}
+          </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-border/50" />
         <ScrollArea className="h-[350px]">
