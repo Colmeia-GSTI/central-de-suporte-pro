@@ -43,7 +43,7 @@ const getNotificationIcon = (type: string, relatedType: string | null) => {
 };
 
 export function NotificationDropdown() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotifications();
   const navigate = useNavigate();
 
   const handleNotificationClick = (notification: { id: string; is_read: boolean; related_type: string | null; related_id: string | null }) => {
