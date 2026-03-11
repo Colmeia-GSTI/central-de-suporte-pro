@@ -147,6 +147,7 @@ export function SLATab() {
         resolution_hours: data.resolution_hours,
         client_id: data.client_id || null,
         category_id: data.category_id || null,
+        contract_id: data.contract_id || null,
       };
 
       if (editingSLA) {
