@@ -442,12 +442,14 @@ async function processPaymentWebhook(
         }
         
         // Create notification for staff
-        await createNotification(
-          supabase,
-          "Pagamento Confirmado via Asaas",
-          `Fatura recebeu confirmação de pagamento. Valor: R$ ${(payment.value as number)?.toFixed(2)}`,
-          "success"
-        );
+    await createNotification(
+      supabase,
+      "Pagamento Confirmado via Asaas",
+      `Fatura recebeu confirmação de pagamento. Valor: R$ ${(payment.value as number)?.toFixed(2)}`,
+      "success",
+      "invoice",
+      externalReference
+    );
       }
     } else if (newStatus === "vencida") {
       console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como vencida`);
