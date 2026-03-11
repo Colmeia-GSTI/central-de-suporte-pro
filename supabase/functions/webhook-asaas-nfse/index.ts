@@ -314,7 +314,9 @@ async function processInvoiceWebhook(
       supabase,
       "NFS-e Cancelada",
       `NFS-e #${invoice.number || nfseRecord.numero_nfse} foi cancelada`,
-      "warning"
+      "warning",
+      "nfse",
+      nfseRecord.id
     );
   }
 
