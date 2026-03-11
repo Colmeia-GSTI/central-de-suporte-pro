@@ -62,6 +62,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
       brand: asset?.brand || "",
       model: asset?.model || "",
       serial_number: asset?.serial_number || "",
+      ip_address: (asset as Record<string, unknown>)?.ip_address as string || "",
       location: asset?.location || "",
       status: asset?.status || "active",
       purchase_date: asset?.purchase_date || "",
