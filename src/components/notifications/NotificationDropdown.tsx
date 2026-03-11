@@ -15,6 +15,25 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+
+function getNotificationRoute(relatedType: string | null, relatedId: string | null): string | null {
+  if (!relatedType || !relatedId) return null;
+  switch (relatedType) {
+    case "ticket":
+      return `/tickets?open=${relatedId}`;
+    case "invoice":
+      return `/billing?tab=invoices&invoice=${relatedId}`;
+    case "contract":
+      return `/contracts?contract=${relatedId}`;
+    case "monitoring_alert":
+      return `/monitoring?alert=${relatedId}`;
+    case "nfse":
+      return `/billing?tab=nfse&nfse=${relatedId}`;
+    default:
+      return null;
+  }
+}
 
 const getNotificationIcon = (type: string, relatedType: string | null) => {
   if (relatedType === "ticket") return Ticket;
