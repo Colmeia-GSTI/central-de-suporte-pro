@@ -403,6 +403,9 @@ export function SLATab() {
                     <TableCell>{sla.response_hours}h</TableCell>
                     <TableCell>{sla.resolution_hours}h</TableCell>
                     <TableCell>{sla.clients?.name || "Todos"}</TableCell>
+                    <TableCell>
+                      {contracts.find((c) => c.id === (sla as Record<string, unknown>).contract_id)?.name || "Todos"}
+                    </TableCell>
                     <TableCell>{sla.ticket_categories?.name || "Todas"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
