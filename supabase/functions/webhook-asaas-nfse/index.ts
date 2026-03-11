@@ -154,7 +154,9 @@ async function createNotification(
   supabase: SupabaseClient,
   title: string,
   message: string,
-  type: "info" | "success" | "warning" | "error"
+  type: "info" | "success" | "warning" | "error",
+  relatedType?: string,
+  relatedId?: string
 ) {
   try {
     const { data: adminUsers } = await supabase
@@ -169,7 +171,9 @@ async function createNotification(
       title,
       message,
       type,
-      read: false,
+      is_read: false,
+      related_type: relatedType || null,
+      related_id: relatedId || null,
     }));
 
     await supabase.from("notifications").insert(notifications);
