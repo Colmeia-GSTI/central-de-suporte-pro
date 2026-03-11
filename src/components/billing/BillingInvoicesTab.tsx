@@ -245,9 +245,38 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   });
 
 
-  const totalPending = invoices.filter((i) => i.status === "pending").reduce((acc, i) => acc + i.amount, 0);
-  const totalOverdue = invoices.filter((i) => i.status === "overdue").reduce((acc, i) => acc + i.amount, 0);
-  const totalPaid = invoices.filter((i) => i.status === "paid").reduce((acc, i) => acc + i.amount, 0);
+  // Global counters: all open invoices regardless of date filter
+  const { data: globalSummary } = useQuery({
+    queryKey: ["invoices-global-summary"],
+    queryFn: async () => {
+      const [pendingRes, overdueRes, paidRes] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("amount")
+          .eq("status", "pending"),
+        supabase
+          .from("invoices")
+          .select("amount")
+          .eq("status", "overdue"),
+        supabase
+          .from("invoices")
+          .select("amount")
+          .eq("status", "paid")
+          .gte("paid_date", fromISO)
+          .lte("paid_date", toISO),
+      ]);
+      return {
+        pending: (pendingRes.data || []).reduce((s, r) => s + r.amount, 0),
+        overdue: (overdueRes.data || []).reduce((s, r) => s + r.amount, 0),
+        paid: (paidRes.data || []).reduce((s, r) => s + r.amount, 0),
+      };
+    },
+    staleTime: 60000,
+  });
+
+  const totalPending = globalSummary?.pending ?? 0;
+  const totalOverdue = globalSummary?.overdue ?? 0;
+  const totalPaid = globalSummary?.paid ?? 0;
 
   const paginatedInvoices = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;

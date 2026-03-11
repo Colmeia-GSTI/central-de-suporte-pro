@@ -50,6 +50,11 @@ export default function CalendarPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const { can } = usePermissions();
+  const canCreate = can("calendar", "create");
+  const canEdit = can("calendar", "edit");
 
   // Auto-open creation form when navigating with ?action=new
   useEffect(() => {
@@ -59,11 +64,6 @@ export default function CalendarPage() {
       setSearchParams(searchParams, { replace: true });
     }
   }, [searchParams, setSearchParams, canCreate]);
-  const queryClient = useQueryClient();
-  const isMobile = useIsMobile();
-  const { can } = usePermissions();
-  const canCreate = can("calendar", "create");
-  const canEdit = can("calendar", "edit");
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["calendar-events", dateRange.start.toISOString(), dateRange.end.toISOString()],
