@@ -44,7 +44,17 @@ const getNotificationIcon = (type: string, relatedType: string | null) => {
 
 export function NotificationDropdown() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const navigate = useNavigate();
 
+  const handleNotificationClick = (notification: { id: string; is_read: boolean; related_type: string | null; related_id: string | null }) => {
+    if (!notification.is_read) {
+      markAsRead(notification.id);
+    }
+    const route = getNotificationRoute(notification.related_type, notification.related_id);
+    if (route) {
+      navigate(route);
+    }
+  };
   const getTypeColor = (type: string) => {
     switch (type) {
       case "error":
