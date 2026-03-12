@@ -108,8 +108,8 @@ export function AppLayout({ children, title }: AppLayoutProps) {
         <main className="flex-1 flex flex-col">
           {/* Premium Header */}
           <header className={cn(
-            "h-16 glass-header sticky top-0 z-40",
-            "flex items-center justify-between px-4 gap-4"
+            "h-14 md:h-16 glass-header sticky top-0 z-40",
+            "flex items-center justify-between px-3 md:px-4 gap-2 md:gap-4"
           )}>
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover-glow rounded-lg" />
