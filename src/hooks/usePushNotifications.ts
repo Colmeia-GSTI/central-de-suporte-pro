@@ -86,10 +86,31 @@ export function usePushNotifications() {
           .eq("endpoint", subscription.endpoint)
           .single();
         
+        if (!data) {
+          // Browser has a subscription but DB doesn't — re-sync it to the database
+          const subscriptionJson = subscription.toJSON();
+          const { error: upsertError } = await supabase
+            .from("push_subscriptions")
+            .upsert({
+              user_id: user.id,
+              endpoint: subscriptionJson.endpoint!,
+              p256dh: subscriptionJson.keys?.p256dh || "",
+              auth: subscriptionJson.keys?.auth || "",
+            }, {
+              onConflict: "user_id,endpoint",
+            });
+          
+          if (upsertError) {
+            logger.error("Error re-syncing push subscription to DB", "Push", { error: String(upsertError) });
+          } else {
+            logger.info("Push subscription re-synced to DB", "Push");
+          }
+        }
+
         setState(prev => ({
           ...prev,
           isSupported: true,
-          isSubscribed: !!data,
+          isSubscribed: true,
           permission: currentPermission,
           isBlocked,
           isLoading: false,

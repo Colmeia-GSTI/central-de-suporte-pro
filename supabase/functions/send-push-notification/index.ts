@@ -295,11 +295,11 @@ function buildEncryptedBody(
 async function sendWebPush(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: PushPayload
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; gone?: boolean }> {
   try {
     if (!VAPID_PRIVATE_KEY) {
       console.error("[Web Push] VAPID_PRIVATE_KEY not configured");
-      return { success: false, error: "VAPID_PRIVATE_KEY not configured" };
+      return { success: false, error: "VAPID_PRIVATE_KEY not configured", gone: false };
     }
 
     const payloadString = JSON.stringify(payload);
@@ -337,19 +337,23 @@ async function sendWebPush(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[Web Push] Failed: ${response.status} - ${errorText}`);
+      // Only mark as gone if the push service explicitly says the subscription is invalid
+      const isGone = response.status === 404 || response.status === 410;
       return { 
         success: false, 
-        error: `Push service returned ${response.status}: ${errorText}` 
+        error: `Push service returned ${response.status}: ${errorText}`,
+        gone: isGone,
       };
     }
 
     console.log(`[Web Push] Success: ${response.status}`);
-    return { success: true };
+    return { success: true, gone: false };
   } catch (error) {
     console.error("[Web Push] Error:", error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : "Unknown error" 
+      error: error instanceof Error ? error.message : "Unknown error",
+      gone: false,
     };
   }
 }
@@ -449,13 +453,12 @@ serve(async (req) => {
 
     // Send push to all subscriptions
     let successCount = 0;
-    const failedEndpoints: string[] = [];
+    const goneEndpoints: string[] = [];
     const errors: string[] = [];
 
     for (const sub of subscriptions) {
       if (!sub.p256dh || !sub.auth) {
-        console.warn(`[send-push-notification] Subscription ${sub.id} missing keys`);
-        failedEndpoints.push(sub.endpoint);
+        console.warn(`[send-push-notification] Subscription ${sub.id} missing keys, skipping`);
         continue;
       }
 
@@ -471,20 +474,23 @@ serve(async (req) => {
       if (result.success) {
         successCount++;
       } else {
-        failedEndpoints.push(sub.endpoint);
         if (result.error) {
           errors.push(result.error);
+        }
+        // Only remove subscriptions that the push service says are permanently gone (404/410)
+        if (result.gone) {
+          goneEndpoints.push(sub.endpoint);
         }
       }
     }
 
-    // Clean up failed subscriptions (they might be expired)
-    if (failedEndpoints.length > 0) {
-      console.log(`[send-push-notification] Cleaning ${failedEndpoints.length} failed subscriptions`);
+    // Only clean up subscriptions confirmed as expired/invalid by the push service
+    if (goneEndpoints.length > 0) {
+      console.log(`[send-push-notification] Removing ${goneEndpoints.length} expired subscriptions (404/410)`);
       await supabase
         .from("push_subscriptions")
         .delete()
-        .in("endpoint", failedEndpoints);
+        .in("endpoint", goneEndpoints);
     }
 
     console.log(`[send-push-notification] Sent: ${successCount}/${subscriptions.length}`);
@@ -493,7 +499,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         sent: successCount,
-        failed: failedEndpoints.length,
+        failed: goneEndpoints.length,
         total: subscriptions.length,
         errors: errors.slice(0, 3), // Return first 3 errors for debugging
       }),
