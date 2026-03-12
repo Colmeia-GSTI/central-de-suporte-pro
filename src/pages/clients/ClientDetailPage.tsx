@@ -21,6 +21,7 @@ import {
   MessageCircle,
   CheckCircle2,
   TrendingUp,
+  Wifi,
 } from "lucide-react";
 import { ClientUsersList } from "@/components/clients/ClientUsersList";
 import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
