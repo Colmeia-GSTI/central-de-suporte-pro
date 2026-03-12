@@ -353,46 +353,124 @@ function getHostDisplayName(h: Record<string, unknown>): string {
 }
 
 function getHostModel(h: Record<string, unknown>): string {
-  const rs = h.reportedState as Record<string, unknown> | undefined;
-  const shortModel = (rs?.shortModel as string) || (rs?.model as string) || (h.model as string) || "";
-  return mapModelName(shortModel);
+  const rs = asRecord(h.reportedState);
+  const ud = asRecord(h.userData);
+  const rsHw = asRecord(rs?.hardware);
+  const udHw = asRecord(ud?.hardware);
+
+  const explicitModel = asString(
+    rs?.shortModel,
+    rs?.model,
+    rsHw?.shortname,
+    rsHw?.model,
+    ud?.shortModel,
+    ud?.model,
+    udHw?.shortname,
+    udHw?.model,
+    h.shortModel,
+    h.model,
+  );
+
+  const inferredCode = inferModelCodeFromText(
+    `${getHostDisplayName(h)} ${asString(h.name)} ${explicitModel}`,
+  );
+
+  return mapModelName(explicitModel || inferredCode);
 }
 
 function getHostShortModel(h: Record<string, unknown>): string {
-  const rs = h.reportedState as Record<string, unknown> | undefined;
-  return (rs?.shortModel as string) || (rs?.model as string) || (h.model as string) || "";
+  const rs = asRecord(h.reportedState);
+  const ud = asRecord(h.userData);
+  const rsHw = asRecord(rs?.hardware);
+  const udHw = asRecord(ud?.hardware);
+
+  const explicitModel = asString(
+    rs?.shortModel,
+    rs?.model,
+    rsHw?.shortname,
+    rsHw?.model,
+    ud?.shortModel,
+    ud?.model,
+    udHw?.shortname,
+    udHw?.model,
+    h.shortModel,
+    h.model,
+  );
+
+  return explicitModel || inferModelCodeFromText(getHostDisplayName(h));
 }
 
 function getHostId(h: Record<string, unknown>): string {
-  return (h.id as string) || (h._id as string) || "";
+  return asString(h.id, h._id, h.hostId, h.host_id);
 }
 
 // Parse a Cloud device from the /v1/devices response
 function parseCloudDevice(raw: Record<string, unknown>): Record<string, unknown> {
-  // The v1 API may have different nesting than the old /ea/ API
-  // Try both flat and nested structures
-  const rs = raw.reportedState as Record<string, unknown> | undefined;
-  const ud = raw.userData as Record<string, unknown> | undefined;
-  const nc = (rs?.networkConfig || raw.networkConfig) as Record<string, unknown> | undefined;
-  const uidb = raw.uidb as Record<string, unknown> | undefined;
+  const wrapped = asRecord(raw.device) ?? raw;
+  const rs = asRecord(wrapped.reportedState);
+  const ud = asRecord(wrapped.userData);
+  const nc = asRecord(rs?.networkConfig) ?? asRecord(wrapped.networkConfig);
+  const uidb = asRecord(wrapped.uidb);
 
-  const mac = (raw.mac as string) || (rs?.mac as string) || (raw._id as string) || "";
-  const name = (ud?.name as string) || (rs?.name as string) || (rs?.hostname as string) || (raw.name as string) || mac;
-  const shortModel = (raw.shortModel as string) || (rs?.shortModel as string) || (uidb?.shortnames as string[])?.at(0) || (raw.model as string) || (rs?.model as string) || "";
-  const model = mapModelName(shortModel) || shortModel;
-  const ip = (raw.ip as string) || (rs?.ip as string) || (nc?.ip as string) || null;
-  const version = (raw.version as string) || (rs?.version as string) || (raw.firmwareVersion as string) || null;
-  const type = shortModel; // We'll use shortModel for type mapping
-  const hostname = (rs?.hostname as string) || (raw.hostname as string) || name;
-  const uptime = (raw.uptime as number) || (rs?.uptime as number) || 0;
-  const numSta = (raw.numSta as number) || (rs?.num_sta as number) || (raw.num_sta as number) || 0;
+  const uidbShortnames = Array.isArray(uidb?.shortnames) ? uidb.shortnames : [];
+  const primaryShortname = typeof uidbShortnames[0] === "string" ? uidbShortnames[0] : "";
 
-  // Online status
-  const stateVal = raw.state ?? rs?.state ?? null;
-  const statusStr = (raw.status as string) || (rs?.status as string) || "";
-  const isOnline = stateVal === 1 || statusStr === "online" || statusStr === "connected";
+  const rawModel = asString(
+    wrapped.shortModel,
+    rs?.shortModel,
+    wrapped.model,
+    rs?.model,
+    uidb?.model,
+    uidb?.name,
+    primaryShortname,
+    wrapped.productModel,
+    wrapped.productName,
+    inferModelCodeFromText(asString(ud?.name, rs?.name, wrapped.name, raw.hostName)),
+  );
 
-  return { mac, name, model, shortModel, ip, version, type, hostname, uptime, numSta, isOnline };
+  const mac = asString(wrapped.mac, rs?.mac);
+  const deviceId = asString(wrapped.id, wrapped._id, wrapped.deviceId, rs?.id, rs?.deviceId);
+  const name = asString(ud?.name, rs?.name, rs?.hostname, wrapped.name, raw.hostName, mac, deviceId);
+  const model = mapModelName(rawModel);
+  const ip = asString(wrapped.ip, rs?.ip, nc?.ip) || null;
+  const version = asString(wrapped.version, rs?.version, wrapped.firmwareVersion) || null;
+  const hostname = asString(rs?.hostname, wrapped.hostname, name);
+  const uptime = asNumber(wrapped.uptime, rs?.uptime, rs?.uptimeSec, rs?.uptime_sec);
+  const numSta = asNumber(
+    wrapped.numSta,
+    wrapped.num_sta,
+    rs?.numSta,
+    rs?.num_sta,
+    rs?.wifiClientCount,
+    rs?.wirelessClientCount,
+    wrapped.wifiClientCount,
+  );
+
+  const stateVal = wrapped.state ?? rs?.state ?? null;
+  const statusStr = asString(wrapped.status, rs?.status).toLowerCase();
+  const onlineValue = wrapped.isOnline ?? rs?.isOnline ?? null;
+  const isOnline =
+    onlineValue === true ||
+    onlineValue === 1 ||
+    stateVal === 1 ||
+    statusStr === "online" ||
+    statusStr === "connected" ||
+    statusStr === "up";
+
+  return {
+    mac,
+    deviceId,
+    name,
+    model,
+    shortModel: rawModel,
+    ip,
+    version,
+    type: asString(wrapped.type, wrapped.deviceType, rawModel, model),
+    hostname,
+    uptime,
+    numSta,
+    isOnline,
+  };
 }
 
 // ========== SYNC LOGIC ==========
