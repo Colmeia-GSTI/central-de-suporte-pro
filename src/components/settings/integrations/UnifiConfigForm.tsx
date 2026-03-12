@@ -57,6 +57,7 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ControllerForm>({ ...EMPTY_FORM });
   const [testing, setTesting] = useState(false);
+  const [loadingHosts, setLoadingHosts] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; hosts?: unknown[]; sites?: unknown[] } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
