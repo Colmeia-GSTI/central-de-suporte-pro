@@ -192,6 +192,25 @@
   .neon-text {
     text-shadow: 0 0 10px hsl(var(--glow-primary) / 0.5);
   }
+
+  .btn-premium {
+    @apply font-semibold text-primary-foreground transition-all duration-300;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    box-shadow: 0 4px 15px -3px hsl(var(--primary) / 0.4);
+  }
+
+  .btn-premium:hover {
+    box-shadow: 0 8px 25px -5px hsl(var(--primary) / 0.5);
+    filter: brightness(1.05);
+  }
+
+  .hover-glow {
+    @apply transition-all duration-200;
+  }
+
+  .hover-glow:hover {
+    box-shadow: 0 0 12px -3px hsl(var(--primary) / 0.3);
+  }
 }
 
 @layer utilities {
