@@ -288,8 +288,8 @@ function cloudHeaders(apiKey: string): Record<string, string> {
   return { "X-API-KEY": apiKey, Accept: "application/json" };
 }
 
-async function cloudGetHosts(apiKey: string): Promise<any[]> {
-  const allHosts: any[] = [];
+async function cloudGetHosts(apiKey: string): Promise<Record<string, unknown>[]> {
+  const allHosts: Record<string, unknown>[] = [];
   let nextToken: string | undefined;
 
   // Paginate through all hosts
@@ -308,16 +308,16 @@ async function cloudGetHosts(apiKey: string): Promise<any[]> {
     }
 
     const json = await response.json();
-    const hosts = json.data || [];
+    const hosts = extractResponseRows(json.data);
     allHosts.push(...hosts);
-    nextToken = json.nextToken;
+    nextToken = typeof json.nextToken === "string" ? json.nextToken : undefined;
   } while (nextToken);
 
   return allHosts;
 }
 
-async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
-  const allDevices: any[] = [];
+async function cloudGetDevices(apiKey: string, hostId: string): Promise<Record<string, unknown>[]> {
+  const allRows: Record<string, unknown>[] = [];
   let nextToken: string | undefined;
 
   do {
@@ -333,16 +333,16 @@ async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
     if (!response.ok) {
       const t = await response.text();
       console.warn(`[cloudGetDevices] ${response.status}: ${t}`);
-      return allDevices;
+      return allRows;
     }
 
     const json = await response.json();
-    const devices = json.data || [];
-    allDevices.push(...devices);
-    nextToken = json.nextToken;
+    const rows = extractResponseRows(json.data);
+    allRows.push(...rows);
+    nextToken = typeof json.nextToken === "string" ? json.nextToken : undefined;
   } while (nextToken);
 
-  return allDevices;
+  return allRows;
 }
 
 // Extract fields from a Cloud host object (nested reportedState/userData)
