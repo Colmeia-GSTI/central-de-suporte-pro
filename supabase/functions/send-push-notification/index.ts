@@ -295,11 +295,11 @@ function buildEncryptedBody(
 async function sendWebPush(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: PushPayload
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; gone?: boolean }> {
   try {
     if (!VAPID_PRIVATE_KEY) {
       console.error("[Web Push] VAPID_PRIVATE_KEY not configured");
-      return { success: false, error: "VAPID_PRIVATE_KEY not configured" };
+      return { success: false, error: "VAPID_PRIVATE_KEY not configured", gone: false };
     }
 
     const payloadString = JSON.stringify(payload);
@@ -337,19 +337,23 @@ async function sendWebPush(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[Web Push] Failed: ${response.status} - ${errorText}`);
+      // Only mark as gone if the push service explicitly says the subscription is invalid
+      const isGone = response.status === 404 || response.status === 410;
       return { 
         success: false, 
-        error: `Push service returned ${response.status}: ${errorText}` 
+        error: `Push service returned ${response.status}: ${errorText}`,
+        gone: isGone,
       };
     }
 
     console.log(`[Web Push] Success: ${response.status}`);
-    return { success: true };
+    return { success: true, gone: false };
   } catch (error) {
     console.error("[Web Push] Error:", error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : "Unknown error" 
+      error: error instanceof Error ? error.message : "Unknown error",
+      gone: false,
     };
   }
 }
