@@ -121,7 +121,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
             </div>
             
             {/* Search with glass effect */}
-            <form onSubmit={handleSearch} className="flex-1 max-w-md">
+            <form onSubmit={handleSearch} className="hidden sm:block flex-1 max-w-md">
               <div className="relative group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
                 <Input
@@ -131,7 +131,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   title="Digite o número do chamado com # ou nome do cliente"
                   className={cn(
-                    "pl-9 bg-muted/30 border-border/50",
+                    "pl-9 bg-muted/30 border-border/50 text-base",
                     "focus:bg-muted/50 focus:border-primary/50",
                     "transition-all duration-300",
                     "placeholder:text-muted-foreground/60"
