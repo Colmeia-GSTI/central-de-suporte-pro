@@ -10,7 +10,9 @@ import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigFor
 import { ResendConfigForm } from "./integrations/ResendConfigForm";
 import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
 import { LogsViewerTab } from "./LogsViewerTab";
-import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail } from "lucide-react";
+import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail, Wifi } from "lucide-react";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { UnifiConfigForm } from "./integrations/UnifiConfigForm";
 
 export function IntegrationsTab() {
   return (
@@ -23,40 +25,48 @@ export function IntegrationsTab() {
       </div>
 
       <Tabs defaultValue="status" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-8">
-          <TabsTrigger value="status" className="flex items-center gap-2">
-            <LayoutDashboard className="h-4 w-4" />
-            <span className="hidden sm:inline">Status</span>
-          </TabsTrigger>
-          <TabsTrigger value="email" className="flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            <span className="hidden sm:inline">Email</span>
-          </TabsTrigger>
-          <TabsTrigger value="comunicacao" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Calendário</span>
-          </TabsTrigger>
-          <TabsTrigger value="mensagens" className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4" />
-            <span className="hidden sm:inline">Mensagens</span>
-          </TabsTrigger>
-          <TabsTrigger value="financeiro" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Financeiro</span>
-          </TabsTrigger>
-          <TabsTrigger value="monitoramento" className="flex items-center gap-2">
-            <Activity className="h-4 w-4" />
-            <span className="hidden sm:inline">Monitor</span>
-          </TabsTrigger>
-          <TabsTrigger value="automacao" className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Automação</span>
-          </TabsTrigger>
-          <TabsTrigger value="logs" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Logs</span>
-          </TabsTrigger>
-        </TabsList>
+        {/* Horizontally scrollable tabs for mobile */}
+        <ScrollArea className="w-full" type="scroll">
+          <TabsList className="inline-flex w-max gap-1 p-1">
+            <TabsTrigger value="status" className="flex items-center gap-2 min-w-max">
+              <LayoutDashboard className="h-4 w-4" />
+              Status
+            </TabsTrigger>
+            <TabsTrigger value="email" className="flex items-center gap-2 min-w-max">
+              <Mail className="h-4 w-4" />
+              Email
+            </TabsTrigger>
+            <TabsTrigger value="comunicacao" className="flex items-center gap-2 min-w-max">
+              <Calendar className="h-4 w-4" />
+              Calendário
+            </TabsTrigger>
+            <TabsTrigger value="mensagens" className="flex items-center gap-2 min-w-max">
+              <MessageSquare className="h-4 w-4" />
+              Mensagens
+            </TabsTrigger>
+            <TabsTrigger value="financeiro" className="flex items-center gap-2 min-w-max">
+              <Building2 className="h-4 w-4" />
+              Financeiro
+            </TabsTrigger>
+            <TabsTrigger value="monitoramento" className="flex items-center gap-2 min-w-max">
+              <Activity className="h-4 w-4" />
+              Monitor
+            </TabsTrigger>
+            <TabsTrigger value="rede" className="flex items-center gap-2 min-w-max">
+              <Wifi className="h-4 w-4" />
+              Rede
+            </TabsTrigger>
+            <TabsTrigger value="automacao" className="flex items-center gap-2 min-w-max">
+              <Settings2 className="h-4 w-4" />
+              Automação
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="flex items-center gap-2 min-w-max">
+              <FileText className="h-4 w-4" />
+              Logs
+            </TabsTrigger>
+          </TabsList>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
 
         <TabsContent value="status" className="space-y-4 mt-4">
           <IntegrationStatusPanel />
@@ -83,6 +93,10 @@ export function IntegrationsTab() {
         <TabsContent value="monitoramento" className="space-y-4 mt-4">
           <CheckMkConfigForm />
           <TacticalRmmConfigForm />
+        </TabsContent>
+
+        <TabsContent value="rede" className="space-y-4 mt-4">
+          <UnifiConfigForm />
         </TabsContent>
 
         <TabsContent value="automacao" className="space-y-4 mt-4">
