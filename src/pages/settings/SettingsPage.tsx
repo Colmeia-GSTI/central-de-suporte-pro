@@ -179,7 +179,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex gap-6">
+        <div className="flex gap-6 min-w-0">
           {/* Desktop sidebar nav */}
           <aside className="hidden md:block w-56 shrink-0">
             <div className="sticky top-20">
