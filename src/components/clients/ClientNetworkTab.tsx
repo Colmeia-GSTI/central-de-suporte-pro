@@ -117,7 +117,7 @@ export function ClientNetworkTab({ clientId }: ClientNetworkTabProps) {
                 <p className="text-sm text-muted-foreground">Devices Online</p>
                 <p className="text-2xl font-bold">{onlineDevices}/{totalDevices}</p>
               </div>
-              <CheckCircle2 className="h-8 w-8 text-emerald-500/30" />
+              <CheckCircle2 className="h-8 w-8 text-status-success/30" />
             </div>
           </CardContent>
         </Card>
