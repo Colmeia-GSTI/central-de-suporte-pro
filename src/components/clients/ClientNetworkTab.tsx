@@ -174,14 +174,14 @@ export function ClientNetworkTab({ clientId }: ClientNetworkTabProps) {
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {siteDevices.map((dev) => (
                     <div key={dev.id} className="flex items-center gap-3 rounded-lg border p-3">
-                      <div className={`p-2 rounded-lg ${dev.is_online ? "bg-emerald-500/10 text-emerald-600" : "bg-destructive/10 text-destructive"}`}>
+                      <div className={`p-2 rounded-lg ${dev.is_online ? "bg-status-success/10 text-status-success" : "bg-destructive/10 text-destructive"}`}>
                         {getDeviceIcon(dev.device_type || "")}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-sm truncate">{dev.name}</p>
                           {dev.is_online ? (
-                            <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                            <CheckCircle2 className="h-3 w-3 text-status-success shrink-0" />
                           ) : (
                             <XCircle className="h-3 w-3 text-destructive shrink-0" />
                           )}
