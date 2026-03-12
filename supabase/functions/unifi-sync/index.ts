@@ -552,10 +552,10 @@ serve(async (req) => {
             JSON.stringify({
               success: true,
               message: `Conexão válida. ${hosts.length} host(s) encontrado(s).`,
-              hosts: hosts.map((h: any) => ({
-                id: h.id || h._id,
-                name: h.name || h.hostname || h.id,
-                model: h.model || "Unknown",
+              hosts: hosts.map((h: Record<string, unknown>) => ({
+                id: getHostId(h),
+                name: getHostDisplayName(h),
+                model: getHostModel(h),
               })),
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
