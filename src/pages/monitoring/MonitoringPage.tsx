@@ -199,17 +199,29 @@ export default function MonitoringPage() {
         .eq("integration_type", "tactical_rmm")
         .single();
 
+      const syncPromises: Promise<unknown>[] = [];
+
       if (checkmkSettings?.is_active) {
-        await supabase.functions.invoke("checkmk-sync", {
-          body: { action: "sync" },
-        });
+        syncPromises.push(supabase.functions.invoke("checkmk-sync", { body: { action: "sync" } }));
       }
 
       if (tacticalSettings?.is_active) {
-        await supabase.functions.invoke("tactical-rmm-sync", {
-          body: { action: "sync" },
-        });
+        syncPromises.push(supabase.functions.invoke("tactical-rmm-sync", { body: { action: "sync" } }));
       }
+
+      // Also sync UniFi controllers
+      const { data: unifiControllers } = await supabase
+        .from("unifi_controllers")
+        .select("id")
+        .eq("is_active", true);
+
+      if (unifiControllers && unifiControllers.length > 0) {
+        for (const ctrl of unifiControllers) {
+          syncPromises.push(supabase.functions.invoke("unifi-sync", { body: { action: "sync", controllerId: ctrl.id } }));
+        }
+      }
+
+      await Promise.allSettled(syncPromises);
 
       await queryClient.invalidateQueries({ queryKey: ["devices"] });
       await queryClient.invalidateQueries({ queryKey: ["alerts"] });
