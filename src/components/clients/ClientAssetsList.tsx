@@ -427,7 +427,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
             </TableHeader>
             <TableBody>
               {allItems.map((item) => {
-                const isRmm = item.source === "rmm";
+                const isRmm = item.source === "monitored";
                 const Icon = isRmm
                   ? (item as MonitoredDevice).device_type
                     ? getAssetIcon((item as MonitoredDevice).device_type!)
