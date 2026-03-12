@@ -886,7 +886,20 @@ serve(async (req) => {
 
     // ========== TEST CONNECTION ==========
     if (action === "test") {
-      const { connection_method, url, username, password, cloud_api_key } = body;
+      const { connection_method, url, username, password } = body;
+      let cloud_api_key = body.cloud_api_key as string | undefined;
+
+      // If editing an existing cloud controller and no new key provided, fetch saved key
+      if (connection_method === "cloud" && !cloud_api_key && controllerId) {
+        const { data: ctrl } = await supabase
+          .from("unifi_controllers")
+          .select("cloud_api_key_encrypted")
+          .eq("id", controllerId)
+          .single();
+        if (ctrl?.cloud_api_key_encrypted) {
+          cloud_api_key = ctrl.cloud_api_key_encrypted;
+        }
+      }
 
       if (connection_method === "direct") {
         if (!url || !username || !password) {

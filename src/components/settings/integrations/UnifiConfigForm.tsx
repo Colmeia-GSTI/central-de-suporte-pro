@@ -181,7 +181,8 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
           url: form.url,
           username: form.username,
           password: form.password,
-          cloud_api_key: form.cloud_api_key,
+          cloud_api_key: form.cloud_api_key || undefined,
+          controller_id: editingId || undefined,
         },
       });
 
