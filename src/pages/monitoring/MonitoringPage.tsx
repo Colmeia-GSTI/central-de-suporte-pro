@@ -179,10 +179,9 @@ export default function MonitoringPage() {
   const onlineDevices = devices.filter((d) => d.is_online).length;
   const offlineDevices = devices.filter((d) => !d.is_online).length;
   const criticalAlerts = alerts.filter((a) => a.level === "critical").length;
-  const devicesWithUptime = devices.filter((d) => d.uptime_percent != null);
-  const uptimeAverage = devicesWithUptime.length > 0
-    ? devicesWithUptime.reduce((acc, d) => acc + (d.uptime_percent || 0), 0) / devicesWithUptime.length
-    : 0;
+  const rmmDevices = devices.filter((d) => d.external_source === "tactical_rmm").length;
+  const checkmkDevices = devices.filter((d) => d.external_source === "checkmk").length;
+  const unifiDevices = devices.filter((d) => d.external_source === "unifi").length;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
