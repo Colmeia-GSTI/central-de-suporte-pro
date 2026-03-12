@@ -162,6 +162,23 @@ async function cloudGetHosts(apiKey: string): Promise<any[]> {
   return data.data || data || [];
 }
 
+// Extract friendly name from a UniFi Cloud host object
+function getHostDisplayName(h: Record<string, unknown>): string {
+  const rs = h.reportedState as Record<string, unknown> | undefined;
+  const ud = h.userData as Record<string, unknown> | undefined;
+  // Priority: userData.name > reportedState.hostname > reportedState.name > id
+  return (ud?.name as string) || (rs?.hostname as string) || (rs?.name as string) || (h.name as string) || (h.hostname as string) || (h.id as string) || (h._id as string) || "Unknown";
+}
+
+function getHostModel(h: Record<string, unknown>): string {
+  const rs = h.reportedState as Record<string, unknown> | undefined;
+  return (rs?.model as string) || (h.model as string) || "Unknown";
+}
+
+function getHostId(h: Record<string, unknown>): string {
+  return (h.id as string) || (h._id as string) || "";
+}
+
 async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
   const response = await fetchWithTimeout(`https://api.ui.com/ea/sites/${hostId}/devices`, {
     headers: { "X-API-KEY": apiKey, Accept: "application/json" },
@@ -358,7 +375,7 @@ async function syncController(supabase: any, ctrl: UnifiController) {
       if (!hostId) {
         const hosts = await cloudGetHosts(apiKey);
         if (hosts.length === 0) throw new Error("Nenhum host encontrado na conta UniFi Cloud");
-        hostId = hosts[0].id || hosts[0]._id;
+        hostId = getHostId(hosts[0]);
       }
 
       // Create a default site entry for cloud
@@ -535,10 +552,10 @@ serve(async (req) => {
             JSON.stringify({
               success: true,
               message: `Conexão válida. ${hosts.length} host(s) encontrado(s).`,
-              hosts: hosts.map((h: any) => ({
-                id: h.id || h._id,
-                name: h.name || h.hostname || h.id,
-                model: h.model || "Unknown",
+              hosts: hosts.map((h: Record<string, unknown>) => ({
+                id: getHostId(h),
+                name: getHostDisplayName(h),
+                model: getHostModel(h),
               })),
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
