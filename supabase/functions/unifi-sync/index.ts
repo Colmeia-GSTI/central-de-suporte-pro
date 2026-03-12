@@ -375,7 +375,7 @@ async function syncController(supabase: any, ctrl: UnifiController) {
       if (!hostId) {
         const hosts = await cloudGetHosts(apiKey);
         if (hosts.length === 0) throw new Error("Nenhum host encontrado na conta UniFi Cloud");
-        hostId = hosts[0].id || hosts[0]._id;
+        hostId = getHostId(hosts[0]);
       }
 
       // Create a default site entry for cloud
