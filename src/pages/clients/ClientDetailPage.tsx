@@ -27,6 +27,7 @@ import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
 import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
+import { ClientNetworkTab } from "@/components/clients/ClientNetworkTab";
 import { formatPhone } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
