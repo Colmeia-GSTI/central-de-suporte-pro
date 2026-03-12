@@ -147,7 +147,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     },
   });
 
-  // Fetch monitored devices (from RMM)
+  // Fetch monitored devices (RMM, UniFi, Uptime Kuma, etc.)
   const { data: monitoredDevices = [], isLoading: isLoadingDevices } = useQuery({
     queryKey: ["client-monitored-devices", clientId],
     queryFn: async () => {
@@ -240,7 +240,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
   // Combine both lists
   const allItems = [
     ...assets.map((a) => ({ ...a, source: "manual" as const })),
-    ...monitoredDevices.map((d) => ({ ...d, source: "rmm" as const })),
+    ...monitoredDevices.map((d) => ({ ...d, source: "monitored" as const })),
   ];
 
   return (
@@ -427,7 +427,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
             </TableHeader>
             <TableBody>
               {allItems.map((item) => {
-                const isRmm = item.source === "rmm";
+                const isRmm = item.source === "monitored";
                 const Icon = isRmm
                   ? (item as MonitoredDevice).device_type
                     ? getAssetIcon((item as MonitoredDevice).device_type!)
@@ -485,6 +485,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                           <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                             <Activity className="h-3 w-3 mr-1" />
                             Uptime Kuma
+                          </Badge>
+                        ) : (item as MonitoredDevice).external_source === "unifi" ? (
+                          <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                            <Wifi className="h-3 w-3 mr-1" />
+                            UniFi
                           </Badge>
                         ) : (
                           <Badge variant="default" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
