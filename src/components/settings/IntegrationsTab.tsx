@@ -90,6 +90,10 @@ export function IntegrationsTab() {
           <TacticalRmmConfigForm />
         </TabsContent>
 
+        <TabsContent value="rede" className="space-y-4 mt-4">
+          <UnifiConfigForm />
+        </TabsContent>
+
         <TabsContent value="automacao" className="space-y-4 mt-4">
           <NoContactCheckConfigForm />
         </TabsContent>

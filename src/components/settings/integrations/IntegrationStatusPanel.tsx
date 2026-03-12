@@ -39,6 +39,7 @@ const INTEGRATION_META: Record<string, { name: string; icon: React.ReactNode; ca
   asaas: { name: "Asaas (NFS-e)", icon: <Building2 className="h-4 w-4" />, category: "Financeiro" },
   checkmk: { name: "Check MK", icon: <Activity className="h-4 w-4" />, category: "Monitoramento" },
   tactical_rmm: { name: "Tactical RMM", icon: <Activity className="h-4 w-4" />, category: "Monitoramento" },
+  unifi: { name: "UniFi", icon: <Activity className="h-4 w-4" />, category: "Rede" },
 };
 
 export function IntegrationStatusPanel() {
