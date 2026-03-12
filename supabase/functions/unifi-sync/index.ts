@@ -95,6 +95,8 @@ function mapModelName(rawModel: string): string {
   const m: Record<string, string> = {
     "UCGU": "Cloud Gateway Ultra",
     "UCG-ULTRA": "Cloud Gateway Ultra",
+    "UCGULTRA": "Cloud Gateway Ultra",
+    "UDRULT": "Cloud Gateway Ultra",
     "UCGMAX": "Cloud Gateway Max",
     "UCG-MAX": "Cloud Gateway Max",
     "UDM": "UniFi Dream Machine",
@@ -108,6 +110,7 @@ function mapModelName(rawModel: string): string {
     "UDM-PRO-MAX": "UniFi Dream Machine Pro Max",
     "UDR": "UniFi Dream Router",
     "UNVR": "UniFi Network Video Recorder",
+    "UOSSERVER": "UniFi OS Server",
     "UXG-PRO": "UniFi Next-Gen Gateway Pro",
     "USW-24-POE": "Switch 24 PoE",
     "USW-48-POE": "Switch 48 PoE",
