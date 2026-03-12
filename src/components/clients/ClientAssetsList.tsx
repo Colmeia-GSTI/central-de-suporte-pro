@@ -486,6 +486,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                             <Activity className="h-3 w-3 mr-1" />
                             Uptime Kuma
                           </Badge>
+                        ) : (item as MonitoredDevice).external_source === "unifi" ? (
+                          <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                            <Wifi className="h-3 w-3 mr-1" />
+                            UniFi
+                          </Badge>
                         ) : (
                           <Badge variant="default" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                             <Monitor className="h-3 w-3 mr-1" />
