@@ -17,13 +17,3 @@ export function RouteChangeLoader() {
 export function RouteProgressBar() {
   return null;
 }
-
-// Disabled route change loader to prevent flickering on remote connections
-export function RouteChangeLoader() {
-  return null;
-}
-
-// Disabled progress bar to prevent flickering on remote connections
-export function RouteProgressBar() {
-  return null;
-}
