@@ -20,12 +20,15 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+interface UnifiConfigFormProps {
+  clientId: string;
+}
 
 interface ControllerForm {
   name: string;
-  client_id: string;
   connection_method: "direct" | "cloud";
   url: string;
   username: string;
@@ -38,7 +41,6 @@ interface ControllerForm {
 
 const EMPTY_FORM: ControllerForm = {
   name: "",
-  client_id: "",
   connection_method: "direct",
   url: "",
   username: "",
@@ -49,37 +51,24 @@ const EMPTY_FORM: ControllerForm = {
   sync_interval_hours: 6,
 };
 
-export function UnifiConfigForm() {
+export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ControllerForm>({ ...EMPTY_FORM });
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string; hosts?: any[]; sites?: any[] } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; hosts?: unknown[]; sites?: unknown[] } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
 
-  // Fetch controllers
+  // Fetch controllers for this client only
   const { data: controllers, isLoading } = useQuery({
-    queryKey: ["unifi-controllers"],
+    queryKey: ["unifi-controllers", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("unifi_controllers")
-        .select("id, name, client_id, connection_method, url, ddns_hostname, cloud_host_id, is_active, sync_interval_hours, last_sync_at, last_error, created_at, clients(name)")
+        .select("id, name, client_id, connection_method, url, ddns_hostname, cloud_host_id, is_active, sync_interval_hours, last_sync_at, last_error, created_at")
+        .eq("client_id", clientId)
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch clients for selector
-  const { data: clients } = useQuery({
-    queryKey: ["clients-list-simple"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("name");
       if (error) throw error;
       return data;
     },
@@ -90,7 +79,7 @@ export function UnifiConfigForm() {
     mutationFn: async (data: ControllerForm) => {
       const payload: Record<string, unknown> = {
         name: data.name,
-        client_id: data.client_id,
+        client_id: clientId,
         connection_method: data.connection_method,
         sync_interval_hours: data.sync_interval_hours,
         is_active: true,
@@ -111,7 +100,10 @@ export function UnifiConfigForm() {
     },
     onSuccess: () => {
       toast.success("Controller cadastrado com sucesso");
+      queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
       queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
+      queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
       setShowForm(false);
       setForm({ ...EMPTY_FORM });
       setTestResult(null);
@@ -129,7 +121,10 @@ export function UnifiConfigForm() {
     },
     onSuccess: () => {
       toast.success("Controller removido");
+      queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
       queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
+      queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
     },
     onError: (err: Error) => {
       toast.error(`Erro ao remover: ${err.message}`);
@@ -143,7 +138,7 @@ export function UnifiConfigForm() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
+      queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
     },
   });
 
@@ -197,7 +192,10 @@ export function UnifiConfigForm() {
         toast.error(data.error);
       } else {
         toast.success(`Sincronização concluída: ${data.total_devices || 0} devices, ${data.total_alerts || 0} alertas`);
-        queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
+        queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
+        queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
+        queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
+        queryClient.invalidateQueries({ queryKey: ["network-topology", clientId] });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao sincronizar";
@@ -207,7 +205,7 @@ export function UnifiConfigForm() {
     }
   }
 
-  const canSave = form.name && form.client_id && (
+  const canSave = form.name && (
     (form.connection_method === "direct" && form.url && form.username && form.password) ||
     (form.connection_method === "cloud" && form.cloud_api_key)
   );
@@ -219,8 +217,8 @@ export function UnifiConfigForm() {
           <div className="flex items-center gap-2">
             <Wifi className="h-5 w-5 text-primary" />
             <div>
-              <CardTitle>UniFi</CardTitle>
-              <CardDescription>Integração com Ubiquiti UniFi Dream Machine</CardDescription>
+              <CardTitle>UniFi Controllers</CardTitle>
+              <CardDescription>Gerencie os controllers UniFi deste cliente</CardDescription>
             </div>
           </div>
           {!showForm && (
@@ -235,27 +233,14 @@ export function UnifiConfigForm() {
         {showForm && (
           <Card className="border-dashed">
             <CardContent className="pt-4 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="ctrl-name">Nome do Controller</Label>
-                  <Input
-                    id="ctrl-name"
-                    placeholder="UDM Pro - Cliente XYZ"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ctrl-client">Cliente</Label>
-                  <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-                    <SelectTrigger id="ctrl-client"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      {clients?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="ctrl-name">Nome do Controller</Label>
+                <Input
+                  id="ctrl-name"
+                  placeholder="UDM Pro - Escritório Principal"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
               </div>
 
               <Separator />
@@ -266,7 +251,7 @@ export function UnifiConfigForm() {
                 <RadioGroup
                   value={form.connection_method}
                   onValueChange={(v) => setForm({ ...form, connection_method: v as "direct" | "cloud" })}
-                  className="grid grid-cols-2 gap-3"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3"
                 >
                   <Label
                     htmlFor="method-direct"
@@ -391,7 +376,7 @@ export function UnifiConfigForm() {
                     </div>
                   </div>
 
-                  {testResult?.hosts && testResult.hosts.length > 0 && (
+                  {testResult?.hosts && (testResult.hosts as Array<{ id: string; name: string; model: string }>).length > 0 && (
                     <div className="space-y-2">
                       <Label>Selecionar Host</Label>
                       <Select
@@ -400,7 +385,7 @@ export function UnifiConfigForm() {
                       >
                         <SelectTrigger><SelectValue placeholder="Selecione o host..." /></SelectTrigger>
                         <SelectContent>
-                          {testResult.hosts.map((h) => (
+                          {(testResult.hosts as Array<{ id: string; name: string; model: string }>).map((h) => (
                             <SelectItem key={h.id} value={h.id}>
                               {h.name} ({h.model})
                             </SelectItem>
@@ -470,87 +455,86 @@ export function UnifiConfigForm() {
           </div>
         ) : controllers && controllers.length > 0 ? (
           <div className="space-y-3">
-            {controllers.map((ctrl) => {
-              const clientName = (ctrl as any).clients?.name || "—";
-              return (
-                <div key={ctrl.id} className="rounded-lg border p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Wifi className="h-4 w-4 text-primary" />
-                      <span className="font-medium">{ctrl.name}</span>
-                      <Badge variant={ctrl.connection_method === "direct" ? "default" : "secondary"} className="text-xs">
-                        {ctrl.connection_method === "direct" ? "IP Direto" : "Cloud"}
-                      </Badge>
-                      {ctrl.last_error && (
-                        <Badge variant="destructive" className="text-xs">Erro</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Switch
-                        checked={ctrl.is_active}
-                        onCheckedChange={(v) => toggleMutation.mutate({ id: ctrl.id, is_active: v })}
-                        aria-label="Ativar/Desativar"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleSync(ctrl.id)}
-                        disabled={syncing === ctrl.id || !ctrl.is_active}
-                        aria-label="Sincronizar agora"
-                      >
-                        {syncing === ctrl.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="Remover controller">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Remover controller?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta ação removerá o controller "{ctrl.name}", seus sites e topologia associados. Devices já sincronizados serão mantidos.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteMutation.mutate(ctrl.id)}>
-                              Remover
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>Cliente: {clientName}</span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> A cada {ctrl.sync_interval_hours}h
-                    </span>
-                    {ctrl.last_sync_at && (
-                      <span>
-                        Último sync: {formatDistanceToNow(new Date(ctrl.last_sync_at), { addSuffix: true, locale: ptBR })}
-                      </span>
+            {controllers.map((ctrl) => (
+              <div key={ctrl.id} className="rounded-lg border p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wifi className="h-4 w-4 text-primary" />
+                    <span className="font-medium">{ctrl.name}</span>
+                    <Badge variant={ctrl.connection_method === "direct" ? "default" : "secondary"} className="text-xs">
+                      {ctrl.connection_method === "direct" ? "IP Direto" : "Cloud"}
+                    </Badge>
+                    {ctrl.last_error && (
+                      <Badge variant="destructive" className="text-xs">Erro</Badge>
                     )}
-                    {ctrl.url && <span>{ctrl.url}</span>}
                   </div>
-
-                  {ctrl.last_error && (
-                    <p className="text-xs text-destructive bg-destructive/10 rounded p-2">{ctrl.last_error}</p>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <Switch
+                      checked={ctrl.is_active}
+                      onCheckedChange={(v) => toggleMutation.mutate({ id: ctrl.id, is_active: v })}
+                      aria-label="Ativar/Desativar"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleSync(ctrl.id)}
+                      disabled={syncing === ctrl.id || !ctrl.is_active}
+                      aria-label="Sincronizar agora"
+                    >
+                      {syncing === ctrl.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Remover controller">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remover controller?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta ação removerá o controller "{ctrl.name}", seus sites e topologia associados. Devices já sincronizados serão mantidos.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteMutation.mutate(ctrl.id)}>
+                            Remover
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
-              );
-            })}
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> A cada {ctrl.sync_interval_hours}h
+                  </span>
+                  {ctrl.last_sync_at && (
+                    <span>
+                      Último sync: {formatDistanceToNow(new Date(ctrl.last_sync_at), { addSuffix: true, locale: ptBR })}
+                    </span>
+                  )}
+                  {ctrl.url && <span>{ctrl.url}</span>}
+                </div>
+
+                {ctrl.last_error && (
+                  <p className="text-xs text-destructive bg-destructive/10 rounded p-2">{ctrl.last_error}</p>
+                )}
+              </div>
+            ))}
           </div>
-        ) : (
+        ) : !showForm ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <Wifi className="h-10 w-10 text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground">Nenhum controller UniFi cadastrado</p>
-            <p className="text-xs text-muted-foreground">Clique em "Adicionar" para conectar um UDM</p>
+            <p className="text-xs text-muted-foreground mb-3">Conecte um UDM para monitorar a rede deste cliente</p>
+            <Button onClick={() => setShowForm(true)} size="sm">
+              <Plus className="h-4 w-4 mr-1" /> Adicionar Controller
+            </Button>
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
