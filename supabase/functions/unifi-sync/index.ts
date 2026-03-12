@@ -486,7 +486,9 @@ function parseCloudDevice(raw: Record<string, unknown>): Record<string, unknown>
 
   const rawModel = asString(
     wrapped.shortModel,
+    wrapped.shortname,
     rs?.shortModel,
+    rs?.shortname,
     wrapped.model,
     rs?.model,
     uidb?.model,
