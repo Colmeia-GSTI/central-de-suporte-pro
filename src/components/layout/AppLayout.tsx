@@ -29,6 +29,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
   const [theme, setTheme] = useState<Theme>("system");
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Realtime subscriptions now handled globally by useUnifiedRealtime
 
