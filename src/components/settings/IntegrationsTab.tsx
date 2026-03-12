@@ -24,7 +24,7 @@ export function IntegrationsTab() {
       </div>
 
       <Tabs defaultValue="status" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-8">
+        <TabsList className="grid w-full grid-cols-5 md:grid-cols-9">
           <TabsTrigger value="status" className="flex items-center gap-2">
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden sm:inline">Status</span>
@@ -48,6 +48,10 @@ export function IntegrationsTab() {
           <TabsTrigger value="monitoramento" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             <span className="hidden sm:inline">Monitor</span>
+          </TabsTrigger>
+          <TabsTrigger value="rede" className="flex items-center gap-2">
+            <Wifi className="h-4 w-4" />
+            <span className="hidden sm:inline">Rede</span>
           </TabsTrigger>
           <TabsTrigger value="automacao" className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
