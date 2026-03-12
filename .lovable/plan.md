@@ -1,44 +1,45 @@
 
 
-# Plano Revisado: Integração UniFi UDM - Alarmes + Monitoramento + Topologia
+# Plano: Edição de Controllers + Nome Real + Dados Reais do UniFi
 
-## Status: ✅ IMPLEMENTADO (Fases 1-5)
+## Problemas Identificados
 
-### Fase 1: Database ✅
-- 4 tabelas criadas: `unifi_controllers`, `network_sites`, `network_topology`, `unifi_sync_logs`
-- `monitored_devices` expandido com `mac_address`, `firmware_version`, `model`, `site_id`
-- RLS `is_staff()` + `service_role` em todas
+1. **Sem edição**: O formulário atual só permite adicionar e excluir controllers, sem opção de editar nome, credenciais ou frequência de sync.
+2. **Nome genérico**: O controller salva o nome digitado pelo usuário (ex: "ucgu") sem buscar o nome real configurado no dispositivo UniFi.
+3. **Dados zerados**: Após sync via Cloud, `device_count` e `client_count` ficam 0 porque a Cloud API retorna devices numa estrutura diferente que não está sendo parseada corretamente.
 
-### Fase 2: Edge Function `unifi-sync` ✅
-- Ações: `test`, `list_sites`, `sync`
-- Método Direct: login/sites/devices/LLDP/alarms/health/logout
-- Método Cloud: hosts/devices via api.ui.com
-- Alarmes mapeados para `monitoring_alerts` existente
-- Timeout 10s, log em `unifi_sync_logs`
+## Mudanças
 
-### Fase 3: UI Config ✅
-- `UnifiConfigForm.tsx` com RadioGroup Direct/Cloud
-- Campos condicionais, teste de conexão, sync manual
-- Aba "Rede" adicionada ao `IntegrationsTab.tsx`
-- `IntegrationStatusPanel` atualizado com UniFi
+### 1. `UnifiConfigForm.tsx` - Adicionar modo de edição
 
-### Fase 4: Client Network Tab ✅
-- `ClientNetworkTab.tsx` com resumo de sites/devices/Wi-Fi
-- `NetworkTopologyMap.tsx` com SVG hierárquico (Gateway→Switch→AP)
-- Aba "Rede" no `ClientDetailPage.tsx`
+- Adicionar estado `editingId` para rastrear qual controller está sendo editado
+- Ao clicar em "Editar" num controller existente, popular o form com os dados atuais e entrar em modo edição
+- No modo edição, o `saveMutation` faz `update` em vez de `insert`
+- Adicionar botão de edição (icone Pencil) ao lado de cada controller na lista
+- Após o "Testar Conexão" no modo Cloud, auto-preencher o campo `name` com o nome real do host selecionado (via `getHostDisplayName`)
+- Após o "Testar Conexão" no modo Direct, auto-preencher o `name` com o hostname do primeiro site retornado
 
-### Fase 5: CRON ✅
-- pg_cron configurado: `unifi-sync-hourly` a cada hora
-- Edge Function verifica `sync_interval_hours` internamente
+### 2. `unifi-sync/index.ts` - Atualizar nome do controller e dados reais
 
-## Arquivos Criados/Modificados
-| Arquivo | Ação |
+- Na ação `sync` para Cloud: após descobrir o host, buscar o nome real via `getHostDisplayName` e atualizar `unifi_controllers.name` com esse nome
+- Na ação `sync` para Cloud: parsear corretamente a resposta de devices da Cloud API (tratar estruturas aninhadas como `reportedState`)
+- Atualizar `network_sites.device_count` e `client_count` com valores reais da contagem de devices e clientes Wi-Fi
+- Na ação `test` para Cloud: retornar também a contagem de devices por host para preview
+
+### 3. Cloud device parsing melhorado
+
+O endpoint `GET /ea/sites/{hostId}/devices` retorna devices com estrutura aninhada. Melhorar o parsing para extrair:
+- `mac` de `reportedState.mac` ou `mac`
+- `name` de `reportedState.name` ou `userData.name`
+- `model` de `reportedState.model`
+- `ip` de `reportedState.ip` ou `networkConfig.ip`
+- `state`/`status` para determinar online/offline
+- `num_sta` para contar clientes Wi-Fi (em APs)
+
+## Arquivos Afetados
+
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/unifi-sync/index.ts` | Criado |
-| `src/components/settings/integrations/UnifiConfigForm.tsx` | Criado |
-| `src/components/clients/ClientNetworkTab.tsx` | Criado |
-| `src/components/clients/NetworkTopologyMap.tsx` | Criado |
-| `src/components/settings/IntegrationsTab.tsx` | Modificado (aba Rede) |
-| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Modificado (UniFi) |
-| `src/pages/clients/ClientDetailPage.tsx` | Modificado (aba Rede) |
-| `supabase/config.toml` | Modificado (unifi-sync) |
+| `src/components/settings/integrations/UnifiConfigForm.tsx` | Adicionar modo edição, auto-nome, botão editar |
+| `supabase/functions/unifi-sync/index.ts` | Auto-atualizar nome, melhorar parsing Cloud, contagens reais |
+
