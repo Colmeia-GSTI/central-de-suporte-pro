@@ -46,23 +46,71 @@ function mapAlarmSeverity(key: string): "critical" | "warning" | "info" {
 
 function mapDeviceType(type: string): string {
   const t = (type || "").toLowerCase();
-  if (t.includes("ugw") || t.includes("udm") || t.includes("uxg") || t.includes("ucg")) return "gateway";
-  if (t.includes("usw") || t.includes("usl")) return "switch";
-  if (t.includes("uap") || t.includes("u6") || t.includes("u7")) return "access_point";
+  if (t.includes("ugw") || t.includes("udm") || t.includes("uxg") || t.includes("ucg") || t.includes("gateway") || t.includes("dream") || t.includes("router")) return "gateway";
+  if (t.includes("usw") || t.includes("usl") || t.includes("switch")) return "switch";
+  if (t.includes("uap") || t.includes("u6") || t.includes("u7") || t.includes("access") || t.includes("wifi") || t.includes("wi-fi")) return "access_point";
   return "other";
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return "";
+}
+
+function asNumber(...values: unknown[]): number {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function normalizeModelCode(model: string): string {
+  return model.trim().toUpperCase().replace(/\s+/g, "-").replace(/_/g, "-");
+}
+
+function inferModelCodeFromText(text: string): string {
+  const normalized = normalizeModelCode(text);
+  if (!normalized) return "";
+
+  const matches = normalized.match(/(UCG-ULTRA|UCGU|UCG-MAX|UCGMAX|UDM-PRO-SE|UDM-PRO-MAX|UDM-PRO|UDMSE|UDR|UNVR|UXG-PRO|USW-[A-Z0-9-]+|U7-[A-Z0-9-]+|U6-[A-Z0-9-]+|UAP-[A-Z0-9-]+)/);
+  if (matches?.[1]) return matches[1];
+
+  return "";
+}
+
 // Map shortModel to a friendly product name
-function mapModelName(shortModel: string): string {
+function mapModelName(rawModel: string): string {
+  const model = normalizeModelCode(rawModel);
   const m: Record<string, string> = {
     "UCGU": "Cloud Gateway Ultra",
+    "UCG-ULTRA": "Cloud Gateway Ultra",
+    "UCGULTRA": "Cloud Gateway Ultra",
+    "UDRULT": "Cloud Gateway Ultra",
     "UCGMAX": "Cloud Gateway Max",
+    "UCG-MAX": "Cloud Gateway Max",
     "UDM": "UniFi Dream Machine",
     "UDMPRO": "UniFi Dream Machine Pro",
+    "UDM-PRO": "UniFi Dream Machine Pro",
     "UDMSE": "UniFi Dream Machine SE",
+    "UDM-SE": "UniFi Dream Machine SE",
     "UDMPROSE": "UniFi Dream Machine Pro SE",
+    "UDM-PRO-SE": "UniFi Dream Machine Pro SE",
     "UDMPROMAX": "UniFi Dream Machine Pro Max",
+    "UDM-PRO-MAX": "UniFi Dream Machine Pro Max",
     "UDR": "UniFi Dream Router",
+    "UNVR": "UniFi Network Video Recorder",
+    "UOSSERVER": "UniFi OS Server",
     "UXG-PRO": "UniFi Next-Gen Gateway Pro",
     "USW-24-POE": "Switch 24 PoE",
     "USW-48-POE": "Switch 48 PoE",
@@ -83,7 +131,66 @@ function mapModelName(shortModel: string): string {
     "UAP-AC-LITE": "UAP AC Lite",
     "UAP-AC-LR": "UAP AC LR",
   };
-  return m[shortModel?.toUpperCase()] || shortModel || "Unknown";
+
+  if (!model) return "Modelo não identificado";
+  return m[model] || rawModel || model;
+}
+
+function extractResponseRows(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload.map(asRecord).filter((row): row is Record<string, unknown> => row !== null);
+  }
+
+  const payloadRecord = asRecord(payload);
+  if (!payloadRecord) return [];
+
+  for (const key of ["items", "results", "rows", "hosts", "devices", "data"]) {
+    const candidate = payloadRecord[key];
+    if (Array.isArray(candidate)) {
+      return candidate.map(asRecord).filter((row): row is Record<string, unknown> => row !== null);
+    }
+  }
+
+  return [payloadRecord];
+}
+
+function looksLikeCloudDevice(row: Record<string, unknown>): boolean {
+  const rs = asRecord(row.reportedState);
+  return Boolean(
+    asString(row.mac, row.id, row._id, row.deviceId) ||
+    asString(row.model, row.shortModel, row.type, row.deviceType) ||
+    asString(rs?.mac, rs?.model, rs?.shortModel, rs?.ip, rs?.status)
+  );
+}
+
+function extractCloudDeviceRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const devices: Record<string, unknown>[] = [];
+
+  for (const row of rows) {
+    const hostId = asString(row.hostId, row.host_id, row.hostID);
+    const hostName = asString(row.hostName, row.host_name);
+
+    let nestedFound = false;
+    for (const key of ["devices", "items", "results", "data"]) {
+      const candidate = row[key];
+      if (!Array.isArray(candidate)) continue;
+
+      nestedFound = true;
+      for (const nested of candidate) {
+        const nestedRecord = asRecord(nested);
+        if (!nestedRecord) continue;
+        if (!nestedRecord.hostId && hostId) nestedRecord.hostId = hostId;
+        if (!nestedRecord.hostName && hostName) nestedRecord.hostName = hostName;
+        devices.push(nestedRecord);
+      }
+    }
+
+    if (!nestedFound && looksLikeCloudDevice(row)) {
+      devices.push(row);
+    }
+  }
+
+  return devices;
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = TIMEOUT_MS): Promise<Response> {
@@ -184,8 +291,8 @@ function cloudHeaders(apiKey: string): Record<string, string> {
   return { "X-API-KEY": apiKey, Accept: "application/json" };
 }
 
-async function cloudGetHosts(apiKey: string): Promise<any[]> {
-  const allHosts: any[] = [];
+async function cloudGetHosts(apiKey: string): Promise<Record<string, unknown>[]> {
+  const allHosts: Record<string, unknown>[] = [];
   let nextToken: string | undefined;
 
   // Paginate through all hosts
@@ -204,16 +311,16 @@ async function cloudGetHosts(apiKey: string): Promise<any[]> {
     }
 
     const json = await response.json();
-    const hosts = json.data || [];
+    const hosts = extractResponseRows(json.data);
     allHosts.push(...hosts);
-    nextToken = json.nextToken;
+    nextToken = typeof json.nextToken === "string" ? json.nextToken : undefined;
   } while (nextToken);
 
   return allHosts;
 }
 
-async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
-  const allDevices: any[] = [];
+async function cloudGetDevices(apiKey: string, hostId: string): Promise<Record<string, unknown>[]> {
+  const allRows: Record<string, unknown>[] = [];
   let nextToken: string | undefined;
 
   do {
@@ -229,16 +336,82 @@ async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
     if (!response.ok) {
       const t = await response.text();
       console.warn(`[cloudGetDevices] ${response.status}: ${t}`);
-      return allDevices;
+      return allRows;
     }
 
     const json = await response.json();
-    const devices = json.data || [];
-    allDevices.push(...devices);
-    nextToken = json.nextToken;
+    const rows = extractResponseRows(json.data);
+    allRows.push(...rows);
+    nextToken = typeof json.nextToken === "string" ? json.nextToken : undefined;
   } while (nextToken);
 
-  return allDevices;
+  return allRows;
+}
+
+async function cloudGetSites(apiKey: string): Promise<Record<string, unknown>[]> {
+  const allSites: Record<string, unknown>[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const url = new URL(`${CLOUD_BASE}/sites`);
+    url.searchParams.set("pageSize", "200");
+    if (nextToken) url.searchParams.set("nextToken", nextToken);
+
+    const response = await fetchWithTimeout(url.toString(), {
+      headers: cloudHeaders(apiKey),
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      console.warn(`[cloudGetSites] ${response.status}: ${t}`);
+      return allSites;
+    }
+
+    const json = await response.json();
+    const rows = extractResponseRows(json.data);
+    allSites.push(...rows);
+    nextToken = typeof json.nextToken === "string" ? json.nextToken : undefined;
+  } while (nextToken);
+
+  return allSites;
+}
+
+function hostIdsMatch(candidateHostId: string, selectedHostId: string): boolean {
+  if (!candidateHostId || !selectedHostId) return false;
+  if (candidateHostId === selectedHostId) return true;
+
+  const candidateBase = candidateHostId.split(":")[0];
+  const selectedBase = selectedHostId.split(":")[0];
+  return Boolean(candidateBase && selectedBase && candidateBase === selectedBase);
+}
+
+function getSiteDeviceCount(site: Record<string, unknown>): number {
+  const stats = asRecord(site.statistics) ?? asRecord(site.stats);
+  return asNumber(
+    site.deviceCount,
+    site.devices,
+    site.numDevices,
+    stats?.deviceCount,
+    stats?.devices,
+    stats?.numDevices,
+  );
+}
+
+function getSiteClientCount(site: Record<string, unknown>): number {
+  const stats = asRecord(site.statistics) ?? asRecord(site.stats);
+  return asNumber(
+    site.clientCount,
+    site.clients,
+    site.numClients,
+    site.wifiClients,
+    stats?.clientCount,
+    stats?.clients,
+    stats?.numClients,
+    stats?.wifiClients,
+    stats?.wirelessClients,
+    stats?.num_sta,
+    stats?.numSta,
+  );
 }
 
 // Extract fields from a Cloud host object (nested reportedState/userData)
@@ -249,46 +422,126 @@ function getHostDisplayName(h: Record<string, unknown>): string {
 }
 
 function getHostModel(h: Record<string, unknown>): string {
-  const rs = h.reportedState as Record<string, unknown> | undefined;
-  const shortModel = (rs?.shortModel as string) || (rs?.model as string) || (h.model as string) || "";
-  return mapModelName(shortModel);
+  const rs = asRecord(h.reportedState);
+  const ud = asRecord(h.userData);
+  const rsHw = asRecord(rs?.hardware);
+  const udHw = asRecord(ud?.hardware);
+
+  const explicitModel = asString(
+    rs?.shortModel,
+    rs?.model,
+    rsHw?.shortname,
+    rsHw?.model,
+    ud?.shortModel,
+    ud?.model,
+    udHw?.shortname,
+    udHw?.model,
+    h.shortModel,
+    h.model,
+  );
+
+  const inferredCode = inferModelCodeFromText(
+    `${getHostDisplayName(h)} ${asString(h.name)} ${explicitModel}`,
+  );
+
+  return mapModelName(explicitModel || inferredCode);
 }
 
 function getHostShortModel(h: Record<string, unknown>): string {
-  const rs = h.reportedState as Record<string, unknown> | undefined;
-  return (rs?.shortModel as string) || (rs?.model as string) || (h.model as string) || "";
+  const rs = asRecord(h.reportedState);
+  const ud = asRecord(h.userData);
+  const rsHw = asRecord(rs?.hardware);
+  const udHw = asRecord(ud?.hardware);
+
+  const explicitModel = asString(
+    rs?.shortModel,
+    rs?.model,
+    rsHw?.shortname,
+    rsHw?.model,
+    ud?.shortModel,
+    ud?.model,
+    udHw?.shortname,
+    udHw?.model,
+    h.shortModel,
+    h.model,
+  );
+
+  return explicitModel || inferModelCodeFromText(getHostDisplayName(h));
 }
 
 function getHostId(h: Record<string, unknown>): string {
-  return (h.id as string) || (h._id as string) || "";
+  return asString(h.id, h._id, h.hostId, h.host_id);
 }
 
 // Parse a Cloud device from the /v1/devices response
 function parseCloudDevice(raw: Record<string, unknown>): Record<string, unknown> {
-  // The v1 API may have different nesting than the old /ea/ API
-  // Try both flat and nested structures
-  const rs = raw.reportedState as Record<string, unknown> | undefined;
-  const ud = raw.userData as Record<string, unknown> | undefined;
-  const nc = (rs?.networkConfig || raw.networkConfig) as Record<string, unknown> | undefined;
-  const uidb = raw.uidb as Record<string, unknown> | undefined;
+  const wrapped = asRecord(raw.device) ?? raw;
+  const rs = asRecord(wrapped.reportedState);
+  const ud = asRecord(wrapped.userData);
+  const nc = asRecord(rs?.networkConfig) ?? asRecord(wrapped.networkConfig);
+  const uidb = asRecord(wrapped.uidb);
 
-  const mac = (raw.mac as string) || (rs?.mac as string) || (raw._id as string) || "";
-  const name = (ud?.name as string) || (rs?.name as string) || (rs?.hostname as string) || (raw.name as string) || mac;
-  const shortModel = (raw.shortModel as string) || (rs?.shortModel as string) || (uidb?.shortnames as string[])?.at(0) || (raw.model as string) || (rs?.model as string) || "";
-  const model = mapModelName(shortModel) || shortModel;
-  const ip = (raw.ip as string) || (rs?.ip as string) || (nc?.ip as string) || null;
-  const version = (raw.version as string) || (rs?.version as string) || (raw.firmwareVersion as string) || null;
-  const type = shortModel; // We'll use shortModel for type mapping
-  const hostname = (rs?.hostname as string) || (raw.hostname as string) || name;
-  const uptime = (raw.uptime as number) || (rs?.uptime as number) || 0;
-  const numSta = (raw.numSta as number) || (rs?.num_sta as number) || (raw.num_sta as number) || 0;
+  const uidbShortnames = Array.isArray(uidb?.shortnames) ? uidb.shortnames : [];
+  const primaryShortname = typeof uidbShortnames[0] === "string" ? uidbShortnames[0] : "";
 
-  // Online status
-  const stateVal = raw.state ?? rs?.state ?? null;
-  const statusStr = (raw.status as string) || (rs?.status as string) || "";
-  const isOnline = stateVal === 1 || statusStr === "online" || statusStr === "connected";
+  const rawModel = asString(
+    wrapped.shortModel,
+    wrapped.shortname,
+    rs?.shortModel,
+    rs?.shortname,
+    wrapped.model,
+    rs?.model,
+    uidb?.model,
+    uidb?.name,
+    primaryShortname,
+    wrapped.productModel,
+    wrapped.productName,
+    inferModelCodeFromText(asString(ud?.name, rs?.name, wrapped.name, raw.hostName)),
+  );
 
-  return { mac, name, model, shortModel, ip, version, type, hostname, uptime, numSta, isOnline };
+  const mac = asString(wrapped.mac, rs?.mac);
+  const deviceId = asString(wrapped.id, wrapped._id, wrapped.deviceId, rs?.id, rs?.deviceId);
+  const name = asString(ud?.name, rs?.name, rs?.hostname, wrapped.name, raw.hostName, mac, deviceId);
+  const model = mapModelName(rawModel);
+  const ip = asString(wrapped.ip, rs?.ip, nc?.ip) || null;
+  const version = asString(wrapped.version, rs?.version, wrapped.firmwareVersion) || null;
+  const hostname = asString(rs?.hostname, wrapped.hostname, name);
+  const uptime = asNumber(wrapped.uptime, rs?.uptime, rs?.uptimeSec, rs?.uptime_sec);
+  const numSta = asNumber(
+    wrapped.numSta,
+    wrapped.num_sta,
+    rs?.numSta,
+    rs?.num_sta,
+    rs?.wifiClientCount,
+    rs?.wirelessClientCount,
+    wrapped.wifiClientCount,
+  );
+
+  const stateVal = wrapped.state ?? rs?.state ?? null;
+  const statusStr = asString(wrapped.status, rs?.status).toLowerCase();
+  const onlineValue = wrapped.isOnline ?? rs?.isOnline ?? null;
+  const isOnline =
+    onlineValue === true ||
+    onlineValue === 1 ||
+    stateVal === 1 ||
+    statusStr === "online" ||
+    statusStr === "connected" ||
+    statusStr === "up";
+
+  return {
+    mac,
+    deviceId,
+    name,
+    model,
+    shortModel: rawModel,
+    ip,
+    version,
+    type: asString(wrapped.type, wrapped.deviceType, rawModel, model),
+    hostname,
+    uptime,
+    numSta,
+    isOnline,
+  };
 }
 
 // ========== SYNC LOGIC ==========
@@ -501,29 +754,31 @@ async function syncController(supabase: any, ctrl: UnifiController) {
       const siteId = siteRow?.id;
 
       // Fetch devices using v1 API
-      const rawDevices = await cloudGetDevices(apiKey, hostId);
-      console.log(`[${siteName}] Cloud API returned ${rawDevices.length} raw device(s)`);
+      const rawRows = await cloudGetDevices(apiKey, hostId);
+      const normalizedDevices = extractCloudDeviceRows(rawRows);
+      console.log(`[${siteName}] Cloud API returned ${rawRows.length} payload row(s), ${normalizedDevices.length} normalized device(s)`);
 
-      // Log first device structure for debugging (only keys)
-      if (rawDevices.length > 0) {
-        console.log(`[${siteName}] Sample device keys: ${Object.keys(rawDevices[0]).join(", ")}`);
+      // Log first normalized device structure for debugging (only keys)
+      if (normalizedDevices.length > 0) {
+        console.log(`[${siteName}] Sample normalized device keys: ${Object.keys(normalizedDevices[0]).join(", ")}`);
       }
 
       let deviceCount = 0;
       let totalClients = 0;
 
-      for (const rawDev of rawDevices) {
+      for (const rawDev of normalizedDevices) {
         const dev = parseCloudDevice(rawDev);
         const mac = dev.mac as string;
-        if (!mac) continue;
+        const externalId = mac || (dev.deviceId as string);
+        if (!externalId) continue;
 
-        const devName = dev.name as string;
-        const devType = mapDeviceType((dev.shortModel as string) || (dev.type as string) || "");
+        const devName = (dev.name as string) || externalId;
+        const devType = mapDeviceType((dev.shortModel as string) || (dev.type as string) || (dev.model as string) || "");
 
         const { data: existingList } = await supabase
           .from("monitored_devices")
           .select("id")
-          .eq("external_id", mac)
+          .eq("external_id", externalId)
           .eq("external_source", "unifi")
           .limit(1);
 
@@ -532,12 +787,12 @@ async function syncController(supabase: any, ctrl: UnifiController) {
           name: devName,
           hostname: dev.hostname as string,
           ip_address: dev.ip || null,
-          mac_address: mac,
+          mac_address: mac || null,
           model: dev.model || null,
           firmware_version: dev.version || null,
           is_online: dev.isOnline as boolean,
           device_type: devType,
-          external_id: mac,
+          external_id: externalId,
           external_source: "unifi",
           client_id: ctrl.client_id,
           site_id: siteId || null,
@@ -546,6 +801,8 @@ async function syncController(supabase: any, ctrl: UnifiController) {
             uptime: dev.uptime,
             num_sta: dev.numSta,
             short_model: dev.shortModel,
+            cloud_host_id: asString(rawDev.hostId),
+            cloud_host_name: asString(rawDev.hostName),
           },
         };
 
@@ -556,18 +813,30 @@ async function syncController(supabase: any, ctrl: UnifiController) {
         }
         devicesSynced++;
         deviceCount++;
-        totalClients += (dev.numSta as number) || 0;
+        totalClients += asNumber(dev.numSta);
       }
+
+      const cloudSites = await cloudGetSites(apiKey);
+      const matchingSites = cloudSites.filter((site) => {
+        const siteHostId = asString(site.hostId, site.host_id, asRecord(site.meta)?.hostId);
+        return hostIdsMatch(siteHostId, hostId || "");
+      });
+
+      const sitesDeviceCount = matchingSites.reduce((sum, site) => sum + getSiteDeviceCount(site), 0);
+      const sitesClientCount = matchingSites.reduce((sum, site) => sum + getSiteClientCount(site), 0);
+
+      const finalDeviceCount = Math.max(deviceCount, sitesDeviceCount);
+      const finalClientCount = Math.max(totalClients, sitesClientCount);
 
       // Update site with real counts
       if (siteId) {
         await supabase
           .from("network_sites")
-          .update({ device_count: deviceCount, client_count: totalClients, site_name: siteName })
+          .update({ device_count: finalDeviceCount, client_count: finalClientCount, site_name: siteName })
           .eq("id", siteId);
       }
 
-      console.log(`[${siteName}] Cloud sync complete: ${deviceCount} devices, ${totalClients} Wi-Fi clients`);
+      console.log(`[${siteName}] Cloud sync complete: ${finalDeviceCount} devices, ${finalClientCount} Wi-Fi clients`);
     }
 
     // Update controller status
@@ -673,8 +942,8 @@ serve(async (req) => {
               const hId = getHostId(h);
               let deviceCount = 0;
               try {
-                const devices = await cloudGetDevices(cloud_api_key, hId);
-                deviceCount = devices.length;
+                const deviceRows = await cloudGetDevices(cloud_api_key, hId);
+                deviceCount = extractCloudDeviceRows(deviceRows).length;
               } catch {
                 // Non-critical
               }
