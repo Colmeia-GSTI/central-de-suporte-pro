@@ -21,12 +21,14 @@ import {
   MessageCircle,
   CheckCircle2,
   TrendingUp,
+  Wifi,
 } from "lucide-react";
 import { ClientUsersList } from "@/components/clients/ClientUsersList";
 import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
 import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
+import { ClientNetworkTab } from "@/components/clients/ClientNetworkTab";
 import { formatPhone } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
@@ -128,7 +130,7 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-flex">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-flex">
             <TabsTrigger value="info" className="gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Informações</span>
@@ -144,6 +146,10 @@ export default function ClientDetailPage() {
             <TabsTrigger value="assets" className="gap-2">
               <Monitor className="h-4 w-4" />
               <span className="hidden sm:inline">Ativos</span>
+            </TabsTrigger>
+            <TabsTrigger value="network" className="gap-2">
+              <Wifi className="h-4 w-4" />
+              <span className="hidden sm:inline">Rede</span>
             </TabsTrigger>
             <TabsTrigger value="technicians" className="gap-2">
               <UserCheck className="h-4 w-4" />
@@ -270,6 +276,11 @@ export default function ClientDetailPage() {
           {/* Assets Tab */}
           <TabsContent value="assets">
             <ClientAssetsList clientId={id!} />
+          </TabsContent>
+
+          {/* Network Tab */}
+          <TabsContent value="network">
+            <ClientNetworkTab clientId={id!} />
           </TabsContent>
 
           {/* Technicians Tab */}

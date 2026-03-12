@@ -29,5 +29,7 @@ project_id = "silefpsayliwqtoskkdz"
     verify_jwt = false
   [functions.send-whatsapp]
     verify_jwt = false
+  [functions.unifi-sync]
+    verify_jwt = false
   [functions.update-user-email]
     verify_jwt = false

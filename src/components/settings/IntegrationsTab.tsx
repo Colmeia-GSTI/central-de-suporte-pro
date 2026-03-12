@@ -8,9 +8,10 @@ import { EvolutionApiConfigForm } from "./integrations/EvolutionApiConfigForm";
 import { TelegramConfigForm } from "./integrations/TelegramConfigForm";
 import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigForm";
 import { ResendConfigForm } from "./integrations/ResendConfigForm";
+import { UnifiConfigForm } from "./integrations/UnifiConfigForm";
 import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
 import { LogsViewerTab } from "./LogsViewerTab";
-import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail } from "lucide-react";
+import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail, Wifi } from "lucide-react";
 
 export function IntegrationsTab() {
   return (
@@ -23,7 +24,7 @@ export function IntegrationsTab() {
       </div>
 
       <Tabs defaultValue="status" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-8">
+        <TabsList className="grid w-full grid-cols-5 md:grid-cols-9">
           <TabsTrigger value="status" className="flex items-center gap-2">
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden sm:inline">Status</span>
@@ -47,6 +48,10 @@ export function IntegrationsTab() {
           <TabsTrigger value="monitoramento" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
             <span className="hidden sm:inline">Monitor</span>
+          </TabsTrigger>
+          <TabsTrigger value="rede" className="flex items-center gap-2">
+            <Wifi className="h-4 w-4" />
+            <span className="hidden sm:inline">Rede</span>
           </TabsTrigger>
           <TabsTrigger value="automacao" className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
@@ -83,6 +88,10 @@ export function IntegrationsTab() {
         <TabsContent value="monitoramento" className="space-y-4 mt-4">
           <CheckMkConfigForm />
           <TacticalRmmConfigForm />
+        </TabsContent>
+
+        <TabsContent value="rede" className="space-y-4 mt-4">
+          <UnifiConfigForm />
         </TabsContent>
 
         <TabsContent value="automacao" className="space-y-4 mt-4">

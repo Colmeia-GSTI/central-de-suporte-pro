@@ -2488,14 +2488,18 @@ export type Database = {
           device_type: string | null
           external_id: string | null
           external_source: string | null
+          firmware_version: string | null
           hostname: string | null
           id: string
           ip_address: string | null
           is_online: boolean
           last_seen_at: string | null
+          mac_address: string | null
+          model: string | null
           name: string
           needs_reboot: boolean | null
           service_data: Json | null
+          site_id: string | null
           updated_at: string
           uptime_percent: number | null
         }
@@ -2506,14 +2510,18 @@ export type Database = {
           device_type?: string | null
           external_id?: string | null
           external_source?: string | null
+          firmware_version?: string | null
           hostname?: string | null
           id?: string
           ip_address?: string | null
           is_online?: boolean
           last_seen_at?: string | null
+          mac_address?: string | null
+          model?: string | null
           name: string
           needs_reboot?: boolean | null
           service_data?: Json | null
+          site_id?: string | null
           updated_at?: string
           uptime_percent?: number | null
         }
@@ -2524,14 +2532,18 @@ export type Database = {
           device_type?: string | null
           external_id?: string | null
           external_source?: string | null
+          firmware_version?: string | null
           hostname?: string | null
           id?: string
           ip_address?: string | null
           is_online?: boolean
           last_seen_at?: string | null
+          mac_address?: string | null
+          model?: string | null
           name?: string
           needs_reboot?: boolean | null
           service_data?: Json | null
+          site_id?: string | null
           updated_at?: string
           uptime_percent?: number | null
         }
@@ -2555,6 +2567,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monitored_devices_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "network_sites"
             referencedColumns: ["id"]
           },
         ]
@@ -2614,6 +2633,137 @@ export type Database = {
             columns: ["device_id"]
             isOneToOne: false
             referencedRelation: "monitored_devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      network_sites: {
+        Row: {
+          client_count: number
+          client_id: string
+          controller_id: string
+          created_at: string
+          device_count: number
+          health_status: Json | null
+          id: string
+          last_sync_at: string | null
+          site_code: string
+          site_name: string
+          updated_at: string
+        }
+        Insert: {
+          client_count?: number
+          client_id: string
+          controller_id: string
+          created_at?: string
+          device_count?: number
+          health_status?: Json | null
+          id?: string
+          last_sync_at?: string | null
+          site_code: string
+          site_name: string
+          updated_at?: string
+        }
+        Update: {
+          client_count?: number
+          client_id?: string
+          controller_id?: string
+          created_at?: string
+          device_count?: number
+          health_status?: Json | null
+          id?: string
+          last_sync_at?: string | null
+          site_code?: string
+          site_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "network_sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "network_sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "network_sites_controller_id_fkey"
+            columns: ["controller_id"]
+            isOneToOne: false
+            referencedRelation: "unifi_controllers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      network_topology: {
+        Row: {
+          client_id: string
+          connection_type: string
+          created_at: string
+          device_mac: string
+          device_name: string | null
+          device_port: string | null
+          id: string
+          neighbor_mac: string
+          neighbor_name: string | null
+          neighbor_port: string | null
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          connection_type?: string
+          created_at?: string
+          device_mac: string
+          device_name?: string | null
+          device_port?: string | null
+          id?: string
+          neighbor_mac: string
+          neighbor_name?: string | null
+          neighbor_port?: string | null
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          connection_type?: string
+          created_at?: string
+          device_mac?: string
+          device_name?: string | null
+          device_port?: string | null
+          id?: string
+          neighbor_mac?: string
+          neighbor_name?: string | null
+          neighbor_port?: string | null
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "network_topology_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "network_topology_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "network_topology_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "network_sites"
             referencedColumns: ["id"]
           },
         ]
@@ -4065,6 +4215,128 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      unifi_controllers: {
+        Row: {
+          client_id: string
+          cloud_api_key_encrypted: string | null
+          cloud_host_id: string | null
+          connection_method: string
+          created_at: string
+          ddns_hostname: string | null
+          id: string
+          is_active: boolean
+          last_error: string | null
+          last_sync_at: string | null
+          name: string
+          password_encrypted: string | null
+          sync_interval_hours: number
+          updated_at: string
+          url: string | null
+          username: string | null
+        }
+        Insert: {
+          client_id: string
+          cloud_api_key_encrypted?: string | null
+          cloud_host_id?: string | null
+          connection_method?: string
+          created_at?: string
+          ddns_hostname?: string | null
+          id?: string
+          is_active?: boolean
+          last_error?: string | null
+          last_sync_at?: string | null
+          name: string
+          password_encrypted?: string | null
+          sync_interval_hours?: number
+          updated_at?: string
+          url?: string | null
+          username?: string | null
+        }
+        Update: {
+          client_id?: string
+          cloud_api_key_encrypted?: string | null
+          cloud_host_id?: string | null
+          connection_method?: string
+          created_at?: string
+          ddns_hostname?: string | null
+          id?: string
+          is_active?: boolean
+          last_error?: string | null
+          last_sync_at?: string | null
+          name?: string
+          password_encrypted?: string | null
+          sync_interval_hours?: number
+          updated_at?: string
+          url?: string | null
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unifi_controllers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unifi_controllers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unifi_sync_logs: {
+        Row: {
+          alarms_collected: number
+          alarms_new: number
+          alerts_posted: number
+          controller_id: string
+          created_at: string
+          devices_synced: number
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          status: string
+          sync_timestamp: string
+        }
+        Insert: {
+          alarms_collected?: number
+          alarms_new?: number
+          alerts_posted?: number
+          controller_id: string
+          created_at?: string
+          devices_synced?: number
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          sync_timestamp?: string
+        }
+        Update: {
+          alarms_collected?: number
+          alarms_new?: number
+          alerts_posted?: number
+          controller_id?: string
+          created_at?: string
+          devices_synced?: number
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          sync_timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unifi_sync_logs_controller_id_fkey"
+            columns: ["controller_id"]
+            isOneToOne: false
+            referencedRelation: "unifi_controllers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       uptime_history: {
         Row: {

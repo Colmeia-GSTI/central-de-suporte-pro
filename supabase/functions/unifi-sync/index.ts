@@ -1,0 +1,667 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const TIMEOUT_MS = 10000;
+
+interface UnifiController {
+  id: string;
+  client_id: string;
+  name: string;
+  connection_method: "direct" | "cloud";
+  url: string | null;
+  username: string | null;
+  password_encrypted: string | null;
+  ddns_hostname: string | null;
+  cloud_api_key_encrypted: string | null;
+  cloud_host_id: string | null;
+  is_active: boolean;
+  sync_interval_hours: number;
+  last_sync_at: string | null;
+  last_error: string | null;
+}
+
+// Severity mapping for UniFi alarm keys
+const CRITICAL_ALARMS = new Set([
+  "EVT_LU_DISCONNECTED", "EVT_GW_WANTransition",
+  "EVT_AP_Lost", "EVT_SW_Lost", "EVT_GW_Lost",
+  "EVT_AP_Disconnected", "EVT_SW_Disconnected",
+]);
+
+const WARNING_ALARMS = new Set([
+  "EVT_LU_Connected", "EVT_AP_RestartedUnknown",
+  "EVT_SW_RestartedUnknown", "EVT_GW_RestartedUnknown",
+  "EVT_AP_ChannelChanged", "EVT_AP_DetectRogueAP",
+]);
+
+function mapAlarmSeverity(key: string): "critical" | "warning" | "info" {
+  if (CRITICAL_ALARMS.has(key)) return "critical";
+  if (WARNING_ALARMS.has(key)) return "warning";
+  return "info";
+}
+
+function mapDeviceType(type: string): string {
+  switch (type) {
+    case "ugw": case "udm": case "uxg": return "gateway";
+    case "usw": return "switch";
+    case "uap": return "access_point";
+    default: return "other";
+  }
+}
+
+// Fetch with timeout helper
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ========== DIRECT METHOD ==========
+async function directLogin(baseUrl: string, username: string, password: string): Promise<string> {
+  const response = await fetchWithTimeout(`${baseUrl}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Login falhou: ${response.status} ${text}`);
+  }
+
+  // Extract session cookie
+  const setCookie = response.headers.get("set-cookie") || "";
+  const match = setCookie.match(/unifises=([^;]+)/);
+  if (!match) {
+    await response.text(); // consume body
+    throw new Error("Cookie de sessão não encontrado na resposta");
+  }
+  await response.json(); // consume body
+  return match[1];
+}
+
+async function directLogout(baseUrl: string, sessionCookie: string): Promise<void> {
+  try {
+    const res = await fetchWithTimeout(`${baseUrl}/api/logout`, {
+      method: "POST",
+      headers: { Cookie: `unifises=${sessionCookie}` },
+    });
+    await res.text();
+  } catch {
+    // Ignore logout errors
+  }
+}
+
+async function directGetSites(baseUrl: string, cookie: string): Promise<any[]> {
+  const response = await fetchWithTimeout(`${baseUrl}/api/self/sites`, {
+    headers: { Cookie: `unifises=${cookie}` },
+  });
+  if (!response.ok) {
+    const t = await response.text();
+    throw new Error(`Erro ao listar sites: ${response.status} ${t}`);
+  }
+  const data = await response.json();
+  return data.data || [];
+}
+
+async function directGetDevices(baseUrl: string, cookie: string, siteCode: string): Promise<any[]> {
+  const response = await fetchWithTimeout(`${baseUrl}/api/s/${siteCode}/stat/device`, {
+    headers: { Cookie: `unifises=${cookie}` },
+  });
+  if (!response.ok) {
+    await response.text();
+    return [];
+  }
+  const data = await response.json();
+  return data.data || [];
+}
+
+async function directGetAlarms(baseUrl: string, cookie: string, siteCode: string): Promise<any[]> {
+  const response = await fetchWithTimeout(`${baseUrl}/api/s/${siteCode}/rest/alarm?archived=false`, {
+    headers: { Cookie: `unifises=${cookie}` },
+  });
+  if (!response.ok) {
+    await response.text();
+    return [];
+  }
+  const data = await response.json();
+  return data.data || [];
+}
+
+async function directGetHealth(baseUrl: string, cookie: string, siteCode: string): Promise<any[]> {
+  const response = await fetchWithTimeout(`${baseUrl}/api/s/${siteCode}/stat/health`, {
+    headers: { Cookie: `unifises=${cookie}` },
+  });
+  if (!response.ok) {
+    await response.text();
+    return [];
+  }
+  const data = await response.json();
+  return data.data || [];
+}
+
+// ========== CLOUD METHOD ==========
+async function cloudGetHosts(apiKey: string): Promise<any[]> {
+  const response = await fetchWithTimeout("https://api.ui.com/ea/hosts", {
+    headers: { "X-API-KEY": apiKey, Accept: "application/json" },
+  });
+  if (!response.ok) {
+    const t = await response.text();
+    throw new Error(`Cloud API falhou: ${response.status} ${t}`);
+  }
+  const data = await response.json();
+  return data.data || data || [];
+}
+
+async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
+  const response = await fetchWithTimeout(`https://api.ui.com/ea/sites/${hostId}/devices`, {
+    headers: { "X-API-KEY": apiKey, Accept: "application/json" },
+  });
+  if (!response.ok) {
+    await response.text();
+    return [];
+  }
+  const data = await response.json();
+  return data.data || data || [];
+}
+
+// ========== SYNC LOGIC ==========
+async function syncController(supabase: any, ctrl: UnifiController) {
+  const startTime = Date.now();
+  let devicesSynced = 0;
+  let alarmsCollected = 0;
+  let alarmsNew = 0;
+  let alertsPosted = 0;
+  let status = "success";
+  let errorMessage: string | null = null;
+
+  try {
+    if (ctrl.connection_method === "direct") {
+      if (!ctrl.url || !ctrl.username || !ctrl.password_encrypted) {
+        throw new Error("Configuração incompleta: URL, usuário e senha são obrigatórios");
+      }
+
+      const baseUrl = ctrl.url.replace(/\/$/, "");
+      const cookie = await directLogin(baseUrl, ctrl.username, ctrl.password_encrypted);
+
+      try {
+        const sites = await directGetSites(baseUrl, cookie);
+        console.log(`[${ctrl.name}] Found ${sites.length} sites`);
+
+        for (const site of sites) {
+          const siteCode = site.name || "default";
+          const siteName = site.desc || site.name || "Default";
+
+          // Upsert network_site
+          const { data: siteRow } = await supabase
+            .from("network_sites")
+            .upsert({
+              controller_id: ctrl.id,
+              client_id: ctrl.client_id,
+              site_code: siteCode,
+              site_name: siteName,
+              device_count: site.num_adopted || 0,
+              client_count: site.num_sta || 0,
+              last_sync_at: new Date().toISOString(),
+            }, { onConflict: "controller_id,site_code" })
+            .select("id")
+            .single();
+
+          const siteId = siteRow?.id;
+
+          // Sync devices
+          const devices = await directGetDevices(baseUrl, cookie, siteCode);
+          for (const dev of devices) {
+            const mac = dev.mac || "";
+            const devName = dev.name || dev.model || mac;
+            const devType = mapDeviceType(dev.type || "");
+
+            // Upsert into monitored_devices
+            const { data: existingList } = await supabase
+              .from("monitored_devices")
+              .select("id")
+              .eq("external_id", mac)
+              .eq("external_source", "unifi")
+              .limit(1);
+
+            const existing = existingList?.[0];
+            const deviceData = {
+              name: devName,
+              hostname: dev.hostname || devName,
+              ip_address: dev.ip || null,
+              mac_address: mac,
+              model: dev.model || null,
+              firmware_version: dev.version || null,
+              is_online: dev.state === 1,
+              device_type: devType,
+              external_id: mac,
+              external_source: "unifi",
+              client_id: ctrl.client_id,
+              site_id: siteId || null,
+              last_seen_at: dev.last_seen ? new Date(dev.last_seen * 1000).toISOString() : new Date().toISOString(),
+              service_data: {
+                uptime: dev.uptime,
+                tx_bytes: dev.tx_bytes,
+                rx_bytes: dev.rx_bytes,
+                num_sta: dev.num_sta,
+                satisfaction: dev.satisfaction,
+              },
+            };
+
+            if (existing) {
+              await supabase.from("monitored_devices").update(deviceData).eq("id", existing.id);
+            } else {
+              await supabase.from("monitored_devices").insert(deviceData);
+            }
+            devicesSynced++;
+
+            // Extract LLDP topology
+            if (dev.lldp_table && Array.isArray(dev.lldp_table) && siteId) {
+              for (const lldp of dev.lldp_table) {
+                await supabase.from("network_topology").upsert({
+                  site_id: siteId,
+                  client_id: ctrl.client_id,
+                  device_mac: mac,
+                  device_name: devName,
+                  device_port: lldp.local_port_name || lldp.local_port_idx?.toString() || null,
+                  neighbor_mac: lldp.chassis_id || "",
+                  neighbor_name: lldp.chassis_name || lldp.chassis_id || "",
+                  neighbor_port: lldp.port_id || null,
+                  connection_type: "ethernet",
+                }, { ignoreDuplicates: true });
+              }
+            }
+          }
+
+          // Collect alarms
+          const alarms = await directGetAlarms(baseUrl, cookie, siteCode);
+          alarmsCollected += alarms.length;
+
+          for (const alarm of alarms) {
+            const alarmKey = alarm.key || alarm.type || "UNKNOWN";
+            const severity = mapAlarmSeverity(alarmKey);
+            const deviceMac = alarm.ap || alarm.sw || alarm.gw || "";
+            const alarmMsg = alarm.msg || alarmKey;
+
+            // Find the device for this alarm
+            const { data: devList } = await supabase
+              .from("monitored_devices")
+              .select("id")
+              .eq("external_id", deviceMac)
+              .eq("external_source", "unifi")
+              .limit(1);
+
+            const alertDevice = devList?.[0];
+            if (!alertDevice) continue;
+
+            // Check if active alert already exists
+            const { data: existingAlert } = await supabase
+              .from("monitoring_alerts")
+              .select("id")
+              .eq("device_id", alertDevice.id)
+              .eq("status", "active")
+              .eq("service_name", alarmKey)
+              .maybeSingle();
+
+            if (!existingAlert) {
+              await supabase.from("monitoring_alerts").insert({
+                device_id: alertDevice.id,
+                title: alarmMsg.substring(0, 200),
+                message: `Alarme UniFi: ${alarmMsg}. Controller: ${ctrl.name}, Site: ${siteName}`,
+                level: severity,
+                status: "active",
+                service_name: alarmKey,
+              });
+              alarmsNew++;
+              alertsPosted++;
+            }
+          }
+
+          // Update health status
+          const health = await directGetHealth(baseUrl, cookie, siteCode);
+          if (health.length > 0 && siteId) {
+            const healthMap: Record<string, any> = {};
+            for (const h of health) {
+              healthMap[h.subsystem] = {
+                status: h.status,
+                num_adopted: h.num_adopted,
+                num_sta: h.num_sta,
+              };
+            }
+            await supabase
+              .from("network_sites")
+              .update({ health_status: healthMap })
+              .eq("id", siteId);
+          }
+        }
+      } finally {
+        await directLogout(baseUrl, cookie);
+      }
+    } else if (ctrl.connection_method === "cloud") {
+      if (!ctrl.cloud_api_key_encrypted) {
+        throw new Error("API Key do UniFi Cloud não configurada");
+      }
+
+      const apiKey = ctrl.cloud_api_key_encrypted;
+
+      // If no host_id specified, list hosts and use the first/configured one
+      let hostId = ctrl.cloud_host_id;
+      if (!hostId) {
+        const hosts = await cloudGetHosts(apiKey);
+        if (hosts.length === 0) throw new Error("Nenhum host encontrado na conta UniFi Cloud");
+        hostId = hosts[0].id || hosts[0]._id;
+      }
+
+      // Create a default site entry for cloud
+      const { data: siteRow } = await supabase
+        .from("network_sites")
+        .upsert({
+          controller_id: ctrl.id,
+          client_id: ctrl.client_id,
+          site_code: "cloud-default",
+          site_name: ctrl.name,
+          last_sync_at: new Date().toISOString(),
+        }, { onConflict: "controller_id,site_code" })
+        .select("id")
+        .single();
+
+      const siteId = siteRow?.id;
+
+      const devices = await cloudGetDevices(apiKey, hostId);
+      let deviceCount = 0;
+
+      for (const dev of devices) {
+        const mac = dev.mac || dev._id || "";
+        const devName = dev.name || dev.model || mac;
+        const devType = mapDeviceType(dev.type || "");
+
+        const { data: existingList } = await supabase
+          .from("monitored_devices")
+          .select("id")
+          .eq("external_id", mac)
+          .eq("external_source", "unifi")
+          .limit(1);
+
+        const existing = existingList?.[0];
+        const deviceData = {
+          name: devName,
+          hostname: dev.hostname || devName,
+          ip_address: dev.ip || null,
+          mac_address: mac,
+          model: dev.model || null,
+          firmware_version: dev.version || null,
+          is_online: dev.state === 1 || dev.status === "online",
+          device_type: devType,
+          external_id: mac,
+          external_source: "unifi",
+          client_id: ctrl.client_id,
+          site_id: siteId || null,
+          last_seen_at: new Date().toISOString(),
+          service_data: {},
+        };
+
+        if (existing) {
+          await supabase.from("monitored_devices").update(deviceData).eq("id", existing.id);
+        } else {
+          await supabase.from("monitored_devices").insert(deviceData);
+        }
+        devicesSynced++;
+        deviceCount++;
+      }
+
+      // Update site device count
+      if (siteId) {
+        await supabase
+          .from("network_sites")
+          .update({ device_count: deviceCount })
+          .eq("id", siteId);
+      }
+
+      // Note: Cloud API does not expose alarms endpoint
+      console.log(`[${ctrl.name}] Cloud sync: ${deviceCount} devices (alarmes indisponíveis via Cloud API)`);
+    }
+
+    // Update controller status
+    await supabase
+      .from("unifi_controllers")
+      .update({ last_sync_at: new Date().toISOString(), last_error: null })
+      .eq("id", ctrl.id);
+
+  } catch (e: any) {
+    status = "error";
+    errorMessage = e.name === "AbortError" ? "Timeout ao conectar ao controller" : e.message;
+    console.error(`[${ctrl.name}] Sync error:`, errorMessage);
+
+    // Update controller with error
+    await supabase
+      .from("unifi_controllers")
+      .update({ last_error: errorMessage })
+      .eq("id", ctrl.id);
+  }
+
+  const durationMs = Date.now() - startTime;
+
+  // Log sync result
+  await supabase.from("unifi_sync_logs").insert({
+    controller_id: ctrl.id,
+    sync_timestamp: new Date().toISOString(),
+    devices_synced: devicesSynced,
+    alarms_collected: alarmsCollected,
+    alarms_new: alarmsNew,
+    alerts_posted: alertsPosted,
+    status,
+    error_message: errorMessage,
+    duration_ms: durationMs,
+  });
+
+  return { devicesSynced, alarmsCollected, alarmsNew, alertsPosted, status, errorMessage };
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    const body = await req.json();
+    const action = body.action as string;
+    const controllerId = body.controller_id as string | undefined;
+
+    // ========== TEST CONNECTION ==========
+    if (action === "test") {
+      const { connection_method, url, username, password, cloud_api_key } = body;
+
+      if (connection_method === "direct") {
+        if (!url || !username || !password) {
+          return new Response(
+            JSON.stringify({ error: "URL, usuário e senha são obrigatórios" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const baseUrl = url.replace(/\/$/, "");
+        let cookie: string;
+        try {
+          cookie = await directLogin(baseUrl, username, password);
+        } catch (e: any) {
+          return new Response(
+            JSON.stringify({ error: e.name === "AbortError" ? "Timeout ao conectar" : e.message }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        try {
+          const sites = await directGetSites(baseUrl, cookie);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: `Conexão válida. ${sites.length} site(s) encontrado(s).`,
+              sites: sites.map((s: any) => ({
+                code: s.name,
+                name: s.desc || s.name,
+                devices: s.num_adopted || 0,
+              })),
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } finally {
+          await directLogout(baseUrl, cookie);
+        }
+      } else if (connection_method === "cloud") {
+        if (!cloud_api_key) {
+          return new Response(
+            JSON.stringify({ error: "API Key é obrigatória" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        try {
+          const hosts = await cloudGetHosts(cloud_api_key);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: `Conexão válida. ${hosts.length} host(s) encontrado(s).`,
+              hosts: hosts.map((h: any) => ({
+                id: h.id || h._id,
+                name: h.name || h.hostname || h.id,
+                model: h.model || "Unknown",
+              })),
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (e: any) {
+          return new Response(
+            JSON.stringify({ error: e.name === "AbortError" ? "Timeout ao conectar" : e.message }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ error: "Método de conexão inválido" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ========== LIST SITES ==========
+    if (action === "list_sites" && controllerId) {
+      const { data: ctrl } = await supabase
+        .from("unifi_controllers")
+        .select("*")
+        .eq("id", controllerId)
+        .single();
+
+      if (!ctrl) {
+        return new Response(
+          JSON.stringify({ error: "Controller não encontrado" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (ctrl.connection_method === "direct") {
+        const baseUrl = ctrl.url.replace(/\/$/, "");
+        const cookie = await directLogin(baseUrl, ctrl.username, ctrl.password_encrypted);
+        try {
+          const sites = await directGetSites(baseUrl, cookie);
+          return new Response(
+            JSON.stringify({ success: true, sites }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } finally {
+          await directLogout(baseUrl, cookie);
+        }
+      } else {
+        const hosts = await cloudGetHosts(ctrl.cloud_api_key_encrypted);
+        return new Response(
+          JSON.stringify({ success: true, hosts }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ========== SYNC (single or all) ==========
+    if (action === "sync") {
+      let controllers: UnifiController[] = [];
+
+      if (controllerId) {
+        // Single controller sync (manual trigger)
+        const { data } = await supabase
+          .from("unifi_controllers")
+          .select("*")
+          .eq("id", controllerId)
+          .eq("is_active", true)
+          .single();
+
+        if (data) controllers = [data];
+      } else {
+        // Cron: sync all controllers that are due
+        const { data } = await supabase
+          .from("unifi_controllers")
+          .select("*")
+          .eq("is_active", true);
+
+        controllers = (data || []).filter((ctrl: UnifiController) => {
+          if (!ctrl.last_sync_at) return true;
+          const lastSync = new Date(ctrl.last_sync_at).getTime();
+          const intervalMs = ctrl.sync_interval_hours * 60 * 60 * 1000;
+          return Date.now() - lastSync >= intervalMs;
+        });
+      }
+
+      if (controllers.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, message: "Nenhum controller para sincronizar", synced: 0 }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`Starting UniFi sync for ${controllers.length} controller(s)...`);
+      const results = [];
+
+      for (const ctrl of controllers) {
+        const result = await syncController(supabase, ctrl);
+        results.push({ controller: ctrl.name, ...result });
+      }
+
+      const totalDevices = results.reduce((s, r) => s + r.devicesSynced, 0);
+      const totalAlerts = results.reduce((s, r) => s + r.alertsPosted, 0);
+      const errors = results.filter((r) => r.status === "error");
+
+      console.log(`UniFi sync complete: ${totalDevices} devices, ${totalAlerts} alerts, ${errors.length} errors`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          controllers_synced: controllers.length,
+          total_devices: totalDevices,
+          total_alerts: totalAlerts,
+          errors: errors.length,
+          results,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    throw new Error("Ação inválida");
+  } catch (error: any) {
+    console.error("UniFi sync error:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
