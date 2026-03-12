@@ -1,44 +1,39 @@
 
 
-# Plano Revisado: Integração UniFi UDM - Alarmes + Monitoramento + Topologia
+# Plano: Mover Configuração UniFi para dentro de cada Cliente
 
-## Status: ✅ IMPLEMENTADO (Fases 1-5)
+## Contexto
 
-### Fase 1: Database ✅
-- 4 tabelas criadas: `unifi_controllers`, `network_sites`, `network_topology`, `unifi_sync_logs`
-- `monitored_devices` expandido com `mac_address`, `firmware_version`, `model`, `site_id`
-- RLS `is_staff()` + `service_role` em todas
+Atualmente, o `UnifiConfigForm` está na página de Configurações globais (aba Integrações → Rede). O usuário quer que a configuração de controllers UniFi fique **dentro da página de detalhes de cada cliente**, já que cada controller pertence a um cliente específico.
 
-### Fase 2: Edge Function `unifi-sync` ✅
-- Ações: `test`, `list_sites`, `sync`
-- Método Direct: login/sites/devices/LLDP/alarms/health/logout
-- Método Cloud: hosts/devices via api.ui.com
-- Alarmes mapeados para `monitoring_alerts` existente
-- Timeout 10s, log em `unifi_sync_logs`
+## Mudanças
 
-### Fase 3: UI Config ✅
-- `UnifiConfigForm.tsx` com RadioGroup Direct/Cloud
-- Campos condicionais, teste de conexão, sync manual
-- Aba "Rede" adicionada ao `IntegrationsTab.tsx`
-- `IntegrationStatusPanel` atualizado com UniFi
+### 1. Refatorar `UnifiConfigForm.tsx`
+- Adicionar prop `clientId: string` obrigatória
+- Remover o seletor de cliente (`Select` de `clients-list-simple`) — o client_id será fixo
+- Filtrar controllers pela query usando `.eq("client_id", clientId)`
+- O formulário de criação já preenche `client_id` automaticamente com o prop
 
-### Fase 4: Client Network Tab ✅
-- `ClientNetworkTab.tsx` com resumo de sites/devices/Wi-Fi
-- `NetworkTopologyMap.tsx` com SVG hierárquico (Gateway→Switch→AP)
-- Aba "Rede" no `ClientDetailPage.tsx`
+### 2. Integrar no `ClientNetworkTab.tsx`
+- Importar o `UnifiConfigForm` refatorado
+- Renderizar o formulário de configuração **acima** da visualização de sites/devices/topologia
+- Quando não há controllers configurados, mostrar o form de adicionar em vez da mensagem "configure em Configurações"
+- Layout: Config de controllers no topo, visualização de rede abaixo
 
-### Fase 5: CRON ✅
-- pg_cron configurado: `unifi-sync-hourly` a cada hora
-- Edge Function verifica `sync_interval_hours` internamente
+### 3. Remover da aba global de Integrações
+- Em `IntegrationsTab.tsx`: remover o `UnifiConfigForm` da aba "Rede"
+- Na aba "Rede" das integrações globais, mostrar apenas um resumo/status geral dos controllers UniFi (quantos clientes têm controllers, status de sync) com link para cada cliente
+- Alternativamente, remover a aba "Rede" inteira se ficar vazia, ou manter apenas como painel de status
 
-## Arquivos Criados/Modificados
+### 4. Atualizar `IntegrationStatusPanel.tsx`
+- Manter o card de status UniFi no painel global (mostra contagem agregada)
+- Adicionar links para os clientes que têm controllers configurados
+
+## Arquivos afetados
+
 | Arquivo | Ação |
 |---|---|
-| `supabase/functions/unifi-sync/index.ts` | Criado |
-| `src/components/settings/integrations/UnifiConfigForm.tsx` | Criado |
-| `src/components/clients/ClientNetworkTab.tsx` | Criado |
-| `src/components/clients/NetworkTopologyMap.tsx` | Criado |
-| `src/components/settings/IntegrationsTab.tsx` | Modificado (aba Rede) |
-| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Modificado (UniFi) |
-| `src/pages/clients/ClientDetailPage.tsx` | Modificado (aba Rede) |
-| `supabase/config.toml` | Modificado (unifi-sync) |
+| `src/components/settings/integrations/UnifiConfigForm.tsx` | Refatorar: adicionar prop `clientId`, remover seletor de cliente |
+| `src/components/clients/ClientNetworkTab.tsx` | Integrar `UnifiConfigForm` com `clientId` fixo |
+| `src/components/settings/IntegrationsTab.tsx` | Remover `UnifiConfigForm` da aba Rede, manter resumo |
+
