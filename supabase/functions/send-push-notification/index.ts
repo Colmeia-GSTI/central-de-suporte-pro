@@ -453,13 +453,12 @@ serve(async (req) => {
 
     // Send push to all subscriptions
     let successCount = 0;
-    const failedEndpoints: string[] = [];
+    const goneEndpoints: string[] = [];
     const errors: string[] = [];
 
     for (const sub of subscriptions) {
       if (!sub.p256dh || !sub.auth) {
-        console.warn(`[send-push-notification] Subscription ${sub.id} missing keys`);
-        failedEndpoints.push(sub.endpoint);
+        console.warn(`[send-push-notification] Subscription ${sub.id} missing keys, skipping`);
         continue;
       }
 
@@ -475,20 +474,23 @@ serve(async (req) => {
       if (result.success) {
         successCount++;
       } else {
-        failedEndpoints.push(sub.endpoint);
         if (result.error) {
           errors.push(result.error);
+        }
+        // Only remove subscriptions that the push service says are permanently gone (404/410)
+        if (result.gone) {
+          goneEndpoints.push(sub.endpoint);
         }
       }
     }
 
-    // Clean up failed subscriptions (they might be expired)
-    if (failedEndpoints.length > 0) {
-      console.log(`[send-push-notification] Cleaning ${failedEndpoints.length} failed subscriptions`);
+    // Only clean up subscriptions confirmed as expired/invalid by the push service
+    if (goneEndpoints.length > 0) {
+      console.log(`[send-push-notification] Removing ${goneEndpoints.length} expired subscriptions (404/410)`);
       await supabase
         .from("push_subscriptions")
         .delete()
-        .in("endpoint", failedEndpoints);
+        .in("endpoint", goneEndpoints);
     }
 
     console.log(`[send-push-notification] Sent: ${successCount}/${subscriptions.length}`);
