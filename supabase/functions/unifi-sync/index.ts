@@ -348,6 +348,72 @@ async function cloudGetDevices(apiKey: string, hostId: string): Promise<Record<s
   return allRows;
 }
 
+async function cloudGetSites(apiKey: string): Promise<Record<string, unknown>[]> {
+  const allSites: Record<string, unknown>[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const url = new URL(`${CLOUD_BASE}/sites`);
+    url.searchParams.set("pageSize", "200");
+    if (nextToken) url.searchParams.set("nextToken", nextToken);
+
+    const response = await fetchWithTimeout(url.toString(), {
+      headers: cloudHeaders(apiKey),
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      console.warn(`[cloudGetSites] ${response.status}: ${t}`);
+      return allSites;
+    }
+
+    const json = await response.json();
+    const rows = extractResponseRows(json.data);
+    allSites.push(...rows);
+    nextToken = typeof json.nextToken === "string" ? json.nextToken : undefined;
+  } while (nextToken);
+
+  return allSites;
+}
+
+function hostIdsMatch(candidateHostId: string, selectedHostId: string): boolean {
+  if (!candidateHostId || !selectedHostId) return false;
+  if (candidateHostId === selectedHostId) return true;
+
+  const candidateBase = candidateHostId.split(":")[0];
+  const selectedBase = selectedHostId.split(":")[0];
+  return Boolean(candidateBase && selectedBase && candidateBase === selectedBase);
+}
+
+function getSiteDeviceCount(site: Record<string, unknown>): number {
+  const stats = asRecord(site.statistics) ?? asRecord(site.stats);
+  return asNumber(
+    site.deviceCount,
+    site.devices,
+    site.numDevices,
+    stats?.deviceCount,
+    stats?.devices,
+    stats?.numDevices,
+  );
+}
+
+function getSiteClientCount(site: Record<string, unknown>): number {
+  const stats = asRecord(site.statistics) ?? asRecord(site.stats);
+  return asNumber(
+    site.clientCount,
+    site.clients,
+    site.numClients,
+    site.wifiClients,
+    stats?.clientCount,
+    stats?.clients,
+    stats?.numClients,
+    stats?.wifiClients,
+    stats?.wirelessClients,
+    stats?.num_sta,
+    stats?.numSta,
+  );
+}
+
 // Extract fields from a Cloud host object (nested reportedState/userData)
 function getHostDisplayName(h: Record<string, unknown>): string {
   const rs = h.reportedState as Record<string, unknown> | undefined;
