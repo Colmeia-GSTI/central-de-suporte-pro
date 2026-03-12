@@ -130,7 +130,7 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-flex">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-flex">
             <TabsTrigger value="info" className="gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Informações</span>
@@ -146,6 +146,10 @@ export default function ClientDetailPage() {
             <TabsTrigger value="assets" className="gap-2">
               <Monitor className="h-4 w-4" />
               <span className="hidden sm:inline">Ativos</span>
+            </TabsTrigger>
+            <TabsTrigger value="network" className="gap-2">
+              <Wifi className="h-4 w-4" />
+              <span className="hidden sm:inline">Rede</span>
             </TabsTrigger>
             <TabsTrigger value="technicians" className="gap-2">
               <UserCheck className="h-4 w-4" />
