@@ -499,7 +499,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         sent: successCount,
-        failed: failedEndpoints.length,
+        failed: goneEndpoints.length,
         total: subscriptions.length,
         errors: errors.slice(0, 3), // Return first 3 errors for debugging
       }),
