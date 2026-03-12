@@ -859,8 +859,8 @@ serve(async (req) => {
               const hId = getHostId(h);
               let deviceCount = 0;
               try {
-                const devices = await cloudGetDevices(cloud_api_key, hId);
-                deviceCount = devices.length;
+                const deviceRows = await cloudGetDevices(cloud_api_key, hId);
+                deviceCount = extractCloudDeviceRows(deviceRows).length;
               } catch {
                 // Non-critical
               }
