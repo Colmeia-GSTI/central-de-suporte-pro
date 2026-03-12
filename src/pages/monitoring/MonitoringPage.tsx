@@ -446,14 +446,12 @@ export default function MonitoringPage() {
                           {device.ip_address || "-"}
                         </TableCell>
                         <TableCell>
-                          {device.uptime_percent ? (
-                            <div className="flex items-center gap-2">
-                              <Activity className="h-4 w-4 text-muted-foreground" />
-                              <span>{device.uptime_percent.toFixed(1)}%</span>
-                            </div>
-                          ) : (
-                            "-"
-                          )}
+                          <Badge variant="outline" className="text-xs">
+                            {device.external_source === "unifi" ? "UniFi" 
+                              : device.external_source === "checkmk" ? "CheckMK"
+                              : device.external_source === "tactical_rmm" ? "RMM"
+                              : device.external_source || "Manual"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {device.last_seen_at ? (

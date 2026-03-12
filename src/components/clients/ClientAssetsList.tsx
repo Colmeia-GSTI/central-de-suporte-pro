@@ -481,15 +481,15 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                     </TableCell>
                     <TableCell>
                       {isRmm ? (
-                        (item as MonitoredDevice).external_source === "uptime_kuma" ? (
-                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                            <Activity className="h-3 w-3 mr-1" />
-                            Uptime Kuma
-                          </Badge>
-                        ) : (item as MonitoredDevice).external_source === "unifi" ? (
+                        (item as MonitoredDevice).external_source === "unifi" ? (
                           <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
                             <Wifi className="h-3 w-3 mr-1" />
                             UniFi
+                          </Badge>
+                        ) : (item as MonitoredDevice).external_source === "checkmk" ? (
+                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            <Activity className="h-3 w-3 mr-1" />
+                            CheckMK
                           </Badge>
                         ) : (
                           <Badge variant="default" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
