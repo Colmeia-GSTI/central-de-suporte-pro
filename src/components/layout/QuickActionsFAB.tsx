@@ -97,7 +97,7 @@ export function QuickActionsFAB() {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-center gap-3 pointer-events-none">
+      <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 flex flex-col-reverse items-center gap-3 pointer-events-none">
         {/* Backdrop for dark mode visibility */}
         {isOpen && (
           <div

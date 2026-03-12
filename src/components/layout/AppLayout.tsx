@@ -184,8 +184,8 @@ export function AppLayout({ children, title }: AppLayoutProps) {
             </div>
           </header>
           
-          {/* Main content with animation */}
-          <div className="flex-1 p-3 md:p-6 overflow-auto animate-fade-in">
+          {/* Main content */}
+          <div className="flex-1 p-3 md:p-6 overflow-auto">
             {children}
           </div>
         </main>
