@@ -106,7 +106,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
       <div className="min-h-[100dvh] flex w-full relative">
         <AppSidebar />
         
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 min-w-0 flex flex-col">
           {/* Premium Header */}
           <header className={cn(
             "h-14 md:h-16 glass-header sticky top-0 z-40",
