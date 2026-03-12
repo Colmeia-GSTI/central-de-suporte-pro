@@ -240,7 +240,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
   // Combine both lists
   const allItems = [
     ...assets.map((a) => ({ ...a, source: "manual" as const })),
-    ...monitoredDevices.map((d) => ({ ...d, source: "rmm" as const })),
+    ...monitoredDevices.map((d) => ({ ...d, source: "monitored" as const })),
   ];
 
   return (
