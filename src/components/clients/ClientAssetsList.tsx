@@ -147,7 +147,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     },
   });
 
-  // Fetch monitored devices (from RMM)
+  // Fetch monitored devices (RMM, UniFi, Uptime Kuma, etc.)
   const { data: monitoredDevices = [], isLoading: isLoadingDevices } = useQuery({
     queryKey: ["client-monitored-devices", clientId],
     queryFn: async () => {
