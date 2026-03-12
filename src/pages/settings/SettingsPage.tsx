@@ -196,7 +196,7 @@ export default function SettingsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="fixed bottom-20 right-4 z-30 shadow-lg rounded-full h-12 px-4 gap-2 md:hidden"
+                  className="fixed bottom-4 left-4 z-30 shadow-lg rounded-full h-12 px-4 gap-2 md:hidden bg-background"
                 >
                   <Menu className="h-4 w-4" />
                   {activeLabel}
