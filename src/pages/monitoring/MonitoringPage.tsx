@@ -179,10 +179,9 @@ export default function MonitoringPage() {
   const onlineDevices = devices.filter((d) => d.is_online).length;
   const offlineDevices = devices.filter((d) => !d.is_online).length;
   const criticalAlerts = alerts.filter((a) => a.level === "critical").length;
-  const devicesWithUptime = devices.filter((d) => d.uptime_percent != null);
-  const uptimeAverage = devicesWithUptime.length > 0
-    ? devicesWithUptime.reduce((acc, d) => acc + (d.uptime_percent || 0), 0) / devicesWithUptime.length
-    : 0;
+  const rmmDevices = devices.filter((d) => d.external_source === "tactical_rmm").length;
+  const checkmkDevices = devices.filter((d) => d.external_source === "checkmk").length;
+  const unifiDevices = devices.filter((d) => d.external_source === "unifi").length;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -200,17 +199,29 @@ export default function MonitoringPage() {
         .eq("integration_type", "tactical_rmm")
         .single();
 
+      const syncPromises: Promise<unknown>[] = [];
+
       if (checkmkSettings?.is_active) {
-        await supabase.functions.invoke("checkmk-sync", {
-          body: { action: "sync" },
-        });
+        syncPromises.push(supabase.functions.invoke("checkmk-sync", { body: { action: "sync" } }));
       }
 
       if (tacticalSettings?.is_active) {
-        await supabase.functions.invoke("tactical-rmm-sync", {
-          body: { action: "sync" },
-        });
+        syncPromises.push(supabase.functions.invoke("tactical-rmm-sync", { body: { action: "sync" } }));
       }
+
+      // Also sync UniFi controllers
+      const { data: unifiControllers } = await supabase
+        .from("unifi_controllers")
+        .select("id")
+        .eq("is_active", true);
+
+      if (unifiControllers && unifiControllers.length > 0) {
+        for (const ctrl of unifiControllers) {
+          syncPromises.push(supabase.functions.invoke("unifi-sync", { body: { action: "sync", controllerId: ctrl.id } }));
+        }
+      }
+
+      await Promise.allSettled(syncPromises);
 
       await queryClient.invalidateQueries({ queryKey: ["devices"] });
       await queryClient.invalidateQueries({ queryKey: ["alerts"] });
@@ -283,11 +294,15 @@ export default function MonitoringPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Uptime Médio</CardTitle>
+              <CardTitle className="text-sm font-medium">Por Origem</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{uptimeAverage.toFixed(1)}%</div>
+              <div className="text-xs space-y-1">
+                <div className="flex justify-between"><span>RMM</span><span className="font-bold">{rmmDevices}</span></div>
+                <div className="flex justify-between"><span>CheckMK</span><span className="font-bold">{checkmkDevices}</span></div>
+                <div className="flex justify-between"><span>UniFi</span><span className="font-bold">{unifiDevices}</span></div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -380,7 +395,7 @@ export default function MonitoringPage() {
                     <TableHead>Dispositivo</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>IP</TableHead>
-                    <TableHead>Uptime</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Última Verificação</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -431,14 +446,12 @@ export default function MonitoringPage() {
                           {device.ip_address || "-"}
                         </TableCell>
                         <TableCell>
-                          {device.uptime_percent ? (
-                            <div className="flex items-center gap-2">
-                              <Activity className="h-4 w-4 text-muted-foreground" />
-                              <span>{device.uptime_percent.toFixed(1)}%</span>
-                            </div>
-                          ) : (
-                            "-"
-                          )}
+                          <Badge variant="outline" className="text-xs">
+                            {device.external_source === "unifi" ? "UniFi" 
+                              : device.external_source === "checkmk" ? "CheckMK"
+                              : device.external_source === "tactical_rmm" ? "RMM"
+                              : device.external_source || "Manual"}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {device.last_seen_at ? (

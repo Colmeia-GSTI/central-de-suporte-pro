@@ -590,11 +590,11 @@ export function ClientMappingsTab() {
                                 <span className="text-muted-foreground ml-1">({externalClientsCache.tactical_rmm.length})</span>
                               )}
                             </SelectItem>
-                            <SelectItem value="uptime_kuma">
-                              Uptime Kuma
-                              {loadingExternal.uptime_kuma && <Loader2 className="h-3 w-3 animate-spin ml-2 inline" />}
-                              {!loadingExternal.uptime_kuma && externalClientsCache.uptime_kuma.length > 0 && (
-                                <span className="text-muted-foreground ml-1">({externalClientsCache.uptime_kuma.length})</span>
+                            <SelectItem value="checkmk">
+                              CheckMK
+                              {loadingExternal.checkmk && <Loader2 className="h-3 w-3 animate-spin ml-2 inline" />}
+                              {!loadingExternal.checkmk && externalClientsCache.checkmk.length > 0 && (
+                                <span className="text-muted-foreground ml-1">({externalClientsCache.checkmk.length})</span>
                               )}
                             </SelectItem>
                           </SelectContent>
@@ -722,11 +722,11 @@ export function ClientMappingsTab() {
                               <span className="text-muted-foreground ml-1">({externalClientsCache.tactical_rmm.length})</span>
                             )}
                           </SelectItem>
-                          <SelectItem value="uptime_kuma">
-                            Uptime Kuma
-                            {loadingExternal.uptime_kuma && <Loader2 className="h-3 w-3 animate-spin ml-2 inline" />}
-                            {!loadingExternal.uptime_kuma && externalClientsCache.uptime_kuma.length > 0 && (
-                              <span className="text-muted-foreground ml-1">({externalClientsCache.uptime_kuma.length})</span>
+                          <SelectItem value="checkmk">
+                            CheckMK
+                            {loadingExternal.checkmk && <Loader2 className="h-3 w-3 animate-spin ml-2 inline" />}
+                            {!loadingExternal.checkmk && externalClientsCache.checkmk.length > 0 && (
+                              <span className="text-muted-foreground ml-1">({externalClientsCache.checkmk.length})</span>
                             )}
                           </SelectItem>
                         </SelectContent>
