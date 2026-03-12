@@ -395,7 +395,7 @@ export default function MonitoringPage() {
                     <TableHead>Dispositivo</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>IP</TableHead>
-                    <TableHead>Uptime</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Última Verificação</TableHead>
                   </TableRow>
                 </TableHeader>
