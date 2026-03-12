@@ -470,6 +470,27 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
                     </div>
                   </div>
 
+                  {/* Button to load hosts using saved credentials (edit mode) */}
+                  {editingId && !testResult?.hosts && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLoadHosts}
+                      disabled={loadingHosts}
+                    >
+                      {loadingHosts ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                      Carregar Hosts disponíveis
+                    </Button>
+                  )}
+
+                  {/* Current host indicator when editing */}
+                  {editingId && form.cloud_host_id && !testResult?.hosts && (
+                    <p className="text-xs text-muted-foreground">
+                      Host vinculado atual: <code className="bg-muted px-1 rounded">{form.cloud_host_id}</code>
+                    </p>
+                  )}
+
                   {testResult?.hosts && (testResult.hosts as Array<{ id: string; name: string; model: string; device_count?: number }>).length > 0 && (
                     <div className="space-y-2">
                       <Label>Selecionar Host</Label>
