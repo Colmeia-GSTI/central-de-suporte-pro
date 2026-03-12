@@ -683,29 +683,31 @@ async function syncController(supabase: any, ctrl: UnifiController) {
       const siteId = siteRow?.id;
 
       // Fetch devices using v1 API
-      const rawDevices = await cloudGetDevices(apiKey, hostId);
-      console.log(`[${siteName}] Cloud API returned ${rawDevices.length} raw device(s)`);
+      const rawRows = await cloudGetDevices(apiKey, hostId);
+      const normalizedDevices = extractCloudDeviceRows(rawRows);
+      console.log(`[${siteName}] Cloud API returned ${rawRows.length} payload row(s), ${normalizedDevices.length} normalized device(s)`);
 
-      // Log first device structure for debugging (only keys)
-      if (rawDevices.length > 0) {
-        console.log(`[${siteName}] Sample device keys: ${Object.keys(rawDevices[0]).join(", ")}`);
+      // Log first normalized device structure for debugging (only keys)
+      if (normalizedDevices.length > 0) {
+        console.log(`[${siteName}] Sample normalized device keys: ${Object.keys(normalizedDevices[0]).join(", ")}`);
       }
 
       let deviceCount = 0;
       let totalClients = 0;
 
-      for (const rawDev of rawDevices) {
+      for (const rawDev of normalizedDevices) {
         const dev = parseCloudDevice(rawDev);
         const mac = dev.mac as string;
-        if (!mac) continue;
+        const externalId = mac || (dev.deviceId as string);
+        if (!externalId) continue;
 
-        const devName = dev.name as string;
-        const devType = mapDeviceType((dev.shortModel as string) || (dev.type as string) || "");
+        const devName = (dev.name as string) || externalId;
+        const devType = mapDeviceType((dev.shortModel as string) || (dev.type as string) || (dev.model as string) || "");
 
         const { data: existingList } = await supabase
           .from("monitored_devices")
           .select("id")
-          .eq("external_id", mac)
+          .eq("external_id", externalId)
           .eq("external_source", "unifi")
           .limit(1);
 
@@ -714,12 +716,12 @@ async function syncController(supabase: any, ctrl: UnifiController) {
           name: devName,
           hostname: dev.hostname as string,
           ip_address: dev.ip || null,
-          mac_address: mac,
+          mac_address: mac || null,
           model: dev.model || null,
           firmware_version: dev.version || null,
           is_online: dev.isOnline as boolean,
           device_type: devType,
-          external_id: mac,
+          external_id: externalId,
           external_source: "unifi",
           client_id: ctrl.client_id,
           site_id: siteId || null,
@@ -728,6 +730,8 @@ async function syncController(supabase: any, ctrl: UnifiController) {
             uptime: dev.uptime,
             num_sta: dev.numSta,
             short_model: dev.shortModel,
+            cloud_host_id: asString(rawDev.hostId),
+            cloud_host_name: asString(rawDev.hostName),
           },
         };
 
@@ -738,7 +742,7 @@ async function syncController(supabase: any, ctrl: UnifiController) {
         }
         devicesSynced++;
         deviceCount++;
-        totalClients += (dev.numSta as number) || 0;
+        totalClients += asNumber(dev.numSta);
       }
 
       // Update site with real counts
