@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Wifi, Plus, Trash2, RefreshCw, CheckCircle2, XCircle,
-  Clock, Globe, Cloud, AlertTriangle, Loader2, Eye, EyeOff,
+  Clock, Globe, Cloud, AlertTriangle, Loader2, Eye, EyeOff, Pencil,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -54,19 +54,19 @@ const EMPTY_FORM: ControllerForm = {
 export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ControllerForm>({ ...EMPTY_FORM });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; hosts?: unknown[]; sites?: unknown[] } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
 
-  // Fetch controllers for this client only
   const { data: controllers, isLoading } = useQuery({
     queryKey: ["unifi-controllers", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("unifi_controllers")
-        .select("id, name, client_id, connection_method, url, ddns_hostname, cloud_host_id, is_active, sync_interval_hours, last_sync_at, last_error, created_at")
+        .select("id, name, client_id, connection_method, url, ddns_hostname, cloud_host_id, is_active, sync_interval_hours, last_sync_at, last_error, created_at, username")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -74,46 +74,77 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
     },
   });
 
-  // Save controller
+  function invalidateAll() {
+    queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
+    queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
+    queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
+    queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
+  }
+
+  function resetForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM });
+    setTestResult(null);
+    setShowPassword(false);
+  }
+
+  function startEdit(ctrl: Record<string, unknown>) {
+    setEditingId(ctrl.id as string);
+    setForm({
+      name: (ctrl.name as string) || "",
+      connection_method: (ctrl.connection_method as "direct" | "cloud") || "direct",
+      url: (ctrl.url as string) || "",
+      username: (ctrl.username as string) || "",
+      password: "", // never pre-fill password
+      ddns_hostname: (ctrl.ddns_hostname as string) || "",
+      cloud_api_key: "", // never pre-fill
+      cloud_host_id: (ctrl.cloud_host_id as string) || "",
+      sync_interval_hours: (ctrl.sync_interval_hours as number) || 6,
+    });
+    setShowForm(true);
+    setTestResult(null);
+  }
+
+  // Save (insert or update)
   const saveMutation = useMutation({
     mutationFn: async (data: ControllerForm) => {
       const payload: Record<string, unknown> = {
         name: data.name,
-        client_id: clientId,
         connection_method: data.connection_method,
         sync_interval_hours: data.sync_interval_hours,
-        is_active: true,
       };
 
       if (data.connection_method === "direct") {
         payload.url = data.url;
         payload.username = data.username;
-        payload.password_encrypted = data.password;
+        if (data.password) payload.password_encrypted = data.password;
         payload.ddns_hostname = data.ddns_hostname || null;
       } else {
-        payload.cloud_api_key_encrypted = data.cloud_api_key;
+        if (data.cloud_api_key) payload.cloud_api_key_encrypted = data.cloud_api_key;
         payload.cloud_host_id = data.cloud_host_id || null;
       }
 
-      const { error } = await supabase.from("unifi_controllers").insert(payload);
-      if (error) throw error;
+      if (editingId) {
+        const { error } = await supabase.from("unifi_controllers").update(payload).eq("id", editingId);
+        if (error) throw error;
+      } else {
+        payload.client_id = clientId;
+        payload.is_active = true;
+        const { error } = await supabase.from("unifi_controllers").insert(payload);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      toast.success("Controller cadastrado com sucesso");
-      queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
-      queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
-      setShowForm(false);
-      setForm({ ...EMPTY_FORM });
-      setTestResult(null);
+      toast.success(editingId ? "Controller atualizado com sucesso" : "Controller cadastrado com sucesso");
+      invalidateAll();
+      resetForm();
     },
     onError: (err: Error) => {
       toast.error(`Erro ao salvar: ${err.message}`);
     },
   });
 
-  // Delete controller
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("unifi_controllers").delete().eq("id", id);
@@ -121,17 +152,13 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
     },
     onSuccess: () => {
       toast.success("Controller removido");
-      queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["unifi-controllers"] });
-      queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
+      invalidateAll();
     },
     onError: (err: Error) => {
       toast.error(`Erro ao remover: ${err.message}`);
     },
   });
 
-  // Toggle active
   const toggleMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error } = await supabase.from("unifi_controllers").update({ is_active }).eq("id", id);
@@ -142,7 +169,6 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
     },
   });
 
-  // Test connection
   async function handleTest() {
     setTesting(true);
     setTestResult(null);
@@ -170,6 +196,13 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
           sites: data.sites,
         });
         toast.success(data.message);
+
+        // Auto-fill name from real device/site data
+        if (!form.name || form.name.trim() === "") {
+          if (form.connection_method === "direct" && data.sites?.length > 0) {
+            setForm(prev => ({ ...prev, name: data.sites[0].name || prev.name }));
+          }
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
@@ -180,7 +213,17 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
     }
   }
 
-  // Manual sync
+  // Auto-fill name when selecting a cloud host
+  function handleHostSelect(hostId: string) {
+    const hosts = testResult?.hosts as Array<{ id: string; name: string; model: string }> | undefined;
+    const selectedHost = hosts?.find(h => h.id === hostId);
+    setForm(prev => ({
+      ...prev,
+      cloud_host_id: hostId,
+      name: selectedHost?.name && (!prev.name || prev.name.trim() === "") ? selectedHost.name : prev.name,
+    }));
+  }
+
   async function handleSync(controllerId: string) {
     setSyncing(controllerId);
     try {
@@ -192,9 +235,7 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
         toast.error(data.error);
       } else {
         toast.success(`Sincronização concluída: ${data.total_devices || 0} devices, ${data.total_alerts || 0} alertas`);
-        queryClient.invalidateQueries({ queryKey: ["unifi-controllers", clientId] });
-        queryClient.invalidateQueries({ queryKey: ["network-sites", clientId] });
-        queryClient.invalidateQueries({ queryKey: ["unifi-devices", clientId] });
+        invalidateAll();
         queryClient.invalidateQueries({ queryKey: ["network-topology", clientId] });
       }
     } catch (err: unknown) {
@@ -206,8 +247,8 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
   }
 
   const canSave = form.name && (
-    (form.connection_method === "direct" && form.url && form.username && form.password) ||
-    (form.connection_method === "cloud" && form.cloud_api_key)
+    (form.connection_method === "direct" && form.url && form.username && (form.password || editingId)) ||
+    (form.connection_method === "cloud" && (form.cloud_api_key || editingId))
   );
 
   return (
@@ -222,69 +263,87 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
             </div>
           </div>
           {!showForm && (
-            <Button onClick={() => setShowForm(true)} size="sm">
+            <Button onClick={() => { resetForm(); setShowForm(true); }} size="sm">
               <Plus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
           )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Add Form */}
+        {/* Add/Edit Form */}
         {showForm && (
           <Card className="border-dashed">
             <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">
+                  {editingId ? "Editar Controller" : "Novo Controller"}
+                </h3>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="ctrl-name">Nome do Controller</Label>
                 <Input
                   id="ctrl-name"
-                  placeholder="UDM Pro - Escritório Principal"
+                  placeholder="Será preenchido automaticamente ao testar"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  💡 Deixe em branco para usar o nome real do dispositivo
+                </p>
               </div>
 
               <Separator />
 
-              {/* Connection method */}
-              <div className="space-y-3">
-                <Label>Método de Conexão</Label>
-                <RadioGroup
-                  value={form.connection_method}
-                  onValueChange={(v) => setForm({ ...form, connection_method: v as "direct" | "cloud" })}
-                  className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-                >
-                  <Label
-                    htmlFor="method-direct"
-                    className={`flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${form.connection_method === "direct" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+              {/* Connection method - only show for new controllers */}
+              {!editingId && (
+                <div className="space-y-3">
+                  <Label>Método de Conexão</Label>
+                  <RadioGroup
+                    value={form.connection_method}
+                    onValueChange={(v) => setForm({ ...form, connection_method: v as "direct" | "cloud" })}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-3"
                   >
-                    <RadioGroupItem value="direct" id="method-direct" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        <span className="font-medium">IP Direto</span>
+                    <Label
+                      htmlFor="method-direct"
+                      className={`flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${form.connection_method === "direct" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                    >
+                      <RadioGroupItem value="direct" id="method-direct" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Globe className="h-4 w-4" />
+                          <span className="font-medium">IP Direto</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Conexão local via IP fixo ou DDNS. Suporta alarmes e topologia LLDP.
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Conexão local via IP fixo ou DDNS. Suporta alarmes e topologia LLDP.
-                      </p>
-                    </div>
-                  </Label>
-                  <Label
-                    htmlFor="method-cloud"
-                    className={`flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${form.connection_method === "cloud" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
-                  >
-                    <RadioGroupItem value="cloud" id="method-cloud" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Cloud className="h-4 w-4" />
-                        <span className="font-medium">UniFi Portal</span>
+                    </Label>
+                    <Label
+                      htmlFor="method-cloud"
+                      className={`flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${form.connection_method === "cloud" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                    >
+                      <RadioGroupItem value="cloud" id="method-cloud" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Cloud className="h-4 w-4" />
+                          <span className="font-medium">UniFi Portal</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Via API Key do Site Manager. Sem alarmes nem topologia.
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Via API Key do Site Manager. Sem alarmes nem topologia.
-                      </p>
-                    </div>
-                  </Label>
-                </RadioGroup>
-              </div>
+                    </Label>
+                  </RadioGroup>
+                </div>
+              )}
+
+              {editingId && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {form.connection_method === "direct" ? <Globe className="h-4 w-4" /> : <Cloud className="h-4 w-4" />}
+                  Método: {form.connection_method === "direct" ? "IP Direto" : "UniFi Portal"}
+                </div>
+              )}
 
               {/* Direct fields */}
               {form.connection_method === "direct" && (
@@ -320,13 +379,14 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="ctrl-pass">Senha</Label>
+                      <Label htmlFor="ctrl-pass">Senha {editingId && <span className="text-muted-foreground font-normal">(deixe em branco para manter)</span>}</Label>
                       <div className="relative">
                         <Input
                           id="ctrl-pass"
                           type={showPassword ? "text" : "password"}
                           value={form.password}
                           onChange={(e) => setForm({ ...form, password: e.target.value })}
+                          placeholder={editingId ? "••••••••" : ""}
                         />
                         <Button
                           type="button"
@@ -354,12 +414,12 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
               {form.connection_method === "cloud" && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="ctrl-apikey">API Key do Site Manager</Label>
+                    <Label htmlFor="ctrl-apikey">API Key do Site Manager {editingId && <span className="text-muted-foreground font-normal">(deixe em branco para manter)</span>}</Label>
                     <div className="relative">
                       <Input
                         id="ctrl-apikey"
                         type={showPassword ? "text" : "password"}
-                        placeholder="Gere em unifi.ui.com → Settings → API Keys"
+                        placeholder={editingId ? "••••••••" : "Gere em unifi.ui.com → Settings → API Keys"}
                         value={form.cloud_api_key}
                         onChange={(e) => setForm({ ...form, cloud_api_key: e.target.value })}
                       />
@@ -376,18 +436,18 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
                     </div>
                   </div>
 
-                  {testResult?.hosts && (testResult.hosts as Array<{ id: string; name: string; model: string }>).length > 0 && (
+                  {testResult?.hosts && (testResult.hosts as Array<{ id: string; name: string; model: string; device_count?: number }>).length > 0 && (
                     <div className="space-y-2">
                       <Label>Selecionar Host</Label>
                       <Select
                         value={form.cloud_host_id}
-                        onValueChange={(v) => setForm({ ...form, cloud_host_id: v })}
+                        onValueChange={handleHostSelect}
                       >
                         <SelectTrigger><SelectValue placeholder="Selecione o host..." /></SelectTrigger>
                         <SelectContent>
-                          {(testResult.hosts as Array<{ id: string; name: string; model: string }>).map((h) => (
+                          {(testResult.hosts as Array<{ id: string; name: string; model: string; device_count?: number }>).map((h) => (
                             <SelectItem key={h.id} value={h.id}>
-                              {h.name} ({h.model})
+                              {h.name} ({h.model}){h.device_count != null ? ` — ${h.device_count} devices` : ""}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -431,7 +491,7 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
 
               {/* Actions */}
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => { setShowForm(false); setForm({ ...EMPTY_FORM }); setTestResult(null); }}>
+                <Button variant="outline" onClick={resetForm}>
                   Cancelar
                 </Button>
                 <Button variant="secondary" onClick={handleTest} disabled={testing}>
@@ -439,8 +499,8 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
                   Testar Conexão
                 </Button>
                 <Button onClick={() => saveMutation.mutate(form)} disabled={!canSave || saveMutation.isPending}>
-                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Salvar
+                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : editingId ? <Pencil className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  {editingId ? "Atualizar" : "Salvar"}
                 </Button>
               </div>
             </CardContent>
@@ -474,6 +534,15 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
                       onCheckedChange={(v) => toggleMutation.mutate({ id: ctrl.id, is_active: v })}
                       aria-label="Ativar/Desativar"
                     />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => startEdit(ctrl)}
+                      disabled={showForm}
+                      aria-label="Editar controller"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
