@@ -816,15 +816,27 @@ async function syncController(supabase: any, ctrl: UnifiController) {
         totalClients += asNumber(dev.numSta);
       }
 
+      const cloudSites = await cloudGetSites(apiKey);
+      const matchingSites = cloudSites.filter((site) => {
+        const siteHostId = asString(site.hostId, site.host_id, asRecord(site.meta)?.hostId);
+        return hostIdsMatch(siteHostId, hostId || "");
+      });
+
+      const sitesDeviceCount = matchingSites.reduce((sum, site) => sum + getSiteDeviceCount(site), 0);
+      const sitesClientCount = matchingSites.reduce((sum, site) => sum + getSiteClientCount(site), 0);
+
+      const finalDeviceCount = Math.max(deviceCount, sitesDeviceCount);
+      const finalClientCount = Math.max(totalClients, sitesClientCount);
+
       // Update site with real counts
       if (siteId) {
         await supabase
           .from("network_sites")
-          .update({ device_count: deviceCount, client_count: totalClients, site_name: siteName })
+          .update({ device_count: finalDeviceCount, client_count: finalClientCount, site_name: siteName })
           .eq("id", siteId);
       }
 
-      console.log(`[${siteName}] Cloud sync complete: ${deviceCount} devices, ${totalClients} Wi-Fi clients`);
+      console.log(`[${siteName}] Cloud sync complete: ${finalDeviceCount} devices, ${finalClientCount} Wi-Fi clients`);
     }
 
     // Update controller status
