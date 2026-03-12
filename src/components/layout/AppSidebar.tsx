@@ -43,11 +43,6 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface MenuItemType {
   title: string;
@@ -231,20 +226,6 @@ export function AppSidebar() {
         </SidebarMenuButton>
       </SidebarMenuItem>
     );
-
-    // Wrap with tooltip if tooltip text exists
-    if (item.tooltip) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {menuContent}
-          </TooltipTrigger>
-          <TooltipContent side="right" className="max-w-xs">
-            <p>{item.tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
 
     return menuContent;
   };

@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -29,6 +29,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
   const [theme, setTheme] = useState<Theme>("system");
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Realtime subscriptions now handled globally by useUnifiedRealtime
 
@@ -105,7 +106,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
       <div className="min-h-[100dvh] flex w-full relative">
         <AppSidebar />
         
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 min-w-0 flex flex-col">
           {/* Premium Header */}
           <header className={cn(
             "h-14 md:h-16 glass-header sticky top-0 z-40",
@@ -185,13 +186,13 @@ export function AppLayout({ children, title }: AppLayoutProps) {
           </header>
           
           {/* Main content */}
-          <div className="flex-1 p-3 md:p-6 overflow-auto">
+          <div className="flex-1 p-3 md:p-6 overflow-auto overflow-x-hidden">
             {children}
           </div>
         </main>
         
         {/* Quick Actions FAB */}
-        <QuickActionsFAB />
+        {!location.pathname.startsWith("/settings") && <QuickActionsFAB />}
       </div>
     </SidebarProvider>
   );

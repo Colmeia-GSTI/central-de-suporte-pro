@@ -179,7 +179,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex gap-6">
+        <div className="flex gap-6 min-w-0">
           {/* Desktop sidebar nav */}
           <aside className="hidden md:block w-56 shrink-0">
             <div className="sticky top-20">
@@ -196,7 +196,7 @@ export default function SettingsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="fixed bottom-4 left-4 z-30 shadow-lg rounded-full h-12 px-4 gap-2 md:hidden bg-background"
+                  className="md:hidden h-11 px-4 gap-2 rounded-full bg-background border-border shadow-sm"
                 >
                   <Menu className="h-4 w-4" />
                   {activeLabel}
