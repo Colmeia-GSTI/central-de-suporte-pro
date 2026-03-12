@@ -679,7 +679,14 @@ serve(async (req) => {
       } else {
         const hosts = await cloudGetHosts(ctrl.cloud_api_key_encrypted);
         return new Response(
-          JSON.stringify({ success: true, hosts }),
+          JSON.stringify({
+            success: true,
+            hosts: hosts.map((h: Record<string, unknown>) => ({
+              id: getHostId(h),
+              name: getHostDisplayName(h),
+              model: getHostModel(h),
+            })),
+          }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
