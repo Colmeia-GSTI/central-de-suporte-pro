@@ -8,9 +8,10 @@ import { EvolutionApiConfigForm } from "./integrations/EvolutionApiConfigForm";
 import { TelegramConfigForm } from "./integrations/TelegramConfigForm";
 import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigForm";
 import { ResendConfigForm } from "./integrations/ResendConfigForm";
+import { UnifiConfigForm } from "./integrations/UnifiConfigForm";
 import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
 import { LogsViewerTab } from "./LogsViewerTab";
-import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail } from "lucide-react";
+import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail, Wifi } from "lucide-react";
 
 export function IntegrationsTab() {
   return (
