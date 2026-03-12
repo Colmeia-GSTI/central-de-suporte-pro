@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 15000;
+const CLOUD_BASE = "https://api.ui.com/v1";
 
 interface UnifiController {
   id: string;
@@ -25,7 +26,6 @@ interface UnifiController {
   last_error: string | null;
 }
 
-// Severity mapping for UniFi alarm keys
 const CRITICAL_ALARMS = new Set([
   "EVT_LU_DISCONNECTED", "EVT_GW_WANTransition",
   "EVT_AP_Lost", "EVT_SW_Lost", "EVT_GW_Lost",
@@ -45,20 +45,52 @@ function mapAlarmSeverity(key: string): "critical" | "warning" | "info" {
 }
 
 function mapDeviceType(type: string): string {
-  switch (type) {
-    case "ugw": case "udm": case "uxg": return "gateway";
-    case "usw": return "switch";
-    case "uap": return "access_point";
-    default: return "other";
-  }
+  const t = (type || "").toLowerCase();
+  if (t.includes("ugw") || t.includes("udm") || t.includes("uxg") || t.includes("ucg")) return "gateway";
+  if (t.includes("usw") || t.includes("usl")) return "switch";
+  if (t.includes("uap") || t.includes("u6") || t.includes("u7")) return "access_point";
+  return "other";
+}
+
+// Map shortModel to a friendly product name
+function mapModelName(shortModel: string): string {
+  const m: Record<string, string> = {
+    "UCGU": "Cloud Gateway Ultra",
+    "UCGMAX": "Cloud Gateway Max",
+    "UDM": "UniFi Dream Machine",
+    "UDMPRO": "UniFi Dream Machine Pro",
+    "UDMSE": "UniFi Dream Machine SE",
+    "UDMPROSE": "UniFi Dream Machine Pro SE",
+    "UDMPROMAX": "UniFi Dream Machine Pro Max",
+    "UDR": "UniFi Dream Router",
+    "UXG-PRO": "UniFi Next-Gen Gateway Pro",
+    "USW-24-POE": "Switch 24 PoE",
+    "USW-48-POE": "Switch 48 PoE",
+    "USW-PRO-24-POE": "Switch Pro 24 PoE",
+    "USW-LITE-16-POE": "Switch Lite 16 PoE",
+    "USW-LITE-8-POE": "Switch Lite 8 PoE",
+    "USW-FLEX": "Switch Flex",
+    "USW-FLEX-MINI": "Switch Flex Mini",
+    "U6-PRO": "U6 Pro",
+    "U6-LITE": "U6 Lite",
+    "U6-LR": "U6 Long Range",
+    "U6-PLUS": "U6+",
+    "U6-ENTERPRISE": "U6 Enterprise",
+    "U6-MESH": "U6 Mesh",
+    "U7-PRO": "U7 Pro",
+    "U7-PRO-MAX": "U7 Pro Max",
+    "UAP-AC-PRO": "UAP AC Pro",
+    "UAP-AC-LITE": "UAP AC Lite",
+    "UAP-AC-LR": "UAP AC LR",
+  };
+  return m[shortModel?.toUpperCase()] || shortModel || "Unknown";
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
+    return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -95,7 +127,7 @@ async function directLogout(baseUrl: string, sessionCookie: string): Promise<voi
     });
     await res.text();
   } catch {
-    // Ignore logout errors
+    // Ignore
   }
 }
 
@@ -147,20 +179,69 @@ async function directGetHealth(baseUrl: string, cookie: string, siteCode: string
   return data.data || [];
 }
 
-// ========== CLOUD METHOD ==========
-async function cloudGetHosts(apiKey: string): Promise<any[]> {
-  const response = await fetchWithTimeout("https://api.ui.com/ea/hosts", {
-    headers: { "X-API-KEY": apiKey, Accept: "application/json" },
-  });
-  if (!response.ok) {
-    const t = await response.text();
-    throw new Error(`Cloud API falhou: ${response.status} ${t}`);
-  }
-  const data = await response.json();
-  return data.data || data || [];
+// ========== CLOUD METHOD (Site Manager API v1) ==========
+function cloudHeaders(apiKey: string): Record<string, string> {
+  return { "X-API-KEY": apiKey, Accept: "application/json" };
 }
 
-// Extract friendly name from a UniFi Cloud host object
+async function cloudGetHosts(apiKey: string): Promise<any[]> {
+  const allHosts: any[] = [];
+  let nextToken: string | undefined;
+
+  // Paginate through all hosts
+  do {
+    const url = new URL(`${CLOUD_BASE}/hosts`);
+    url.searchParams.set("pageSize", "200");
+    if (nextToken) url.searchParams.set("nextToken", nextToken);
+
+    const response = await fetchWithTimeout(url.toString(), {
+      headers: cloudHeaders(apiKey),
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      throw new Error(`Cloud API falhou (hosts): ${response.status} ${t}`);
+    }
+
+    const json = await response.json();
+    const hosts = json.data || [];
+    allHosts.push(...hosts);
+    nextToken = json.nextToken;
+  } while (nextToken);
+
+  return allHosts;
+}
+
+async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
+  const allDevices: any[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const url = new URL(`${CLOUD_BASE}/devices`);
+    url.searchParams.append("hostIds[]", hostId);
+    url.searchParams.set("pageSize", "200");
+    if (nextToken) url.searchParams.set("nextToken", nextToken);
+
+    const response = await fetchWithTimeout(url.toString(), {
+      headers: cloudHeaders(apiKey),
+    });
+
+    if (!response.ok) {
+      const t = await response.text();
+      console.warn(`[cloudGetDevices] ${response.status}: ${t}`);
+      return allDevices;
+    }
+
+    const json = await response.json();
+    const devices = json.data || [];
+    allDevices.push(...devices);
+    nextToken = json.nextToken;
+  } while (nextToken);
+
+  return allDevices;
+}
+
+// Extract fields from a Cloud host object (nested reportedState/userData)
 function getHostDisplayName(h: Record<string, unknown>): string {
   const rs = h.reportedState as Record<string, unknown> | undefined;
   const ud = h.userData as Record<string, unknown> | undefined;
@@ -169,47 +250,45 @@ function getHostDisplayName(h: Record<string, unknown>): string {
 
 function getHostModel(h: Record<string, unknown>): string {
   const rs = h.reportedState as Record<string, unknown> | undefined;
-  return (rs?.model as string) || (h.model as string) || "Unknown";
+  const shortModel = (rs?.shortModel as string) || (rs?.model as string) || (h.model as string) || "";
+  return mapModelName(shortModel);
+}
+
+function getHostShortModel(h: Record<string, unknown>): string {
+  const rs = h.reportedState as Record<string, unknown> | undefined;
+  return (rs?.shortModel as string) || (rs?.model as string) || (h.model as string) || "";
 }
 
 function getHostId(h: Record<string, unknown>): string {
   return (h.id as string) || (h._id as string) || "";
 }
 
-// Parse a Cloud device from nested reportedState structure
+// Parse a Cloud device from the /v1/devices response
 function parseCloudDevice(raw: Record<string, unknown>): Record<string, unknown> {
+  // The v1 API may have different nesting than the old /ea/ API
+  // Try both flat and nested structures
   const rs = raw.reportedState as Record<string, unknown> | undefined;
   const ud = raw.userData as Record<string, unknown> | undefined;
-  const nc = rs?.networkConfig as Record<string, unknown> | undefined;
+  const nc = (rs?.networkConfig || raw.networkConfig) as Record<string, unknown> | undefined;
+  const uidb = raw.uidb as Record<string, unknown> | undefined;
 
-  const mac = (rs?.mac as string) || (raw.mac as string) || (raw._id as string) || "";
+  const mac = (raw.mac as string) || (rs?.mac as string) || (raw._id as string) || "";
   const name = (ud?.name as string) || (rs?.name as string) || (rs?.hostname as string) || (raw.name as string) || mac;
-  const model = (rs?.model as string) || (raw.model as string) || "";
-  const ip = (rs?.ip as string) || (nc?.ip as string) || (raw.ip as string) || null;
-  const version = (rs?.version as string) || (raw.version as string) || null;
-  const type = (rs?.type as string) || (raw.type as string) || "";
+  const shortModel = (raw.shortModel as string) || (rs?.shortModel as string) || (uidb?.shortnames as string[])?.at(0) || (raw.model as string) || (rs?.model as string) || "";
+  const model = mapModelName(shortModel) || shortModel;
+  const ip = (raw.ip as string) || (rs?.ip as string) || (nc?.ip as string) || null;
+  const version = (raw.version as string) || (rs?.version as string) || (raw.firmwareVersion as string) || null;
+  const type = shortModel; // We'll use shortModel for type mapping
   const hostname = (rs?.hostname as string) || (raw.hostname as string) || name;
-  const uptime = (rs?.uptime as number) || (raw.uptime as number) || 0;
-  const numSta = (rs?.num_sta as number) || (raw.num_sta as number) || 0;
+  const uptime = (raw.uptime as number) || (rs?.uptime as number) || 0;
+  const numSta = (raw.numSta as number) || (rs?.num_sta as number) || (raw.num_sta as number) || 0;
 
-  // Determine online status: state=1 (direct API), or check reportedState presence
-  const stateVal = (rs?.state as number) ?? (raw.state as number) ?? null;
-  const statusStr = (rs?.status as string) || (raw.status as string) || "";
-  const isOnline = stateVal === 1 || statusStr === "online" || (rs !== undefined && stateVal === null && statusStr === "");
+  // Online status
+  const stateVal = raw.state ?? rs?.state ?? null;
+  const statusStr = (raw.status as string) || (rs?.status as string) || "";
+  const isOnline = stateVal === 1 || statusStr === "online" || statusStr === "connected";
 
-  return { mac, name, model, ip, version, type, hostname, uptime, numSta, isOnline };
-}
-
-async function cloudGetDevices(apiKey: string, hostId: string): Promise<any[]> {
-  const response = await fetchWithTimeout(`https://api.ui.com/ea/sites/${hostId}/devices`, {
-    headers: { "X-API-KEY": apiKey, Accept: "application/json" },
-  });
-  if (!response.ok) {
-    await response.text();
-    return [];
-  }
-  const data = await response.json();
-  return data.data || data || [];
+  return { mac, name, model, shortModel, ip, version, type, hostname, uptime, numSta, isOnline };
 }
 
 // ========== SYNC LOGIC ==========
@@ -235,14 +314,11 @@ async function syncController(supabase: any, ctrl: UnifiController) {
         const sites = await directGetSites(baseUrl, cookie);
         console.log(`[${ctrl.name}] Found ${sites.length} sites`);
 
-        // Auto-update controller name from first site if generic
+        // Auto-update controller name from first site
         if (sites.length > 0) {
           const firstSiteName = sites[0].desc || sites[0].name || ctrl.name;
           if (firstSiteName && firstSiteName !== ctrl.name) {
-            await supabase
-              .from("unifi_controllers")
-              .update({ name: firstSiteName })
-              .eq("id", ctrl.id);
+            await supabase.from("unifi_controllers").update({ name: firstSiteName }).eq("id", ctrl.id);
           }
         }
 
@@ -310,7 +386,6 @@ async function syncController(supabase: any, ctrl: UnifiController) {
             }
             devicesSynced++;
 
-            // Extract LLDP topology
             if (dev.lldp_table && Array.isArray(dev.lldp_table) && siteId) {
               for (const lldp of dev.lldp_table) {
                 await supabase.from("network_topology").upsert({
@@ -328,7 +403,6 @@ async function syncController(supabase: any, ctrl: UnifiController) {
             }
           }
 
-          // Collect alarms
           const alarms = await directGetAlarms(baseUrl, cookie, siteCode);
           alarmsCollected += alarms.length;
 
@@ -370,21 +444,13 @@ async function syncController(supabase: any, ctrl: UnifiController) {
             }
           }
 
-          // Update health status
           const health = await directGetHealth(baseUrl, cookie, siteCode);
           if (health.length > 0 && siteId) {
             const healthMap: Record<string, any> = {};
             for (const h of health) {
-              healthMap[h.subsystem] = {
-                status: h.status,
-                num_adopted: h.num_adopted,
-                num_sta: h.num_sta,
-              };
+              healthMap[h.subsystem] = { status: h.status, num_adopted: h.num_adopted, num_sta: h.num_sta };
             }
-            await supabase
-              .from("network_sites")
-              .update({ health_status: healthMap })
-              .eq("id", siteId);
+            await supabase.from("network_sites").update({ health_status: healthMap }).eq("id", siteId);
           }
         }
       } finally {
@@ -401,34 +467,25 @@ async function syncController(supabase: any, ctrl: UnifiController) {
       let hostId = ctrl.cloud_host_id;
       let hostRealName: string | null = null;
 
+      const hosts = await cloudGetHosts(apiKey);
       if (!hostId) {
-        const hosts = await cloudGetHosts(apiKey);
         if (hosts.length === 0) throw new Error("Nenhum host encontrado na conta UniFi Cloud");
         hostId = getHostId(hosts[0]);
         hostRealName = getHostDisplayName(hosts[0]);
       } else {
-        // Fetch hosts to get real name for the configured host
-        try {
-          const hosts = await cloudGetHosts(apiKey);
-          const matched = hosts.find((h: Record<string, unknown>) => getHostId(h) === hostId);
-          if (matched) hostRealName = getHostDisplayName(matched);
-        } catch {
-          // Non-critical: keep existing name
-        }
+        const matched = hosts.find((h: Record<string, unknown>) => getHostId(h) === hostId);
+        if (matched) hostRealName = getHostDisplayName(matched);
       }
 
-      // Auto-update controller name with the real host name
+      // Auto-update controller name
       if (hostRealName && hostRealName !== ctrl.name) {
-        await supabase
-          .from("unifi_controllers")
-          .update({ name: hostRealName })
-          .eq("id", ctrl.id);
+        await supabase.from("unifi_controllers").update({ name: hostRealName }).eq("id", ctrl.id);
         console.log(`[${ctrl.name}] Updated controller name to: ${hostRealName}`);
       }
 
       const siteName = hostRealName || ctrl.name;
 
-      // Create/update default site entry for cloud
+      // Upsert default site
       const { data: siteRow } = await supabase
         .from("network_sites")
         .upsert({
@@ -443,15 +500,25 @@ async function syncController(supabase: any, ctrl: UnifiController) {
 
       const siteId = siteRow?.id;
 
+      // Fetch devices using v1 API
       const rawDevices = await cloudGetDevices(apiKey, hostId);
+      console.log(`[${siteName}] Cloud API returned ${rawDevices.length} raw device(s)`);
+
+      // Log first device structure for debugging (only keys)
+      if (rawDevices.length > 0) {
+        console.log(`[${siteName}] Sample device keys: ${Object.keys(rawDevices[0]).join(", ")}`);
+      }
+
       let deviceCount = 0;
       let totalClients = 0;
 
       for (const rawDev of rawDevices) {
         const dev = parseCloudDevice(rawDev);
         const mac = dev.mac as string;
+        if (!mac) continue;
+
         const devName = dev.name as string;
-        const devType = mapDeviceType((dev.type as string) || "");
+        const devType = mapDeviceType((dev.shortModel as string) || (dev.type as string) || "");
 
         const { data: existingList } = await supabase
           .from("monitored_devices")
@@ -478,6 +545,7 @@ async function syncController(supabase: any, ctrl: UnifiController) {
           service_data: {
             uptime: dev.uptime,
             num_sta: dev.numSta,
+            short_model: dev.shortModel,
           },
         };
 
@@ -495,15 +563,11 @@ async function syncController(supabase: any, ctrl: UnifiController) {
       if (siteId) {
         await supabase
           .from("network_sites")
-          .update({
-            device_count: deviceCount,
-            client_count: totalClients,
-            site_name: siteName,
-          })
+          .update({ device_count: deviceCount, client_count: totalClients, site_name: siteName })
           .eq("id", siteId);
       }
 
-      console.log(`[${siteName}] Cloud sync: ${deviceCount} devices, ${totalClients} Wi-Fi clients`);
+      console.log(`[${siteName}] Cloud sync complete: ${deviceCount} devices, ${totalClients} Wi-Fi clients`);
     }
 
     // Update controller status
@@ -516,11 +580,7 @@ async function syncController(supabase: any, ctrl: UnifiController) {
     status = "error";
     errorMessage = e.name === "AbortError" ? "Timeout ao conectar ao controller" : e.message;
     console.error(`[${ctrl.name}] Sync error:`, errorMessage);
-
-    await supabase
-      .from("unifi_controllers")
-      .update({ last_error: errorMessage })
-      .eq("id", ctrl.id);
+    await supabase.from("unifi_controllers").update({ last_error: errorMessage }).eq("id", ctrl.id);
   }
 
   const durationMs = Date.now() - startTime;
@@ -607,7 +667,7 @@ serve(async (req) => {
         try {
           const hosts = await cloudGetHosts(cloud_api_key);
 
-          // For each host, try to get device count for preview
+          // For each host, get device count
           const hostsWithCounts = await Promise.all(
             hosts.map(async (h: Record<string, unknown>) => {
               const hId = getHostId(h);
@@ -622,6 +682,7 @@ serve(async (req) => {
                 id: hId,
                 name: getHostDisplayName(h),
                 model: getHostModel(h),
+                shortModel: getHostShortModel(h),
                 device_count: deviceCount,
               };
             })
@@ -685,6 +746,7 @@ serve(async (req) => {
               id: getHostId(h),
               name: getHostDisplayName(h),
               model: getHostModel(h),
+              shortModel: getHostShortModel(h),
             })),
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -703,7 +765,6 @@ serve(async (req) => {
           .eq("id", controllerId)
           .eq("is_active", true)
           .single();
-
         if (data) controllers = [data];
       } else {
         const { data } = await supabase
