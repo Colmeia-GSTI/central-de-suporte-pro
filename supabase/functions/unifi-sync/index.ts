@@ -46,23 +46,68 @@ function mapAlarmSeverity(key: string): "critical" | "warning" | "info" {
 
 function mapDeviceType(type: string): string {
   const t = (type || "").toLowerCase();
-  if (t.includes("ugw") || t.includes("udm") || t.includes("uxg") || t.includes("ucg")) return "gateway";
-  if (t.includes("usw") || t.includes("usl")) return "switch";
-  if (t.includes("uap") || t.includes("u6") || t.includes("u7")) return "access_point";
+  if (t.includes("ugw") || t.includes("udm") || t.includes("uxg") || t.includes("ucg") || t.includes("gateway") || t.includes("dream") || t.includes("router")) return "gateway";
+  if (t.includes("usw") || t.includes("usl") || t.includes("switch")) return "switch";
+  if (t.includes("uap") || t.includes("u6") || t.includes("u7") || t.includes("access") || t.includes("wifi") || t.includes("wi-fi")) return "access_point";
   return "other";
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return "";
+}
+
+function asNumber(...values: unknown[]): number {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function normalizeModelCode(model: string): string {
+  return model.trim().toUpperCase().replace(/\s+/g, "-").replace(/_/g, "-");
+}
+
+function inferModelCodeFromText(text: string): string {
+  const normalized = normalizeModelCode(text);
+  if (!normalized) return "";
+
+  const matches = normalized.match(/(UCG-ULTRA|UCGU|UCG-MAX|UCGMAX|UDM-PRO-SE|UDM-PRO-MAX|UDM-PRO|UDMSE|UDR|UNVR|UXG-PRO|USW-[A-Z0-9-]+|U7-[A-Z0-9-]+|U6-[A-Z0-9-]+|UAP-[A-Z0-9-]+)/);
+  if (matches?.[1]) return matches[1];
+
+  return "";
+}
+
 // Map shortModel to a friendly product name
-function mapModelName(shortModel: string): string {
+function mapModelName(rawModel: string): string {
+  const model = normalizeModelCode(rawModel);
   const m: Record<string, string> = {
     "UCGU": "Cloud Gateway Ultra",
+    "UCG-ULTRA": "Cloud Gateway Ultra",
     "UCGMAX": "Cloud Gateway Max",
+    "UCG-MAX": "Cloud Gateway Max",
     "UDM": "UniFi Dream Machine",
     "UDMPRO": "UniFi Dream Machine Pro",
+    "UDM-PRO": "UniFi Dream Machine Pro",
     "UDMSE": "UniFi Dream Machine SE",
+    "UDM-SE": "UniFi Dream Machine SE",
     "UDMPROSE": "UniFi Dream Machine Pro SE",
+    "UDM-PRO-SE": "UniFi Dream Machine Pro SE",
     "UDMPROMAX": "UniFi Dream Machine Pro Max",
+    "UDM-PRO-MAX": "UniFi Dream Machine Pro Max",
     "UDR": "UniFi Dream Router",
+    "UNVR": "UniFi Network Video Recorder",
     "UXG-PRO": "UniFi Next-Gen Gateway Pro",
     "USW-24-POE": "Switch 24 PoE",
     "USW-48-POE": "Switch 48 PoE",
@@ -83,7 +128,66 @@ function mapModelName(shortModel: string): string {
     "UAP-AC-LITE": "UAP AC Lite",
     "UAP-AC-LR": "UAP AC LR",
   };
-  return m[shortModel?.toUpperCase()] || shortModel || "Unknown";
+
+  if (!model) return "Modelo não identificado";
+  return m[model] || rawModel || model;
+}
+
+function extractResponseRows(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload.map(asRecord).filter((row): row is Record<string, unknown> => row !== null);
+  }
+
+  const payloadRecord = asRecord(payload);
+  if (!payloadRecord) return [];
+
+  for (const key of ["items", "results", "rows", "hosts", "devices", "data"]) {
+    const candidate = payloadRecord[key];
+    if (Array.isArray(candidate)) {
+      return candidate.map(asRecord).filter((row): row is Record<string, unknown> => row !== null);
+    }
+  }
+
+  return [payloadRecord];
+}
+
+function looksLikeCloudDevice(row: Record<string, unknown>): boolean {
+  const rs = asRecord(row.reportedState);
+  return Boolean(
+    asString(row.mac, row.id, row._id, row.deviceId) ||
+    asString(row.model, row.shortModel, row.type, row.deviceType) ||
+    asString(rs?.mac, rs?.model, rs?.shortModel, rs?.ip, rs?.status)
+  );
+}
+
+function extractCloudDeviceRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const devices: Record<string, unknown>[] = [];
+
+  for (const row of rows) {
+    const hostId = asString(row.hostId, row.host_id, row.hostID);
+    const hostName = asString(row.hostName, row.host_name);
+
+    let nestedFound = false;
+    for (const key of ["devices", "items", "results", "data"]) {
+      const candidate = row[key];
+      if (!Array.isArray(candidate)) continue;
+
+      nestedFound = true;
+      for (const nested of candidate) {
+        const nestedRecord = asRecord(nested);
+        if (!nestedRecord) continue;
+        if (!nestedRecord.hostId && hostId) nestedRecord.hostId = hostId;
+        if (!nestedRecord.hostName && hostName) nestedRecord.hostName = hostName;
+        devices.push(nestedRecord);
+      }
+    }
+
+    if (!nestedFound && looksLikeCloudDevice(row)) {
+      devices.push(row);
+    }
+  }
+
+  return devices;
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = TIMEOUT_MS): Promise<Response> {
