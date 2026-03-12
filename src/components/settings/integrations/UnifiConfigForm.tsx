@@ -214,6 +214,39 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
     }
   }
 
+  // Load hosts from saved credentials (for editing)
+  async function handleLoadHosts() {
+    if (!editingId) return;
+    setLoadingHosts(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("unifi-sync", {
+        body: { action: "list_sites", controller_id: editingId },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+      if (data.hosts) {
+        setTestResult(prev => ({
+          success: true,
+          message: prev?.message || "Hosts carregados",
+          hosts: data.hosts.map((h: Record<string, unknown>) => ({
+            id: (h.id as string) || (h._id as string) || "",
+            name: (h.name as string) || "Unknown",
+            model: (h.model as string) || "Unknown",
+          })),
+        }));
+        toast.success(`${data.hosts.length} host(s) encontrado(s)`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar hosts";
+      toast.error(msg);
+    } finally {
+      setLoadingHosts(false);
+    }
+  }
+
   // Auto-fill name when selecting a cloud host
   function handleHostSelect(hostId: string) {
     const hosts = testResult?.hosts as Array<{ id: string; name: string; model: string }> | undefined;
