@@ -1,46 +1,44 @@
 
 
-# Correção: E0014 falso positivo — permitir cancelar e reemitir NFS-e com erro
+# Plano Revisado: Integração UniFi UDM - Alarmes + Monitoramento + Topologia
 
-## Problema
+## Status: ✅ IMPLEMENTADO (Fases 1-5)
 
-Quando uma NFS-e falha no Asaas com erro E0014 ("DPS duplicada"), o sistema bloqueia completamente a reemissão. Porém, o E0014 pode ser um falso positivo — a nota não existe de fato no Portal Nacional, é apenas um erro interno do Asaas. O usuário fica preso sem opção de corrigir.
+### Fase 1: Database ✅
+- 4 tabelas criadas: `unifi_controllers`, `network_sites`, `network_topology`, `unifi_sync_logs`
+- `monitored_devices` expandido com `mac_address`, `firmware_version`, `model`, `site_id`
+- RLS `is_staff()` + `service_role` em todas
 
-O fluxo atual (linhas 554-654 do `asaas-nfse/index.ts`):
-1. Detecta `asaas_invoice_id` existente → consulta status no Asaas
-2. Se status = ERROR e código = E0014 → lança erro 409 e bloqueia
-3. Frontend exibe toast "use Vincular Nota Existente" — mas não há nota para vincular
+### Fase 2: Edge Function `unifi-sync` ✅
+- Ações: `test`, `list_sites`, `sync`
+- Método Direct: login/sites/devices/LLDP/alarms/health/logout
+- Método Cloud: hosts/devices via api.ui.com
+- Alarmes mapeados para `monitoring_alerts` existente
+- Timeout 10s, log em `unifi_sync_logs`
 
-## Solução
+### Fase 3: UI Config ✅
+- `UnifiConfigForm.tsx` com RadioGroup Direct/Cloud
+- Campos condicionais, teste de conexão, sync manual
+- Aba "Rede" adicionada ao `IntegrationsTab.tsx`
+- `IntegrationStatusPanel` atualizado com UniFi
 
-### 1. Edge function: adicionar ação `retry_failed` ao `asaas-nfse`
-Nova ação que:
-- Cancela/deleta a invoice com erro no Asaas (DELETE `/invoices/{id}`)
-- Limpa o `asaas_invoice_id` do registro `nfse_history`
-- Redefine status para "pendente"
-- Registra evento no `nfse_event_logs`
-- Retorna sucesso para que o frontend possa reemitir em seguida
+### Fase 4: Client Network Tab ✅
+- `ClientNetworkTab.tsx` com resumo de sites/devices/Wi-Fi
+- `NetworkTopologyMap.tsx` com SVG hierárquico (Gateway→Switch→AP)
+- Aba "Rede" no `ClientDetailPage.tsx`
 
-### 2. Edge function: relaxar bloqueio E0014 no `emit`
-Adicionar parâmetro `force_new_emission: true` que, quando presente:
-- Ignora a verificação de `asaas_invoice_id` existente
-- Permite criar nova invoice no Asaas do zero
-- Usado internamente após o `retry_failed` limpar o registro
+### Fase 5: CRON ✅
+- pg_cron configurado: `unifi-sync-hourly` a cada hora
+- Edge Function verifica `sync_interval_hours` internamente
 
-### 3. Frontend: `BillingErrorsPanel` — botão "Cancelar e Reemitir"
-No `handleReprocessNfse`, quando o erro retornado contém "E0014" ou "DPS_DUPLICADA":
-- Em vez de exibir toast genérico, oferecer ação "Cancelar nota com erro e reemitir"
-- Fluxo: chama `retry_failed` → depois chama `emit` normalmente
-- Toast de sucesso: "Nota anterior cancelada. Reemissão em andamento."
-
-### 4. Frontend: `NfseDetailsSheet` — mesma lógica para reenvio individual
-Atualizar o handler de reenvio para detectar E0014 e oferecer a mesma opção.
-
-## Arquivos modificados
-
+## Arquivos Criados/Modificados
 | Arquivo | Ação |
 |---|---|
-| `supabase/functions/asaas-nfse/index.ts` | Adicionar ação `retry_failed`; adicionar param `force_new_emission` no `emit` |
-| `src/components/billing/BillingErrorsPanel.tsx` | Detectar E0014 no reprocessamento e oferecer "cancelar e reemitir" |
-| `src/components/nfse/NfseActionsMenu.tsx` | Mesma lógica de retry para E0014 no reenvio |
-
+| `supabase/functions/unifi-sync/index.ts` | Criado |
+| `src/components/settings/integrations/UnifiConfigForm.tsx` | Criado |
+| `src/components/clients/ClientNetworkTab.tsx` | Criado |
+| `src/components/clients/NetworkTopologyMap.tsx` | Criado |
+| `src/components/settings/IntegrationsTab.tsx` | Modificado (aba Rede) |
+| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Modificado (UniFi) |
+| `src/pages/clients/ClientDetailPage.tsx` | Modificado (aba Rede) |
+| `supabase/config.toml` | Modificado (unifi-sync) |
