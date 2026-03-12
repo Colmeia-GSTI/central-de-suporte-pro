@@ -57,6 +57,7 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ControllerForm>({ ...EMPTY_FORM });
   const [testing, setTesting] = useState(false);
+  const [loadingHosts, setLoadingHosts] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; hosts?: unknown[]; sites?: unknown[] } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -210,6 +211,39 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
       toast.error(msg);
     } finally {
       setTesting(false);
+    }
+  }
+
+  // Load hosts from saved credentials (for editing)
+  async function handleLoadHosts() {
+    if (!editingId) return;
+    setLoadingHosts(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("unifi-sync", {
+        body: { action: "list_sites", controller_id: editingId },
+      });
+      if (error) throw error;
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+      if (data.hosts) {
+        setTestResult(prev => ({
+          success: true,
+          message: prev?.message || "Hosts carregados",
+          hosts: data.hosts.map((h: Record<string, unknown>) => ({
+            id: (h.id as string) || (h._id as string) || "",
+            name: (h.name as string) || "Unknown",
+            model: (h.model as string) || "Unknown",
+          })),
+        }));
+        toast.success(`${data.hosts.length} host(s) encontrado(s)`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar hosts";
+      toast.error(msg);
+    } finally {
+      setLoadingHosts(false);
     }
   }
 
@@ -435,6 +469,27 @@ export function UnifiConfigForm({ clientId }: UnifiConfigFormProps) {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Button to load hosts using saved credentials (edit mode) */}
+                  {editingId && !testResult?.hosts && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLoadHosts}
+                      disabled={loadingHosts}
+                    >
+                      {loadingHosts ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                      Carregar Hosts disponíveis
+                    </Button>
+                  )}
+
+                  {/* Current host indicator when editing */}
+                  {editingId && form.cloud_host_id && !testResult?.hosts && (
+                    <p className="text-xs text-muted-foreground">
+                      Host vinculado atual: <code className="bg-muted px-1 rounded">{form.cloud_host_id}</code>
+                    </p>
+                  )}
 
                   {testResult?.hosts && (testResult.hosts as Array<{ id: string; name: string; model: string; device_count?: number }>).length > 0 && (
                     <div className="space-y-2">
