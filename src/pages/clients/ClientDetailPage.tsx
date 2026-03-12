@@ -278,6 +278,11 @@ export default function ClientDetailPage() {
             <ClientAssetsList clientId={id!} />
           </TabsContent>
 
+          {/* Network Tab */}
+          <TabsContent value="network">
+            <ClientNetworkTab clientId={id!} />
+          </TabsContent>
+
           {/* Technicians Tab */}
           <TabsContent value="technicians">
             <ClientTechniciansList clientId={id!} />
