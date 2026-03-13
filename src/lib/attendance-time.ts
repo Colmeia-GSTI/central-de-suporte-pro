@@ -26,6 +26,17 @@ export interface AttendanceData {
  *  Caps open sessions at resolved_at to prevent time inflation on closed tickets. */
 export function calcWorkedTimeMs(data: AttendanceData, now: Date = new Date()): number {
   const cap = data.resolved_at ? new Date(data.resolved_at).getTime() : now.getTime();
+
+  // Fallback: no sessions but ticket has started_at (legacy data or silent insert failure)
+  if (data.sessions.length === 0 && data.started_at) {
+    const activeStatuses = ["in_progress", "paused", "waiting_third_party", "no_contact"];
+    if (data.status && activeStatuses.includes(data.status)) {
+      const start = new Date(data.started_at).getTime();
+      const pausedMs = calcPausedTimeMs(data, now);
+      return Math.max(0, cap - start - pausedMs);
+    }
+  }
+
   let total = 0;
   for (const s of data.sessions) {
     const start = new Date(s.started_at).getTime();
