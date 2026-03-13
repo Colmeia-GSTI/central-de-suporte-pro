@@ -193,10 +193,11 @@ export function TicketResolveDialog({
       if (ticketError) throw ticketError;
       
       // 3. Register in history with total time
-      const finalTotal = totalMinutes + extraMins;
+      const workedInfo = workedMinutes > 0 ? `Tempo trabalhado: ${formatDuration(workedMinutes)}` : "";
       const autoInfo = autoElapsedMinutes > 0 ? `Tempo total (abertura → agora): ${formatDuration(autoElapsedMinutes)}` : "";
-      const manualInfo = finalTotal > 0 ? `Tempo registrado: ${formatDuration(finalTotal)}` : "";
-      const timeInfo = [autoInfo, manualInfo].filter(Boolean).join(" | ");
+      const extraInfo = extraMins > 0 ? `Tempo extra: ${formatDuration(extraMins)}` : "";
+      const timeInfo = [workedInfo, autoInfo, extraInfo].filter(Boolean).join(" | ");
+      const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
       const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
       
       const { error: historyError } = await supabase
