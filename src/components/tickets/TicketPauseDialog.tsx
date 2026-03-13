@@ -134,6 +134,8 @@ export function TicketPauseDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
       toast({ title: "Chamado pausado com sucesso" });
       handleClose();
       onSuccess?.();
