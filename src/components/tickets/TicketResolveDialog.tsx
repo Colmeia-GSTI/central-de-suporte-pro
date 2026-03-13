@@ -160,6 +160,13 @@ export function TicketResolveDialog({
         
         if (timeError) throw timeError;
       }
+
+      // Close active attendance session
+      await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: new Date().toISOString() })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
       
       // 2. Update ticket
       const { error: ticketError } = await supabase
