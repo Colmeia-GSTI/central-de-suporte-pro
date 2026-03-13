@@ -63,15 +63,15 @@ export function TicketResolveDialog({
   const [extraMinutes, setExtraMinutes] = useState(0);
   const [createArticle, setCreateArticle] = useState(false);
 
-  // Fetch existing time entries
-  const { data: timeEntries = [] } = useQuery({
-    queryKey: ["ticket-time-entries-summary", ticketId],
+  // Fetch attendance sessions for worked time calculation
+  const { data: attendanceSessions = [] } = useQuery({
+    queryKey: ["ticket-attendance-sessions", ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("ticket_time_entries")
-        .select("duration_minutes")
-        .eq("ticket_id", ticketId);
-      
+        .from("ticket_attendance_sessions")
+        .select("started_at, ended_at")
+        .eq("ticket_id", ticketId)
+        .order("started_at");
       if (error) throw error;
       return data || [];
     },

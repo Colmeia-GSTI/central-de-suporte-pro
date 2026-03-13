@@ -363,33 +363,114 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     }
     setFormData((prev) => ({ ...prev, status: newStatus as Enums<"ticket_status"> }));
     if (!isEditing) {
-      // Registrar mudança de status no histórico
-      const { error: historyError } = await supabase.from("ticket_history").insert([
-        {
+      const nowIso = new Date().toISOString();
+      const typedNew = newStatus as Enums<"ticket_status">;
+      const pauseStatuses: Enums<"ticket_status">[] = ["paused", "waiting_third_party", "no_contact"];
+      const closedStatuses: Enums<"ticket_status">[] = ["resolved", "closed"];
+
+      try {
+        // --- Session / Pause management ---
+
+        // Transitioning TO in_progress: open new session, close active pause
+        if (typedNew === "in_progress") {
+          // Close any active pause
+          await supabase
+            .from("ticket_pauses")
+            .update({ resumed_at: nowIso })
+            .eq("ticket_id", ticket.id)
+            .is("resumed_at", null);
+
+          // Open new attendance session
+          await supabase
+            .from("ticket_attendance_sessions")
+            .insert({ ticket_id: ticket.id, started_by: user!.id, started_at: nowIso });
+
+          // Set started_at / first_response_at on first start
+          const ticketUpdates: Record<string, unknown> = { status: typedNew };
+          if (!ticket.started_at) {
+            ticketUpdates.started_at = nowIso;
+            ticketUpdates.first_response_at = nowIso;
+          }
+          const { error: tErr } = await supabase.from("tickets").update(ticketUpdates).eq("id", ticket.id);
+          if (tErr) throw tErr;
+        }
+        // Transitioning TO a pause status: close active session, create pause record
+        else if (pauseStatuses.includes(typedNew)) {
+          // Close active session
+          await supabase
+            .from("ticket_attendance_sessions")
+            .update({ ended_at: nowIso })
+            .eq("ticket_id", ticket.id)
+            .is("ended_at", null);
+
+          // Create pause record
+          await supabase
+            .from("ticket_pauses")
+            .insert({
+              ticket_id: ticket.id,
+              paused_at: nowIso,
+              reason: `Status alterado para ${statusLabels[typedNew]}`,
+            });
+
+          const { error: tErr } = await supabase.from("tickets").update({ status: typedNew }).eq("id", ticket.id);
+          if (tErr) throw tErr;
+        }
+        // Transitioning TO resolved/closed: close active session, set resolved_at
+        else if (closedStatuses.includes(typedNew)) {
+          await supabase
+            .from("ticket_attendance_sessions")
+            .update({ ended_at: nowIso })
+            .eq("ticket_id", ticket.id)
+            .is("ended_at", null);
+
+          // Close any active pause too
+          await supabase
+            .from("ticket_pauses")
+            .update({ resumed_at: nowIso })
+            .eq("ticket_id", ticket.id)
+            .is("resumed_at", null);
+
+          const ticketUpdates: Record<string, unknown> = { status: typedNew };
+          if (typedNew === "resolved" && !ticket.resolved_at) {
+            ticketUpdates.resolved_at = nowIso;
+          }
+          const { error: tErr } = await supabase.from("tickets").update(ticketUpdates).eq("id", ticket.id);
+          if (tErr) throw tErr;
+        }
+        // Other transitions (waiting, etc): just update status
+        else {
+          const { error: tErr } = await supabase.from("tickets").update({ status: typedNew }).eq("id", ticket.id);
+          if (tErr) throw tErr;
+        }
+
+        // Register history
+        await supabase.from("ticket_history").insert({
           ticket_id: ticket.id,
           user_id: user?.id,
           old_status: oldStatus,
-          new_status: newStatus as Enums<"ticket_status">,
+          new_status: typedNew,
           comment: "Status alterado",
-        },
-      ]);
-
-      if (historyError) {
-        logger.warn("Failed to insert ticket_history (status)", "Tickets", { error: historyError.message });
-        toast({
-          title: "Aviso",
-          description: "Status alterado, mas não foi possível registrar no histórico.",
         });
-      }
-      updateMutation.mutate({ status: newStatus as Enums<"ticket_status"> });
 
-      // Disparar notificação para cliente
-      supabase.functions.invoke("send-ticket-notification", {
-        body: {
-          ticket_id: ticket.id,
-          event_type: "updated",
-        },
-      }).catch((err) => logger.error("Failed to send notification", "Tickets", { error: String(err) }));
+        // Invalidate all related queries
+        queryClient.invalidateQueries({ queryKey: ["tickets"] });
+        queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticket.id] });
+        queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticket.id] });
+        queryClient.invalidateQueries({ queryKey: ["ticket-recent-history", ticket.id] });
+        queryClient.invalidateQueries({ queryKey: ["ticket-history", ticket.id] });
+        onUpdate?.();
+
+        // Send notification
+        supabase.functions.invoke("send-ticket-notification", {
+          body: { ticket_id: ticket.id, event_type: "updated" },
+        }).catch((err) => logger.error("Failed to send notification", "Tickets", { error: String(err) }));
+
+      } catch (err) {
+        logger.error("[handleStatusChange] Failed", "Tickets", { error: String(err) });
+        toast({ title: "Erro ao alterar status", variant: "destructive" });
+        // Revert local state
+        setFormData((prev) => ({ ...prev, status: oldStatus }));
+      }
     }
   };
 
