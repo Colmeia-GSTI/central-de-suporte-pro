@@ -17,6 +17,7 @@ export interface AttendanceData {
   created_at: string;
   started_at: string | null;
   resolved_at: string | null;
+  status?: string;
   sessions: AttendanceSession[];
   pauses: AttendancePause[];
 }
