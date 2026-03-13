@@ -3,7 +3,7 @@ import { AppSidebar } from "./AppSidebar";
 import { SessionExpiryIndicator } from "./SessionExpiryIndicator";
 import { BackgroundPattern } from "./BackgroundPattern";
 import { GlobalProgress } from "./GlobalProgress";
-import { QuickActionsFAB } from "./QuickActionsFAB";
+
 import { Search, Moon, Sun, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
