@@ -855,7 +855,7 @@ export default function TicketsPage() {
               clientId={selectedTicket.client_id} ticketTitle={selectedTicket.title}
               ticketCreatedAt={selectedTicket.created_at} ticketStartedAt={selectedTicket.started_at}
               firstResponseAt={selectedTicket.first_response_at}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); setIsResolveOpen(false); setIsRatingOpen(true); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); setIsResolveOpen(false); }}
             />
             <TicketRatingDialog
               open={isRatingOpen} onOpenChange={setIsRatingOpen}
