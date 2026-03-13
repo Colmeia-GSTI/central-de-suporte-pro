@@ -1,82 +1,44 @@
 
 
-# Revisao E2E da Contagem de Tempo de Atendimento
+# Plano Revisado: Integração UniFi UDM - Alarmes + Monitoramento + Topologia
 
-## Problemas Identificados
+## Status: ✅ IMPLEMENTADO (Fases 1-5)
 
-### 1. CRITICO: `handleStatusChange` bypassa o controle de sessoes
-Em `TicketDetailsTab.tsx` (linha 353), quando o status e alterado via dropdown (ex: paused -> in_progress, open -> in_progress), **nenhuma sessao de atendimento e criada/fechada** e **nenhuma pausa e registrada/encerrada**. Isso causa desincronizacao total do timer com a realidade.
+### Fase 1: Database ✅
+- 4 tabelas criadas: `unifi_controllers`, `network_sites`, `network_topology`, `unifi_sync_logs`
+- `monitored_devices` expandido com `mac_address`, `firmware_version`, `model`, `site_id`
+- RLS `is_staff()` + `service_role` em todas
 
-### 2. CRITICO: Dois sistemas de tempo independentes e conflitantes
-- `TicketAttendancePanel` usa `ticket_attendance_sessions` (automatico)
-- `TicketTimeTracker` usa `ticket_time_entries` (manual/cronometro)
-- `TicketResolveDialog` mostra tempo de `ticket_time_entries` mas ignora `ticket_attendance_sessions`
+### Fase 2: Edge Function `unifi-sync` ✅
+- Ações: `test`, `list_sites`, `sync`
+- Método Direct: login/sites/devices/LLDP/alarms/health/logout
+- Método Cloud: hosts/devices via api.ui.com
+- Alarmes mapeados para `monitoring_alerts` existente
+- Timeout 10s, log em `unifi_sync_logs`
 
-O usuario ve tempos diferentes dependendo de onde olha.
+### Fase 3: UI Config ✅
+- `UnifiConfigForm.tsx` com RadioGroup Direct/Cloud
+- Campos condicionais, teste de conexão, sync manual
+- Aba "Rede" adicionada ao `IntegrationsTab.tsx`
+- `IntegrationStatusPanel` atualizado com UniFi
 
-### 3. Timer continua contando apos resolucao em edge cases
-Quando `resolvedAt` e definido mas a sessao nao foi fechada corretamente (ex: via handleStatusChange), `calcWorkedTimeMs` usa `now` como fallback para sessoes abertas, inflando o tempo.
+### Fase 4: Client Network Tab ✅
+- `ClientNetworkTab.tsx` com resumo de sites/devices/Wi-Fi
+- `NetworkTopologyMap.tsx` com SVG hierárquico (Gateway→Switch→AP)
+- Aba "Rede" no `ClientDetailPage.tsx`
 
-### 4. Imports nao utilizados
-`useState, useEffect` importados em `TicketAttendancePanel` mas nao usados.
+### Fase 5: CRON ✅
+- pg_cron configurado: `unifi-sync-hourly` a cada hora
+- Edge Function verifica `sync_interval_hours` internamente
 
----
-
-## Plano de Correcao
-
-### Tarefa 1: Unificar status changes com gestao de sessoes
-
-**Arquivo: `src/components/tickets/TicketDetailsTab.tsx`**
-
-Refatorar `handleStatusChange` para:
-- Se transicao para `in_progress`: criar sessao em `ticket_attendance_sessions`, fechar pausa ativa, setar `started_at`/`first_response_at` se primeiro inicio
-- Se transicao para `paused`/`waiting_third_party`/`no_contact`: fechar sessao ativa, criar registro de pausa
-- Se transicao para `resolved`/`closed`: fechar sessao ativa, setar `resolved_at`
-
-### Tarefa 2: Unificar exibicao de tempo no ResolveDialog
-
-**Arquivo: `src/components/tickets/TicketResolveDialog.tsx`**
-
-Substituir a query de `ticket_time_entries` por `ticket_attendance_sessions` para mostrar o tempo trabalhado real (consistente com o painel). Manter `ticket_time_entries` apenas como "tempo extra manual".
-
-### Tarefa 3: Proteger calculos contra sessoes orfas
-
-**Arquivo: `src/lib/attendance-time.ts`**
-
-Em `calcWorkedTimeMs`, quando `data.resolved_at` existe, usar `resolved_at` como cap maximo para sessoes abertas em vez de `now`. Isso evita inflacao de tempo em tickets ja encerrados.
-
-```typescript
-export function calcWorkedTimeMs(data: AttendanceData, now: Date = new Date()): number {
-  const cap = data.resolved_at ? new Date(data.resolved_at).getTime() : now.getTime();
-  let total = 0;
-  for (const s of data.sessions) {
-    const start = new Date(s.started_at).getTime();
-    const end = s.ended_at ? Math.min(new Date(s.ended_at).getTime(), cap) : cap;
-    total += Math.max(0, end - start);
-  }
-  return total;
-}
-```
-
-Mesma logica para `calcPausedTimeMs`.
-
-### Tarefa 4: Limpar imports e codigo morto
-
-**Arquivo: `src/components/tickets/TicketAttendancePanel.tsx`**
-- Remover `useState, useEffect` dos imports (nao usados)
-
-### Tarefa 5: Garantir invalidacao consistente
-
-Adicionar invalidacao de `ticket-attendance-sessions` e `ticket-attendance-pauses` em `handleStatusChange` apos mutacao.
-
----
-
-## Resumo das Mudancas
-
-| Arquivo | Mudanca |
+## Arquivos Criados/Modificados
+| Arquivo | Ação |
 |---|---|
-| `TicketDetailsTab.tsx` | Integrar gestao de sessoes/pausas no `handleStatusChange` |
-| `TicketResolveDialog.tsx` | Mostrar tempo de `attendance_sessions` em vez de `time_entries` |
-| `attendance-time.ts` | Cap `resolved_at` em calculos para evitar inflacao |
-| `TicketAttendancePanel.tsx` | Limpar imports nao utilizados |
-
+| `supabase/functions/unifi-sync/index.ts` | Criado |
+| `src/components/settings/integrations/UnifiConfigForm.tsx` | Criado |
+| `src/components/clients/ClientNetworkTab.tsx` | Criado |
+| `src/components/clients/NetworkTopologyMap.tsx` | Criado |
+| `src/components/settings/IntegrationsTab.tsx` | Modificado (aba Rede) |
+| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Modificado (UniFi) |
+| `src/pages/clients/ClientDetailPage.tsx` | Modificado (aba Rede) |
+| `supabase/config.toml` | Modificado (unifi-sync) |

@@ -21,13 +21,14 @@ export interface AttendanceData {
   pauses: AttendancePause[];
 }
 
-/** Total worked time in ms — sum of all sessions (excludes paused time) */
+/** Total worked time in ms — sum of all sessions (excludes paused time).
+ *  Caps open sessions at resolved_at to prevent time inflation on closed tickets. */
 export function calcWorkedTimeMs(data: AttendanceData, now: Date = new Date()): number {
-  const nowMs = now.getTime();
+  const cap = data.resolved_at ? new Date(data.resolved_at).getTime() : now.getTime();
   let total = 0;
   for (const s of data.sessions) {
     const start = new Date(s.started_at).getTime();
-    const end = s.ended_at ? new Date(s.ended_at).getTime() : nowMs;
+    const end = s.ended_at ? Math.min(new Date(s.ended_at).getTime(), cap) : cap;
     total += Math.max(0, end - start);
   }
   return total;
@@ -44,13 +45,14 @@ export function calcWaitTimeMs(data: AttendanceData, now: Date = new Date()): nu
   return Math.max(0, new Date(data.started_at).getTime() - new Date(data.created_at).getTime());
 }
 
-/** Total paused time in ms */
+/** Total paused time in ms.
+ *  Caps open pauses at resolved_at to prevent inflation on closed tickets. */
 export function calcPausedTimeMs(data: AttendanceData, now: Date = new Date()): number {
-  const nowMs = now.getTime();
+  const cap = data.resolved_at ? new Date(data.resolved_at).getTime() : now.getTime();
   let total = 0;
   for (const p of data.pauses) {
     const start = new Date(p.paused_at).getTime();
-    const end = p.resumed_at ? new Date(p.resumed_at).getTime() : nowMs;
+    const end = p.resumed_at ? Math.min(new Date(p.resumed_at).getTime(), cap) : cap;
     total += Math.max(0, end - start);
   }
   return total;

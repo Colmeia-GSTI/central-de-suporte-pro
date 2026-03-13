@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import { calculateElapsedBusinessMinutes } from "@/lib/sla-calculator";
+import { calcWorkedTimeMs, formatTimeFriendly } from "@/lib/attendance-time";
 import {
   Dialog,
   DialogContent,
@@ -63,15 +64,15 @@ export function TicketResolveDialog({
   const [extraMinutes, setExtraMinutes] = useState(0);
   const [createArticle, setCreateArticle] = useState(false);
 
-  // Fetch existing time entries
-  const { data: timeEntries = [] } = useQuery({
-    queryKey: ["ticket-time-entries-summary", ticketId],
+  // Fetch attendance sessions for worked time calculation
+  const { data: attendanceSessions = [] } = useQuery({
+    queryKey: ["ticket-attendance-sessions", ticketId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("ticket_time_entries")
-        .select("duration_minutes")
-        .eq("ticket_id", ticketId);
-      
+        .from("ticket_attendance_sessions")
+        .select("started_at, ended_at")
+        .eq("ticket_id", ticketId)
+        .order("started_at");
       if (error) throw error;
       return data || [];
     },
@@ -108,7 +109,18 @@ export function TicketResolveDialog({
     enabled: open,
   });
 
-  const totalMinutes = timeEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+  // Calculate worked time from attendance sessions (consistent with panel)
+  const workedMs = useMemo(() => {
+    return calcWorkedTimeMs({
+      created_at: ticketCreatedAt,
+      started_at: null,
+      resolved_at: null,
+      sessions: attendanceSessions,
+      pauses: [],
+    });
+  }, [attendanceSessions, ticketCreatedAt]);
+
+  const workedMinutes = Math.floor(workedMs / 60000);
 
   // Sempre contar desde a abertura do ticket (ticketCreatedAt)
   const autoElapsedMinutes = useMemo(() => {
@@ -181,10 +193,11 @@ export function TicketResolveDialog({
       if (ticketError) throw ticketError;
       
       // 3. Register in history with total time
-      const finalTotal = totalMinutes + extraMins;
+      const workedInfo = workedMinutes > 0 ? `Tempo trabalhado: ${formatDuration(workedMinutes)}` : "";
       const autoInfo = autoElapsedMinutes > 0 ? `Tempo total (abertura → agora): ${formatDuration(autoElapsedMinutes)}` : "";
-      const manualInfo = finalTotal > 0 ? `Tempo registrado: ${formatDuration(finalTotal)}` : "";
-      const timeInfo = [autoInfo, manualInfo].filter(Boolean).join(" | ");
+      const extraInfo = extraMins > 0 ? `Tempo extra: ${formatDuration(extraMins)}` : "";
+      const timeInfo = [workedInfo, autoInfo, extraInfo].filter(Boolean).join(" | ");
+      const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
       const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
       
       const { error: historyError } = await supabase
@@ -279,11 +292,11 @@ export function TicketResolveDialog({
               )}
               <div className="flex items-center gap-2 mb-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Tempo Registrado</span>
+                <span className="text-sm font-medium">Tempo Trabalhado</span>
               </div>
               <div className="text-sm">
                 <span className="text-muted-foreground">Total: </span>
-                <span className="font-medium">{formatDuration(totalMinutes)}</span>
+                <span className="font-medium">{formatTimeFriendly(workedMs)}</span>
               </div>
             </CardContent>
           </Card>
