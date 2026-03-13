@@ -3635,6 +3635,41 @@ export type Database = {
           },
         ]
       }
+      ticket_attendance_sessions: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          id: string
+          started_at: string
+          started_by: string
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+          started_by: string
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+          started_by?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_attendance_sessions_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_categories: {
         Row: {
           created_at: string
@@ -4048,6 +4083,7 @@ export type Database = {
           satisfaction_comment: string | null
           satisfaction_rating: number | null
           sla_deadline: string | null
+          started_at: string | null
           status: Database["public"]["Enums"]["ticket_status"]
           subcategory_id: string | null
           ticket_number: number
@@ -4077,6 +4113,7 @@ export type Database = {
           satisfaction_comment?: string | null
           satisfaction_rating?: number | null
           sla_deadline?: string | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           subcategory_id?: string | null
           ticket_number?: number
@@ -4106,6 +4143,7 @@ export type Database = {
           satisfaction_comment?: string | null
           satisfaction_rating?: number | null
           sla_deadline?: string | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["ticket_status"]
           subcategory_id?: string | null
           ticket_number?: number
