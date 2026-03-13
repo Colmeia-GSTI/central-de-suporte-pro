@@ -198,7 +198,6 @@ export function TicketResolveDialog({
       const extraInfo = extraMins > 0 ? `Tempo extra: ${formatDuration(extraMins)}` : "";
       const timeInfo = [workedInfo, autoInfo, extraInfo].filter(Boolean).join(" | ");
       const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
-      const timeDisplay = timeInfo ? ` (${timeInfo})` : "";
       
       const { error: historyError } = await supabase
         .from("ticket_history")
