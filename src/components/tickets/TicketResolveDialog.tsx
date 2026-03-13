@@ -109,7 +109,18 @@ export function TicketResolveDialog({
     enabled: open,
   });
 
-  const totalMinutes = timeEntries.reduce((sum, e) => sum + (e.duration_minutes || 0), 0);
+  // Calculate worked time from attendance sessions (consistent with panel)
+  const workedMs = useMemo(() => {
+    return calcWorkedTimeMs({
+      created_at: ticketCreatedAt,
+      started_at: null,
+      resolved_at: null,
+      sessions: attendanceSessions,
+      pauses: [],
+    });
+  }, [attendanceSessions, ticketCreatedAt]);
+
+  const workedMinutes = Math.floor(workedMs / 60000);
 
   // Sempre contar desde a abertura do ticket (ticketCreatedAt)
   const autoElapsedMinutes = useMemo(() => {
