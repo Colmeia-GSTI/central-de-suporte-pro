@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import { calculateElapsedBusinessMinutes } from "@/lib/sla-calculator";
+import { calcWorkedTimeMs, formatTimeFriendly } from "@/lib/attendance-time";
 import {
   Dialog,
   DialogContent,
