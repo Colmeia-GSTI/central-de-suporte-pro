@@ -160,6 +160,13 @@ export function TicketResolveDialog({
         
         if (timeError) throw timeError;
       }
+
+      // Close active attendance session
+      await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: new Date().toISOString() })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
       
       // 2. Update ticket
       const { error: ticketError } = await supabase
@@ -216,6 +223,8 @@ export function TicketResolveDialog({
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       resetForm();

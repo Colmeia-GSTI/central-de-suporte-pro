@@ -92,6 +92,16 @@ export function TicketPauseDialog({
       });
       if (pauseError) throw pauseError;
 
+      // Close active attendance session
+      const { error: sessErr } = await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: new Date().toISOString() })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
+      if (sessErr) {
+        logger.warn("Failed to close attendance session on pause", "Tickets", { error: sessErr.message });
+      }
+
       // Update ticket status
       const { error: ticketError } = await supabase
         .from("tickets")
@@ -124,6 +134,8 @@ export function TicketPauseDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
       toast({ title: "Chamado pausado com sucesso" });
       handleClose();
       onSuccess?.();

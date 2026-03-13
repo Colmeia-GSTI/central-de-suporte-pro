@@ -9,6 +9,7 @@ import {
   Clock, Building2, User, ExternalLink,
 } from "lucide-react";
 import { NoContactButton } from "./NoContactButton";
+import { TicketAttendancePanel } from "./TicketAttendancePanel";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -64,15 +65,24 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
 
   return (
     <div className="space-y-5">
+      {/* Attendance Panel — Live Timer + Actions + Time Summary */}
+      <TicketAttendancePanel
+        ticketId={ticket.id}
+        status={ticket.status}
+        createdAt={ticket.created_at}
+        startedAt={(ticket as Record<string, unknown>).started_at as string | null}
+        resolvedAt={ticket.resolved_at}
+        onPause={canPause && onPause ? onPause : undefined}
+        onResolve={canResolve && onResolve ? onResolve : undefined}
+        canEdit={canEditTicket}
+      />
+
       {/* Header Card */}
       <div className="bg-muted/30 rounded-xl p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-muted-foreground font-mono">#{ticket.ticket_number}</span>
-              <Badge className={statusColors[ticket.status]}>
-                {statusLabels[ticket.status]}
-              </Badge>
             </div>
             <h2 className="text-lg font-semibold leading-snug">{ticket.title}</h2>
           </div>
@@ -101,20 +111,8 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
           />
         </div>
 
-        {/* Action Buttons */}
+        {/* Secondary Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap pt-1">
-          {canResolve && onResolve && (
-            <Button size="sm" onClick={onResolve} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white h-8 text-xs">
-              <CheckCircle className="h-3.5 w-3.5" />
-              Finalizar
-            </Button>
-          )}
-          {canPause && onPause && (
-            <Button variant="outline" size="sm" onClick={onPause} className="gap-1.5 h-8 text-xs">
-              <Pause className="h-3.5 w-3.5" />
-              Pausar
-            </Button>
-          )}
           {canEditTicket && (
             <NoContactButton ticketId={ticket.id} ticketNumber={ticket.ticket_number} currentStatus={ticket.status} />
           )}
