@@ -223,6 +223,8 @@ export function TicketResolveDialog({
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       resetForm();
