@@ -78,10 +78,11 @@ export function useTicketAttendance({
       created_at: createdAt,
       started_at: startedAt,
       resolved_at: resolvedAt,
+      status,
       sessions,
       pauses,
     }),
-    [createdAt, startedAt, resolvedAt, sessions, pauses]
+    [createdAt, startedAt, resolvedAt, status, sessions, pauses]
   );
 
   const workedMs = calcWorkedTimeMs(attendanceData, now);

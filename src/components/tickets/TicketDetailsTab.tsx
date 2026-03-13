@@ -374,16 +374,18 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         // Transitioning TO in_progress: open new session, close active pause
         if (typedNew === "in_progress") {
           // Close any active pause
-          await supabase
+          const { error: pauseErr } = await supabase
             .from("ticket_pauses")
             .update({ resumed_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("resumed_at", null);
+          if (pauseErr) throw pauseErr;
 
           // Open new attendance session
-          await supabase
+          const { error: sessErr } = await supabase
             .from("ticket_attendance_sessions")
             .insert({ ticket_id: ticket.id, started_by: user!.id, started_at: nowIso });
+          if (sessErr) throw sessErr;
 
           // Set started_at / first_response_at on first start
           const ticketUpdates: Record<string, unknown> = { status: typedNew };
@@ -397,38 +399,42 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         // Transitioning TO a pause status: close active session, create pause record
         else if (pauseStatuses.includes(typedNew)) {
           // Close active session
-          await supabase
+          const { error: sessCloseErr } = await supabase
             .from("ticket_attendance_sessions")
             .update({ ended_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("ended_at", null);
+          if (sessCloseErr) throw sessCloseErr;
 
           // Create pause record
-          await supabase
+          const { error: pauseInsErr } = await supabase
             .from("ticket_pauses")
             .insert({
               ticket_id: ticket.id,
               paused_at: nowIso,
               reason: `Status alterado para ${statusLabels[typedNew]}`,
             });
+          if (pauseInsErr) throw pauseInsErr;
 
           const { error: tErr } = await supabase.from("tickets").update({ status: typedNew }).eq("id", ticket.id);
           if (tErr) throw tErr;
         }
         // Transitioning TO resolved/closed: close active session, set resolved_at
         else if (closedStatuses.includes(typedNew)) {
-          await supabase
+          const { error: sessEnd } = await supabase
             .from("ticket_attendance_sessions")
             .update({ ended_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("ended_at", null);
+          if (sessEnd) throw sessEnd;
 
           // Close any active pause too
-          await supabase
+          const { error: pauseEnd } = await supabase
             .from("ticket_pauses")
             .update({ resumed_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("resumed_at", null);
+          if (pauseEnd) throw pauseEnd;
 
           const ticketUpdates: Record<string, unknown> = { status: typedNew };
           if (typedNew === "resolved" && !ticket.resolved_at) {
