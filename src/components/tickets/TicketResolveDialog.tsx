@@ -116,12 +116,13 @@ export function TicketResolveDialog({
   const workedMs = useMemo(() => {
     return calcWorkedTimeMs({
       created_at: ticketCreatedAt,
-      started_at: null,
+      started_at: ticketStartedAt ?? null,
       resolved_at: null,
+      status: ticketStatus,
       sessions: attendanceSessions,
-      pauses: [],
+      pauses: ticketPauses.map(p => ({ paused_at: p.paused_at, resumed_at: p.resumed_at })),
     });
-  }, [attendanceSessions, ticketCreatedAt]);
+  }, [attendanceSessions, ticketCreatedAt, ticketStartedAt, ticketStatus, ticketPauses]);
 
   const workedMinutes = Math.floor(workedMs / 60000);
 
