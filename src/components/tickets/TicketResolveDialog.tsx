@@ -292,11 +292,11 @@ export function TicketResolveDialog({
               )}
               <div className="flex items-center gap-2 mb-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Tempo Registrado</span>
+                <span className="text-sm font-medium">Tempo Trabalhado</span>
               </div>
               <div className="text-sm">
                 <span className="text-muted-foreground">Total: </span>
-                <span className="font-medium">{formatDuration(totalMinutes)}</span>
+                <span className="font-medium">{formatTimeFriendly(workedMs)}</span>
               </div>
             </CardContent>
           </Card>
