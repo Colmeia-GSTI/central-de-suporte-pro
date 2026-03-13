@@ -374,16 +374,18 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         // Transitioning TO in_progress: open new session, close active pause
         if (typedNew === "in_progress") {
           // Close any active pause
-          await supabase
+          const { error: pauseErr } = await supabase
             .from("ticket_pauses")
             .update({ resumed_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("resumed_at", null);
+          if (pauseErr) throw pauseErr;
 
           // Open new attendance session
-          await supabase
+          const { error: sessErr } = await supabase
             .from("ticket_attendance_sessions")
             .insert({ ticket_id: ticket.id, started_by: user!.id, started_at: nowIso });
+          if (sessErr) throw sessErr;
 
           // Set started_at / first_response_at on first start
           const ticketUpdates: Record<string, unknown> = { status: typedNew };
