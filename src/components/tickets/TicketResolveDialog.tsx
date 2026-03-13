@@ -33,6 +33,7 @@ interface TicketResolveDialogProps {
   clientId?: string | null;
   ticketTitle: string;
   ticketCreatedAt: string;
+  ticketStartedAt?: string | null;
   firstResponseAt?: string | null;
   onSuccess?: () => void;
 }
@@ -54,6 +55,7 @@ export function TicketResolveDialog({
   clientId,
   ticketTitle,
   ticketCreatedAt,
+  ticketStartedAt,
   onSuccess,
 }: TicketResolveDialogProps) {
   const { user } = useAuth();
@@ -113,12 +115,13 @@ export function TicketResolveDialog({
   const workedMs = useMemo(() => {
     return calcWorkedTimeMs({
       created_at: ticketCreatedAt,
-      started_at: null,
+      started_at: ticketStartedAt ?? null,
       resolved_at: null,
+      status: currentStatus,
       sessions: attendanceSessions,
-      pauses: [],
+      pauses: ticketPauses.map(p => ({ paused_at: p.paused_at, resumed_at: p.resumed_at })),
     });
-  }, [attendanceSessions, ticketCreatedAt]);
+  }, [attendanceSessions, ticketCreatedAt, ticketStartedAt, currentStatus, ticketPauses]);
 
   const workedMinutes = Math.floor(workedMs / 60000);
 
