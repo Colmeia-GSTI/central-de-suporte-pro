@@ -9,6 +9,7 @@ import {
   Clock, Building2, User, ExternalLink,
 } from "lucide-react";
 import { NoContactButton } from "./NoContactButton";
+import { TicketAttendancePanel } from "./TicketAttendancePanel";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
