@@ -56,7 +56,6 @@ export function TicketResolveDialog({
   ticketTitle,
   ticketCreatedAt,
   ticketStartedAt,
-  currentStatus: ticketStatus,
   onSuccess,
 }: TicketResolveDialogProps) {
   const { user } = useAuth();
