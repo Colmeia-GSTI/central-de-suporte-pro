@@ -191,8 +191,6 @@ export function AppLayout({ children, title }: AppLayoutProps) {
           </div>
         </main>
         
-        {/* Quick Actions FAB */}
-        {!location.pathname.startsWith("/settings") && <QuickActionsFAB />}
       </div>
     </SidebarProvider>
   );
