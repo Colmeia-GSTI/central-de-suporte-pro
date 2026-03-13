@@ -399,20 +399,22 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         // Transitioning TO a pause status: close active session, create pause record
         else if (pauseStatuses.includes(typedNew)) {
           // Close active session
-          await supabase
+          const { error: sessCloseErr } = await supabase
             .from("ticket_attendance_sessions")
             .update({ ended_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("ended_at", null);
+          if (sessCloseErr) throw sessCloseErr;
 
           // Create pause record
-          await supabase
+          const { error: pauseInsErr } = await supabase
             .from("ticket_pauses")
             .insert({
               ticket_id: ticket.id,
               paused_at: nowIso,
               reason: `Status alterado para ${statusLabels[typedNew]}`,
             });
+          if (pauseInsErr) throw pauseInsErr;
 
           const { error: tErr } = await supabase.from("tickets").update({ status: typedNew }).eq("id", ticket.id);
           if (tErr) throw tErr;
