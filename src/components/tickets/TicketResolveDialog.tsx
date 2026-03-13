@@ -117,11 +117,11 @@ export function TicketResolveDialog({
       created_at: ticketCreatedAt,
       started_at: ticketStartedAt ?? null,
       resolved_at: null,
-      status: ticketStatus,
+      status: currentStatus,
       sessions: attendanceSessions,
       pauses: ticketPauses.map(p => ({ paused_at: p.paused_at, resumed_at: p.resumed_at })),
     });
-  }, [attendanceSessions, ticketCreatedAt, ticketStartedAt, ticketStatus, ticketPauses]);
+  }, [attendanceSessions, ticketCreatedAt, ticketStartedAt, currentStatus, ticketPauses]);
 
   const workedMinutes = Math.floor(workedMs / 60000);
 
