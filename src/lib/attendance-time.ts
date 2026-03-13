@@ -81,6 +81,7 @@ export function formatTimeHMS(ms: number): string {
 
 /** Format ms to friendly string like "2h 15min" */
 export function formatTimeFriendly(ms: number): string {
+  if (ms <= 0) return "0min";
   const totalMinutes = Math.floor(ms / 60000);
   if (totalMinutes < 1) return "< 1min";
   const hours = Math.floor(totalMinutes / 60);

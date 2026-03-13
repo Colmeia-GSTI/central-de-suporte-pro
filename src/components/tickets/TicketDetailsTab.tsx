@@ -421,18 +421,20 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         }
         // Transitioning TO resolved/closed: close active session, set resolved_at
         else if (closedStatuses.includes(typedNew)) {
-          await supabase
+          const { error: sessEnd } = await supabase
             .from("ticket_attendance_sessions")
             .update({ ended_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("ended_at", null);
+          if (sessEnd) throw sessEnd;
 
           // Close any active pause too
-          await supabase
+          const { error: pauseEnd } = await supabase
             .from("ticket_pauses")
             .update({ resumed_at: nowIso })
             .eq("ticket_id", ticket.id)
             .is("resumed_at", null);
+          if (pauseEnd) throw pauseEnd;
 
           const ticketUpdates: Record<string, unknown> = { status: typedNew };
           if (typedNew === "resolved" && !ticket.resolved_at) {
