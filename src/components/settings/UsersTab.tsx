@@ -75,6 +75,7 @@ export function UsersTab() {
   const [linkClientUser, setLinkClientUser] = useState<ProfileWithRoles | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [editProfileUser, setEditProfileUser] = useState<ProfileWithRoles | null>(null);
+  const [clientSearchFilter, setClientSearchFilter] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
