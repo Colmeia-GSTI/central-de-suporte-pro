@@ -75,6 +75,7 @@ export function UsersTab() {
   const [linkClientUser, setLinkClientUser] = useState<ProfileWithRoles | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
   const [editProfileUser, setEditProfileUser] = useState<ProfileWithRoles | null>(null);
+  const [clientSearchFilter, setClientSearchFilter] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -125,6 +126,33 @@ export function UsersTab() {
     },
     staleTime: 1000 * 60 * 2,
   });
+
+  // Fetch client_contacts to detect orphan users (clients without company link)
+  const { data: userClientLinks = [] } = useQuery({
+    queryKey: ["user-client-links"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_contacts")
+        .select("user_id, client_id, clients(name)")
+        .not("user_id", "is", null);
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+
+  // Build a map: user_id -> linked client names
+  const userLinkedClients = new Map<string, string[]>();
+  for (const link of userClientLinks) {
+    if (!link.user_id) continue;
+    const existing = userLinkedClients.get(link.user_id) || [];
+    const clientName = (link.clients as { name: string } | null)?.name;
+    if (clientName) existing.push(clientName);
+    userLinkedClients.set(link.user_id, existing);
+  }
+
+  const isClientRole = (roles: { role: Enums<"app_role"> }[]) =>
+    roles.some(r => r.role === "client" || r.role === "client_master");
 
   // Fetch clients for linking
   const { data: clients = [] } = useQuery({
@@ -241,9 +269,11 @@ export function UsersTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      queryClient.invalidateQueries({ queryKey: ["user-client-links"] });
       toast({ title: "Usuário vinculado à empresa com sucesso" });
       setLinkClientUser(null);
       setSelectedClientId("");
+      setClientSearchFilter("");
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao vincular empresa", description: error.message, variant: "destructive" });
@@ -413,6 +443,7 @@ export function UsersTab() {
               <TableRow>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Empresa</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Papéis</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -424,6 +455,7 @@ export function UsersTab() {
                   <TableRow key={i}>
                     <TableCell><div className="h-4 w-32 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="h-4 w-40 bg-muted animate-pulse rounded" /></TableCell>
+                    <TableCell><div className="h-4 w-24 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="h-6 w-16 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="flex gap-1"><div className="h-6 w-16 bg-muted animate-pulse rounded" /></div></TableCell>
                     <TableCell className="text-right"><div className="h-8 w-28 bg-muted animate-pulse rounded ml-auto" /></TableCell>
@@ -431,13 +463,15 @@ export function UsersTab() {
                 ))
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
               ) : (
                 users.map((user) => {
                   const isConfirmed = confirmationStatus[user.user_id] ?? true;
+                  const linkedClients = userLinkedClients.get(user.user_id) || [];
+                  const isOrphanClient = isClientRole(user.user_roles) && linkedClients.length === 0;
                   return (
                     <TableRow key={user.id}>
                       <TableCell
@@ -447,6 +481,36 @@ export function UsersTab() {
                         {user.full_name}
                       </TableCell>
                       <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        {isClientRole(user.user_roles) ? (
+                          linkedClients.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {linkedClients.map((name, i) => (
+                                <Badge key={i} variant="outline" className="text-xs">
+                                  <Building2 className="mr-1 h-3 w-3" />
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="warning" className="text-xs cursor-pointer" onClick={() => {
+                                  setLinkClientUser(user);
+                                  setSelectedClientId("");
+                                  setClientSearchFilter("");
+                                }}>
+                                  <Building2 className="mr-1 h-3 w-3" />
+                                  Sem empresa
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Clique para vincular a uma empresa</TooltipContent>
+                            </Tooltip>
+                          )
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {isConfirmed ? (
                           <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
@@ -685,7 +749,12 @@ export function UsersTab() {
         />
 
         {/* Link Client Dialog */}
-        <Dialog open={!!linkClientUser} onOpenChange={(open) => !open && setLinkClientUser(null)}>
+        <Dialog open={!!linkClientUser} onOpenChange={(open) => {
+          if (!open) {
+            setLinkClientUser(null);
+            setClientSearchFilter("");
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Vincular Empresa</DialogTitle>
@@ -694,6 +763,30 @@ export function UsersTab() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Show already linked companies */}
+              {linkClientUser && (userLinkedClients.get(linkClientUser.user_id) || []).length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Empresas já vinculadas</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {(userLinkedClients.get(linkClientUser.user_id) || []).map((name, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        <Building2 className="mr-1 h-3 w-3" />
+                        {name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="client-search-filter">Buscar empresa</Label>
+                <Input
+                  id="client-search-filter"
+                  placeholder="Filtrar por nome..."
+                  value={clientSearchFilter}
+                  onChange={(e) => setClientSearchFilter(e.target.value)}
+                  className="text-base"
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="client-select">Empresa</Label>
                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
@@ -701,11 +794,13 @@ export function UsersTab() {
                     <SelectValue placeholder="Selecione uma empresa" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
+                    {clients
+                      .filter((c) => !clientSearchFilter || c.name.toLowerCase().includes(clientSearchFilter.toLowerCase()))
+                      .map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
