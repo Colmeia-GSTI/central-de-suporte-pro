@@ -127,6 +127,33 @@ export function UsersTab() {
     staleTime: 1000 * 60 * 2,
   });
 
+  // Fetch client_contacts to detect orphan users (clients without company link)
+  const { data: userClientLinks = [] } = useQuery({
+    queryKey: ["user-client-links"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_contacts")
+        .select("user_id, client_id, clients(name)")
+        .not("user_id", "is", null);
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+
+  // Build a map: user_id -> linked client names
+  const userLinkedClients = new Map<string, string[]>();
+  for (const link of userClientLinks) {
+    if (!link.user_id) continue;
+    const existing = userLinkedClients.get(link.user_id) || [];
+    const clientName = (link.clients as { name: string } | null)?.name;
+    if (clientName) existing.push(clientName);
+    userLinkedClients.set(link.user_id, existing);
+  }
+
+  const isClientRole = (roles: { role: Enums<"app_role"> }[]) =>
+    roles.some(r => r.role === "client" || r.role === "client_master");
+
   // Fetch clients for linking
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-for-linking"],
