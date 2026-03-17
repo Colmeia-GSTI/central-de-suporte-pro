@@ -1,44 +1,44 @@
 
 
-# Plano Revisado: Integração UniFi UDM - Alarmes + Monitoramento + Topologia
+# Correção Completa: Trigger Ausente + Indicador de Usuário Órfão + Melhoria no Dialog de Vinculação
 
-## Status: ✅ IMPLEMENTADO (Fases 1-5)
+## Diagnóstico Confirmado
 
-### Fase 1: Database ✅
-- 4 tabelas criadas: `unifi_controllers`, `network_sites`, `network_topology`, `unifi_sync_logs`
-- `monitored_devices` expandido com `mac_address`, `firmware_version`, `model`, `site_id`
-- RLS `is_staff()` + `service_role` em todas
+1. **Trigger `on_auth_user_created` NÃO EXISTE** no banco — a query retornou `[]`. A função `handle_new_user()` existe mas nunca é chamada automaticamente. Usuários que se cadastram pelo `/register` ficam sem `profiles` e sem `user_roles`.
 
-### Fase 2: Edge Function `unifi-sync` ✅
-- Ações: `test`, `list_sites`, `sync`
-- Método Direct: login/sites/devices/LLDP/alarms/health/logout
-- Método Cloud: hosts/devices via api.ui.com
-- Alarmes mapeados para `monitoring_alerts` existente
-- Timeout 10s, log em `unifi_sync_logs`
+2. **2 usuários órfãos** confirmados: Milena Kasten e Ilce Siqueira (têm profile e role `client`, mas **nenhum vínculo** em `client_contacts`).
 
-### Fase 3: UI Config ✅
-- `UnifiConfigForm.tsx` com RadioGroup Direct/Cloud
-- Campos condicionais, teste de conexão, sync manual
-- Aba "Rede" adicionada ao `IntegrationsTab.tsx`
-- `IntegrationStatusPanel` atualizado com UniFi
+3. **Frontend**: O `UsersTab` não tem nenhum indicador visual de que um usuário `client` está sem empresa vinculada. O dialog de vincular empresa não tem filtro de busca.
 
-### Fase 4: Client Network Tab ✅
-- `ClientNetworkTab.tsx` com resumo de sites/devices/Wi-Fi
-- `NetworkTopologyMap.tsx` com SVG hierárquico (Gateway→Switch→AP)
-- Aba "Rede" no `ClientDetailPage.tsx`
+## Plano de Implementação
 
-### Fase 5: CRON ✅
-- pg_cron configurado: `unifi-sync-hourly` a cada hora
-- Edge Function verifica `sync_interval_hours` internamente
+### 1. Migração SQL — Criar trigger ausente
 
-## Arquivos Criados/Modificados
-| Arquivo | Ação |
+```sql
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+```
+
+Isso resolve a causa raiz: todo novo cadastro via `/register` terá profile + role `client` automaticamente.
+
+### 2. UsersTab — Query de vínculos + badge "Sem empresa"
+
+- Adicionar query para buscar `client_contacts` agrupados por `user_id` (apenas user_ids com role `client`/`client_master`)
+- Na coluna Status, para usuários com role cliente sem vínculo em `client_contacts`: exibir badge amber "Sem empresa" ao lado do status atual
+- Isso torna imediatamente visível quais usuários precisam ser vinculados
+
+### 3. UsersTab — Filtro de busca no dialog de vincular empresa
+
+- Adicionar `Input` com filtro de texto no dialog existente (linhas 688-728)
+- Filtrar a lista de empresas pelo texto digitado
+- Mostrar empresas já vinculadas ao usuário (se houver) com indicador visual
+
+## Arquivos Alterados
+
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/unifi-sync/index.ts` | Criado |
-| `src/components/settings/integrations/UnifiConfigForm.tsx` | Criado |
-| `src/components/clients/ClientNetworkTab.tsx` | Criado |
-| `src/components/clients/NetworkTopologyMap.tsx` | Criado |
-| `src/components/settings/IntegrationsTab.tsx` | Modificado (aba Rede) |
-| `src/components/settings/integrations/IntegrationStatusPanel.tsx` | Modificado (UniFi) |
-| `src/pages/clients/ClientDetailPage.tsx` | Modificado (aba Rede) |
-| `supabase/config.toml` | Modificado (unifi-sync) |
+| Migração SQL | Trigger `on_auth_user_created` |
+| `src/components/settings/UsersTab.tsx` | Query `client_contacts`, badge "Sem empresa", filtro no dialog |
+
