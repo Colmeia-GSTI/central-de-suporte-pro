@@ -441,6 +441,7 @@ export function UsersTab() {
               <TableRow>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Email</TableHead>
+                <TableHead>Empresa</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Papéis</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
