@@ -453,6 +453,7 @@ export function UsersTab() {
                   <TableRow key={i}>
                     <TableCell><div className="h-4 w-32 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="h-4 w-40 bg-muted animate-pulse rounded" /></TableCell>
+                    <TableCell><div className="h-4 w-24 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="h-6 w-16 bg-muted animate-pulse rounded" /></TableCell>
                     <TableCell><div className="flex gap-1"><div className="h-6 w-16 bg-muted animate-pulse rounded" /></div></TableCell>
                     <TableCell className="text-right"><div className="h-8 w-28 bg-muted animate-pulse rounded ml-auto" /></TableCell>
@@ -460,13 +461,15 @@ export function UsersTab() {
                 ))
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
               ) : (
                 users.map((user) => {
                   const isConfirmed = confirmationStatus[user.user_id] ?? true;
+                  const linkedClients = userLinkedClients.get(user.user_id) || [];
+                  const isOrphanClient = isClientRole(user.user_roles) && linkedClients.length === 0;
                   return (
                     <TableRow key={user.id}>
                       <TableCell
