@@ -269,9 +269,11 @@ export function UsersTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
+      queryClient.invalidateQueries({ queryKey: ["user-client-links"] });
       toast({ title: "Usuário vinculado à empresa com sucesso" });
       setLinkClientUser(null);
       setSelectedClientId("");
+      setClientSearchFilter("");
     },
     onError: (error: Error) => {
       toast({ title: "Erro ao vincular empresa", description: error.message, variant: "destructive" });
