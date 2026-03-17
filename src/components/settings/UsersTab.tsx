@@ -480,6 +480,36 @@ export function UsersTab() {
                       </TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
+                        {isClientRole(user.user_roles) ? (
+                          linkedClients.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {linkedClients.map((name, i) => (
+                                <Badge key={i} variant="outline" className="text-xs">
+                                  <Building2 className="mr-1 h-3 w-3" />
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="warning" className="text-xs cursor-pointer" onClick={() => {
+                                  setLinkClientUser(user);
+                                  setSelectedClientId("");
+                                  setClientSearchFilter("");
+                                }}>
+                                  <Building2 className="mr-1 h-3 w-3" />
+                                  Sem empresa
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Clique para vincular a uma empresa</TooltipContent>
+                            </Tooltip>
+                          )
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {isConfirmed ? (
                           <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
                             <UserCheck className="mr-1 h-3 w-3" />
