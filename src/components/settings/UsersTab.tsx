@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -781,29 +782,45 @@ export function UsersTab() {
                 <Label htmlFor="client-search-filter">Buscar empresa</Label>
                 <Input
                   id="client-search-filter"
-                  placeholder="Filtrar por nome..."
+                  placeholder="Digite o nome da empresa..."
                   value={clientSearchFilter}
-                  onChange={(e) => setClientSearchFilter(e.target.value)}
+                  onChange={(e) => {
+                    setClientSearchFilter(e.target.value);
+                    setSelectedClientId("");
+                  }}
                   className="text-base"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="client-select">Empresa</Label>
-                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients
-                      .filter((c) => !clientSearchFilter || c.name.toLowerCase().includes(clientSearchFilter.toLowerCase()))
-                      .map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {clientSearchFilter.length >= 2 && (
+                <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border border-border">
+                  {clients
+                    .filter((c) => c.name.toLowerCase().includes(clientSearchFilter.toLowerCase()))
+                    .map((client) => {
+                      const isSelected = selectedClientId === client.id;
+                      return (
+                        <button
+                          key={client.id}
+                          type="button"
+                          onClick={() => setSelectedClientId(client.id)}
+                          className={cn(
+                            "flex items-center gap-2 w-full px-3 py-2.5 text-sm text-left transition-colors",
+                            "min-h-[44px] touch-manipulation",
+                            isSelected
+                              ? "bg-primary/10 text-primary font-medium"
+                              : "hover:bg-muted text-foreground"
+                          )}
+                        >
+                          <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{client.name}</span>
+                          {isSelected && <UserCheck className="h-4 w-4 shrink-0 ml-auto text-primary" />}
+                        </button>
+                      );
+                    })}
+                  {clients.filter((c) => c.name.toLowerCase().includes(clientSearchFilter.toLowerCase())).length === 0 && (
+                    <p className="px-3 py-3 text-sm text-muted-foreground text-center">Nenhuma empresa encontrada</p>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setLinkClientUser(null)}>
