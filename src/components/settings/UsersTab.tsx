@@ -747,7 +747,12 @@ export function UsersTab() {
         />
 
         {/* Link Client Dialog */}
-        <Dialog open={!!linkClientUser} onOpenChange={(open) => !open && setLinkClientUser(null)}>
+        <Dialog open={!!linkClientUser} onOpenChange={(open) => {
+          if (!open) {
+            setLinkClientUser(null);
+            setClientSearchFilter("");
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Vincular Empresa</DialogTitle>
@@ -756,6 +761,30 @@ export function UsersTab() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Show already linked companies */}
+              {linkClientUser && (userLinkedClients.get(linkClientUser.user_id) || []).length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Empresas já vinculadas</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {(userLinkedClients.get(linkClientUser.user_id) || []).map((name, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        <Building2 className="mr-1 h-3 w-3" />
+                        {name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="client-search-filter">Buscar empresa</Label>
+                <Input
+                  id="client-search-filter"
+                  placeholder="Filtrar por nome..."
+                  value={clientSearchFilter}
+                  onChange={(e) => setClientSearchFilter(e.target.value)}
+                  className="text-base"
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="client-select">Empresa</Label>
                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
@@ -763,11 +792,13 @@ export function UsersTab() {
                     <SelectValue placeholder="Selecione uma empresa" />
                   </SelectTrigger>
                   <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
+                    {clients
+                      .filter((c) => !clientSearchFilter || c.name.toLowerCase().includes(clientSearchFilter.toLowerCase()))
+                      .map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
