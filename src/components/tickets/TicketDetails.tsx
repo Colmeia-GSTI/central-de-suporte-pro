@@ -52,7 +52,7 @@ const canResolveStatuses: Enums<"ticket_status">[] = [
 ];
 
 export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause, onResolve }: TicketDetailsProps) {
-  const [activeTab, setActiveTab] = useState(initialTab || "details");
+  const [activeTab, setActiveTab] = useState(initialTab || "comments");
   const queryClient = useQueryClient();
   const { can } = usePermissions();
 

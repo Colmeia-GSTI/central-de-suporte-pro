@@ -251,27 +251,39 @@ export default function TicketsPage() {
   const hasPreviousPage = previousCursors.length > 0;
 
   const handleViewTicket = (ticket: TicketWithRelations) => {
-    setSelectedTicketInitialTab(undefined);
+    setSelectedTicketInitialTab("comments");
     setSelectedTicket(ticket);
   };
 
   const startTicketMutation = useMutation({
     mutationFn: async ({ ticketId, assetId, assetDescription }: { ticketId: string; assetId: string | null; assetDescription: string | null }) => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      const nowIso = new Date().toISOString();
+
+      // 1. Create attendance session
+      const { error: sessErr } = await supabase
+        .from("ticket_attendance_sessions")
+        .insert({ ticket_id: ticketId, started_by: user.id, started_at: nowIso });
+      if (sessErr) throw sessErr;
+
+      // 2. Update ticket status + started_at
       const { error } = await supabase
         .from("tickets")
         .update({
           status: "in_progress" as Enums<"ticket_status">,
-          assigned_to: user?.id,
-          first_response_at: new Date().toISOString(),
+          assigned_to: user.id,
+          started_at: nowIso,
+          first_response_at: nowIso,
           asset_id: assetId,
           asset_description: assetDescription,
         })
         .eq("id", ticketId);
       if (error) throw error;
 
+      // 3. Record in history
       const assetInfo = assetId ? "com ativo vinculado" : assetDescription ? `dispositivo: ${assetDescription}` : "";
       const { error: historyError } = await supabase.from("ticket_history").insert([{
-        ticket_id: ticketId, user_id: user?.id, old_status: "open", new_status: "in_progress",
+        ticket_id: ticketId, user_id: user.id, old_status: "open", new_status: "in_progress",
         comment: `Atendimento iniciado${assetInfo ? ` (${assetInfo})` : ""}`,
       }]);
       if (historyError) logger.warn("Failed to insert ticket_history (start)", "Tickets", { error: historyError.message });
@@ -280,11 +292,13 @@ export default function TicketsPage() {
     onSuccess: (ticketId) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       toast({ title: "Atendimento iniciado" });
       const ticket = tickets.find(t => t.id === ticketId);
       if (ticket) {
         setSelectedTicketInitialTab("comments");
-        setSelectedTicket({ ...ticket, status: "in_progress" as Enums<"ticket_status">, assigned_to: user?.id ?? null, first_response_at: new Date().toISOString() });
+        setSelectedTicket({ ...ticket, status: "in_progress" as Enums<"ticket_status">, assigned_to: user?.id ?? null, started_at: new Date().toISOString(), first_response_at: new Date().toISOString() });
       }
       setPendingStartTicket(null);
       setIsAssetDialogOpen(false);
