@@ -175,12 +175,21 @@ export function useTicketAttendance({
         .insert({ ticket_id: ticketId, started_by: user!.id, started_at: nowIso });
       if (sessErr) throw sessErr;
 
-      // Update ticket — trigger handles history automatically
+      // Update ticket
       const { error: tErr } = await supabase
         .from("tickets")
         .update({ status: "in_progress" as TicketStatus })
         .eq("id", ticketId);
       if (tErr) throw tErr;
+
+      // Insert history (trigger was removed to avoid duplicates)
+      await supabase.from("ticket_history").insert({
+        ticket_id: ticketId,
+        user_id: user!.id,
+        old_status: status,
+        new_status: "in_progress",
+        comment: "Atendimento retomado",
+      });
     },
     onSuccess: () => {
       toast({ title: "Atendimento retomado" });

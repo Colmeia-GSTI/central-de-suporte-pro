@@ -449,7 +449,14 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
           if (tErr) throw tErr;
         }
 
-        // History is handled automatically by the trg_log_ticket_status_change trigger
+        // Insert history manually (trigger was removed to avoid duplicates)
+        await supabase.from("ticket_history").insert({
+          ticket_id: ticket.id,
+          user_id: user?.id,
+          old_status: oldStatus,
+          new_status: typedNew,
+          comment: `Status alterado: ${statusLabels[oldStatus]} → ${statusLabels[typedNew]}`,
+        });
 
         // Invalidate all related queries
         queryClient.invalidateQueries({ queryKey: ["tickets"] });
