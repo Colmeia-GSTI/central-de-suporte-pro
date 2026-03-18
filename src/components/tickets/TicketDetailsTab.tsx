@@ -406,13 +406,15 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
             .is("ended_at", null);
           if (sessCloseErr) throw sessCloseErr;
 
-          // Create pause record
+          // Create pause record with correct column names
           const { error: pauseInsErr } = await supabase
             .from("ticket_pauses")
             .insert({
               ticket_id: ticket.id,
               paused_at: nowIso,
-              reason: `Status alterado para ${statusLabels[typedNew]}`,
+              paused_by: user!.id,
+              pause_type: "manual",
+              pause_reason: `Status alterado para ${statusLabels[typedNew]}`,
             });
           if (pauseInsErr) throw pauseInsErr;
 
@@ -449,14 +451,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
           if (tErr) throw tErr;
         }
 
-        // Register history
-        await supabase.from("ticket_history").insert({
-          ticket_id: ticket.id,
-          user_id: user?.id,
-          old_status: oldStatus,
-          new_status: typedNew,
-          comment: "Status alterado",
-        });
+        // History is handled automatically by the trg_log_ticket_status_change trigger
 
         // Invalidate all related queries
         queryClient.invalidateQueries({ queryKey: ["tickets"] });

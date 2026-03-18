@@ -35,13 +35,13 @@ export function useTicketAttendance({
   const queryClient = useQueryClient();
   const [now, setNow] = useState(new Date());
 
-  // Live timer — tick every second when ticket is active
-  const isActive = status === "in_progress" || status === "paused";
+  // Only tick when actively working — not when paused or closed
+  const isRunning = status === "in_progress";
   useEffect(() => {
-    if (!isActive) return;
+    if (!isRunning) return;
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
-  }, [isActive]);
+  }, [isRunning]);
 
   // Fetch sessions
   const { data: sessions = [] } = useQuery({
@@ -98,6 +98,7 @@ export function useTicketAttendance({
     queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
     queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
     queryClient.invalidateQueries({ queryKey: ["ticket-recent-history", ticketId] });
+    queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
   }, [queryClient, ticketId]);
 
   // Start attendance: open → in_progress
@@ -105,33 +106,30 @@ export function useTicketAttendance({
     mutationFn: async () => {
       const nowIso = new Date().toISOString();
 
-      // Create session
+      // Close any orphan open sessions first (prevent duplicates)
+      await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: nowIso })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
+
+      // Create new session
       const { error: sessErr } = await supabase
         .from("ticket_attendance_sessions")
         .insert({ ticket_id: ticketId, started_by: user!.id, started_at: nowIso });
       if (sessErr) throw sessErr;
 
-      // Update ticket
+      // Update ticket — trigger handles history automatically
       const updates: Record<string, unknown> = {
         status: "in_progress" as TicketStatus,
         assigned_to: user!.id,
       };
-      // Only set started_at on first start
       if (!startedAt) {
         updates.started_at = nowIso;
         updates.first_response_at = nowIso;
       }
       const { error: tErr } = await supabase.from("tickets").update(updates).eq("id", ticketId);
       if (tErr) throw tErr;
-
-      // History
-      await supabase.from("ticket_history").insert({
-        ticket_id: ticketId,
-        user_id: user!.id,
-        old_status: status,
-        new_status: "in_progress" as TicketStatus,
-        comment: "Atendimento iniciado",
-      });
     },
     onSuccess: () => {
       toast({ title: "Atendimento iniciado" });
@@ -149,12 +147,18 @@ export function useTicketAttendance({
       const nowIso = new Date().toISOString();
 
       // Close active pause
-      const { error: pErr } = await supabase
+      await supabase
         .from("ticket_pauses")
         .update({ resumed_at: nowIso })
         .eq("ticket_id", ticketId)
         .is("resumed_at", null);
-      if (pErr) throw pErr;
+
+      // Close any orphan open sessions first
+      await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: nowIso })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
 
       // New session
       const { error: sessErr } = await supabase
@@ -162,20 +166,12 @@ export function useTicketAttendance({
         .insert({ ticket_id: ticketId, started_by: user!.id, started_at: nowIso });
       if (sessErr) throw sessErr;
 
-      // Update ticket
+      // Update ticket — trigger handles history automatically
       const { error: tErr } = await supabase
         .from("tickets")
         .update({ status: "in_progress" as TicketStatus })
         .eq("id", ticketId);
       if (tErr) throw tErr;
-
-      await supabase.from("ticket_history").insert({
-        ticket_id: ticketId,
-        user_id: user!.id,
-        old_status: status,
-        new_status: "in_progress" as TicketStatus,
-        comment: "Atendimento retomado",
-      });
     },
     onSuccess: () => {
       toast({ title: "Atendimento retomado" });
