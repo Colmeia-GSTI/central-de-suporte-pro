@@ -109,7 +109,7 @@ export function TicketHistoryTab({ ticketId }: TicketHistoryTabProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_history")
-        .select("id, ticket_id, user_id, old_status, new_status, comment, created_at, field_changes")
+        .select("id, ticket_id, user_id, old_status, new_status, comment, created_at")
         .eq("ticket_id", ticketId)
         .order("created_at", { ascending: false });
       if (error) throw error;
