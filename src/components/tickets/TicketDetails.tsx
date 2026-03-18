@@ -2,16 +2,15 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  FileText, MessageSquare, History, ArrowRightLeft, Pause, CheckCircle, PhoneOff,
-  Clock, Building2, User, ExternalLink,
+  FileText, MessageSquare, History, ArrowRightLeft,
+  Clock, Building2,
 } from "lucide-react";
 import { NoContactButton } from "./NoContactButton";
 import { TicketAttendancePanel } from "./TicketAttendancePanel";
 import { usePermissions } from "@/hooks/usePermissions";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { SLAIndicator } from "./SLAIndicator";
 import { TicketDetailsTab } from "./TicketDetailsTab";
@@ -64,31 +63,19 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
   const canResolve = canEditTicket && canResolveStatuses.includes(ticket.status);
 
   return (
-    <div className="space-y-5">
-      {/* Attendance Panel — Live Timer + Actions + Time Summary */}
-      <TicketAttendancePanel
-        ticketId={ticket.id}
-        status={ticket.status}
-        createdAt={ticket.created_at}
-        startedAt={(ticket as Record<string, unknown>).started_at as string | null}
-        resolvedAt={ticket.resolved_at}
-        onPause={canPause && onPause ? onPause : undefined}
-        onResolve={canResolve && onResolve ? onResolve : undefined}
-        canEdit={canEditTicket}
-      />
-
-      {/* Header Card */}
-      <div className="bg-muted/30 rounded-xl p-4 space-y-3">
+    <div className="space-y-4">
+      {/* Compact Header — ticket identity + quick info */}
+      <div className="space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-muted-foreground font-mono">#{ticket.ticket_number}</span>
+              <Badge className={statusColors[ticket.status]}>{statusLabels[ticket.status]}</Badge>
             </div>
             <h2 className="text-lg font-semibold leading-snug">{ticket.title}</h2>
           </div>
         </div>
 
-        {/* Quick Info Row */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {ticket.clients?.name && (
             <span className="flex items-center gap-1">
@@ -111,8 +98,8 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
           />
         </div>
 
-        {/* Secondary Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap pt-1">
+        {/* Quick Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
           {canEditTicket && (
             <NoContactButton ticketId={ticket.id} ticketNumber={ticket.ticket_number} currentStatus={ticket.status} />
           )}
@@ -125,17 +112,29 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
         </div>
       </div>
 
+      {/* Attendance Panel — Timer + Controls + Metrics */}
+      <TicketAttendancePanel
+        ticketId={ticket.id}
+        status={ticket.status}
+        createdAt={ticket.created_at}
+        startedAt={(ticket as Record<string, unknown>).started_at as string | null}
+        resolvedAt={ticket.resolved_at}
+        onPause={canPause && onPause ? onPause : undefined}
+        onResolve={canResolve && onResolve ? onResolve : undefined}
+        canEdit={canEditTicket}
+      />
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="comments" className="gap-1.5 text-xs sm:text-sm">
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span>Comentários</span>
+          </TabsTrigger>
           <TabsTrigger value="details" className="gap-1.5 text-xs sm:text-sm">
             <FileText className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Detalhes</span>
             <span className="sm:hidden">Info</span>
-          </TabsTrigger>
-          <TabsTrigger value="comments" className="gap-1.5 text-xs sm:text-sm">
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span>Comentários</span>
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5 text-xs sm:text-sm">
             <History className="h-3.5 w-3.5" />
@@ -144,11 +143,11 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="details" className="mt-4">
-          <TicketDetailsTab ticket={ticket} onUpdate={handleUpdate} />
-        </TabsContent>
         <TabsContent value="comments" className="mt-4">
           <TicketCommentsTab ticketId={ticket.id} ticketCreatedBy={ticket.created_by} />
+        </TabsContent>
+        <TabsContent value="details" className="mt-4">
+          <TicketDetailsTab ticket={ticket} onUpdate={handleUpdate} />
         </TabsContent>
         <TabsContent value="history" className="mt-4">
           <TicketHistoryTab ticketId={ticket.id} />
