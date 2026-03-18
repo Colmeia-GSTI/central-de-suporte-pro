@@ -292,11 +292,13 @@ export default function TicketsPage() {
     onSuccess: (ticketId) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       toast({ title: "Atendimento iniciado" });
       const ticket = tickets.find(t => t.id === ticketId);
       if (ticket) {
         setSelectedTicketInitialTab("comments");
-        setSelectedTicket({ ...ticket, status: "in_progress" as Enums<"ticket_status">, assigned_to: user?.id ?? null, first_response_at: new Date().toISOString() });
+        setSelectedTicket({ ...ticket, status: "in_progress" as Enums<"ticket_status">, assigned_to: user?.id ?? null, started_at: new Date().toISOString(), first_response_at: new Date().toISOString() });
       }
       setPendingStartTicket(null);
       setIsAssetDialogOpen(false);
