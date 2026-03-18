@@ -3739,6 +3739,7 @@ export type Database = {
         Row: {
           comment: string | null
           created_at: string
+          field_changes: Json | null
           id: string
           new_status: Database["public"]["Enums"]["ticket_status"] | null
           old_status: Database["public"]["Enums"]["ticket_status"] | null
@@ -3748,6 +3749,7 @@ export type Database = {
         Insert: {
           comment?: string | null
           created_at?: string
+          field_changes?: Json | null
           id?: string
           new_status?: Database["public"]["Enums"]["ticket_status"] | null
           old_status?: Database["public"]["Enums"]["ticket_status"] | null
@@ -3757,6 +3759,7 @@ export type Database = {
         Update: {
           comment?: string | null
           created_at?: string
+          field_changes?: Json | null
           id?: string
           new_status?: Database["public"]["Enums"]["ticket_status"] | null
           old_status?: Database["public"]["Enums"]["ticket_status"] | null
