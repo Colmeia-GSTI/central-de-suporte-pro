@@ -64,7 +64,7 @@ export function SessionExpiryIndicator() {
           className={cn(
             "gap-1.5 cursor-default transition-colors",
             isCritical
-              ? "border-destructive/50 bg-destructive/10 text-destructive animate-pulse"
+              ? "border-destructive/50 bg-destructive/10 text-destructive"
               : "border-warning/50 bg-warning/10 text-warning"
           )}
         >

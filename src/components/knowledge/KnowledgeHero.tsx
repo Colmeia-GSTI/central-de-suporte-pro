@@ -18,7 +18,7 @@ export function KnowledgeHero({ search, onSearchChange }: KnowledgeHeroProps) {
 
       <div className="relative px-6 py-12 md:px-12 md:py-16 text-center">
         <div className="flex items-center justify-center gap-2 mb-4">
-          <Sparkles className="h-6 w-6 text-primary animate-pulse" />
+          <Sparkles className="h-6 w-6 text-primary" />
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
             Central de Ajuda
           </h1>

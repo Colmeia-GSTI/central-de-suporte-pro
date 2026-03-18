@@ -57,9 +57,9 @@ interface TicketAttendancePanelProps {
   canEdit?: boolean;
 }
 
-const statusConfig: Record<string, { label: string; color: string; pulse?: boolean }> = {
+const statusConfig: Record<string, { label: string; color: string }> = {
   open: { label: "Aberto", color: "bg-muted text-muted-foreground" },
-  in_progress: { label: "Em Atendimento", color: "bg-green-500 text-white", pulse: true },
+  in_progress: { label: "Em Atendimento", color: "bg-green-500 text-white" },
   paused: { label: "Pausado", color: "bg-amber-500 text-white" },
   waiting_third_party: { label: "Aguardando Terceiro", color: "bg-purple-500 text-white" },
   no_contact: { label: "Sem Contato", color: "bg-orange-500 text-white" },
@@ -115,7 +115,7 @@ export function TicketAttendancePanel({
         {/* Status Banner + Timer */}
         <div className="bg-muted/40 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <Badge className={cn(cfg.color, cfg.pulse && "animate-pulse")}>
+            <Badge className={cfg.color}>
               {cfg.label}
             </Badge>
           </div>
