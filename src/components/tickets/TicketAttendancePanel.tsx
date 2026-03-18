@@ -115,7 +115,7 @@ export function TicketAttendancePanel({
         {/* Status Banner + Timer */}
         <div className="bg-muted/40 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <Badge className={cn(cfg.color, cfg.pulse && "animate-pulse")}>
+            <Badge className={cfg.color}>
               {cfg.label}
             </Badge>
           </div>
