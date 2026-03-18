@@ -251,7 +251,7 @@ export default function TicketsPage() {
   const hasPreviousPage = previousCursors.length > 0;
 
   const handleViewTicket = (ticket: TicketWithRelations) => {
-    setSelectedTicketInitialTab(undefined);
+    setSelectedTicketInitialTab("comments");
     setSelectedTicket(ticket);
   };
 
