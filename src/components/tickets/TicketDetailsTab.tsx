@@ -406,13 +406,15 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
             .is("ended_at", null);
           if (sessCloseErr) throw sessCloseErr;
 
-          // Create pause record
+          // Create pause record with correct column names
           const { error: pauseInsErr } = await supabase
             .from("ticket_pauses")
             .insert({
               ticket_id: ticket.id,
               paused_at: nowIso,
-              reason: `Status alterado para ${statusLabels[typedNew]}`,
+              paused_by: user!.id,
+              pause_type: "manual",
+              pause_reason: `Status alterado para ${statusLabels[typedNew]}`,
             });
           if (pauseInsErr) throw pauseInsErr;
 
