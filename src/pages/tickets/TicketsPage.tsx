@@ -250,9 +250,37 @@ export default function TicketsPage() {
   const hasNextPage = data?.hasNextPage || false;
   const hasPreviousPage = previousCursors.length > 0;
 
+  // Reactive ticket detail query — keeps selectedTicket fresh after mutations
+  const { data: freshTicketDetail } = useQuery({
+    queryKey: ["ticket-detail", selectedTicketId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select(`
+          *,
+          clients(id, name),
+          ticket_categories(id, name),
+          ticket_subcategories(id, name),
+          ticket_tag_assignments(ticket_tags(id, name, color))
+        `)
+        .eq("id", selectedTicketId!)
+        .single();
+      if (error) throw error;
+      return data as TicketWithRelations;
+    },
+    enabled: !!selectedTicketId,
+    staleTime: 5_000,
+  });
+
+  const selectedTicket = useMemo(() => {
+    if (!selectedTicketId) return null;
+    // Prefer list data (most up-to-date after invalidation), fallback to dedicated query
+    return tickets.find(t => t.id === selectedTicketId) ?? freshTicketDetail ?? null;
+  }, [selectedTicketId, tickets, freshTicketDetail]);
+
   const handleViewTicket = (ticket: TicketWithRelations) => {
     setSelectedTicketInitialTab("comments");
-    setSelectedTicket(ticket);
+    setSelectedTicketId(ticket.id);
   };
 
   const startTicketMutation = useMutation({
