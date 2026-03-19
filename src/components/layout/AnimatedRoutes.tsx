@@ -26,7 +26,9 @@ function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType }>
   });
 }
 
-// Lazy load with retry
+// Lazy load with retry — ALL pages are lazy for optimal bundle splitting
+const Dashboard = lazyWithRetry(() => import("@/pages/Dashboard"));
+const TicketsPage = lazyWithRetry(() => import("@/pages/tickets/TicketsPage"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/ForgotPassword"));
 const Register = lazyWithRetry(() => import("@/pages/Register"));
 const Unauthorized = lazyWithRetry(() => import("@/pages/Unauthorized"));
