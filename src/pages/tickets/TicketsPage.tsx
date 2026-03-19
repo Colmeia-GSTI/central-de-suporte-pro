@@ -888,7 +888,7 @@ export default function TicketsPage() {
               open={isTransferOpen} onOpenChange={setIsTransferOpen}
               ticketId={selectedTicket.id} currentAssignedTo={selectedTicket.assigned_to}
               currentDepartmentId={selectedTicket.department_id}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-detail", selectedTicketId] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
             />
             <TicketPauseDialog
               open={isPauseOpen} onOpenChange={setIsPauseOpen}
