@@ -7,10 +7,8 @@ import { HoneycombLoader } from "@/components/ui/HoneycombLoader";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Eager load - frequently accessed
-import Dashboard from "@/pages/Dashboard";
+// Only Login is eager (entry point) — Dashboard and TicketsPage are lazy for faster initial load
 import Login from "@/pages/Login";
-import TicketsPage from "@/pages/tickets/TicketsPage";
 
 // Retry wrapper for lazy imports — retries up to 3 times with exponential delay
 function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
