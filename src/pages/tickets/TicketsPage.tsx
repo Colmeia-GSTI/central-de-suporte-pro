@@ -91,7 +91,7 @@ export default function TicketsPage() {
   const [clientFilter, setClientFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedTicketInitialTab, setSelectedTicketInitialTab] = useState<"details" | "comments" | "history" | undefined>(undefined);
   const [cursor, setCursor] = useState<string | null>(null);
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);

@@ -94,6 +94,7 @@ export function useTicketAttendance({
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["tickets"] });
+    queryClient.invalidateQueries({ queryKey: ["ticket-detail", ticketId] });
     queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
     queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
     queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
