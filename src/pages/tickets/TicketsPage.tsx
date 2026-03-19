@@ -870,7 +870,7 @@ export default function TicketsPage() {
               {selectedTicket && (
                 <TicketDetails
                   ticket={selectedTicket}
-                  onClose={() => setSelectedTicket(null)}
+                  onClose={() => setSelectedTicketId(null)}
                   initialTab={selectedTicketInitialTab}
                   onTransfer={() => setIsTransferOpen(true)}
                   onPause={() => setIsPauseOpen(true)}
