@@ -861,7 +861,7 @@ export default function TicketsPage() {
         )}
 
         {/* Ticket Details Sheet (side panel like Zendesk) */}
-        <Sheet open={!!selectedTicket} onOpenChange={() => { setSelectedTicket(null); setSelectedTicketInitialTab(undefined); }}>
+        <Sheet open={!!selectedTicketId} onOpenChange={() => { setSelectedTicketId(null); setSelectedTicketInitialTab(undefined); }}>
           <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
             <SheetHeader className="p-6 pb-0">
               <SheetTitle className="sr-only">Detalhes do Chamado</SheetTitle>
