@@ -893,7 +893,7 @@ export default function TicketsPage() {
             <TicketPauseDialog
               open={isPauseOpen} onOpenChange={setIsPauseOpen}
               ticketId={selectedTicket.id}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-detail", selectedTicketId] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
             />
             <TicketResolveDialog
               open={isResolveOpen} onOpenChange={setIsResolveOpen}
