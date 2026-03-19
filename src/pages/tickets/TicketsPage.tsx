@@ -908,7 +908,7 @@ export default function TicketsPage() {
               open={isRatingOpen} onOpenChange={setIsRatingOpen}
               ticketId={selectedTicket.id} ticketNumber={selectedTicket.ticket_number}
               ticketTitle={selectedTicket.title}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); setSelectedTicket(null); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); setSelectedTicketId(null); }}
             />
           </>
         )}
