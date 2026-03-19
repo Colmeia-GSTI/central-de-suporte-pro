@@ -132,9 +132,9 @@ export function AnimatedRoutes() {
       {/* Client portal */}
       <Route path="/portal" element={<ProtectedRoute allowedRoles={["client", "client_master"]}><LazyPage><ClientPortalPage /></LazyPage></ProtectedRoute>} />
 
-      {/* Main routes - Dashboard and Tickets eager loaded */}
-      <Route path="/" element={<ProtectedRoute><PageTransition><Dashboard /></PageTransition></ProtectedRoute>} />
-      <Route path="/tickets" element={<ProtectedRoute requireStaff><PageTransition><TicketsPage /></PageTransition></ProtectedRoute>} />
+      {/* Main routes - lazy loaded for optimal bundle splitting */}
+      <Route path="/" element={<ProtectedRoute><LazyPage><Dashboard /></LazyPage></ProtectedRoute>} />
+      <Route path="/tickets" element={<ProtectedRoute requireStaff><LazyPage><TicketsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/tickets/new" element={<ProtectedRoute requireStaff><LazyPage><NewTicketPage /></LazyPage></ProtectedRoute>} />
       
       {/* Other staff routes - lazy */}
