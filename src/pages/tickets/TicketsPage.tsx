@@ -288,6 +288,13 @@ export default function TicketsPage() {
       if (!user?.id) throw new Error("Usuário não autenticado");
       const nowIso = new Date().toISOString();
 
+      // 0. Close orphan open sessions (prevent duplicates)
+      await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: nowIso })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
+
       // 1. Create attendance session
       const { error: sessErr } = await supabase
         .from("ticket_attendance_sessions")
@@ -319,15 +326,13 @@ export default function TicketsPage() {
     },
     onSuccess: (ticketId) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-detail", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       toast({ title: "Atendimento iniciado" });
-      const ticket = tickets.find(t => t.id === ticketId);
-      if (ticket) {
-        setSelectedTicketInitialTab("comments");
-        setSelectedTicket({ ...ticket, status: "in_progress" as Enums<"ticket_status">, assigned_to: user?.id ?? null, started_at: new Date().toISOString(), first_response_at: new Date().toISOString() });
-      }
+      setSelectedTicketInitialTab("comments");
+      setSelectedTicketId(ticketId);
       setPendingStartTicket(null);
       setIsAssetDialogOpen(false);
     },
