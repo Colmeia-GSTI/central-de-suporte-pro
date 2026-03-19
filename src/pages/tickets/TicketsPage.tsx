@@ -91,7 +91,7 @@ export default function TicketsPage() {
   const [clientFilter, setClientFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedTicketInitialTab, setSelectedTicketInitialTab] = useState<"details" | "comments" | "history" | undefined>(undefined);
   const [cursor, setCursor] = useState<string | null>(null);
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);
@@ -250,15 +250,50 @@ export default function TicketsPage() {
   const hasNextPage = data?.hasNextPage || false;
   const hasPreviousPage = previousCursors.length > 0;
 
+  // Reactive ticket detail query — keeps selectedTicket fresh after mutations
+  const { data: freshTicketDetail } = useQuery({
+    queryKey: ["ticket-detail", selectedTicketId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select(`
+          *,
+          clients(id, name),
+          ticket_categories(id, name),
+          ticket_subcategories(id, name),
+          ticket_tag_assignments(ticket_tags(id, name, color))
+        `)
+        .eq("id", selectedTicketId!)
+        .single();
+      if (error) throw error;
+      return data as TicketWithRelations;
+    },
+    enabled: !!selectedTicketId,
+    staleTime: 5_000,
+  });
+
+  const selectedTicket = useMemo(() => {
+    if (!selectedTicketId) return null;
+    // Prefer list data (most up-to-date after invalidation), fallback to dedicated query
+    return tickets.find(t => t.id === selectedTicketId) ?? freshTicketDetail ?? null;
+  }, [selectedTicketId, tickets, freshTicketDetail]);
+
   const handleViewTicket = (ticket: TicketWithRelations) => {
     setSelectedTicketInitialTab("comments");
-    setSelectedTicket(ticket);
+    setSelectedTicketId(ticket.id);
   };
 
   const startTicketMutation = useMutation({
     mutationFn: async ({ ticketId, assetId, assetDescription }: { ticketId: string; assetId: string | null; assetDescription: string | null }) => {
       if (!user?.id) throw new Error("Usuário não autenticado");
       const nowIso = new Date().toISOString();
+
+      // 0. Close orphan open sessions (prevent duplicates)
+      await supabase
+        .from("ticket_attendance_sessions")
+        .update({ ended_at: nowIso })
+        .eq("ticket_id", ticketId)
+        .is("ended_at", null);
 
       // 1. Create attendance session
       const { error: sessErr } = await supabase
@@ -291,15 +326,13 @@ export default function TicketsPage() {
     },
     onSuccess: (ticketId) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["ticket-detail", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       toast({ title: "Atendimento iniciado" });
-      const ticket = tickets.find(t => t.id === ticketId);
-      if (ticket) {
-        setSelectedTicketInitialTab("comments");
-        setSelectedTicket({ ...ticket, status: "in_progress" as Enums<"ticket_status">, assigned_to: user?.id ?? null, started_at: new Date().toISOString(), first_response_at: new Date().toISOString() });
-      }
+      setSelectedTicketInitialTab("comments");
+      setSelectedTicketId(ticketId);
       setPendingStartTicket(null);
       setIsAssetDialogOpen(false);
     },
@@ -828,7 +861,7 @@ export default function TicketsPage() {
         )}
 
         {/* Ticket Details Sheet (side panel like Zendesk) */}
-        <Sheet open={!!selectedTicket} onOpenChange={() => { setSelectedTicket(null); setSelectedTicketInitialTab(undefined); }}>
+        <Sheet open={!!selectedTicketId} onOpenChange={() => { setSelectedTicketId(null); setSelectedTicketInitialTab(undefined); }}>
           <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-0">
             <SheetHeader className="p-6 pb-0">
               <SheetTitle className="sr-only">Detalhes do Chamado</SheetTitle>
@@ -837,7 +870,7 @@ export default function TicketsPage() {
               {selectedTicket && (
                 <TicketDetails
                   ticket={selectedTicket}
-                  onClose={() => setSelectedTicket(null)}
+                  onClose={() => setSelectedTicketId(null)}
                   initialTab={selectedTicketInitialTab}
                   onTransfer={() => setIsTransferOpen(true)}
                   onPause={() => setIsPauseOpen(true)}
@@ -855,12 +888,12 @@ export default function TicketsPage() {
               open={isTransferOpen} onOpenChange={setIsTransferOpen}
               ticketId={selectedTicket.id} currentAssignedTo={selectedTicket.assigned_to}
               currentDepartmentId={selectedTicket.department_id}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-detail", selectedTicketId] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
             />
             <TicketPauseDialog
               open={isPauseOpen} onOpenChange={setIsPauseOpen}
               ticketId={selectedTicket.id}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-detail", selectedTicketId] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); }}
             />
             <TicketResolveDialog
               open={isResolveOpen} onOpenChange={setIsResolveOpen}
@@ -869,13 +902,13 @@ export default function TicketsPage() {
               clientId={selectedTicket.client_id} ticketTitle={selectedTicket.title}
               ticketCreatedAt={selectedTicket.created_at} ticketStartedAt={selectedTicket.started_at}
               firstResponseAt={selectedTicket.first_response_at}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); setIsResolveOpen(false); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-detail", selectedTicketId] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); setIsResolveOpen(false); }}
             />
             <TicketRatingDialog
               open={isRatingOpen} onOpenChange={setIsRatingOpen}
               ticketId={selectedTicket.id} ticketNumber={selectedTicket.ticket_number}
               ticketTitle={selectedTicket.title}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); setSelectedTicket(null); }}
+              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); setSelectedTicketId(null); }}
             />
           </>
         )}
