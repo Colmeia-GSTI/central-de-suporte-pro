@@ -1,4 +1,7 @@
-export function BackgroundPattern() {
+import { memo } from "react";
+
+// Memoized to prevent re-renders — this is a purely static decoration
+export const BackgroundPattern = memo(function BackgroundPattern() {
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
       {/* Main background */}
@@ -29,7 +32,7 @@ export function BackgroundPattern() {
         <rect width="100%" height="100%" fill="url(#hexagons)" />
       </svg>
       
-      {/* Static honey orbs - no animation to prevent flickering on remote connections */}
+      {/* Static honey orbs */}
       <div 
         className="absolute top-1/4 -left-32 w-96 h-96 rounded-full opacity-20 dark:opacity-15 blur-3xl"
         style={{
@@ -90,4 +93,4 @@ export function BackgroundPattern() {
       />
     </div>
   );
-}
+});
