@@ -35,6 +35,7 @@ export function useNotifications() {
       return data as Notification[];
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 2,
   });
 
   useEffect(() => {

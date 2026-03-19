@@ -1,7 +1,8 @@
+import { memo } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
-export function GlobalProgress() {
+export const GlobalProgress = memo(function GlobalProgress() {
   const isFetching = useIsFetching();
 
   if (!isFetching) return null;
@@ -27,4 +28,4 @@ export function GlobalProgress() {
       />
     </div>
   );
-}
+});

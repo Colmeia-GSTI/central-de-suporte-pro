@@ -50,27 +50,27 @@ function StatCard({ label, value, icon, colorClass, accentClass, delay, tooltip,
 }
 
 export function TicketStatsBar() {
+  // Use count-only (head: true) queries instead of fetching all rows
   const { data: stats, isLoading } = useQuery({
     queryKey: ["ticket-stats-bar"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("status, assigned_to")
-        .not("status", "in", '("closed")');
-      if (error) throw error;
+      const [openRes, progressRes, waitingRes, pausedRes, unassignedRes, resolvedRes] = await Promise.all([
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "open"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "in_progress"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).in("status", ["waiting", "waiting_third_party"]),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "paused"),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).is("assigned_to", null).not("status", "in", '("resolved","closed")'),
+        supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "resolved"),
+      ]);
 
-      const counts = { open: 0, in_progress: 0, waiting: 0, paused: 0, unassigned: 0, resolved: 0 };
-
-      for (const t of data || []) {
-        if (t.status === "open") counts.open++;
-        else if (t.status === "in_progress") counts.in_progress++;
-        else if (t.status === "waiting" || t.status === "waiting_third_party") counts.waiting++;
-        else if (t.status === "paused") counts.paused++;
-        else if (t.status === "resolved") counts.resolved++;
-
-        if (!t.assigned_to && t.status !== "resolved" && t.status !== "closed") counts.unassigned++;
-      }
-      return counts;
+      return {
+        open: openRes.count || 0,
+        in_progress: progressRes.count || 0,
+        waiting: waitingRes.count || 0,
+        paused: pausedRes.count || 0,
+        unassigned: unassignedRes.count || 0,
+        resolved: resolvedRes.count || 0,
+      };
     },
     staleTime: 60 * 1000,
   });

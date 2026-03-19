@@ -7,10 +7,8 @@ import { HoneycombLoader } from "@/components/ui/HoneycombLoader";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Eager load - frequently accessed
-import Dashboard from "@/pages/Dashboard";
+// Only Login is eager (entry point) — Dashboard and TicketsPage are lazy for faster initial load
 import Login from "@/pages/Login";
-import TicketsPage from "@/pages/tickets/TicketsPage";
 
 // Retry wrapper for lazy imports — retries up to 3 times with exponential delay
 function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType }>) {
@@ -28,7 +26,9 @@ function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType }>
   });
 }
 
-// Lazy load with retry
+// Lazy load with retry — ALL pages are lazy for optimal bundle splitting
+const Dashboard = lazyWithRetry(() => import("@/pages/Dashboard"));
+const TicketsPage = lazyWithRetry(() => import("@/pages/tickets/TicketsPage"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/ForgotPassword"));
 const Register = lazyWithRetry(() => import("@/pages/Register"));
 const Unauthorized = lazyWithRetry(() => import("@/pages/Unauthorized"));
@@ -132,9 +132,9 @@ export function AnimatedRoutes() {
       {/* Client portal */}
       <Route path="/portal" element={<ProtectedRoute allowedRoles={["client", "client_master"]}><LazyPage><ClientPortalPage /></LazyPage></ProtectedRoute>} />
 
-      {/* Main routes - Dashboard and Tickets eager loaded */}
-      <Route path="/" element={<ProtectedRoute><PageTransition><Dashboard /></PageTransition></ProtectedRoute>} />
-      <Route path="/tickets" element={<ProtectedRoute requireStaff><PageTransition><TicketsPage /></PageTransition></ProtectedRoute>} />
+      {/* Main routes - lazy loaded for optimal bundle splitting */}
+      <Route path="/" element={<ProtectedRoute><LazyPage><Dashboard /></LazyPage></ProtectedRoute>} />
+      <Route path="/tickets" element={<ProtectedRoute requireStaff><LazyPage><TicketsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/tickets/new" element={<ProtectedRoute requireStaff><LazyPage><NewTicketPage /></LazyPage></ProtectedRoute>} />
       
       {/* Other staff routes - lazy */}
