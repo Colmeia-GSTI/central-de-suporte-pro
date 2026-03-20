@@ -1,90 +1,94 @@
 
 
-# Fix: Ticket não atualiza ao vivo após "Iniciar Atendimento"
+# Diagnóstico: Push Notifications não vinculam dispositivos
 
-## Diagnóstico Completo
+## Descobertas da Investigação E2E
 
-O problema raiz é que `selectedTicket` em `TicketsPage.tsx` é um **snapshot estático** (`useState`). Quando `startAttendance` ou qualquer ação muda o status no banco, `invalidateQueries(["tickets"])` atualiza a lista, mas o `selectedTicket` no Sheet permanece congelado com os dados antigos.
+### 1. Tabela `push_subscriptions` — vazia para o usuário atual
+O usuário logado (`3d877c38-...`) **não possui nenhuma assinatura push** na tabela. Existem apenas 2 registros de outros usuários (de março).
 
-### Componentes afetados e como serão impactados pela correção
+### 2. CAUSA RAIZ: `checkSubscription` trava indefinidamente
+No hook `usePushNotifications.ts`, o `checkSubscription` (chamado no `useEffect` inicial) faz:
+```
+const registration = await navigator.serviceWorker.ready;
+```
+Se nenhum Service Worker está registrado (e não há PWA configurada com `vite-plugin-pwa`), essa promise **nunca resolve**. Resultado:
+- `isLoading` fica `true` para sempre
+- O botão "Ativar Notificações Push" fica desabilitado ou oculto
+- O usuário nunca consegue se inscrever
 
-| Componente | Dado afetado | Situação atual | Após correção |
-|---|---|---|---|
-| **TicketDetails** (header) | `ticket.status` → Badge de status | Fica "Aberto" mesmo após iniciar | Atualiza para "Em Andamento" em tempo real |
-| **TicketAttendancePanel** | `status` prop → Timer + Botões | Timer não inicia, botão "Iniciar" persiste | Timer inicia, botões mudam para Pausar/Resolver |
-| **useTicketAttendance** (hook) | `status` → `isRunning` (tick a cada 1s) | `isRunning = false` (status ainda "open") | `isRunning = true`, cronômetro começa |
-| **SLAIndicator** | `first_response_at` | Continua mostrando "sem resposta" | Reflete a primeira resposta |
-| **TicketDetailsTab** | `ticket.assigned_to`, `status` | Campos desatualizados | Dados frescos |
-| **TicketHistoryTab** | Query própria por `ticketId` | Já funciona (query independente) | Mantém funcionando |
-| **TicketCommentsTab** | Query própria por `ticketId` | Já funciona | Mantém funcionando |
-| **TicketPauseDialog** | `ticketId` (apenas ID) | OK — usa apenas ID | Sem impacto |
-| **TicketResolveDialog** | Props estáticos (`ticketNumber`, `currentStatus`, `ticketStartedAt`) | `currentStatus` fica desatualizado | Atualiza com dados frescos |
-| **TicketTransferDialog** | `ticketId`, `currentAssignedTo` | `currentAssignedTo` desatualizado | Atualiza |
-| **TicketRatingDialog** | `ticketId`, `ticketNumber`, `ticketTitle` | OK — dados que não mudam | Sem impacto |
-| **startTicketMutation** (TicketsPage) | Cria sessão + atualiza ticket | Duplica sessão (não fecha anteriores) | Fechar sessões antes de abrir nova |
+### 3. Service Worker só é registrado no `subscribe()`
+O `navigator.serviceWorker.register("/sw-push.js")` só é chamado dentro da função `subscribe()`. Mas `checkSubscription` (que roda antes) depende de `navigator.serviceWorker.ready` — criando um deadlock lógico.
+
+### 4. Sem logs na Edge Function
+A função `send-push-notification` não tem logs recentes — confirmando que o fluxo de envio nunca está sendo acionado.
+
+### 5. RLS policies estão corretas
+As policies permitem INSERT/SELECT/UPDATE/DELETE com `auth.uid() = user_id`. A edge function usa service role key (bypass RLS). ✅ OK.
+
+### 6. Manifest com escopo incorreto
+O `manifest.json` tem `scope: "https://suporte.colmeiagsti.com/"` mas o app roda em domínios diferentes (lovable.app/lovableproject.com). Isso pode causar problemas de escopo do SW.
+
+---
 
 ## Plano de Correção
 
-### 1. `TicketsPage.tsx` — selectedTicket reativo
+### Arquivo 1: `src/hooks/usePushNotifications.ts`
 
-Substituir o estado estático por derivação reativa:
+**Problema**: `checkSubscription` chama `navigator.serviceWorker.ready` sem SW registrado → hang infinito.
 
-```typescript
-// Antes
-const [selectedTicket, setSelectedTicket] = useState<TicketWithRelations | null>(null);
-
-// Depois
-const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
-
-// Query individual como fallback
-const { data: freshTicket } = useQuery({
-  queryKey: ["ticket-detail", selectedTicketId],
-  queryFn: /* fetch ticket by ID with relations */,
-  enabled: !!selectedTicketId,
-});
-
-// Derivar de dados frescos
-const selectedTicket = useMemo(() => {
-  if (!selectedTicketId) return null;
-  return tickets.find(t => t.id === selectedTicketId) ?? freshTicket ?? null;
-}, [selectedTicketId, tickets, freshTicket]);
-```
-
-Atualizar **todas as 8 referências** a `setSelectedTicket`:
-- `handleViewTicket` → `setSelectedTicketId(ticket.id)`
-- `startTicketMutation.onSuccess` → remover o spread manual, apenas `setSelectedTicketId(ticketId)` (dados virão da query)
-- `Sheet onOpenChange` → `setSelectedTicketId(null)`
-- `TicketDetails onClose` → `setSelectedTicketId(null)`
-- `TicketRatingDialog onSuccess` → `setSelectedTicketId(null)`
-
-### 2. `TicketsPage.tsx` — startTicketMutation: fechar sessões órfãs
-
-Adicionar fechamento de sessões abertas antes de criar nova (mesmo padrão que `useTicketAttendance.ts`):
+**Correção**:
+1. Substituir `navigator.serviceWorker.ready` por `navigator.serviceWorker.getRegistrations()` para verificar se já existe um SW registrado sem bloquear
+2. Se não há SW registrado, definir `isSubscribed: false` imediatamente (sem hang)
+3. Se há SW registrado, usar `registration.pushManager.getSubscription()` para verificar
+4. Adicionar um timeout de 5 segundos como fallback de segurança
 
 ```typescript
-// Antes de inserir nova sessão:
-await supabase
-  .from("ticket_attendance_sessions")
-  .update({ ended_at: nowIso })
-  .eq("ticket_id", ticketId)
-  .is("ended_at", null);
+// Antes (trava):
+const registration = await navigator.serviceWorker.ready;
+const subscription = await registration.pushManager.getSubscription();
+
+// Depois (seguro):
+const registrations = await navigator.serviceWorker.getRegistrations();
+const pushReg = registrations.find(r => r.active?.scriptURL.includes("sw-push"));
+if (!pushReg) {
+  // Nenhum SW push registrado — não há subscription
+  setState(prev => ({ ...prev, isSupported: true, isSubscribed: false, isLoading: false }));
+  return;
+}
+const subscription = await pushReg.pushManager.getSubscription();
 ```
 
-### 3. `useTicketAttendance.ts` — invalidar `ticket-detail`
+### Arquivo 2: `public/manifest.json`
 
-Adicionar na função `invalidateAll`:
-```typescript
-queryClient.invalidateQueries({ queryKey: ["ticket-detail", ticketId] });
+**Problema**: `scope` e `start_url` hardcoded para `suporte.colmeiagsti.com`.
+
+**Correção**: Usar caminhos relativos (`/`) para funcionar em qualquer domínio:
+```json
+"start_url": "/",
+"scope": "/",
+"id": "/"
 ```
 
-### 4. Dialogs que usam props do selectedTicket
+### Arquivo 3: `public/sw-push.js`
 
-Como `selectedTicket` agora será derivado reativamente, os props passados para `TicketResolveDialog` (`currentStatus`, `ticketStartedAt`) e `TicketTransferDialog` (`currentAssignedTo`) serão automaticamente atualizados.
+**Problema menor**: O `pushsubscriptionchange` referencia `self.VAPID_PUBLIC_KEY` que nunca é definido.
+
+**Correção**: Remover o handler `pushsubscriptionchange` (a re-sincronização já é feita pelo hook no frontend via upsert automático).
+
+---
+
+## Resumo do Impacto
+
+| Item | Antes | Depois |
+|---|---|---|
+| `checkSubscription` | Trava se não há SW | Retorna imediato, mostra botão |
+| Botão "Ativar Push" | Invisível/desabilitado | Visível e funcional |
+| Manifest scope | Fixo em domínio externo | Relativo (funciona em qualquer domínio) |
+| SW `pushsubscriptionchange` | Referencia variável inexistente | Removido (resync no frontend) |
 
 ## Arquivos alterados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/tickets/TicketsPage.tsx` | Substituir `selectedTicket` state por `selectedTicketId` + query reativa; fechar sessões órfãs no `startTicketMutation` |
-| `src/hooks/useTicketAttendance.ts` | Adicionar invalidação de `ticket-detail` |
+- `src/hooks/usePushNotifications.ts`
+- `public/manifest.json`
+- `public/sw-push.js`
 
