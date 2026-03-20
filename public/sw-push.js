@@ -54,7 +54,6 @@ self.addEventListener('notificationclick', function(event) {
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then(function(clientList) {
-        // Check if there's already a window open
         for (const client of clientList) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
             client.focus();
@@ -62,7 +61,6 @@ self.addEventListener('notificationclick', function(event) {
             return;
           }
         }
-        // If no window is open, open a new one
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }
@@ -72,26 +70,4 @@ self.addEventListener('notificationclick', function(event) {
 
 self.addEventListener('notificationclose', function(event) {
   console.log('[SW Push] Notification closed');
-});
-
-// Handle push subscription change
-self.addEventListener('pushsubscriptionchange', function(event) {
-  console.log('[SW Push] Subscription changed');
-  
-  event.waitUntil(
-    self.registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: self.VAPID_PUBLIC_KEY
-    })
-    .then(function(subscription) {
-      // Send new subscription to server
-      return fetch('/api/push/update-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(subscription)
-      });
-    })
-  );
 });

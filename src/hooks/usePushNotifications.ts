@@ -63,7 +63,7 @@ export function usePushNotifications() {
     return isSupported;
   }, []);
 
-  // Check current subscription status
+  // Check current subscription status (non-blocking — no navigator.serviceWorker.ready)
   const checkSubscription = useCallback(async () => {
     if (!checkSupport() || !user) {
       setState(prev => ({ ...prev, isLoading: false }));
@@ -74,9 +74,28 @@ export function usePushNotifications() {
     const isBlocked = currentPermission === "denied";
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      
+      // Use getRegistrations() instead of .ready to avoid infinite hang
+      // when no service worker is registered yet
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      const pushReg = registrations.find(
+        (r) => r.active?.scriptURL.includes("sw-push")
+      );
+
+      if (!pushReg) {
+        // No push SW registered — user hasn't subscribed on this device
+        setState(prev => ({
+          ...prev,
+          isSupported: true,
+          isSubscribed: false,
+          permission: currentPermission,
+          isBlocked,
+          isLoading: false,
+        }));
+        return;
+      }
+
+      const subscription = await pushReg.pushManager.getSubscription();
+
       if (subscription) {
         // Verify subscription exists in database
         const { data } = await supabase
@@ -85,9 +104,9 @@ export function usePushNotifications() {
           .eq("user_id", user.id)
           .eq("endpoint", subscription.endpoint)
           .single();
-        
+
         if (!data) {
-          // Browser has a subscription but DB doesn't — re-sync it to the database
+          // Browser has a subscription but DB doesn't — re-sync
           const subscriptionJson = subscription.toJSON();
           const { error: upsertError } = await supabase
             .from("push_subscriptions")
@@ -99,7 +118,7 @@ export function usePushNotifications() {
             }, {
               onConflict: "user_id,endpoint",
             });
-          
+
           if (upsertError) {
             logger.error("Error re-syncing push subscription to DB", "Push", { error: String(upsertError) });
           } else {
