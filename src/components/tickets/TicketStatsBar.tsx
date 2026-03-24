@@ -13,10 +13,11 @@ interface StatCardProps {
   accentClass: string;
   delay: number;
   tooltip?: string;
+  isActive?: boolean;
   onClick?: () => void;
 }
 
-function StatCard({ label, value, icon, colorClass, accentClass, delay, tooltip, onClick }: StatCardProps) {
+function StatCard({ label, value, icon, colorClass, accentClass, delay, tooltip, isActive, onClick }: StatCardProps) {
   const content = (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -25,7 +26,7 @@ function StatCard({ label, value, icon, colorClass, accentClass, delay, tooltip,
       onClick={onClick}
       className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-card transition-all ${colorClass} ${
         onClick ? "cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]" : ""
-      }`}
+      } ${isActive ? "ring-2 ring-primary shadow-md" : ""}`}
     >
       <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${accentClass}`}>
         {icon}
