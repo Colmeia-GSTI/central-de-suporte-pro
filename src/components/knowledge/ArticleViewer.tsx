@@ -21,6 +21,7 @@ import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { ArticleFeedback } from "./ArticleFeedback";
 import { ArticleTableOfContents } from "./ArticleTableOfContents";
+import { MarkdownPreviewRenderer } from "./MarkdownPreviewRenderer";
 import type { Tables } from "@/integrations/supabase/types";
 import { useState } from "react";
 
