@@ -42,10 +42,7 @@ function calculateReadingTime(content: string): number {
   return Math.max(1, Math.ceil(words / 200)); // ~200 words per minute
 }
 
-/**
- * Simple Markdown-like rendering for article content.
- */
-function renderContent(content: string): React.ReactNode[] {
+// Rendering is now handled by MarkdownPreviewRenderer
   const lines = content.split("\n");
   const result: React.ReactNode[] = [];
   let inCodeBlock = false;
