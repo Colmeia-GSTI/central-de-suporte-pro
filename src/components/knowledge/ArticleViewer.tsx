@@ -139,7 +139,7 @@ function formatInline(text: string): React.ReactNode {
   while (remaining.length > 0) {
     const codeMatch = remaining.match(/^`([^`]+)`/);
     if (codeMatch) {
-      parts.push(<code key={key++} className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{codeMatch[1]}</code>);
+      parts.push(<code key={key++} className="bg-primary/10 text-primary px-1.5 py-0.5 rounded-md text-sm font-mono border border-primary/20">{codeMatch[1]}</code>);
       remaining = remaining.slice(codeMatch[0].length);
       continue;
     }
