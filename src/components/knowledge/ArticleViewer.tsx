@@ -345,7 +345,7 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-10">
         {/* Main content */}
         <div className="prose prose-sm dark:prose-invert max-w-none">
-          {renderContent(article.content)}
+          <MarkdownPreviewRenderer content={article.content} />
         </div>
 
         {/* Table of Contents (desktop only) */}
