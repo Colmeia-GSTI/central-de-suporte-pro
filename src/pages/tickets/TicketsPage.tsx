@@ -368,27 +368,25 @@ export default function TicketsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-5">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Chamados</h1>
-            <p className="text-sm text-muted-foreground">
-              {data?.total ? `${data.total} chamados encontrados` : "Gerencie chamados de suporte"}
-            </p>
+      <div className="space-y-3">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Chamados</h1>
+            {data?.total !== undefined && (
+              <Badge variant="secondary" className="font-mono text-xs tabular-nums">
+                {data.total}
+              </Badge>
+            )}
           </div>
           <PermissionGate module="tickets" action="create">
-            <Button onClick={() => navigate("/tickets/new")} className="gap-2 active:scale-[0.98] transition-transform">
-              <Plus className="h-4 w-4" />
+            <Button size="sm" onClick={() => navigate("/tickets/new")} className="gap-1.5 h-8 active:scale-[0.98] transition-transform">
+              <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Novo Chamado</span>
               <span className="sm:hidden">Novo</span>
             </Button>
           </PermissionGate>
-        </motion.div>
+        </div>
 
         {/* Stats Bar */}
         <TicketStatsBar
@@ -405,23 +403,120 @@ export default function TicketsPage() {
           }}
         />
 
-        {/* Search + Filters */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por título ou número..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 text-base md:text-sm"
-              />
-            </div>
+        {/* Compact Search + Filters Row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar título ou nº..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-base md:text-sm bg-card"
+            />
+          </div>
 
-            {/* Status Filter */}
+          {/* Status Filter */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32 h-8 text-xs hidden sm:flex">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Ativos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="open">Aberto</SelectItem>
+              <SelectItem value="in_progress">Em Andamento</SelectItem>
+              <SelectItem value="waiting">Aguardando</SelectItem>
+              <SelectItem value="paused">Pausado</SelectItem>
+              <SelectItem value="waiting_third_party">Ag. Terceiro</SelectItem>
+              <SelectItem value="no_contact">Sem Contato</SelectItem>
+              <SelectItem value="resolved">Resolvido</SelectItem>
+              <SelectItem value="closed">Fechado</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* More filters toggle */}
+          <Button
+            variant={showFilters || activeFilterCount > 0 ? "secondary" : "outline"}
+            size="sm"
+            className="gap-1.5 h-8 text-xs relative"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Filtros</span>
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+
+          {/* View toggle */}
+          <div className="hidden sm:flex items-center border rounded-md overflow-hidden h-8">
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="rounded-none h-8 w-8 p-0"
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "kanban" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("kanban")}
+              className="rounded-none h-8 w-8 p-0"
+            >
+              <Kanban className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* Saved Views */}
+          {savedViews.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1 h-8 text-xs hidden md:flex">
+                  Vistas ({savedViews.length})
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Aplicar vista</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {savedViews.map((v) => (
+                  <DropdownMenuItem
+                    key={v.id}
+                    className="flex items-center justify-between"
+                    onSelect={() => {
+                      setStatusFilter(v.filters.status || "active");
+                      setPriorityFilter(v.filters.priority || "all");
+                      setTechnicianFilter(v.filters.technician || "all");
+                      setClientFilter(v.filters.client || "all");
+                      if (v.filters.search !== undefined) setSearch(v.filters.search);
+                    }}
+                  >
+                    <span>{v.name}</span>
+                    <button className="text-muted-foreground hover:text-destructive ml-2" onClick={(e) => { e.stopPropagation(); deleteView(v.id); }} aria-label="Excluir vista">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* Expandable filter bar */}
+        {showFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex flex-wrap items-center gap-2 p-2.5 bg-muted/20 border border-border/50 rounded-lg"
+          >
+            {/* Mobile Status filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36 hidden sm:flex">
+              <SelectTrigger className="w-32 h-8 text-xs sm:hidden">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -430,188 +525,85 @@ export default function TicketsPage() {
                 <SelectItem value="open">Aberto</SelectItem>
                 <SelectItem value="in_progress">Em Andamento</SelectItem>
                 <SelectItem value="waiting">Aguardando</SelectItem>
-                <SelectItem value="paused">Pausado</SelectItem>
-                <SelectItem value="waiting_third_party">Ag. Terceiro</SelectItem>
-                <SelectItem value="no_contact">Sem Contato</SelectItem>
                 <SelectItem value="resolved">Resolvido</SelectItem>
                 <SelectItem value="closed">Fechado</SelectItem>
               </SelectContent>
             </Select>
 
-            {/* More filters toggle */}
-            <Button
-              variant={showFilters || activeFilterCount > 0 ? "secondary" : "outline"}
-              size="sm"
-              className="gap-1.5 relative"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span className="hidden sm:inline">Filtros</span>
-              {activeFilterCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <AlertCircle className="h-3 w-3 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Prioridade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas prioridades</SelectItem>
+                <SelectItem value="critical">Crítica</SelectItem>
+                <SelectItem value="high">Alta</SelectItem>
+                <SelectItem value="medium">Média</SelectItem>
+                <SelectItem value="low">Baixa</SelectItem>
+              </SelectContent>
+            </Select>
 
-            {/* View toggle */}
-            <div className="hidden sm:flex items-center border rounded-lg overflow-hidden">
-              <Button
-                variant={viewMode === "table" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className="rounded-none gap-1 h-8"
-              >
-                <LayoutList className="h-3.5 w-3.5" />
+            <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <Users className="h-3 w-3 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Técnico" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos técnicos</SelectItem>
+                <SelectItem value="unassigned">Sem técnico</SelectItem>
+                {staffMembers.map((s) => (
+                  <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <Building2 className="h-3 w-3 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos clientes</SelectItem>
+                {clientsForFilter.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-7 text-xs" onClick={clearAllFilters}>
+                <X className="h-3 w-3" />
+                Limpar
               </Button>
+            )}
+
+            <div className="ml-auto">
               <Button
-                variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                variant="outline"
                 size="sm"
-                onClick={() => setViewMode("kanban")}
-                className="rounded-none gap-1 h-8"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const name = window.prompt("Nome para esta vista:");
+                  if (!name?.trim()) return;
+                  saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
+                  toast({ title: `Vista "${name.trim()}" salva` });
+                }}
               >
-                <Kanban className="h-3.5 w-3.5" />
+                Salvar Vista
               </Button>
             </div>
-
-            {/* Saved Views */}
-            {savedViews.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1 h-8 text-xs hidden md:flex">
-                    Vistas ({savedViews.length})
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Aplicar vista</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {savedViews.map((v) => (
-                    <DropdownMenuItem
-                      key={v.id}
-                      className="flex items-center justify-between"
-                      onSelect={() => {
-                        setStatusFilter(v.filters.status || "active");
-                        setPriorityFilter(v.filters.priority || "all");
-                        setTechnicianFilter(v.filters.technician || "all");
-                        setClientFilter(v.filters.client || "all");
-                        if (v.filters.search !== undefined) setSearch(v.filters.search);
-                      }}
-                    >
-                      <span>{v.name}</span>
-                      <button className="text-muted-foreground hover:text-destructive ml-2" onClick={(e) => { e.stopPropagation(); deleteView(v.id); }} aria-label="Excluir vista">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-
-          {/* Expandable filter bar */}
-          {showFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 border rounded-lg"
-            >
-              {/* Mobile Status filter */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-36 sm:hidden">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Ativos</SelectItem>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="open">Aberto</SelectItem>
-                  <SelectItem value="in_progress">Em Andamento</SelectItem>
-                  <SelectItem value="waiting">Aguardando</SelectItem>
-                  <SelectItem value="resolved">Resolvido</SelectItem>
-                  <SelectItem value="closed">Fechado</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-40">
-                  <AlertCircle className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as prioridades</SelectItem>
-                  <SelectItem value="critical">Crítica</SelectItem>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="medium">Média</SelectItem>
-                  <SelectItem value="low">Baixa</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                <SelectTrigger className="w-44">
-                  <Users className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Técnico" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os técnicos</SelectItem>
-                  <SelectItem value="unassigned">Sem técnico</SelectItem>
-                  {staffMembers.map((s) => (
-                    <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={clientFilter} onValueChange={setClientFilter}>
-                <SelectTrigger className="w-44">
-                  <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os clientes</SelectItem>
-                  {clientsForFilter.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-8" onClick={clearAllFilters}>
-                  <X className="h-3 w-3" />
-                  Limpar
-                </Button>
-              )}
-
-              <div className="ml-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => {
-                    const name = window.prompt("Nome para esta vista:");
-                    if (!name?.trim()) return;
-                    saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
-                    toast({ title: `Vista "${name.trim()}" salva` });
-                  }}
-                >
-                  Salvar Vista
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </div>
+          </motion.div>
+        )}
 
         {/* Bulk Action Bar */}
         {selectedIds.size > 0 && canManageTickets && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2"
-          >
-            <span className="text-sm font-medium text-primary">{selectedIds.size} selecionado(s)</span>
+          <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5">
+            <span className="text-xs font-semibold text-primary">{selectedIds.size} selecionado(s)</span>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">Status <ChevronDown className="h-3 w-3" /></Button>
+                <Button variant="outline" size="sm" className="h-6 gap-1 text-[11px]">Status <ChevronDown className="h-3 w-3" /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuLabel>Alterar status</DropdownMenuLabel>
@@ -626,8 +618,8 @@ export default function TicketsPage() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
-                  <AlertCircle className="h-3 w-3" />Prioridade <ChevronDown className="h-3 w-3" />
+                <Button variant="outline" size="sm" className="h-6 gap-1 text-[11px]">
+                  <AlertCircle className="h-3 w-3" />Prior. <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
@@ -643,7 +635,7 @@ export default function TicketsPage() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
+                <Button variant="outline" size="sm" className="h-6 gap-1 text-[11px]">
                   <Users className="h-3 w-3" />Atribuir <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
@@ -660,10 +652,10 @@ export default function TicketsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground ml-auto" onClick={() => setSelectedIds(new Set())}>
+            <Button variant="ghost" size="sm" className="h-6 text-[11px] text-muted-foreground ml-auto" onClick={() => setSelectedIds(new Set())}>
               <X className="h-3 w-3 mr-1" />Cancelar
             </Button>
-          </motion.div>
+          </div>
         )}
 
         {/* Kanban View */}
@@ -676,16 +668,16 @@ export default function TicketsPage() {
           <>
             {/* Mobile Cards */}
             {isMobile ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {isLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-32 rounded-xl" />
+                    <Skeleton key={i} className="h-28 rounded-lg" />
                   ))
                 ) : tickets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <Ticket className="h-16 w-16 text-muted-foreground/30 mb-4" />
-                    <h3 className="font-semibold text-lg">Nenhum chamado encontrado</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Tente ajustar os filtros ou crie um novo chamado</p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Ticket className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <h3 className="font-semibold text-base">Nenhum chamado</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Ajuste os filtros ou crie um novo</p>
                   </div>
                 ) : (
                   tickets.map((ticket) => (
@@ -700,12 +692,12 @@ export default function TicketsPage() {
                 )}
               </div>
             ) : (
-              /* Desktop Table */
-              <div className="rounded-xl border bg-card overflow-hidden">
+              /* Desktop Table - Dense */
+              <div className="rounded-lg border border-border/60 bg-card overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/30">
-                      <TableHead className="w-10">
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="w-8 py-2">
                         <Checkbox
                           checked={tickets.length > 0 && selectedIds.size === tickets.length}
                           onCheckedChange={(checked) => {
@@ -715,51 +707,51 @@ export default function TicketsPage() {
                           aria-label="Selecionar todos"
                         />
                       </TableHead>
-                      <TableHead className="w-20">#</TableHead>
-                      <TableHead>Título</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Tags</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Prioridade</TableHead>
-                      <TableHead>SLA</TableHead>
-                      <TableHead>Criado</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+                      <TableHead className="w-16 py-2 text-xs font-semibold">#</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Título</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Cliente</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Categoria</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Tags</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Status</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Prior.</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">SLA</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold">Criado</TableHead>
+                      <TableHead className="py-2 text-xs font-semibold text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      Array.from({ length: 5 }).map((_, i) => (
+                      Array.from({ length: 8 }).map((_, i) => (
                         <TableRow key={i}>
-                          <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-16" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                          <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-3.5" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-10" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-40" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-20" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-16" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-16" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-5 w-16" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-5 w-12" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-12" /></TableCell>
+                          <TableCell className="py-1.5"><Skeleton className="h-3.5 w-20" /></TableCell>
+                          <TableCell className="py-1.5 text-right"><Skeleton className="h-6 w-6 ml-auto" /></TableCell>
                         </TableRow>
                       ))
                     ) : tickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={11} className="text-center py-16">
-                          <Ticket className="mx-auto h-16 w-16 text-muted-foreground/30" />
-                          <h3 className="mt-4 font-semibold text-lg">Nenhum chamado encontrado</h3>
-                          <p className="text-sm text-muted-foreground mt-1">Tente ajustar os filtros ou crie um novo chamado</p>
+                        <TableCell colSpan={11} className="text-center py-12">
+                          <Ticket className="mx-auto h-10 w-10 text-muted-foreground/30" />
+                          <h3 className="mt-3 font-semibold text-sm">Nenhum chamado encontrado</h3>
+                          <p className="text-xs text-muted-foreground mt-1">Ajuste os filtros ou crie um novo</p>
                         </TableCell>
                       </TableRow>
                     ) : (
                       tickets.map((ticket) => (
                         <TableRow
                           key={ticket.id}
-                          className={`cursor-pointer hover:bg-muted/50 transition-colors ${selectedIds.has(ticket.id) ? "bg-primary/5" : ""}`}
+                          className={`cursor-pointer hover:bg-muted/40 transition-colors text-sm ${selectedIds.has(ticket.id) ? "bg-primary/5" : ""}`}
                           onClick={() => handleViewTicket(ticket)}
                         >
-                          <TableCell onClick={(e) => e.stopPropagation()}>
+                          <TableCell className="py-1.5" onClick={(e) => e.stopPropagation()}>
                             <Checkbox
                               checked={selectedIds.has(ticket.id)}
                               onCheckedChange={(checked) => {
@@ -769,28 +761,26 @@ export default function TicketsPage() {
                                   return next;
                                 });
                               }}
-                              aria-label={`Selecionar chamado #${ticket.ticket_number}`}
+                              aria-label={`Selecionar #${ticket.ticket_number}`}
                             />
                           </TableCell>
-                          <TableCell className="font-mono text-sm text-muted-foreground">#{ticket.ticket_number}</TableCell>
-                          <TableCell>
-                            <div className="max-w-xs truncate font-medium">{ticket.title}</div>
+                          <TableCell className="py-1.5 font-mono text-xs text-muted-foreground">#{ticket.ticket_number}</TableCell>
+                          <TableCell className="py-1.5">
+                            <span className="max-w-[220px] truncate block text-sm font-medium text-foreground">{ticket.title}</span>
                           </TableCell>
-                          <TableCell className="text-sm">{ticket.clients?.name || <span className="text-muted-foreground">-</span>}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-sm">{ticket.ticket_categories?.name || <span className="text-muted-foreground">-</span>}</span>
-                              {ticket.ticket_subcategories?.name && (
-                                <span className="text-xs text-muted-foreground">→ {ticket.ticket_subcategories.name}</span>
-                              )}
-                            </div>
+                          <TableCell className="py-1.5 text-xs text-muted-foreground">{ticket.clients?.name || "—"}</TableCell>
+                          <TableCell className="py-1.5">
+                            <span className="text-xs">{ticket.ticket_categories?.name || "—"}</span>
+                            {ticket.ticket_subcategories?.name && (
+                              <span className="text-[10px] text-muted-foreground block">→ {ticket.ticket_subcategories.name}</span>
+                            )}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1 max-w-32">
-                              {ticket.ticket_tag_assignments?.slice(0, 3).map((a) => (
+                          <TableCell className="py-1.5">
+                            <div className="flex flex-wrap gap-0.5 max-w-28">
+                              {ticket.ticket_tag_assignments?.slice(0, 2).map((a) => (
                                 <span
                                   key={a.ticket_tags.id}
-                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium border"
+                                  className="inline-flex px-1.5 py-0 rounded-full text-[9px] font-medium border"
                                   style={{
                                     backgroundColor: `${a.ticket_tags.color || "#6b7280"}15`,
                                     borderColor: a.ticket_tags.color || "#6b7280",
@@ -800,18 +790,18 @@ export default function TicketsPage() {
                                   {a.ticket_tags.name}
                                 </span>
                               ))}
-                              {ticket.ticket_tag_assignments?.length > 3 && (
-                                <span className="text-[10px] text-muted-foreground">+{ticket.ticket_tag_assignments.length - 3}</span>
+                              {ticket.ticket_tag_assignments?.length > 2 && (
+                                <span className="text-[9px] text-muted-foreground">+{ticket.ticket_tag_assignments.length - 2}</span>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <Badge className={statusColors[ticket.status]}>{statusLabels[ticket.status]}</Badge>
+                          <TableCell className="py-1.5">
+                            <Badge className={`text-[10px] px-1.5 py-0 h-5 ${statusColors[ticket.status]}`}>{statusLabels[ticket.status]}</Badge>
                           </TableCell>
-                          <TableCell>
-                            <Badge className={priorityColors[ticket.priority]}>{priorityLabels[ticket.priority]}</Badge>
+                          <TableCell className="py-1.5">
+                            <Badge className={`text-[10px] px-1.5 py-0 h-5 ${priorityColors[ticket.priority]}`}>{priorityLabels[ticket.priority]}</Badge>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="py-1.5">
                             <SLAIndicator
                               ticket={{
                                 id: ticket.id, created_at: ticket.created_at,
@@ -822,18 +812,15 @@ export default function TicketsPage() {
                               compact
                             />
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: ptBR })}
-                            </div>
+                          <TableCell className="py-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+                            {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: ptBR })}
                           </TableCell>
-                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-1">
+                          <TableCell className="py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-0.5">
                               {ticket.status === "open" && !ticket.assigned_to && (
                                 <Button
                                   size="sm"
-                                  className="gap-1 h-7 text-xs bg-success hover:bg-success/90 text-success-foreground"
+                                  className="gap-1 h-6 text-[10px] bg-success hover:bg-success/90 text-success-foreground px-2"
                                   onClick={(e) => handleStartTicket(e, ticket)}
                                   disabled={startTicketMutation.isPending}
                                 >
@@ -841,8 +828,8 @@ export default function TicketsPage() {
                                   Iniciar
                                 </Button>
                               )}
-                              <Button variant="ghost" size="icon" onClick={() => handleViewTicket(ticket)} aria-label="Ver chamado">
-                                <Eye className="h-4 w-4" />
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleViewTicket(ticket)} aria-label="Ver chamado">
+                                <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </TableCell>
@@ -852,18 +839,18 @@ export default function TicketsPage() {
                   </TableBody>
                 </Table>
 
-                {/* Pagination */}
+                {/* Compact Pagination */}
                 {(hasNextPage || hasPreviousPage) && (
-                  <div className="flex items-center justify-between px-4 py-3 border-t">
-                    <p className="text-sm text-muted-foreground">
-                      {tickets.length} chamados carregados {data?.total ? `de ${data.total} total` : ""}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-border/40 bg-muted/20">
+                    <p className="text-[11px] text-muted-foreground tabular-nums">
+                      {tickets.length} de {data?.total || 0}
                     </p>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={handlePreviousPage} disabled={!hasPreviousPage}>
-                        <ChevronLeft className="h-4 w-4" />Anterior
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={handlePreviousPage} disabled={!hasPreviousPage}>
+                        <ChevronLeft className="h-3 w-3" />
                       </Button>
-                      <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!hasNextPage}>
-                        Próximo<ChevronRight className="h-4 w-4" />
+                      <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={handleNextPage} disabled={!hasNextPage}>
+                        <ChevronRight className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
