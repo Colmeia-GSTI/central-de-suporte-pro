@@ -19,24 +19,24 @@ function StatCard({ label, value, icon, dotColor, isActive, onClick }: StatCardP
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all duration-150",
+        "flex items-center gap-3 px-3.5 py-2.5 rounded-lg border text-left transition-all duration-150",
         "hover:bg-muted/60 active:scale-[0.97]",
         isActive
           ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30 shadow-sm"
           : "bg-card border-border/50 hover:border-border"
       )}
     >
-      <div className={cn("flex items-center justify-center w-8 h-8 rounded-md", dotColor)}>
+      <div className={cn("flex items-center justify-center w-9 h-9 rounded-md shrink-0", dotColor)}>
         {icon}
       </div>
       <div className="min-w-0">
         <p className={cn(
-          "text-xl font-bold tabular-nums leading-none",
+          "text-2xl font-bold tabular-nums leading-none",
           isActive ? "text-primary" : "text-foreground"
         )}>
           {value}
         </p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 truncate font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground mt-1 truncate font-medium">{label}</p>
       </div>
     </button>
   );
