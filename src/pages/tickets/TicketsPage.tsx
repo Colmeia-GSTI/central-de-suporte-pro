@@ -368,27 +368,25 @@ export default function TicketsPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-5">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Chamados</h1>
-            <p className="text-sm text-muted-foreground">
-              {data?.total ? `${data.total} chamados encontrados` : "Gerencie chamados de suporte"}
-            </p>
+      <div className="space-y-3">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Chamados</h1>
+            {data?.total !== undefined && (
+              <Badge variant="secondary" className="font-mono text-xs tabular-nums">
+                {data.total}
+              </Badge>
+            )}
           </div>
           <PermissionGate module="tickets" action="create">
-            <Button onClick={() => navigate("/tickets/new")} className="gap-2 active:scale-[0.98] transition-transform">
-              <Plus className="h-4 w-4" />
+            <Button size="sm" onClick={() => navigate("/tickets/new")} className="gap-1.5 h-8 active:scale-[0.98] transition-transform">
+              <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Novo Chamado</span>
               <span className="sm:hidden">Novo</span>
             </Button>
           </PermissionGate>
-        </motion.div>
+        </div>
 
         {/* Stats Bar */}
         <TicketStatsBar
@@ -405,23 +403,120 @@ export default function TicketsPage() {
           }}
         />
 
-        {/* Search + Filters */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por título ou número..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 text-base md:text-sm"
-              />
-            </div>
+        {/* Compact Search + Filters Row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar título ou nº..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-base md:text-sm bg-card"
+            />
+          </div>
 
-            {/* Status Filter */}
+          {/* Status Filter */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32 h-8 text-xs hidden sm:flex">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Ativos</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="open">Aberto</SelectItem>
+              <SelectItem value="in_progress">Em Andamento</SelectItem>
+              <SelectItem value="waiting">Aguardando</SelectItem>
+              <SelectItem value="paused">Pausado</SelectItem>
+              <SelectItem value="waiting_third_party">Ag. Terceiro</SelectItem>
+              <SelectItem value="no_contact">Sem Contato</SelectItem>
+              <SelectItem value="resolved">Resolvido</SelectItem>
+              <SelectItem value="closed">Fechado</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* More filters toggle */}
+          <Button
+            variant={showFilters || activeFilterCount > 0 ? "secondary" : "outline"}
+            size="sm"
+            className="gap-1.5 h-8 text-xs relative"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Filtros</span>
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+
+          {/* View toggle */}
+          <div className="hidden sm:flex items-center border rounded-md overflow-hidden h-8">
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="rounded-none h-8 w-8 p-0"
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "kanban" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("kanban")}
+              className="rounded-none h-8 w-8 p-0"
+            >
+              <Kanban className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* Saved Views */}
+          {savedViews.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1 h-8 text-xs hidden md:flex">
+                  Vistas ({savedViews.length})
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Aplicar vista</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {savedViews.map((v) => (
+                  <DropdownMenuItem
+                    key={v.id}
+                    className="flex items-center justify-between"
+                    onSelect={() => {
+                      setStatusFilter(v.filters.status || "active");
+                      setPriorityFilter(v.filters.priority || "all");
+                      setTechnicianFilter(v.filters.technician || "all");
+                      setClientFilter(v.filters.client || "all");
+                      if (v.filters.search !== undefined) setSearch(v.filters.search);
+                    }}
+                  >
+                    <span>{v.name}</span>
+                    <button className="text-muted-foreground hover:text-destructive ml-2" onClick={(e) => { e.stopPropagation(); deleteView(v.id); }} aria-label="Excluir vista">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* Expandable filter bar */}
+        {showFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex flex-wrap items-center gap-2 p-2.5 bg-muted/20 border border-border/50 rounded-lg"
+          >
+            {/* Mobile Status filter */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36 hidden sm:flex">
+              <SelectTrigger className="w-32 h-8 text-xs sm:hidden">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -430,175 +525,76 @@ export default function TicketsPage() {
                 <SelectItem value="open">Aberto</SelectItem>
                 <SelectItem value="in_progress">Em Andamento</SelectItem>
                 <SelectItem value="waiting">Aguardando</SelectItem>
-                <SelectItem value="paused">Pausado</SelectItem>
-                <SelectItem value="waiting_third_party">Ag. Terceiro</SelectItem>
-                <SelectItem value="no_contact">Sem Contato</SelectItem>
                 <SelectItem value="resolved">Resolvido</SelectItem>
                 <SelectItem value="closed">Fechado</SelectItem>
               </SelectContent>
             </Select>
 
-            {/* More filters toggle */}
-            <Button
-              variant={showFilters || activeFilterCount > 0 ? "secondary" : "outline"}
-              size="sm"
-              className="gap-1.5 relative"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span className="hidden sm:inline">Filtros</span>
-              {activeFilterCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <AlertCircle className="h-3 w-3 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Prioridade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas prioridades</SelectItem>
+                <SelectItem value="critical">Crítica</SelectItem>
+                <SelectItem value="high">Alta</SelectItem>
+                <SelectItem value="medium">Média</SelectItem>
+                <SelectItem value="low">Baixa</SelectItem>
+              </SelectContent>
+            </Select>
 
-            {/* View toggle */}
-            <div className="hidden sm:flex items-center border rounded-lg overflow-hidden">
-              <Button
-                variant={viewMode === "table" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className="rounded-none gap-1 h-8"
-              >
-                <LayoutList className="h-3.5 w-3.5" />
+            <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <Users className="h-3 w-3 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Técnico" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos técnicos</SelectItem>
+                <SelectItem value="unassigned">Sem técnico</SelectItem>
+                {staffMembers.map((s) => (
+                  <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={clientFilter} onValueChange={setClientFilter}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <Building2 className="h-3 w-3 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="Cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos clientes</SelectItem>
+                {clientsForFilter.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-7 text-xs" onClick={clearAllFilters}>
+                <X className="h-3 w-3" />
+                Limpar
               </Button>
+            )}
+
+            <div className="ml-auto">
               <Button
-                variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                variant="outline"
                 size="sm"
-                onClick={() => setViewMode("kanban")}
-                className="rounded-none gap-1 h-8"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const name = window.prompt("Nome para esta vista:");
+                  if (!name?.trim()) return;
+                  saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
+                  toast({ title: `Vista "${name.trim()}" salva` });
+                }}
               >
-                <Kanban className="h-3.5 w-3.5" />
+                Salvar Vista
               </Button>
             </div>
-
-            {/* Saved Views */}
-            {savedViews.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1 h-8 text-xs hidden md:flex">
-                    Vistas ({savedViews.length})
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Aplicar vista</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {savedViews.map((v) => (
-                    <DropdownMenuItem
-                      key={v.id}
-                      className="flex items-center justify-between"
-                      onSelect={() => {
-                        setStatusFilter(v.filters.status || "active");
-                        setPriorityFilter(v.filters.priority || "all");
-                        setTechnicianFilter(v.filters.technician || "all");
-                        setClientFilter(v.filters.client || "all");
-                        if (v.filters.search !== undefined) setSearch(v.filters.search);
-                      }}
-                    >
-                      <span>{v.name}</span>
-                      <button className="text-muted-foreground hover:text-destructive ml-2" onClick={(e) => { e.stopPropagation(); deleteView(v.id); }} aria-label="Excluir vista">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-
-          {/* Expandable filter bar */}
-          {showFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 border rounded-lg"
-            >
-              {/* Mobile Status filter */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-36 sm:hidden">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Ativos</SelectItem>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="open">Aberto</SelectItem>
-                  <SelectItem value="in_progress">Em Andamento</SelectItem>
-                  <SelectItem value="waiting">Aguardando</SelectItem>
-                  <SelectItem value="resolved">Resolvido</SelectItem>
-                  <SelectItem value="closed">Fechado</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-40">
-                  <AlertCircle className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as prioridades</SelectItem>
-                  <SelectItem value="critical">Crítica</SelectItem>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="medium">Média</SelectItem>
-                  <SelectItem value="low">Baixa</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                <SelectTrigger className="w-44">
-                  <Users className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Técnico" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os técnicos</SelectItem>
-                  <SelectItem value="unassigned">Sem técnico</SelectItem>
-                  {staffMembers.map((s) => (
-                    <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={clientFilter} onValueChange={setClientFilter}>
-                <SelectTrigger className="w-44">
-                  <Building2 className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os clientes</SelectItem>
-                  {clientsForFilter.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-8" onClick={clearAllFilters}>
-                  <X className="h-3 w-3" />
-                  Limpar
-                </Button>
-              )}
-
-              <div className="ml-auto">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => {
-                    const name = window.prompt("Nome para esta vista:");
-                    if (!name?.trim()) return;
-                    saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
-                    toast({ title: `Vista "${name.trim()}" salva` });
-                  }}
-                >
-                  Salvar Vista
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </div>
+          </motion.div>
+        )}
 
         {/* Bulk Action Bar */}
         {selectedIds.size > 0 && canManageTickets && (
