@@ -228,6 +228,7 @@ export default function TicketsPage() {
       }
 
       if (statusFilter === "active") query = query.not("status", "in", '("resolved","closed")');
+      else if (statusFilter === "waiting") query = query.in("status", ["waiting", "waiting_third_party"]);
       else if (statusFilter !== "all") query = query.eq("status", statusFilter as Enums<"ticket_status">);
 
       if (priorityFilter !== "all") query = query.eq("priority", priorityFilter as Enums<"ticket_priority">);
