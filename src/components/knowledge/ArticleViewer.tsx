@@ -73,25 +73,28 @@ function renderContent(content: string): React.ReactNode[] {
       continue;
     }
 
-    // Generate heading IDs for TOC navigation
-    const headingId = `heading-${i}-${line.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
     if (line.startsWith("### ")) {
+      const text = line.slice(4).trim();
+      const headingId = `heading-${i}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
       result.push(
-        <h3 key={i} id={headingId} className="text-lg font-semibold mt-6 mb-3 scroll-mt-4">
-          {formatInline(line.slice(4))}
+        <h3 key={i} id={headingId} className="text-lg font-semibold mt-8 mb-3 scroll-mt-20 text-foreground">
+          {formatInline(text)}
         </h3>
       );
     } else if (line.startsWith("## ")) {
+      const text = line.slice(3).trim();
+      const headingId = `heading-${i}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
       result.push(
-        <h2 key={i} id={headingId} className="text-xl font-semibold mt-6 mb-3 scroll-mt-4">
-          {formatInline(line.slice(3))}
+        <h2 key={i} id={headingId} className="text-xl font-semibold mt-10 mb-4 scroll-mt-20 text-foreground border-b border-border/40 pb-2">
+          {formatInline(text)}
         </h2>
       );
     } else if (line.startsWith("# ")) {
+      const text = line.slice(2).trim();
+      const headingId = `heading-${i}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
       result.push(
-        <h1 key={i} id={headingId} className="text-2xl font-bold mt-6 mb-3 scroll-mt-4">
-          {formatInline(line.slice(2))}
+        <h1 key={i} id={headingId} className="text-2xl font-bold mt-10 mb-4 scroll-mt-20 text-foreground">
+          {formatInline(text)}
         </h1>
       );
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
