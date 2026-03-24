@@ -107,6 +107,8 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
         colorClass="border-status-open/30"
         accentClass="bg-status-open/10"
         tooltip="Chamados aguardando triagem"
+        isActive={activeFilter === "open"}
+        onClick={() => handleClick("open")}
         delay={0}
       />
       <StatCard
@@ -116,6 +118,8 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
         colorClass="border-info/30"
         accentClass="bg-info/10"
         tooltip="Chamados sendo atendidos"
+        isActive={activeFilter === "in_progress"}
+        onClick={() => handleClick("in_progress")}
         delay={0.05}
       />
       <StatCard
@@ -125,6 +129,8 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
         colorClass="border-warning/30"
         accentClass="bg-warning/10"
         tooltip="Aguardando resposta do cliente ou terceiro"
+        isActive={activeFilter === "waiting"}
+        onClick={() => handleClick("waiting")}
         delay={0.1}
       />
       <StatCard
@@ -134,6 +140,8 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
         colorClass="border-amber-500/30"
         accentClass="bg-amber-500/10"
         tooltip="Chamados pausados temporariamente"
+        isActive={activeFilter === "paused"}
+        onClick={() => handleClick("paused")}
         delay={0.15}
       />
       <StatCard
@@ -143,6 +151,8 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
         colorClass="border-destructive/30"
         accentClass="bg-destructive/10"
         tooltip="Chamados sem técnico atribuído"
+        isActive={activeFilter === "unassigned"}
+        onClick={() => handleClick("unassigned")}
         delay={0.2}
       />
       <StatCard
@@ -152,6 +162,8 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
         colorClass="border-success/30"
         accentClass="bg-success/10"
         tooltip="Chamados resolvidos aguardando fechamento"
+        isActive={activeFilter === "resolved"}
+        onClick={() => handleClick("resolved")}
         delay={0.25}
       />
     </div>

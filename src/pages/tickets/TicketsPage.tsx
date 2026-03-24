@@ -390,7 +390,19 @@ export default function TicketsPage() {
         </motion.div>
 
         {/* Stats Bar */}
-        <TicketStatsBar />
+        <TicketStatsBar
+          activeFilter={technicianFilter === "unassigned" ? "unassigned" : statusFilter}
+          onFilterChange={(filter) => {
+            handleResetPagination();
+            if (filter === "unassigned") {
+              setStatusFilter("active");
+              setTechnicianFilter("unassigned");
+            } else {
+              setTechnicianFilter("all");
+              setStatusFilter(filter);
+            }
+          }}
+        />
 
         {/* Search + Filters */}
         <div className="space-y-3">
