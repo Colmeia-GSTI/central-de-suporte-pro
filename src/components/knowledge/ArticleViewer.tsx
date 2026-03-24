@@ -56,7 +56,7 @@ function renderContent(content: string): React.ReactNode[] {
     if (line.trim().startsWith("```")) {
       if (inCodeBlock) {
         result.push(
-          <pre key={`code-${i}`} className="bg-muted p-4 rounded-lg overflow-x-auto text-sm my-4">
+          <pre key={`code-${i}`} className="bg-muted/60 border border-border/40 p-4 rounded-xl overflow-x-auto text-sm my-5 font-mono">
             <code>{codeBlockLines.join("\n")}</code>
           </pre>
         );
