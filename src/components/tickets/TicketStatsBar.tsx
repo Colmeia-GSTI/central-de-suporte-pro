@@ -50,7 +50,17 @@ function StatCard({ label, value, icon, colorClass, accentClass, delay, tooltip,
   return content;
 }
 
-export function TicketStatsBar() {
+interface TicketStatsBarProps {
+  onFilterChange?: (filter: string) => void;
+  activeFilter?: string;
+}
+
+export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarProps) {
+  const handleClick = (filter: string) => {
+    if (!onFilterChange) return;
+    // Toggle: clicking active card resets to default
+    onFilterChange(activeFilter === filter ? "active" : filter);
+  };
   // Use count-only (head: true) queries instead of fetching all rows
   const { data: stats, isLoading } = useQuery({
     queryKey: ["ticket-stats-bar"],
