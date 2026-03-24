@@ -43,8 +43,6 @@ function calculateReadingTime(content: string): number {
 }
 
 
-  const result: React.ReactNode[] = [];
-  let inCodeBlock = false;
   let codeBlockLines: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
