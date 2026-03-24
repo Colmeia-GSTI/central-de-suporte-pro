@@ -99,30 +99,30 @@ function renderContent(content: string): React.ReactNode[] {
       );
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
       result.push(
-        <li key={i} className="ml-6 list-disc my-1">{formatInline(line.slice(2))}</li>
+        <li key={i} className="ml-6 list-disc my-1.5 text-foreground/90 leading-relaxed">{formatInline(line.slice(2))}</li>
       );
     } else if (/^\d+\.\s/.test(line)) {
       result.push(
-        <li key={i} className="ml-6 list-decimal my-1">{formatInline(line.replace(/^\d+\.\s/, ""))}</li>
+        <li key={i} className="ml-6 list-decimal my-1.5 text-foreground/90 leading-relaxed">{formatInline(line.replace(/^\d+\.\s/, ""))}</li>
       );
     } else if (line.startsWith("> ")) {
       result.push(
-        <blockquote key={i} className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4">
+        <blockquote key={i} className="border-l-4 border-primary/40 bg-primary/5 pl-4 py-2 pr-3 rounded-r-lg italic text-muted-foreground my-5">
           {formatInline(line.slice(2))}
         </blockquote>
       );
     } else if (line.trim() === "---") {
-      result.push(<hr key={i} className="my-6 border-border" />);
+      result.push(<hr key={i} className="my-8 border-border/50" />);
     } else if (line.trim() === "") {
       result.push(<br key={i} />);
     } else {
-      result.push(<p key={i} className="my-2 leading-relaxed">{formatInline(line)}</p>);
+      result.push(<p key={i} className="my-2 leading-relaxed text-foreground/90">{formatInline(line)}</p>);
     }
   }
 
   if (inCodeBlock && codeBlockLines.length > 0) {
     result.push(
-      <pre key="code-end" className="bg-muted p-4 rounded-lg overflow-x-auto text-sm my-4">
+      <pre key="code-end" className="bg-muted/60 border border-border/40 p-4 rounded-xl overflow-x-auto text-sm my-5 font-mono">
         <code>{codeBlockLines.join("\n")}</code>
       </pre>
     );
