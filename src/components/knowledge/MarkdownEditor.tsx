@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import {
   Bold,
   Italic,
@@ -17,8 +19,11 @@ import {
   Minus,
   Eye,
   Edit3,
+  ImagePlus,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MarkdownPreviewRenderer } from "./MarkdownPreviewRenderer";
 
 interface MarkdownEditorProps {
   value: string;
@@ -56,115 +61,6 @@ const blockButtons: ToolbarButton[] = [
   { icon: Minus, label: "Separador", prefix: "\n---\n", block: true },
 ];
 
-// Simple markdown preview renderer
-function renderMarkdownPreview(content: string): React.ReactNode[] {
-  const lines = content.split("\n");
-  const result: React.ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeBlockLines: string[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.trim().startsWith("```")) {
-      if (inCodeBlock) {
-        result.push(
-          <pre key={`code-${i}`} className="bg-muted p-4 rounded-lg overflow-x-auto text-sm my-2">
-            <code>{codeBlockLines.join("\n")}</code>
-          </pre>
-        );
-        codeBlockLines = [];
-        inCodeBlock = false;
-      } else {
-        inCodeBlock = true;
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBlockLines.push(line);
-      continue;
-    }
-
-    if (line.startsWith("### ")) {
-      result.push(<h3 key={i} className="text-lg font-semibold mt-4 mb-2">{formatInline(line.slice(4))}</h3>);
-    } else if (line.startsWith("## ")) {
-      result.push(<h2 key={i} className="text-xl font-semibold mt-4 mb-2">{formatInline(line.slice(3))}</h2>);
-    } else if (line.startsWith("# ")) {
-      result.push(<h1 key={i} className="text-2xl font-bold mt-4 mb-2">{formatInline(line.slice(2))}</h1>);
-    } else if (line.startsWith("- ") || line.startsWith("* ")) {
-      result.push(<li key={i} className="ml-4 list-disc">{formatInline(line.slice(2))}</li>);
-    } else if (/^\d+\.\s/.test(line)) {
-      result.push(<li key={i} className="ml-4 list-decimal">{formatInline(line.replace(/^\d+\.\s/, ""))}</li>);
-    } else if (line.startsWith("> ")) {
-      result.push(
-        <blockquote key={i} className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-2">
-          {formatInline(line.slice(2))}
-        </blockquote>
-      );
-    } else if (line.trim() === "---") {
-      result.push(<hr key={i} className="my-4 border-border" />);
-    } else if (line.trim() === "") {
-      result.push(<br key={i} />);
-    } else {
-      result.push(<p key={i} className="my-1">{formatInline(line)}</p>);
-    }
-  }
-
-  return result;
-}
-
-function formatInline(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    const codeMatch = remaining.match(/^`([^`]+)`/);
-    if (codeMatch) {
-      parts.push(<code key={key++} className="bg-muted px-1.5 py-0.5 rounded text-sm">{codeMatch[1]}</code>);
-      remaining = remaining.slice(codeMatch[0].length);
-      continue;
-    }
-
-    const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
-    if (boldMatch) {
-      parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
-      remaining = remaining.slice(boldMatch[0].length);
-      continue;
-    }
-
-    const italicMatch = remaining.match(/^\*([^*]+)\*/);
-    if (italicMatch) {
-      parts.push(<em key={key++}>{italicMatch[1]}</em>);
-      remaining = remaining.slice(italicMatch[0].length);
-      continue;
-    }
-
-    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
-    if (linkMatch) {
-      parts.push(
-        <a key={key++} href={linkMatch[2]} className="text-primary underline" target="_blank" rel="noopener noreferrer">
-          {linkMatch[1]}
-        </a>
-      );
-      remaining = remaining.slice(linkMatch[0].length);
-      continue;
-    }
-
-    const nextSpecial = remaining.slice(1).search(/[`*\[]/);
-    if (nextSpecial === -1) {
-      parts.push(remaining);
-      break;
-    } else {
-      parts.push(remaining.slice(0, nextSpecial + 1));
-      remaining = remaining.slice(nextSpecial + 1);
-    }
-  }
-
-  return parts.length === 1 ? parts[0] : <>{parts}</>;
-}
-
 export function MarkdownEditor({
   value,
   onChange,
@@ -173,7 +69,10 @@ export function MarkdownEditor({
   className,
 }: MarkdownEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<string>("write");
+  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
 
   const insertMarkdown = (prefix: string, suffix?: string, block?: boolean) => {
     const textarea = textareaRef.current;
@@ -187,32 +86,94 @@ export function MarkdownEditor({
     let cursorPosition: number;
 
     if (block) {
-      // For block elements, insert at the beginning of the line
       const lineStart = value.lastIndexOf("\n", start - 1) + 1;
       const beforeLine = value.substring(0, lineStart);
       const afterLine = value.substring(lineStart);
       newText = beforeLine + prefix + afterLine;
       cursorPosition = lineStart + prefix.length;
     } else if (selectedText) {
-      // Wrap selected text
       newText = value.substring(0, start) + prefix + selectedText + (suffix || "") + value.substring(end);
       cursorPosition = start + prefix.length + selectedText.length + (suffix?.length || 0);
     } else {
-      // Insert placeholder
       newText = value.substring(0, start) + prefix + "texto" + (suffix || "") + value.substring(end);
       cursorPosition = start + prefix.length;
     }
 
     onChange(newText);
 
-    // Restore focus and cursor position
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(cursorPosition, cursorPosition);
     }, 0);
   };
 
-  const ToolbarButton = ({ button }: { button: ToolbarButton }) => (
+  const handleImageUpload = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Arquivo inválido", description: "Selecione uma imagem (JPG, PNG, GIF, WebP).", variant: "destructive" });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Imagem muito grande", description: "O tamanho máximo é 5MB.", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "png";
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const filePath = `articles/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("knowledge-images")
+        .upload(filePath, file, { contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("knowledge-images")
+        .getPublicUrl(filePath);
+
+      const imageMarkdown = `![${file.name}](${urlData.publicUrl})`;
+      const textarea = textareaRef.current;
+      const pos = textarea ? textarea.selectionStart : value.length;
+      const before = value.substring(0, pos);
+      const after = value.substring(pos);
+      const newLine = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+      onChange(before + newLine + imageMarkdown + "\n" + after);
+
+      toast({ title: "Imagem inserida com sucesso" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      toast({ title: "Erro ao enviar imagem", description: msg, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [value, onChange, toast]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      handleImageUpload(file);
+    }
+  }, [handleImageUpload]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) handleImageUpload(file);
+        return;
+      }
+    }
+  }, [handleImageUpload]);
+
+  const ToolbarBtn = ({ button }: { button: ToolbarButton }) => (
     <Button
       type="button"
       variant="ghost"
@@ -227,21 +188,50 @@ export function MarkdownEditor({
 
   return (
     <div className={cn("border rounded-lg overflow-hidden", className)}>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleImageUpload(file);
+        }}
+      />
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         {/* Toolbar */}
         <div className="flex items-center justify-between border-b bg-muted/30 px-2">
           <div className="flex items-center gap-0.5 py-1">
             {toolbarButtons.map((btn) => (
-              <ToolbarButton key={btn.label} button={btn} />
+              <ToolbarBtn key={btn.label} button={btn} />
             ))}
             <Separator orientation="vertical" className="mx-1 h-6" />
             {headingButtons.map((btn) => (
-              <ToolbarButton key={btn.label} button={btn} />
+              <ToolbarBtn key={btn.label} button={btn} />
             ))}
             <Separator orientation="vertical" className="mx-1 h-6" />
             {blockButtons.map((btn) => (
-              <ToolbarButton key={btn.label} button={btn} />
+              <ToolbarBtn key={btn.label} button={btn} />
             ))}
+            <Separator orientation="vertical" className="mx-1 h-6" />
+            {/* Image upload button */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-8 w-8 p-0"
+              title="Inserir imagem"
+              disabled={isUploading}
+            >
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImagePlus className="h-4 w-4" />
+              )}
+            </Button>
           </div>
           
           <TabsList className="h-8 bg-transparent">
@@ -261,10 +251,19 @@ export function MarkdownEditor({
             ref={textareaRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onPaste={handlePaste}
             placeholder={placeholder}
             rows={rows}
             className="border-0 rounded-none focus-visible:ring-0 resize-none font-mono text-sm"
           />
+          {isUploading && (
+            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/30 border-t">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Enviando imagem...
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="preview" className="m-0">
@@ -273,7 +272,7 @@ export function MarkdownEditor({
             style={{ minHeight: `${rows * 1.5}rem` }}
           >
             {value ? (
-              renderMarkdownPreview(value)
+              <MarkdownPreviewRenderer content={value} />
             ) : (
               <p className="text-muted-foreground italic">Nenhum conteúdo para visualizar</p>
             )}
