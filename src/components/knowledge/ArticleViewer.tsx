@@ -56,7 +56,7 @@ function renderContent(content: string): React.ReactNode[] {
     if (line.trim().startsWith("```")) {
       if (inCodeBlock) {
         result.push(
-          <pre key={`code-${i}`} className="bg-muted p-4 rounded-lg overflow-x-auto text-sm my-4">
+          <pre key={`code-${i}`} className="bg-muted/60 border border-border/40 p-4 rounded-xl overflow-x-auto text-sm my-5 font-mono">
             <code>{codeBlockLines.join("\n")}</code>
           </pre>
         );
@@ -73,53 +73,56 @@ function renderContent(content: string): React.ReactNode[] {
       continue;
     }
 
-    // Generate heading IDs for TOC navigation
-    const headingId = `heading-${i}-${line.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
     if (line.startsWith("### ")) {
+      const text = line.slice(4).trim();
+      const headingId = `heading-${i}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
       result.push(
-        <h3 key={i} id={headingId} className="text-lg font-semibold mt-6 mb-3 scroll-mt-4">
-          {formatInline(line.slice(4))}
+        <h3 key={i} id={headingId} className="text-lg font-semibold mt-8 mb-3 scroll-mt-20 text-foreground">
+          {formatInline(text)}
         </h3>
       );
     } else if (line.startsWith("## ")) {
+      const text = line.slice(3).trim();
+      const headingId = `heading-${i}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
       result.push(
-        <h2 key={i} id={headingId} className="text-xl font-semibold mt-6 mb-3 scroll-mt-4">
-          {formatInline(line.slice(3))}
+        <h2 key={i} id={headingId} className="text-xl font-semibold mt-10 mb-4 scroll-mt-20 text-foreground border-b border-border/40 pb-2">
+          {formatInline(text)}
         </h2>
       );
     } else if (line.startsWith("# ")) {
+      const text = line.slice(2).trim();
+      const headingId = `heading-${i}-${text.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
       result.push(
-        <h1 key={i} id={headingId} className="text-2xl font-bold mt-6 mb-3 scroll-mt-4">
-          {formatInline(line.slice(2))}
+        <h1 key={i} id={headingId} className="text-2xl font-bold mt-10 mb-4 scroll-mt-20 text-foreground">
+          {formatInline(text)}
         </h1>
       );
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
       result.push(
-        <li key={i} className="ml-6 list-disc my-1">{formatInline(line.slice(2))}</li>
+        <li key={i} className="ml-6 list-disc my-1.5 text-foreground/90 leading-relaxed">{formatInline(line.slice(2))}</li>
       );
     } else if (/^\d+\.\s/.test(line)) {
       result.push(
-        <li key={i} className="ml-6 list-decimal my-1">{formatInline(line.replace(/^\d+\.\s/, ""))}</li>
+        <li key={i} className="ml-6 list-decimal my-1.5 text-foreground/90 leading-relaxed">{formatInline(line.replace(/^\d+\.\s/, ""))}</li>
       );
     } else if (line.startsWith("> ")) {
       result.push(
-        <blockquote key={i} className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-4">
+        <blockquote key={i} className="border-l-4 border-primary/40 bg-primary/5 pl-4 py-2 pr-3 rounded-r-lg italic text-muted-foreground my-5">
           {formatInline(line.slice(2))}
         </blockquote>
       );
     } else if (line.trim() === "---") {
-      result.push(<hr key={i} className="my-6 border-border" />);
+      result.push(<hr key={i} className="my-8 border-border/50" />);
     } else if (line.trim() === "") {
       result.push(<br key={i} />);
     } else {
-      result.push(<p key={i} className="my-2 leading-relaxed">{formatInline(line)}</p>);
+      result.push(<p key={i} className="my-2 leading-relaxed text-foreground/90">{formatInline(line)}</p>);
     }
   }
 
   if (inCodeBlock && codeBlockLines.length > 0) {
     result.push(
-      <pre key="code-end" className="bg-muted p-4 rounded-lg overflow-x-auto text-sm my-4">
+      <pre key="code-end" className="bg-muted/60 border border-border/40 p-4 rounded-xl overflow-x-auto text-sm my-5 font-mono">
         <code>{codeBlockLines.join("\n")}</code>
       </pre>
     );
@@ -136,7 +139,7 @@ function formatInline(text: string): React.ReactNode {
   while (remaining.length > 0) {
     const codeMatch = remaining.match(/^`([^`]+)`/);
     if (codeMatch) {
-      parts.push(<code key={key++} className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{codeMatch[1]}</code>);
+      parts.push(<code key={key++} className="bg-primary/10 text-primary px-1.5 py-0.5 rounded-md text-sm font-mono border border-primary/20">{codeMatch[1]}</code>);
       remaining = remaining.slice(codeMatch[0].length);
       continue;
     }
@@ -260,34 +263,36 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Breadcrumbs */}
       {categoryName && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Base de Conhecimento</span>
-          <ChevronRight className="h-4 w-4" />
-          <span>{categoryName}</span>
-          <ChevronRight className="h-4 w-4" />
-          <span className="text-foreground truncate max-w-[200px]">{article.title}</span>
+          <span className="hover:text-foreground cursor-pointer transition-colors">Base de Conhecimento</span>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="hover:text-foreground cursor-pointer transition-colors">{categoryName}</span>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium truncate max-w-[240px]">{article.title}</span>
         </div>
       )}
 
-      {/* Header */}
-      <div>
+      {/* Header Card */}
+      <div className="rounded-xl border border-border/60 bg-card p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          {article.is_public ? (
-            <Globe className="h-5 w-5 text-muted-foreground shrink-0 mt-1" />
-          ) : (
-            <Lock className="h-5 w-5 text-muted-foreground shrink-0 mt-1" />
-          )}
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold leading-tight">{article.title}</h1>
+          <div className="rounded-lg bg-primary/10 p-2 shrink-0">
+            {article.is_public ? (
+              <Globe className="h-5 w-5 text-primary" />
+            ) : (
+              <Lock className="h-5 w-5 text-primary" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold leading-tight text-foreground">{article.title}</h1>
             
             {/* Tags */}
             {article.tags && article.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div className="flex flex-wrap gap-1.5 mt-3">
                 {article.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-xs">
+                  <Badge key={tag} variant="secondary" className="text-xs font-medium bg-secondary/60">
                     {tag}
                   </Badge>
                 ))}
@@ -297,47 +302,46 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
         </div>
 
         {/* Meta info */}
-        <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 mt-5 pt-4 border-t border-border/40">
           {categoryName && (
-            <Badge variant="outline">{categoryName}</Badge>
+            <Badge variant="outline" className="font-medium border-primary/30 text-primary">
+              {categoryName}
+            </Badge>
           )}
-          <span className="flex items-center gap-1">
-            <Eye className="h-4 w-4" />
-            {(article.views || 0) + 1} visualizações
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Eye className="h-3.5 w-3.5" />
+            {(article.views || 0) + 1}
           </span>
           {article.helpful_count > 0 && (
-            <span className="flex items-center gap-1">
-              <ThumbsUp className="h-4 w-4" />
-              {article.helpful_count} acharam útil
+            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <ThumbsUp className="h-3.5 w-3.5" />
+              {article.helpful_count}
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            {readingTime} min de leitura
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            {readingTime} min
           </span>
-          <span className="flex items-center gap-1">
-            <Calendar className="h-4 w-4" />
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Calendar className="h-3.5 w-3.5" />
             {formattedDate}
           </span>
-        </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 mt-4">
-          <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copiado!" : "Copiar link"}
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2">
-            <Share2 className="h-4 w-4" />
-            Compartilhar
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-1.5 h-8 text-xs">
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copiado!" : "Copiar link"}
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
+              <Share2 className="h-3.5 w-3.5" />
+              Compartilhar
+            </Button>
+          </div>
         </div>
       </div>
 
-      <Separator />
-
-      {/* Content with optional TOC */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_200px] gap-8">
+      {/* Content with TOC */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-10">
         {/* Main content */}
         <div className="prose prose-sm dark:prose-invert max-w-none">
           {renderContent(article.content)}
@@ -357,19 +361,19 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
 
       {/* Related Articles */}
       {relatedArticles.length > 0 && (
-        <div className="border-t pt-6 mt-8">
-          <h3 className="text-lg font-semibold mb-4">Artigos Relacionados</h3>
+        <div className="rounded-xl border border-border/60 bg-card p-6 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4 text-foreground">Artigos Relacionados</h3>
           <div className="grid gap-2">
             {relatedArticles.map((related) => (
               <button
                 key={related.id}
-                className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors text-left"
+                className="flex items-center justify-between p-3 rounded-lg border border-border/40 hover:bg-primary/5 hover:border-primary/30 transition-all text-left group"
               >
-                <span className="font-medium">{related.title}</span>
+                <span className="font-medium text-foreground group-hover:text-primary transition-colors">{related.title}</span>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Eye className="h-3 w-3" />
                   {related.views}
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </button>
             ))}
