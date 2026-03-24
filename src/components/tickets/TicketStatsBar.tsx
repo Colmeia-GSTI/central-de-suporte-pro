@@ -2,52 +2,44 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Ticket, Clock, AlertTriangle, CheckCircle, Pause, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { motion } from "framer-motion";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface StatCardProps {
   label: string;
   value: number;
   icon: React.ReactNode;
-  colorClass: string;
-  accentClass: string;
-  delay: number;
-  tooltip?: string;
+  dotColor: string;
   isActive?: boolean;
   onClick?: () => void;
 }
 
-function StatCard({ label, value, icon, colorClass, accentClass, delay, tooltip, isActive, onClick }: StatCardProps) {
-  const content = (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.3 }}
+function StatCard({ label, value, icon, dotColor, isActive, onClick }: StatCardProps) {
+  return (
+    <button
+      type="button"
       onClick={onClick}
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl border bg-card transition-all ${colorClass} ${
-        onClick ? "cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]" : ""
-      } ${isActive ? "ring-2 ring-primary shadow-md" : ""}`}
+      className={cn(
+        "flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all duration-150",
+        "hover:bg-muted/60 active:scale-[0.97]",
+        isActive
+          ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30 shadow-sm"
+          : "bg-card border-border/50 hover:border-border"
+      )}
     >
-      <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${accentClass}`}>
+      <div className={cn("flex items-center justify-center w-8 h-8 rounded-md", dotColor)}>
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-2xl font-bold tabular-nums leading-none">{value}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 truncate">{label}</p>
+        <p className={cn(
+          "text-xl font-bold tabular-nums leading-none",
+          isActive ? "text-primary" : "text-foreground"
+        )}>
+          {value}
+        </p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 truncate font-medium">{label}</p>
       </div>
-    </motion.div>
+    </button>
   );
-
-  if (tooltip) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{content}</TooltipTrigger>
-        <TooltipContent><p>{tooltip}</p></TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return content;
 }
 
 interface TicketStatsBarProps {
@@ -58,10 +50,9 @@ interface TicketStatsBarProps {
 export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarProps) {
   const handleClick = (filter: string) => {
     if (!onFilterChange) return;
-    // Toggle: clicking active card resets to default
     onFilterChange(activeFilter === filter ? "active" : filter);
   };
-  // Use count-only (head: true) queries instead of fetching all rows
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ["ticket-stats-bar"],
     queryFn: async () => {
@@ -88,9 +79,9 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-[72px] rounded-xl" />
+          <Skeleton key={i} className="h-[52px] rounded-lg" />
         ))}
       </div>
     );
@@ -98,74 +89,28 @@ export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarP
 
   if (!stats) return null;
 
+  const cards = [
+    { key: "open", label: "Abertos", value: stats.open, icon: <Ticket className="h-4 w-4 text-status-open" />, dotColor: "bg-status-open/15" },
+    { key: "in_progress", label: "Andamento", value: stats.in_progress, icon: <Clock className="h-4 w-4 text-info" />, dotColor: "bg-info/15" },
+    { key: "waiting", label: "Aguardando", value: stats.waiting, icon: <AlertTriangle className="h-4 w-4 text-warning" />, dotColor: "bg-warning/15" },
+    { key: "paused", label: "Pausados", value: stats.paused, icon: <Pause className="h-4 w-4 text-amber-500" />, dotColor: "bg-amber-500/15" },
+    { key: "unassigned", label: "S/ Técnico", value: stats.unassigned, icon: <Users className="h-4 w-4 text-destructive" />, dotColor: "bg-destructive/15" },
+    { key: "resolved", label: "Resolvidos", value: stats.resolved, icon: <CheckCircle className="h-4 w-4 text-success" />, dotColor: "bg-success/15" },
+  ];
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      <StatCard
-        label="Abertos"
-        value={stats.open}
-        icon={<Ticket className="h-5 w-5 text-status-open" />}
-        colorClass="border-status-open/30"
-        accentClass="bg-status-open/10"
-        tooltip="Chamados aguardando triagem"
-        isActive={activeFilter === "open"}
-        onClick={() => handleClick("open")}
-        delay={0}
-      />
-      <StatCard
-        label="Em Andamento"
-        value={stats.in_progress}
-        icon={<Clock className="h-5 w-5 text-info" />}
-        colorClass="border-info/30"
-        accentClass="bg-info/10"
-        tooltip="Chamados sendo atendidos"
-        isActive={activeFilter === "in_progress"}
-        onClick={() => handleClick("in_progress")}
-        delay={0.05}
-      />
-      <StatCard
-        label="Aguardando"
-        value={stats.waiting}
-        icon={<AlertTriangle className="h-5 w-5 text-warning" />}
-        colorClass="border-warning/30"
-        accentClass="bg-warning/10"
-        tooltip="Aguardando resposta do cliente ou terceiro"
-        isActive={activeFilter === "waiting"}
-        onClick={() => handleClick("waiting")}
-        delay={0.1}
-      />
-      <StatCard
-        label="Pausados"
-        value={stats.paused}
-        icon={<Pause className="h-5 w-5 text-amber-500" />}
-        colorClass="border-amber-500/30"
-        accentClass="bg-amber-500/10"
-        tooltip="Chamados pausados temporariamente"
-        isActive={activeFilter === "paused"}
-        onClick={() => handleClick("paused")}
-        delay={0.15}
-      />
-      <StatCard
-        label="Sem Técnico"
-        value={stats.unassigned}
-        icon={<Users className="h-5 w-5 text-destructive" />}
-        colorClass="border-destructive/30"
-        accentClass="bg-destructive/10"
-        tooltip="Chamados sem técnico atribuído"
-        isActive={activeFilter === "unassigned"}
-        onClick={() => handleClick("unassigned")}
-        delay={0.2}
-      />
-      <StatCard
-        label="Resolvidos"
-        value={stats.resolved}
-        icon={<CheckCircle className="h-5 w-5 text-success" />}
-        colorClass="border-success/30"
-        accentClass="bg-success/10"
-        tooltip="Chamados resolvidos aguardando fechamento"
-        isActive={activeFilter === "resolved"}
-        onClick={() => handleClick("resolved")}
-        delay={0.25}
-      />
+    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+      {cards.map((card) => (
+        <StatCard
+          key={card.key}
+          label={card.label}
+          value={card.value}
+          icon={card.icon}
+          dotColor={card.dotColor}
+          isActive={activeFilter === card.key}
+          onClick={() => handleClick(card.key)}
+        />
+      ))}
     </div>
   );
 }
