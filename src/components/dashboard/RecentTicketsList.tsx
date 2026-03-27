@@ -5,7 +5,7 @@ import { Ticket, Clock, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 interface RecentTicket {
@@ -62,6 +62,7 @@ const itemVariants = {
 };
 
 export function RecentTicketsList({ tickets, isLoading }: RecentTicketsListProps) {
+  const navigate = useNavigate();
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -111,6 +112,7 @@ export function RecentTicketsList({ tickets, isLoading }: RecentTicketsListProps
                   key={ticket.id}
                   variants={itemVariants}
                   whileHover={{ x: 4, backgroundColor: "hsl(var(--accent) / 0.5)" }}
+                  onClick={() => navigate(`/tickets?open=${ticket.id}`)}
                   className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card/50 transition-colors cursor-pointer"
                 >
                   <div className="flex-1 min-w-0">
