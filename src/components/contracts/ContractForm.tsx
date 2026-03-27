@@ -63,6 +63,7 @@ const contractSchema = z.object({
   billing_provider: z.enum(["banco_inter", "asaas"]).default("banco_inter"),
   payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
   generate_initial_invoice: z.boolean().default(false),
+  first_payment_date: z.string().optional(),
   generate_payment: z.boolean().default(true),
   send_notification: z.boolean().default(true),
   adjustment_date: z.string().optional(),
@@ -153,6 +154,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       billing_provider: (contractData?.billing_provider as "banco_inter" | "asaas") || "banco_inter",
       payment_preference: (contractData?.payment_preference as "boleto" | "pix" | "both") || "boleto",
       generate_initial_invoice: false,
+      first_payment_date: "",
       generate_payment: true,
       send_notification: true,
       adjustment_date: contractData?.adjustment_date || "",
@@ -343,15 +345,22 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
       // Generate initial invoice if requested (only for new contracts)
       if (!isUpdate && data.generate_initial_invoice && contractIdValue) {
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
-        const referenceMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
+        let dueDate: string;
+        let referenceMonth: string;
         
-        const billingDay = data.billing_day || 10;
-        const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
-        const actualBillingDay = Math.min(billingDay, lastDayOfMonth);
-        const dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
+        if (data.first_payment_date) {
+          dueDate = data.first_payment_date;
+          referenceMonth = data.first_payment_date.substring(0, 7);
+        } else {
+          const now = new Date();
+          const currentMonth = now.getMonth() + 1;
+          const currentYear = now.getFullYear();
+          referenceMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
+          const billingDay = data.billing_day || 10;
+          const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
+          const actualBillingDay = Math.min(billingDay, lastDayOfMonth);
+          dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
+        }
         
         const invoiceAmount = calculatedTotal > 0 ? calculatedTotal : data.monthly_value;
         const { data: invoice, error: invoiceError } = await supabase
@@ -779,9 +788,24 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
               {form.watch("generate_initial_invoice") && (
                 <div className="ml-6 space-y-3 border-l-2 border-primary/30 pl-4">
+                  <FormField
+                    control={form.control}
+                    name="first_payment_date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data do Primeiro Pagamento</FormLabel>
+                        <DatePickerField field={field} label="Data do Primeiro Pagamento" />
+                        <FormDescription>
+                          Escolha a data de vencimento da primeira fatura. Se não informada, será calculada pelo dia de vencimento ({form.watch("billing_day") || 10}) do mês atual.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <div className="text-sm text-muted-foreground">
-                    <p><strong>Competência:</strong> {new Date().getFullYear()}-{String(new Date().getMonth() + 1).padStart(2, "0")}</p>
-                    <p><strong>Vencimento:</strong> {new Date().getFullYear()}-{String(new Date().getMonth() + 1).padStart(2, "0")}-{String(form.watch("billing_day") || 10).padStart(2, "0")}</p>
+                    <p><strong>Competência:</strong> {form.watch("first_payment_date") ? form.watch("first_payment_date")!.substring(0, 7) : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`}</p>
+                    <p><strong>Vencimento:</strong> {form.watch("first_payment_date") || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(form.watch("billing_day") || 10).padStart(2, "0")}`}</p>
                     <p><strong>Valor:</strong> {calculatedTotal > 0 ? `R$ ${calculatedTotal.toFixed(2)}` : "Será calculado pelos serviços"}</p>
                   </div>
 

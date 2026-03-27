@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Package, History } from "lucide-react";
+import { Plus, Trash2, Package, History, PlusCircle } from "lucide-react";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
@@ -34,7 +34,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ServiceForm } from "@/components/services/ServiceForm";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -73,11 +75,13 @@ export function ContractServicesSection({
   initialServices = [],
   onChange,
 }: ContractServicesSectionProps) {
+  const queryClient = useQueryClient();
   const [services, setServices] = useState<ContractService[]>(initialServices);
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const [unitValue, setUnitValue] = useState<number>(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isNewServiceOpen, setIsNewServiceOpen] = useState(false);
 
   // Keep track of original services for comparison
   const [originalServices, setOriginalServices] = useState<ContractService[]>(initialServices);
@@ -278,22 +282,39 @@ export function ContractServicesSection({
       <div className="flex items-end gap-2 p-4 rounded-lg border bg-muted/30 flex-wrap">
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-1 block">Serviço</label>
-          <Select value={selectedServiceId} onValueChange={(val) => {
-            setSelectedServiceId(val);
-            const svc = availableServices.find((s) => s.id === val);
-            if (svc) setUnitValue(svc.base_value * svc.multiplier);
-          }}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um serviço" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableServices.map((service) => (
-                <SelectItem key={service.id} value={service.id}>
-                  {service.name} - {formatCurrencyBRLWithSymbol(service.base_value * service.multiplier)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select value={selectedServiceId} onValueChange={(val) => {
+              setSelectedServiceId(val);
+              const svc = availableServices.find((s) => s.id === val);
+              if (svc) setUnitValue(svc.base_value * svc.multiplier);
+            }}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Selecione um serviço" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableServices.map((service) => (
+                  <SelectItem key={service.id} value={service.id}>
+                    {service.name} - {formatCurrencyBRLWithSymbol(service.base_value * service.multiplier)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsNewServiceOpen(true)}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Cadastrar novo serviço</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
         <div className="w-24">
           <label className="text-sm font-medium mb-1 block">Quantidade</label>
@@ -398,6 +419,24 @@ export function ContractServicesSection({
           <p className="text-sm">Selecione um serviço acima para adicionar ao contrato</p>
         </div>
       )}
+
+      {/* Inline New Service Sheet */}
+      <Sheet open={isNewServiceOpen} onOpenChange={setIsNewServiceOpen}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Cadastrar Novo Serviço</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <ServiceForm
+              onSuccess={() => {
+                setIsNewServiceOpen(false);
+                queryClient.invalidateQueries({ queryKey: ["services-active"] });
+              }}
+              onCancel={() => setIsNewServiceOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
