@@ -1,45 +1,52 @@
 
 
-# Implementação: Cards de Status Clicáveis + Teste de Push
+## Diagnóstico: Financeiro sem acesso completo
 
-## Parte 1: Cards de Status Clicáveis
+### Problemas encontrados
 
-### Arquivo 1: `src/components/tickets/TicketStatsBar.tsx`
+**1. Permissões Frontend (`src/lib/permissions.ts`) — `clients` module**
+- `create`: Permite apenas `["admin", "manager", "technician"]` — **falta `"financial"`**
+- `edit`: Permite apenas `["admin", "manager", "technician"]` — **falta `"financial"`**
+- O financeiro pode **ver** clientes mas não pode **criar nem editar**
 
-- Adicionar props `onFilterChange?: (filter: string) => void` e `activeFilter?: string`
-- Passar `onClick` para cada `StatCard` com o filtro correspondente:
-  - Abertos → `"open"`, Em Andamento → `"in_progress"`, Aguardando → `"waiting"`, Pausados → `"paused"`, Sem Técnico → `"unassigned"`, Resolvidos → `"resolved"`
-- Toggle: clicar no card ativo reseta para `"active"` (filtro padrão)
-- Destaque visual: adicionar `ring-2 ring-primary` no card ativo
-- Adicionar prop `isActive` ao `StatCard` para controlar o estilo
+**2. Permissões Frontend — `contracts` module**
+- `create`: Apenas `["admin", "manager"]` — **falta `"financial"`**
+- `edit`: Apenas `["admin", "manager"]` — **falta `"financial"`**
+- O financeiro precisa criar/editar contratos para gestão de faturamento
 
-### Arquivo 2: `src/pages/tickets/TicketsPage.tsx` (linha 393)
+**3. RLS (Backend) — tabela `contracts`**
+- A política `ALL` para contracts permite apenas `admin` e `manager`
+- **Falta policy para financial** poder inserir/atualizar contratos
 
-Substituir `<TicketStatsBar />` por:
+**4. RLS (Backend) — tabela `clients`**
+- INSERT policy (`Staff can insert clients`) usa `is_staff()` — **OK, financial já é staff**
+- UPDATE policy (`Financial staff can update clients`) usa `is_financial_admin()` — **OK**
+- Então o backend já permite, mas o **frontend bloqueia** o botão de criar/editar
 
-```tsx
-<TicketStatsBar
-  activeFilter={technicianFilter === "unassigned" ? "unassigned" : statusFilter}
-  onFilterChange={(filter) => {
-    handleResetPagination();
-    if (filter === "unassigned") {
-      setStatusFilter("active");
-      setTechnicianFilter("unassigned");
-    } else {
-      setTechnicianFilter("all");
-      setStatusFilter(filter);
-    }
-  }}
-/>
+### Plano de correção
+
+#### Arquivo 1: `src/lib/permissions.ts`
+Adicionar `"financial"` nas seguintes permissões:
+- `clients.create` → adicionar `"financial"`
+- `clients.edit` → adicionar `"financial"`
+- `contracts.create` → adicionar `"financial"`
+- `contracts.edit` → adicionar `"financial"`
+
+#### Migração SQL: RLS para `contracts`
+Criar nova policy para que o financeiro possa inserir e atualizar contratos:
+```sql
+CREATE POLICY "Financial can manage contracts"
+ON public.contracts FOR ALL TO authenticated
+USING (has_role(auth.uid(), 'financial'))
+WITH CHECK (has_role(auth.uid(), 'financial'));
 ```
 
-## Parte 2: Teste de Push Notifications
+### Resumo do impacto
+- **Clientes**: Financeiro poderá cadastrar e editar clientes (botão "Novo Cliente" ficará visível)
+- **Contratos**: Financeiro poderá criar e editar contratos
+- **Faturas, boletos, NFS-e**: Já funcionam — RLS e frontend já permitem para `financial`
+- **Conciliação bancária, lançamentos financeiros**: Já funcionam
+- **Relatórios**: Já funcionam (view + export permitidos)
 
-Após implementar os cards, testarei as push notifications verificando:
-- Se o botão "Ativar Push" aparece na página de perfil (não trava mais em loading)
-- Se o fluxo de inscrição funciona
-
-## Arquivos alterados
-- `src/components/tickets/TicketStatsBar.tsx`
-- `src/pages/tickets/TicketsPage.tsx`
+Estas são as únicas lacunas encontradas na varredura completa.
 
