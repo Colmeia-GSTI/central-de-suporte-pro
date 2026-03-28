@@ -620,8 +620,11 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             name="start_date"
             render={({ field }) => (
               <FormItem className="flex flex-col">
-                <FormLabel>Data de Início *</FormLabel>
-                <DatePickerField field={field} label="Data de Início" />
+                <FormLabel>Data de Início do Contrato *</FormLabel>
+                <DatePickerField field={field} label="Data de Início do Contrato" />
+                <FormDescription>
+                  Data em que o contrato entra em vigor. Não é a data do primeiro pagamento.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
