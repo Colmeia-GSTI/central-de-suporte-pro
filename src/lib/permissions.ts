@@ -72,7 +72,7 @@ export const PERMISSIONS_CONFIG: PermissionsConfig = {
     view: ["admin", "manager", "financial"],
     create: ["admin", "manager", "financial"],
     edit: ["admin", "manager", "financial"],
-    delete: ["admin"],
+    delete: ["admin", "financial"],
     export: ["admin", "manager", "financial"],
   },
   services: {
