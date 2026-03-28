@@ -620,8 +620,11 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             name="start_date"
             render={({ field }) => (
               <FormItem className="flex flex-col">
-                <FormLabel>Data de Início *</FormLabel>
-                <DatePickerField field={field} label="Data de Início" />
+                <FormLabel>Data de Início do Contrato *</FormLabel>
+                <DatePickerField field={field} label="Data de Início do Contrato" />
+                <FormDescription>
+                  Data em que o contrato entra em vigor. Não é a data do primeiro pagamento.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -761,93 +764,99 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           </div>
 
           {/* Initial Invoice Generation - Only for new contracts */}
-          {!contractData && (
-            <div className="mt-4 p-4 rounded-lg border bg-muted/30 space-y-4">
-              <FormField
-                control={form.control}
-                name="generate_initial_invoice"
-                render={({ field }) => (
-                  <FormItem className="flex items-start gap-3 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1">
-                      <FormLabel className="cursor-pointer font-medium">
-                        Gerar primeira cobrança ao criar contrato
-                      </FormLabel>
-                      <FormDescription>
-                        A fatura será gerada para o mês atual com vencimento no dia {form.watch("billing_day") || 10}
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              {form.watch("generate_initial_invoice") && (
-                <div className="ml-6 space-y-3 border-l-2 border-primary/30 pl-4">
-                  <FormField
-                    control={form.control}
-                    name="first_payment_date"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Data do Primeiro Pagamento</FormLabel>
-                        <DatePickerField field={field} label="Data do Primeiro Pagamento" />
-                        <FormDescription>
-                          Escolha a data de vencimento da primeira fatura. Se não informada, será calculada pelo dia de vencimento ({form.watch("billing_day") || 10}) do mês atual.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="text-sm text-muted-foreground">
-                    <p><strong>Competência:</strong> {form.watch("first_payment_date") ? form.watch("first_payment_date")!.substring(0, 7) : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`}</p>
-                    <p><strong>Vencimento:</strong> {form.watch("first_payment_date") || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(form.watch("billing_day") || 10).padStart(2, "0")}`}</p>
-                    <p><strong>Valor:</strong> {calculatedTotal > 0 ? `R$ ${calculatedTotal.toFixed(2)}` : "Será calculado pelos serviços"}</p>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="generate_payment"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center gap-2 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <FormLabel className="cursor-pointer text-sm">
-                          Gerar boleto/PIX automaticamente ({form.watch("billing_provider") === "asaas" ? "Asaas" : "Banco Inter"})
-                        </FormLabel>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="send_notification"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center gap-2 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <FormLabel className="cursor-pointer text-sm">
-                          Enviar notificação por email
-                        </FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                </div>
+          {/* First Payment Date - always visible */}
+          <div className="mt-4 p-4 rounded-lg border bg-muted/30 space-y-4">
+            <FormField
+              control={form.control}
+              name="first_payment_date"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>📅 Data do Primeiro Pagamento</FormLabel>
+                  <DatePickerField field={field} label="Data do Primeiro Pagamento" />
+                  <FormDescription>
+                    Data de vencimento da primeira fatura deste contrato. Se não informada, será calculada pelo dia de vencimento ({form.watch("billing_day") || 10}) do mês atual.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
-          )}
+            />
+
+            {form.watch("first_payment_date") && (
+              <div className="text-sm text-muted-foreground bg-background/50 rounded p-2">
+                <p><strong>Competência:</strong> {form.watch("first_payment_date")!.substring(0, 7)}</p>
+                <p><strong>Vencimento:</strong> {form.watch("first_payment_date")}</p>
+                <p><strong>Valor:</strong> {calculatedTotal > 0 ? `R$ ${calculatedTotal.toFixed(2)}` : "Será calculado pelos serviços"}</p>
+              </div>
+            )}
+
+            {/* Initial Invoice Generation - Only for new contracts */}
+            {!contractData && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="generate_initial_invoice"
+                  render={({ field }) => (
+                    <FormItem className="flex items-start gap-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1">
+                        <FormLabel className="cursor-pointer font-medium">
+                          Gerar primeira cobrança ao criar contrato
+                        </FormLabel>
+                        <FormDescription>
+                          A fatura será gerada com base na data do primeiro pagamento acima
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                {form.watch("generate_initial_invoice") && (
+                  <div className="ml-6 space-y-3 border-l-2 border-primary/30 pl-4">
+                    <FormField
+                      control={form.control}
+                      name="generate_payment"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <FormLabel className="cursor-pointer text-sm">
+                            Gerar boleto/PIX automaticamente ({form.watch("billing_provider") === "asaas" ? "Asaas" : "Banco Inter"})
+                          </FormLabel>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="send_notification"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <FormLabel className="cursor-pointer text-sm">
+                            Enviar notificação por email
+                          </FormLabel>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Adjustment Section */}
