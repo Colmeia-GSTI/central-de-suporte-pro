@@ -1,41 +1,27 @@
 
 
-## Diagnóstico e Correções — Contratos
+## Diagnóstico: Crash na página de Novo Contrato
 
-### Problemas encontrados
+### Problema encontrado
 
-**1. Financeiro não consegue criar contratos (RLS)**
-A migration anterior adicionou policy no `contracts` para `financial`, mas as tabelas auxiliares continuam bloqueadas:
-- `contract_services`: policy `FOR ALL` permite apenas `admin` e `manager` — **financeiro não pode inserir/deletar serviços**
-- `contract_history`: policy `FOR INSERT` usa `is_staff()` — OK, funciona
+A página `/contracts/new` crasha imediatamente ao carregar, exibindo "Erro ao carregar esta página".
 
-**2. Sem campo para escolher data do primeiro pagamento**
-Atualmente, a data de vencimento da primeira fatura é calculada automaticamente usando `billing_day` + mês corrente. Não há opção de escolher uma data diferente (outro mês, por exemplo).
+**Causa raiz:** O componente `Select` do Radix UI em `ContractServicesSection.tsx` recebe `value=""` (string vazia) no estado inicial de `selectedServiceId`. O Radix Select interpreta string vazia como um valor válido e tenta renderizar um `<SelectBubbleInput>` para ele, mas como não existe nenhum `<SelectItem>` com `value=""`, isso causa um crash no DOM (`removeChild` error).
 
-**3. Sem opção de cadastrar serviço inline**
-O `ContractServicesSection` exibe apenas um `Select` com serviços existentes. Se o serviço não existe, o usuário precisa sair do formulário para criá-lo.
+### Correção
 
----
+**Arquivo:** `src/components/contracts/ContractServicesSection.tsx`
 
-### Plano de correção
+1. Mudar o estado `selectedServiceId` de `""` para `undefined`
+2. Atualizar o `Select` para passar `value={selectedServiceId || ""}` e no `onValueChange` tratar o reset corretamente
+3. Alternativa mais simples e robusta: manter `""` mas passar `value={selectedServiceId || undefined}` ao `Select`, e no reset setar `""` internamente mas converter para `undefined` na prop
 
-#### 1. Migração SQL — RLS para `contract_services`
-Adicionar policy para financial:
-```sql
-CREATE POLICY "Financial can manage contract services"
-ON public.contract_services FOR ALL TO authenticated
-USING (public.has_role(auth.uid(), 'financial'))
-WITH CHECK (public.has_role(auth.uid(), 'financial'));
-```
+A correção mais limpa:
+- `const [selectedServiceId, setSelectedServiceId] = useState<string>("")` fica como está
+- No `<Select>`: trocar `value={selectedServiceId}` para `value={selectedServiceId || undefined}`
+- No reset após adicionar: `setSelectedServiceId("")` fica como está (internamente é "", mas o Select recebe `undefined`)
 
-#### 2. Campo "Data do Primeiro Pagamento" (`ContractForm.tsx`)
-- Adicionar campo `first_payment_date` ao schema (string opcional, só visível quando `generate_initial_invoice` está ativo)
-- Substituir o cálculo fixo de `dueDate` na mutation pelo valor desse campo
-- Renderizar um `DatePickerField` clicável dentro do bloco de "Gerar primeira cobrança"
-- Atualizar a exibição da competência/vencimento para refletir a data escolhida
+### Arquivos a editar
 
-#### 3. Cadastro inline de serviço (`ContractServicesSection.tsx`)
-- Adicionar botão "Novo Serviço" ao lado do select de serviços
-- Abrir um `Sheet` (lateral) com o `ServiceForm` já existente
-- Ao salvar com sucesso, invalidar a query `services-active` e selecionar automaticamente o novo serviço
+- `src/components/contracts/ContractServicesSection.tsx` — corrigir prop `value` do `Select`
 
