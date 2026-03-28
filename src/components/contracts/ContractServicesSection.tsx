@@ -283,7 +283,7 @@ export function ContractServicesSection({
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-1 block">Serviço</label>
           <div className="flex gap-2">
-            <Select value={selectedServiceId} onValueChange={(val) => {
+            <Select value={selectedServiceId || undefined} onValueChange={(val) => {
               setSelectedServiceId(val);
               const svc = availableServices.find((s) => s.id === val);
               if (svc) setUnitValue(svc.base_value * svc.multiplier);
