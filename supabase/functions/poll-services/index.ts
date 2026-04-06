@@ -192,11 +192,63 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
       const codigoBarras = cobranca.linhaDigitavel || boleto.linhaDigitavel;
 
       if (codigoBarras) {
-        await supabase.from("invoices").update({
+        const updatePayload: Record<string, unknown> = {
           boleto_barcode: codigoBarras,
-          boleto_url: boleto.urlPdf || null,
           notes: invoice.notes?.replace(/\s*codigoSolicitacao:[a-f0-9-]+/gi, "").trim() || null,
-        }).eq("id", invoice.id);
+        };
+
+        // Download PDF via endpoint dedicado /pdf (retorna base64)
+        try {
+          const pdfResponse = await mtlsFetch(
+            `${baseUrl}/cobranca/v3/cobrancas/${match[1]}/pdf`,
+            { headers: { Authorization: `Bearer ${access_token}` } }
+          );
+          if (pdfResponse.ok) {
+            const pdfData = await pdfResponse.json();
+            if (pdfData.pdf) {
+              const pdfBytes = Uint8Array.from(atob(pdfData.pdf), (c: string) => c.charCodeAt(0));
+              const boletoPath = `boletos/${invoice.id}/boleto.pdf`;
+              const { error: uploadError } = await supabase.storage
+                .from("invoice-documents")
+                .upload(boletoPath, pdfBytes, {
+                  contentType: "application/pdf",
+                  upsert: true,
+                });
+
+              if (!uploadError) {
+                updatePayload.boleto_url = `invoice-documents/${boletoPath}`;
+                updatePayload.boleto_status = "enviado";
+
+                // Registrar na tabela invoice_documents
+                await supabase.from("invoice_documents").insert({
+                  invoice_id: invoice.id,
+                  document_type: "boleto_pdf",
+                  file_path: boletoPath,
+                  file_name: `boleto_${invoice.invoice_number}.pdf`,
+                  mime_type: "application/pdf",
+                  bucket_name: "invoice-documents",
+                  storage_provider: "supabase",
+                  metadata: { source: "poll_services_fallback", codigoSolicitacao: match[1] },
+                });
+
+                console.log(`[POLL-SERVICES] PDF do boleto ${invoice.invoice_number} salvo no Storage`);
+              } else {
+                console.warn(`[POLL-SERVICES] Erro upload PDF ${invoice.id}:`, uploadError);
+                updatePayload.boleto_url = boleto.urlPdf || null;
+              }
+            } else {
+              updatePayload.boleto_url = boleto.urlPdf || null;
+            }
+          } else {
+            console.warn(`[POLL-SERVICES] Erro ao obter PDF ${invoice.id}:`, await pdfResponse.text());
+            updatePayload.boleto_url = boleto.urlPdf || null;
+          }
+        } catch (pdfErr) {
+          console.warn(`[POLL-SERVICES] Erro download PDF ${invoice.id}:`, pdfErr);
+          updatePayload.boleto_url = boleto.urlPdf || null;
+        }
+
+        await supabase.from("invoices").update(updatePayload).eq("id", invoice.id);
         updated++;
       }
     } catch (e) {
