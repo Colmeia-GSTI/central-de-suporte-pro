@@ -1,27 +1,39 @@
 
 
-## Diagnóstico: Crash na página de Novo Contrato
+## Plano: Aumentar tempos de polling do boleto + download de PDF no fallback
 
-### Problema encontrado
+### Problema
 
-A página `/contracts/new` crasha imediatamente ao carregar, exibindo "Erro ao carregar esta página".
+Quando o Banco Inter demora mais que 30 segundos para processar o boleto, o sistema desiste do polling imediato e o boleto fica sem PDF. O fallback (`poll-services`) recupera o barcode mas não baixa o PDF.
 
-**Causa raiz:** O componente `Select` do Radix UI em `ContractServicesSection.tsx` recebe `value=""` (string vazia) no estado inicial de `selectedServiceId`. O Radix Select interpreta string vazia como um valor válido e tenta renderizar um `<SelectBubbleInput>` para ele, mas como não existe nenhum `<SelectItem>` com `value=""`, isso causa um crash no DOM (`removeChild` error).
+### Correções
 
-### Correção
+#### 1. Aumentar polling imediato (`banco-inter/index.ts`, linha 726-730)
 
-**Arquivo:** `src/components/contracts/ContractServicesSection.tsx`
+- **Intervalo entre tentativas**: de 5s → **15s**
+- **Número de tentativas**: de 6 → **12** (total: ~3 minutos)
+- Alterar: `const maxTentativas = 12;` e `setTimeout(r, 15000)`
 
-1. Mudar o estado `selectedServiceId` de `""` para `undefined`
-2. Atualizar o `Select` para passar `value={selectedServiceId || ""}` e no `onValueChange` tratar o reset corretamente
-3. Alternativa mais simples e robusta: manter `""` mas passar `value={selectedServiceId || undefined}` ao `Select`, e no reset setar `""` internamente mas converter para `undefined` na prop
+#### 2. Adicionar download de PDF no fallback (`poll-services/index.ts`, função `pollBoletos`)
 
-A correção mais limpa:
-- `const [selectedServiceId, setSelectedServiceId] = useState<string>("")` fica como está
-- No `<Select>`: trocar `value={selectedServiceId}` para `value={selectedServiceId || undefined}`
-- No reset após adicionar: `setSelectedServiceId("")` fica como está (internamente é "", mas o Select recebe `undefined`)
+Após recuperar o barcode com sucesso (linha ~194), adicionar:
+
+1. Chamar `GET /cobranca/v3/cobrancas/{codigoSolicitacao}/pdf` para obter o PDF em base64
+2. Decodificar e fazer upload para o bucket `invoice-documents`
+3. Registrar na tabela `invoice_documents`
+4. Salvar o caminho do Storage em `boleto_url`
+5. Atualizar `boleto_status` para `"enviado"`
 
 ### Arquivos a editar
 
-- `src/components/contracts/ContractServicesSection.tsx` — corrigir prop `value` do `Select`
+| Arquivo | Mudança |
+|---|---|
+| `supabase/functions/banco-inter/index.ts` | Aumentar `maxTentativas` para 12, intervalo para 15s |
+| `supabase/functions/poll-services/index.ts` | Adicionar download/armazenamento de PDF na função `pollBoletos` |
+
+### Resultado esperado
+
+- Polling imediato aguarda até ~3 minutos (cobre a maioria dos casos)
+- Se ainda assim o boleto não ficar pronto a tempo, o fallback periódico recupera barcode **e PDF**
+- Todo boleto terá PDF disponível para download e envio por e-mail
 
