@@ -723,11 +723,11 @@ Deno.serve(async (req) => {
         }
 
         let boletoCompleto = false;
-        const maxTentativas = 6; // 30 segundos (5 segundos cada) - webhook/poll-services cuida do resto
+        const maxTentativas = 12; // ~3 minutos (15 segundos cada) - webhook/poll-services cuida do resto
         
         if (readToken) {
           for (let tentativa = 1; tentativa <= maxTentativas && !boletoCompleto; tentativa++) {
-            await new Promise(r => setTimeout(r, 5000)); // Aguarda 5 segundos
+            await new Promise(r => setTimeout(r, 15000)); // Aguarda 15 segundos
             console.log(`[BANCO-INTER] Polling tentativa ${tentativa}/${maxTentativas}...`);
             
             try {
