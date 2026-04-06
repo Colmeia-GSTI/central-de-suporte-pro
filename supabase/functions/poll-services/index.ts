@@ -130,22 +130,6 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
     return { processed: 0, updated: 0 };
   }
 
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-
-  const { data: pendingInvoices } = await supabase
-    .from("invoices")
-    .select("id, invoice_number, notes, amount, client_id")
-    .eq("payment_method", "boleto")
-    .is("boleto_barcode", null)
-    .in("status", ["pending", "overdue"])
-    .lt("created_at", twoHoursAgo)
-    .limit(10);
-
-  if (!pendingInvoices?.length) {
-    console.log("[POLL-SERVICES] Nenhum boleto pendente");
-    return { processed: 0, updated: 0 };
-  }
-
   const httpClient = createMtlsClient(settings.certificate_crt, settings.certificate_key);
   const baseUrl = settings.environment === "production"
     ? "https://cdpj.partners.bancointer.com.br"
@@ -172,6 +156,18 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
 
   const { access_token } = await tokenResponse.json();
   let processed = 0, updated = 0;
+
+  // === PASSO 1: boletos sem barcode ===
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+  const { data: pendingInvoices } = await supabase
+    .from("invoices")
+    .select("id, invoice_number, notes, amount, client_id")
+    .eq("payment_method", "boleto")
+    .is("boleto_barcode", null)
+    .in("status", ["pending", "overdue"])
+    .lt("created_at", twoHoursAgo)
+    .limit(10);
 
   for (const invoice of pendingInvoices) {
     const match = invoice.notes?.match(/codigoSolicitacao:([a-f0-9-]+)/i);
