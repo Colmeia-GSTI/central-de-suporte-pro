@@ -256,6 +256,122 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
     }
   }
 
+  // === SEGUNDO PASSO: recuperar PDF de boletos que já têm barcode mas sem PDF no Storage ===
+  const { data: missingPdfInvoices } = await supabase
+    .from("invoices")
+    .select("id, invoice_number, notes, boleto_url")
+    .eq("payment_method", "boleto")
+    .not("boleto_barcode", "is", null)
+    .in("status", ["pending", "overdue", "paid"])
+    .or("boleto_url.is.null,boleto_url.not.like.invoice-documents/%")
+    .limit(20);
+
+  if (missingPdfInvoices?.length) {
+    console.log(`[POLL-SERVICES] ${missingPdfInvoices.length} boletos com barcode mas sem PDF no Storage`);
+
+    // Garantir que temos httpClient e token (podem já existir do passo anterior)
+    let pdfHttpClient = httpClient;
+    let pdfAccessToken = access_token;
+    let pdfBaseUrl = baseUrl;
+    let pdfMtlsFetch = mtlsFetch;
+
+    if (!pdfHttpClient) {
+      // Se o primeiro passo não rodou (nenhum boleto sem barcode), precisamos inicializar
+      const interSettings = await getInterSettings(supabase);
+      if (interSettings) {
+        pdfHttpClient = createMtlsClient(interSettings.certificate_crt, interSettings.certificate_key);
+        pdfBaseUrl = interSettings.environment === "production"
+          ? "https://cdpj.partners.bancointer.com.br"
+          : "https://cdpj-sandbox.partners.bancointer.com.br";
+        pdfMtlsFetch = (url: string, options: RequestInit) =>
+          fetch(url, { ...options, client: pdfHttpClient } as RequestInit);
+
+        const tokenRes = await pdfMtlsFetch(`${pdfBaseUrl}/oauth/v2/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: interSettings.client_id,
+            client_secret: interSettings.client_secret,
+            grant_type: "client_credentials",
+            scope: "boleto-cobranca.read",
+          }),
+        });
+        if (tokenRes.ok) {
+          const tokenData = await tokenRes.json();
+          pdfAccessToken = tokenData.access_token;
+        } else {
+          console.error("[POLL-SERVICES] Erro auth Inter para PDF recovery");
+          pdfAccessToken = null;
+        }
+      }
+    }
+
+    if (pdfAccessToken) {
+      for (const inv of missingPdfInvoices) {
+        const solMatch = inv.notes?.match(/codigoSolicitacao:([a-f0-9-]+)/i);
+        if (!solMatch) {
+          console.warn(`[POLL-SERVICES] Fatura ${inv.invoice_number} sem codigoSolicitacao no notes`);
+          continue;
+        }
+
+        processed++;
+        try {
+          const pdfResponse = await pdfMtlsFetch(
+            `${pdfBaseUrl}/cobranca/v3/cobrancas/${solMatch[1]}/pdf`,
+            { headers: { Authorization: `Bearer ${pdfAccessToken}` } }
+          );
+
+          if (!pdfResponse.ok) {
+            console.warn(`[POLL-SERVICES] PDF recovery ${inv.invoice_number}: HTTP ${pdfResponse.status}`);
+            continue;
+          }
+
+          const pdfData = await pdfResponse.json();
+          if (!pdfData.pdf) {
+            console.warn(`[POLL-SERVICES] PDF recovery ${inv.invoice_number}: campo pdf vazio`);
+            continue;
+          }
+
+          const pdfBytes = Uint8Array.from(atob(pdfData.pdf), (c: string) => c.charCodeAt(0));
+          const boletoPath = `boletos/${inv.id}/boleto.pdf`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("invoice-documents")
+            .upload(boletoPath, pdfBytes, {
+              contentType: "application/pdf",
+              upsert: true,
+            });
+
+          if (uploadError) {
+            console.warn(`[POLL-SERVICES] Upload PDF ${inv.invoice_number}:`, uploadError);
+            continue;
+          }
+
+          await supabase.from("invoices").update({
+            boleto_url: `invoice-documents/${boletoPath}`,
+            boleto_status: "enviado",
+          }).eq("id", inv.id);
+
+          await supabase.from("invoice_documents").insert({
+            invoice_id: inv.id,
+            document_type: "boleto_pdf",
+            file_path: boletoPath,
+            file_name: `boleto_${inv.invoice_number}.pdf`,
+            mime_type: "application/pdf",
+            bucket_name: "invoice-documents",
+            storage_provider: "supabase",
+            metadata: { source: "poll_services_pdf_recovery", codigoSolicitacao: solMatch[1] },
+          });
+
+          updated++;
+          console.log(`[POLL-SERVICES] PDF recuperado para boleto ${inv.invoice_number}`);
+        } catch (e) {
+          console.error(`[POLL-SERVICES] Erro PDF recovery ${inv.invoice_number}:`, e);
+        }
+      }
+    }
+  }
+
   console.log(`[POLL-SERVICES] Boletos: ${processed} verificados, ${updated} atualizados`);
   return { processed, updated };
 }
