@@ -169,7 +169,7 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
     .lt("created_at", twoHoursAgo)
     .limit(10);
 
-  for (const invoice of pendingInvoices) {
+  for (const invoice of (pendingInvoices || [])) {
     const match = invoice.notes?.match(/codigoSolicitacao:([a-f0-9-]+)/i);
     if (!match) continue;
 
