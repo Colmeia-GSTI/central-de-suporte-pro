@@ -1,39 +1,38 @@
 
 
-## Plano: Aumentar tempos de polling do boleto + download de PDF no fallback
+## Correção: Via Piana e boletos com barcode mas sem PDF
 
-### Problema
+### Problema Atual
 
-Quando o Banco Inter demora mais que 30 segundos para processar o boleto, o sistema desiste do polling imediato e o boleto fica sem PDF. O fallback (`poll-services`) recupera o barcode mas não baixa o PDF.
+A correção anterior adicionou download de PDF no fallback, **porém** a query do fallback filtra apenas faturas com `boleto_barcode IS NULL` (linha 139). O boleto do Via Piana **já tem barcode** (por isso mostra "copiar código"), então o fallback **nunca o encontra** para baixar o PDF.
 
-### Correções
+Há dois cenários a cobrir:
+1. **Faturas sem barcode** (já coberto) — recupera barcode + PDF
+2. **Faturas COM barcode mas SEM PDF no Storage** (Via Piana, CVR, Ruaro) — precisa apenas baixar o PDF
 
-#### 1. Aumentar polling imediato (`banco-inter/index.ts`, linha 726-730)
+### Plano
 
-- **Intervalo entre tentativas**: de 5s → **15s**
-- **Número de tentativas**: de 6 → **12** (total: ~3 minutos)
-- Alterar: `const maxTentativas = 12;` e `setTimeout(r, 15000)`
+**Arquivo: `supabase/functions/poll-services/index.ts`**
 
-#### 2. Adicionar download de PDF no fallback (`poll-services/index.ts`, função `pollBoletos`)
+Adicionar uma **segunda query** na função `pollBoletos`, após o loop existente (linha 257):
 
-Após recuperar o barcode com sucesso (linha ~194), adicionar:
+1. Buscar faturas que tenham `boleto_barcode NOT NULL` mas `boleto_url IS NULL` ou `boleto_url NOT LIKE 'invoice-documents/%'` (ou seja, têm barcode mas o PDF não está no Storage)
+2. Para cada uma, extrair o `codigoSolicitacao` do campo `notes`
+3. Chamar o endpoint `/cobranca/v3/cobrancas/{id}/pdf` para obter o PDF em base64
+4. Upload para `invoice-documents/boletos/{invoice_id}/boleto.pdf`
+5. Atualizar `boleto_url` e `boleto_status`
+6. Registrar em `invoice_documents`
 
-1. Chamar `GET /cobranca/v3/cobrancas/{codigoSolicitacao}/pdf` para obter o PDF em base64
-2. Decodificar e fazer upload para o bucket `invoice-documents`
-3. Registrar na tabela `invoice_documents`
-4. Salvar o caminho do Storage em `boleto_url`
-5. Atualizar `boleto_status` para `"enviado"`
+Isso cobre tanto os boletos antigos (Via Piana) quanto qualquer futuro boleto que receba barcode mas perca o PDF.
 
-### Arquivos a editar
+### Mudanças Técnicas
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/banco-inter/index.ts` | Aumentar `maxTentativas` para 12, intervalo para 15s |
-| `supabase/functions/poll-services/index.ts` | Adicionar download/armazenamento de PDF na função `pollBoletos` |
+| `supabase/functions/poll-services/index.ts` | Adicionar segundo loop em `pollBoletos` para recuperar PDF de faturas com barcode mas sem PDF no Storage |
 
-### Resultado esperado
+### Resultado
 
-- Polling imediato aguarda até ~3 minutos (cobre a maioria dos casos)
-- Se ainda assim o boleto não ficar pronto a tempo, o fallback periódico recupera barcode **e PDF**
-- Todo boleto terá PDF disponível para download e envio por e-mail
+- Ao disparar o polling manualmente (botão "Forçar Polling" na aba Boletos), o sistema encontrará o Via Piana e baixará o PDF
+- Futuramente, qualquer boleto nessa situação será corrigido automaticamente pelo cron de 6 em 6 horas
 
