@@ -265,44 +265,7 @@ async function pollBoletos(supabase: SupabaseClient): Promise<{ processed: numbe
   if (missingPdfInvoices?.length) {
     console.log(`[POLL-SERVICES] ${missingPdfInvoices.length} boletos com barcode mas sem PDF no Storage`);
 
-    // Garantir que temos httpClient e token (podem já existir do passo anterior)
-    let pdfHttpClient = httpClient;
-    let pdfAccessToken = access_token;
-    let pdfBaseUrl = baseUrl;
-    let pdfMtlsFetch = mtlsFetch;
-
-    if (!pdfHttpClient) {
-      // Se o primeiro passo não rodou (nenhum boleto sem barcode), precisamos inicializar
-      const interSettings = await getInterSettings(supabase);
-      if (interSettings) {
-        pdfHttpClient = createMtlsClient(interSettings.certificate_crt, interSettings.certificate_key);
-        pdfBaseUrl = interSettings.environment === "production"
-          ? "https://cdpj.partners.bancointer.com.br"
-          : "https://cdpj-sandbox.partners.bancointer.com.br";
-        pdfMtlsFetch = (url: string, options: RequestInit) =>
-          fetch(url, { ...options, client: pdfHttpClient } as RequestInit);
-
-        const tokenRes = await pdfMtlsFetch(`${pdfBaseUrl}/oauth/v2/token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: interSettings.client_id,
-            client_secret: interSettings.client_secret,
-            grant_type: "client_credentials",
-            scope: "boleto-cobranca.read",
-          }),
-        });
-        if (tokenRes.ok) {
-          const tokenData = await tokenRes.json();
-          pdfAccessToken = tokenData.access_token;
-        } else {
-          console.error("[POLL-SERVICES] Erro auth Inter para PDF recovery");
-          pdfAccessToken = null;
-        }
-      }
-    }
-
-    if (pdfAccessToken) {
+    {
       for (const inv of missingPdfInvoices) {
         const solMatch = inv.notes?.match(/codigoSolicitacao:([a-f0-9-]+)/i);
         if (!solMatch) {
