@@ -358,6 +358,40 @@ Deno.serve(async (req) => {
           dueDate = `${currentReferenceMonth}-${String(nextActualBillingDay).padStart(2, "0")}`;
         }
 
+        // ── Verificar first_billing_month ──
+        if ((contract as Contract).first_billing_month && currentReferenceMonth < (contract as Contract).first_billing_month!) {
+          console.log(
+            `[GEN-INVOICES] Contrato ${contract.name}: faturamento inicia em ${(contract as Contract).first_billing_month}. Competência ${currentReferenceMonth} anterior, pulando.`
+          );
+
+          await logToDatabase(
+            supabase,
+            "info",
+            "Billing",
+            "generate-monthly-invoices",
+            `Contrato ${contract.name} ainda não atingiu first_billing_month (${(contract as Contract).first_billing_month}). Competência: ${currentReferenceMonth}`,
+            {
+              contract_id: contract.id,
+              first_billing_month: (contract as Contract).first_billing_month,
+              reference_month: currentReferenceMonth,
+            },
+            undefined,
+            executionId
+          );
+
+          skipped++;
+          results.push({
+            contract_id: contract.id,
+            contract_name: contract.name,
+            status: "skipped",
+            invoice_id: null,
+            invoice_number: null,
+            error: null,
+            duration_ms: Date.now() - contractStartTime,
+          });
+          continue;
+        }
+
         // ── Verificar janela de geração antecipada (days_before_due) ──
         if (!manualContractId) {
           const daysBeforeDue = contract.days_before_due ?? 5;
