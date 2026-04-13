@@ -1267,6 +1267,7 @@ export type Database = {
           days_before_due: number | null
           description: string | null
           end_date: string | null
+          first_billing_month: string | null
           hours_included: number | null
           id: string
           internal_notes: string | null
@@ -1298,6 +1299,7 @@ export type Database = {
           days_before_due?: number | null
           description?: string | null
           end_date?: string | null
+          first_billing_month?: string | null
           hours_included?: number | null
           id?: string
           internal_notes?: string | null
@@ -1329,6 +1331,7 @@ export type Database = {
           days_before_due?: number | null
           description?: string | null
           end_date?: string | null
+          first_billing_month?: string | null
           hours_included?: number | null
           id?: string
           internal_notes?: string | null

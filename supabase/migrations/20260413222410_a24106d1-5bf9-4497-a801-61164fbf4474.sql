@@ -1,0 +1,1 @@
+ALTER TABLE public.contracts ADD COLUMN first_billing_month text;
