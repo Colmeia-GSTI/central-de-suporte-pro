@@ -1,32 +1,45 @@
 
 
-## Correção: Campo "motivo" vs "justification" no cancelamento de NFS-e
+## Plano: Corrigir crash e ajustar formulário de contratos
 
 ### Causa Raiz
 
-O dialog de cancelamento **funciona corretamente** (abre, valida, envia). Porém a chamada à edge function `asaas-nfse` envia o campo `motivo` enquanto a função espera `justification`.
+O `ContractForm.tsx` usa 7+ componentes `Select` do Radix UI simultaneamente. A combinação de múltiplos portals Radix com React 18 causa o erro fatal `NotFoundError: Failed to execute 'removeChild' on 'Node'`, que derruba a página inteira (ErrorBoundary mostra "Erro ao carregar esta página").
 
-**Frontend envia:**
-```json
-{ "action": "cancel", "invoice_id": "...", "nfse_history_id": "...", "motivo": "..." }
-```
+### Solução
 
-**Edge function espera:**
-```typescript
-const { invoice_id, nfse_history_id, justification } = params;
-// justification é undefined → erro 400 MISSING_JUSTIFICATION
-```
+Converter **o seletor de clientes** para Combobox (Popover+Command) — é o mais crítico pois tem lista dinâmica e precisa de busca. Os demais Selects (support_model, status, term_type, billing_provider, payment_preference, adjustment_index) são estáticos com 3-5 itens e funcionam melhor como `<select>` nativo via Radix, mas precisam ter `modal={false}` no `SelectContent` para evitar conflito de portals.
 
-### Correção
+### Mudanças em `src/components/contracts/ContractForm.tsx`
 
-| Arquivo | Mudança |
-|---|---|
-| `src/components/billing/BillingInvoicesTab.tsx` | Linha ~1084: renomear `motivo` para `justification` no body da chamada |
+1. **Adicionar imports**: `Popover`, `PopoverContent`, `PopoverTrigger`, `Command`, `CommandInput`, `CommandList`, `CommandEmpty`, `CommandGroup`, `CommandItem`, ícones `Check`, `ChevronsUpDown`
 
-A mudança é de uma única palavra: `motivo: justification` → `justification: justification` (ou simplesmente `justification`).
+2. **Converter seletor de clientes** (linhas 530-551) para Combobox com:
+   - Estado `clientPopoverOpen` para controlar abertura
+   - `CommandInput` com placeholder "Buscar cliente..."
+   - `CommandList` com `max-h-[200px]` para rolagem
+   - `CommandEmpty` com "Nenhum cliente encontrado"
+   - `CommandItem` com `value={client.name}` para busca por nome
+   - Ícone `Check` no item selecionado
+
+3. **Adicionar `modal={false}`** em todos os `SelectContent` restantes para evitar conflito de portal DOM:
+   - `support_model` (linha ~564)
+   - `status` (linha ~602)
+   - `term_type` (linha ~643)
+   - `billing_provider` (linha ~728)
+   - `payment_preference` (linha ~751)
+   - `adjustment_index` (linha ~894)
 
 ### Resultado
 
-- O cancelamento de NFS-e funcionará end-to-end
-- A NFS-e #170 do Bocchese poderá ser cancelada com sucesso
+- A página de criação de contratos para de crashar
+- O seletor de clientes ganha busca/autocomplete
+- Todos os Select estáticos funcionam sem conflito de portals
+- O fluxo completo de criação fica funcional para testes
+
+### Arquivo
+
+| Arquivo | Mudança |
+|---|---|
+| `src/components/contracts/ContractForm.tsx` | Converter cliente para Combobox, adicionar `modal={false}` nos demais SelectContent |
 
