@@ -266,6 +266,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         nfse_cnae: data.nfse_cnae || null,
         nfse_aliquota: data.nfse_aliquota || 0,
         nfse_iss_retido: data.nfse_iss_retido || false,
+        first_billing_month: data.first_payment_date ? data.first_payment_date.substring(0, 7) : null,
       };
 
       let contractIdValue = contractData?.id;

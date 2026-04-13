@@ -21,6 +21,7 @@ interface Contract {
   description: string | null;
   nfse_descricao_customizada: string | null;
   nfse_service_code: string | null;
+  first_billing_month: string | null;
   clients: {
     name: string;
     email: string | null;
@@ -149,6 +150,7 @@ Deno.serve(async (req) => {
         nfse_service_code,
         nfse_aliquota,
         nfse_iss_retido,
+        first_billing_month,
         clients (
           name,
           email,
@@ -354,6 +356,40 @@ Deno.serve(async (req) => {
           const nextLastDay = new Date(currentTargetYear, currentTargetMonth, 0).getDate();
           const nextActualBillingDay = Math.min(billingDay, nextLastDay);
           dueDate = `${currentReferenceMonth}-${String(nextActualBillingDay).padStart(2, "0")}`;
+        }
+
+        // ── Verificar first_billing_month ──
+        if ((contract as Contract).first_billing_month && currentReferenceMonth < (contract as Contract).first_billing_month!) {
+          console.log(
+            `[GEN-INVOICES] Contrato ${contract.name}: faturamento inicia em ${(contract as Contract).first_billing_month}. Competência ${currentReferenceMonth} anterior, pulando.`
+          );
+
+          await logToDatabase(
+            supabase,
+            "info",
+            "Billing",
+            "generate-monthly-invoices",
+            `Contrato ${contract.name} ainda não atingiu first_billing_month (${(contract as Contract).first_billing_month}). Competência: ${currentReferenceMonth}`,
+            {
+              contract_id: contract.id,
+              first_billing_month: (contract as Contract).first_billing_month,
+              reference_month: currentReferenceMonth,
+            },
+            undefined,
+            executionId
+          );
+
+          skipped++;
+          results.push({
+            contract_id: contract.id,
+            contract_name: contract.name,
+            status: "skipped",
+            invoice_id: null,
+            invoice_number: null,
+            error: null,
+            duration_ms: Date.now() - contractStartTime,
+          });
+          continue;
         }
 
         // ── Verificar janela de geração antecipada (days_before_due) ──
