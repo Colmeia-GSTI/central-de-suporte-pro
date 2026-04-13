@@ -563,8 +563,13 @@ export default function ContractsPage() {
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => handleDeleteClick(contract)}
+                                  disabled={checkingDelete}
                                 >
-                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  {checkingDelete ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                  )}
                                   Excluir
                                 </DropdownMenuItem>
                               </PermissionGate>
