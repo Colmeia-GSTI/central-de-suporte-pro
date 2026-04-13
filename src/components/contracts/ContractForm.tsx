@@ -607,7 +607,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent modal={false}>
                     <SelectItem value="ticket">Por Ticket</SelectItem>
                     <SelectItem value="hours_bank">Banco de Horas</SelectItem>
                     <SelectItem value="unlimited">Ilimitado</SelectItem>
@@ -646,7 +646,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent modal={false}>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="active">Ativo</SelectItem>
                     <SelectItem value="suspended">Suspenso</SelectItem>
@@ -687,7 +687,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent modal={false}>
                     <SelectItem value="indefinite">Indeterminado</SelectItem>
                     <SelectItem value="auto_renew">Renovação automática</SelectItem>
                     <SelectItem value="fixed">Prazo fixo</SelectItem>
@@ -772,7 +772,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent modal={false}>
                       <SelectItem value="banco_inter">Banco Inter</SelectItem>
                       <SelectItem value="asaas">Asaas</SelectItem>
                     </SelectContent>
@@ -795,7 +795,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent modal={false}>
                       <SelectItem value="boleto">Boleto</SelectItem>
                       <SelectItem value="pix">PIX</SelectItem>
                       <SelectItem value="both">Boleto + PIX</SelectItem>
@@ -938,7 +938,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent modal={false}>
                       <SelectItem value="IGPM">IGP-M</SelectItem>
                       <SelectItem value="IPCA">IPCA</SelectItem>
                       <SelectItem value="INPC">INPC</SelectItem>
