@@ -128,6 +128,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
   const [contractServices, setContractServices] = useState<ContractService[]>([]);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
   // Buscar configurações fiscais padrão da empresa
   const { data: companySettings } = useQuery({
