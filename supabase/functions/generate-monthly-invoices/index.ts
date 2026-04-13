@@ -21,6 +21,7 @@ interface Contract {
   description: string | null;
   nfse_descricao_customizada: string | null;
   nfse_service_code: string | null;
+  first_billing_month: string | null;
   clients: {
     name: string;
     email: string | null;
@@ -149,6 +150,7 @@ Deno.serve(async (req) => {
         nfse_service_code,
         nfse_aliquota,
         nfse_iss_retido,
+        first_billing_month,
         clients (
           name,
           email,
