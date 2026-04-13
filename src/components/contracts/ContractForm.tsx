@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,10 +31,18 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
-import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon } from "lucide-react";
+import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { cn } from "@/lib/utils";
