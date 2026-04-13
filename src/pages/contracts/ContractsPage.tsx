@@ -542,20 +542,17 @@ export default function ContractsPage() {
                                   Editar contrato
                                 </DropdownMenuItem>
                               </PermissionGate>
-                              <PermissionGate module="contracts" action="delete">
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => handleDeleteClick(contract)}
-                                  disabled={checkingDelete}
-                                >
-                                  {checkingDelete ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  ) : (
+                              {contract.status !== "cancelled" && (
+                                <PermissionGate module="contracts" action="delete">
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => handleDeleteClick(contract)}
+                                  >
                                     <Trash2 className="h-4 w-4 mr-2" />
-                                  )}
-                                  Excluir
-                                </DropdownMenuItem>
-                              </PermissionGate>
+                                    Cancelar contrato
+                                  </DropdownMenuItem>
+                                </PermissionGate>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -569,26 +566,16 @@ export default function ContractsPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Cancel Confirmation Dialog */}
       <ConfirmDialog
         open={deleteConfirm.open}
         onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
-        title="Excluir Contrato"
-        description={`Tem certeza que deseja excluir o contrato "${deleteConfirm.contract?.name}"? Esta ação não pode ser desfeita.`}
-        confirmLabel="Excluir"
+        title="Cancelar Contrato"
+        description={`Tem certeza que deseja cancelar o contrato "${deleteConfirm.contract?.name}"? O contrato será marcado como cancelado e poderá ser consultado no histórico. Faturas e registros vinculados serão preservados.`}
+        confirmLabel="Cancelar Contrato"
         variant="destructive"
         onConfirm={handleConfirmDelete}
-        isLoading={deleteMutation.isPending}
-      />
-
-      {/* Delete Blocked Dialog */}
-      <ConfirmDialog
-        open={deleteBlocked.open}
-        onOpenChange={(open) => setDeleteBlocked({ ...deleteBlocked, open })}
-        title="Exclusão Bloqueada"
-        description={deleteBlocked.message}
-        confirmLabel="Entendi"
-        onConfirm={() => setDeleteBlocked({ open: false, message: "" })}
+        isLoading={cancelMutation.isPending}
       />
 
       {/* Contract Adjustment Dialog */}
