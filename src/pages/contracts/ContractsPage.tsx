@@ -164,8 +164,36 @@ export default function ContractsPage() {
     navigate(`/contracts/edit/${contract.id}`);
   };
 
-  const handleDeleteClick = (contract: ContractWithClient) => {
-    setDeleteConfirm({ open: true, contract });
+  const [deleteBlocked, setDeleteBlocked] = useState<{ open: boolean; message: string }>({
+    open: false,
+    message: "",
+  });
+  const [checkingDelete, setCheckingDelete] = useState(false);
+
+  const handleDeleteClick = async (contract: ContractWithClient) => {
+    setCheckingDelete(true);
+    try {
+      const { count: activeInvoices, error } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("contract_id", contract.id)
+        .neq("status", "cancelled");
+
+      if (error) throw error;
+
+      if (activeInvoices && activeInvoices > 0) {
+        setDeleteBlocked({
+          open: true,
+          message: `Este contrato possui ${activeInvoices} fatura(s) ativa(s). Cancele todas as faturas antes de excluir o contrato.`,
+        });
+      } else {
+        setDeleteConfirm({ open: true, contract });
+      }
+    } catch {
+      toast.error("Erro ao verificar faturas vinculadas");
+    } finally {
+      setCheckingDelete(false);
+    }
   };
 
   const handleConfirmDelete = () => {
