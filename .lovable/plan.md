@@ -1,40 +1,32 @@
 
 
-## Plano: Substituir Select por Combobox com busca no seletor de serviços
+## Correção: Campo "motivo" vs "justification" no cancelamento de NFS-e
 
-### Problema
+### Causa Raiz
 
-O seletor de serviços em `ContractServicesSection.tsx` usa um `Select` do Radix que não suporta busca, filtragem ou rolagem fluida com muitos itens. Também causa o bug `removeChild` do React 18 + Radix portals.
+O dialog de cancelamento **funciona corretamente** (abre, valida, envia). Porém a chamada à edge function `asaas-nfse` envia o campo `motivo` enquanto a função espera `justification`.
 
-### Solução
+**Frontend envia:**
+```json
+{ "action": "cancel", "invoice_id": "...", "nfse_history_id": "...", "motivo": "..." }
+```
 
-Substituir o `Select` por um **Combobox** usando `Popover` + `Command` (cmdk) — o mesmo padrão já usado em `NfseServiceCodeCombobox.tsx`.
+**Edge function espera:**
+```typescript
+const { invoice_id, nfse_history_id, justification } = params;
+// justification é undefined → erro 400 MISSING_JUSTIFICATION
+```
 
-### Mudanças em `src/components/contracts/ContractServicesSection.tsx`
-
-1. **Remover** imports de `Select`, `SelectContent`, `SelectItem`, `SelectTrigger`, `SelectValue`
-2. **Adicionar** imports de `Popover`, `PopoverContent`, `PopoverTrigger`, `Command`, `CommandInput`, `CommandList`, `CommandEmpty`, `CommandGroup`, `CommandItem`, e ícones `Check`, `ChevronsUpDown`
-3. **Adicionar** estado `popoverOpen` para controlar abertura do combobox
-4. **Substituir** o bloco do `Select` (linhas 286-301) por um Combobox com:
-   - `CommandInput` com placeholder "Buscar serviço..."
-   - `CommandList` com `max-h-[200px]` para rolagem fluida
-   - `CommandEmpty` com mensagem "Nenhum serviço encontrado"
-   - Cada `CommandItem` usando `value={service.name}` para matching por texto (busca parcial nativa do cmdk)
-   - Ícone `Check` para o item selecionado
-   - Ao selecionar, setar `selectedServiceId` e `unitValue`, fechar popover
-5. O botão trigger mostra o nome do serviço selecionado ou placeholder
-
-### Benefícios
-
-- **Busca**: digitação filtra em tempo real (nativo do cmdk)
-- **Rolagem**: `CommandList` com overflow scroll
-- **Match parcial**: cmdk faz fuzzy match por padrão
-- **Sem bug**: Popover+Command não tem o bug `removeChild` do Select portals
-- **Consistência**: mesmo padrão usado no combobox de códigos NFS-e
-
-### Arquivo
+### Correção
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/contracts/ContractServicesSection.tsx` | Trocar Select por Popover+Command combobox |
+| `src/components/billing/BillingInvoicesTab.tsx` | Linha ~1084: renomear `motivo` para `justification` no body da chamada |
+
+A mudança é de uma única palavra: `motivo: justification` → `justification: justification` (ou simplesmente `justification`).
+
+### Resultado
+
+- O cancelamento de NFS-e funcionará end-to-end
+- A NFS-e #170 do Bocchese poderá ser cancelada com sucesso
 
