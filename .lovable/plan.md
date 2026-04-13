@@ -1,33 +1,41 @@
 
 
-## Plano: Soft-delete de contratos (status `cancelled`)
+## Revisão: Configurações de Notificações Push e Melhorias
 
-### Mudança
+### Problemas Encontrados
 
-Em vez de deletar fisicamente o contrato (`DELETE FROM contracts`), atualizar o status para `cancelled` e registrar no histórico. Remover toda a lógica de bloqueio (checagem de faturas ativas) já que o soft-delete preserva todos os vínculos.
+1. **Componente órfão (`NotificationPreferencesForm`)**: O arquivo `src/components/settings/profile/NotificationPreferencesForm.tsx` (521 linhas) não é importado em nenhum lugar do projeto. O `ProfilePage.tsx` reimplementa toda a mesma lógica inline. Isso gera duplicação de ~300 linhas.
 
-### Alterações em `src/pages/contracts/ContractsPage.tsx`
+2. **Preferências de alerta não são consultadas no backend**: Os tipos de alerta (critical, warning, ticket_new, etc.) são salvos apenas no `localStorage`. As Edge Functions (`notify-sla-breach`, `send-alert-notification`, `check-no-contact-tickets`) enviam notificações sem consultar essas preferências, tornando os switches de "Tipos de Alerta" ineficazes.
 
-1. **Simplificar `handleDeleteClick`**: Remover a consulta assíncrona de faturas ativas e os estados `deleteBlocked`/`checkingDelete`. Abrir direto o dialog de confirmação.
+3. **Botão "Salvar" global salva apenas a aba ativa**: O botão "Salvar Alterações" no rodapé do ProfilePage persiste dados pessoais e preferências de canais, mas não dá feedback claro de que as preferências locais (push, som, alertas) foram salvas junto.
 
-2. **Converter `deleteMutation` para soft-delete**:
-   - Trocar `supabase.from("contracts").delete()` por `.update({ status: "cancelled" })`
-   - Inserir registro em `contract_history` com action `"cancelled"` e comment `"Contrato cancelado pelo usuário"`
-   - Mensagem de sucesso: "Contrato cancelado com sucesso"
+4. **`PushPermissionBlockedCard` não aparece no `NotificationPreferencesForm`**: Apenas o ProfilePage mostra o card de permissão bloqueada. O componente de settings (que está órfão) não trata esse caso.
 
-3. **Atualizar textos do dialog de confirmação**:
-   - Título: "Cancelar Contrato"
-   - Descrição: mencionar que o contrato será marcado como cancelado e poderá ser consultado no histórico
-   - Botão: "Cancelar Contrato"
+5. **Push "Testar" sem feedback de falha detalhada**: Se a Edge Function retorna `sent: 0` (assinatura existe no DB mas expirou no browser), o usuário vê "Nenhum dispositivo inscrito" sem orientação.
 
-4. **Remover código morto**: estados `deleteBlocked`, `checkingDelete`, e o segundo `ConfirmDialog` de bloqueio.
+### Plano de Correção
 
-5. **Ocultar botão para contratos já cancelados**: Não mostrar "Cancelar" no dropdown se `contract.status === 'cancelled'`.
+| # | Arquivo | Mudança |
+|---|---|---|
+| 1 | `src/components/settings/profile/NotificationPreferencesForm.tsx` | **Deletar** - componente órfão, nunca usado |
+| 2 | `src/pages/profile/ProfilePage.tsx` | Extrair a seção de notificações para um componente reutilizável `NotificationSettings.tsx` para reduzir o tamanho do arquivo (711 linhas) |
+| 3 | `src/components/profile/NotificationSettings.tsx` | **Criar** - componente extraído do ProfilePage com toda a lógica de canais + alertas + push |
+| 4 | `src/pages/profile/ProfilePage.tsx` | Importar e usar `NotificationSettings` na aba de notificações, reduzindo o arquivo para ~400 linhas |
+| 5 | `src/pages/profile/ProfilePage.tsx` | Melhorar feedback do "Testar Push" quando `sent: 0` - sugerir re-ativar assinatura |
+| 6 | `src/pages/profile/ProfilePage.tsx` | Adicionar toast de confirmação específico ao salvar preferências locais (localStorage) |
+
+### Melhorias Sugeridas (além das correções)
+
+1. **Persistir preferências de alerta no banco** (futura): Migrar `alert_critical`, `alert_warning`, etc. do localStorage para a tabela `profiles`, permitindo que as Edge Functions respeitem as preferências do usuário.
+2. **Indicador visual de dispositivos registrados**: Mostrar quantos dispositivos o usuário tem com push ativo (consulta `push_subscriptions`).
+3. **Horário de silêncio (Do Not Disturb)**: Permitir configurar faixas horárias onde notificações push/som são suprimidas.
+4. **Validação de WhatsApp/Telegram**: Validar formato do número de WhatsApp e Chat ID do Telegram antes de salvar.
 
 ### Resultado
 
-- Nenhum contrato é deletado fisicamente
-- Faturas, tickets e NFS-e permanecem vinculados
-- Histórico completo preservado
-- Auditoria íntegra
+- Código limpo sem duplicações
+- Feedback de push mais claro para o usuário
+- Componente de notificações reutilizável e testável
+- Base preparada para futura integração backend das preferências de alerta
 
