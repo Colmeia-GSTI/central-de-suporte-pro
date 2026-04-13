@@ -164,8 +164,36 @@ export default function ContractsPage() {
     navigate(`/contracts/edit/${contract.id}`);
   };
 
-  const handleDeleteClick = (contract: ContractWithClient) => {
-    setDeleteConfirm({ open: true, contract });
+  const [deleteBlocked, setDeleteBlocked] = useState<{ open: boolean; message: string }>({
+    open: false,
+    message: "",
+  });
+  const [checkingDelete, setCheckingDelete] = useState(false);
+
+  const handleDeleteClick = async (contract: ContractWithClient) => {
+    setCheckingDelete(true);
+    try {
+      const { count: activeInvoices, error } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("contract_id", contract.id)
+        .neq("status", "cancelled");
+
+      if (error) throw error;
+
+      if (activeInvoices && activeInvoices > 0) {
+        setDeleteBlocked({
+          open: true,
+          message: `Este contrato possui ${activeInvoices} fatura(s) ativa(s). Cancele todas as faturas antes de excluir o contrato.`,
+        });
+      } else {
+        setDeleteConfirm({ open: true, contract });
+      }
+    } catch {
+      toast.error("Erro ao verificar faturas vinculadas");
+    } finally {
+      setCheckingDelete(false);
+    }
   };
 
   const handleConfirmDelete = () => {
@@ -535,8 +563,13 @@ export default function ContractsPage() {
                                 <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => handleDeleteClick(contract)}
+                                  disabled={checkingDelete}
                                 >
-                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  {checkingDelete ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                  )}
                                   Excluir
                                 </DropdownMenuItem>
                               </PermissionGate>
@@ -563,6 +596,16 @@ export default function ContractsPage() {
         variant="destructive"
         onConfirm={handleConfirmDelete}
         isLoading={deleteMutation.isPending}
+      />
+
+      {/* Delete Blocked Dialog */}
+      <ConfirmDialog
+        open={deleteBlocked.open}
+        onOpenChange={(open) => setDeleteBlocked({ ...deleteBlocked, open })}
+        title="Exclusão Bloqueada"
+        description={deleteBlocked.message}
+        confirmLabel="Entendi"
+        onConfirm={() => setDeleteBlocked({ open: false, message: "" })}
       />
 
       {/* Contract Adjustment Dialog */}
