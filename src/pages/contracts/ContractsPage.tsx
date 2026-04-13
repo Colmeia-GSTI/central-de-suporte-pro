@@ -598,6 +598,16 @@ export default function ContractsPage() {
         isLoading={deleteMutation.isPending}
       />
 
+      {/* Delete Blocked Dialog */}
+      <ConfirmDialog
+        open={deleteBlocked.open}
+        onOpenChange={(open) => setDeleteBlocked({ ...deleteBlocked, open })}
+        title="Exclusão Bloqueada"
+        description={deleteBlocked.message}
+        confirmLabel="Entendi"
+        onConfirm={() => setDeleteBlocked({ open: false, message: "" })}
+      />
+
       {/* Contract Adjustment Dialog */}
       {adjustmentDialog.contract && (
         <ContractAdjustmentDialog
