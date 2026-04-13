@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,10 +31,18 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
-import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon } from "lucide-react";
+import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
 import { cn } from "@/lib/utils";
@@ -120,6 +128,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
   const [contractServices, setContractServices] = useState<ContractService[]>([]);
   const [calculatedTotal, setCalculatedTotal] = useState(0);
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
 
   // Buscar configurações fiscais padrão da empresa
   const { data: companySettings } = useQuery({
@@ -531,22 +540,56 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             control={form.control}
             name="client_id"
             render={({ field }) => (
-              <FormItem className="col-span-2">
+              <FormItem className="col-span-2 flex flex-col">
                 <FormLabel>Cliente *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={clientPopoverOpen}
+                        className={cn(
+                          "w-full justify-between font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        {field.value
+                          ? clients.find((c) => c.id === field.value)?.name ?? "Cliente não encontrado"
+                          : "Selecione um cliente"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar cliente..." />
+                      <CommandList className="max-h-[200px]">
+                        <CommandEmpty>Nenhum cliente encontrado</CommandEmpty>
+                        <CommandGroup>
+                          {clients.map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.name}
+                              onSelect={() => {
+                                field.onChange(client.id);
+                                setClientPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  field.value === client.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {client.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 <FormMessage />
               </FormItem>
             )}
@@ -564,7 +607,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent modal={false}>
                     <SelectItem value="ticket">Por Ticket</SelectItem>
                     <SelectItem value="hours_bank">Banco de Horas</SelectItem>
                     <SelectItem value="unlimited">Ilimitado</SelectItem>
@@ -603,7 +646,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent modal={false}>
                     <SelectItem value="pending">Pendente</SelectItem>
                     <SelectItem value="active">Ativo</SelectItem>
                     <SelectItem value="suspended">Suspenso</SelectItem>
@@ -644,7 +687,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent>
+                  <SelectContent modal={false}>
                     <SelectItem value="indefinite">Indeterminado</SelectItem>
                     <SelectItem value="auto_renew">Renovação automática</SelectItem>
                     <SelectItem value="fixed">Prazo fixo</SelectItem>
@@ -729,7 +772,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent modal={false}>
                       <SelectItem value="banco_inter">Banco Inter</SelectItem>
                       <SelectItem value="asaas">Asaas</SelectItem>
                     </SelectContent>
@@ -752,7 +795,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent modal={false}>
                       <SelectItem value="boleto">Boleto</SelectItem>
                       <SelectItem value="pix">PIX</SelectItem>
                       <SelectItem value="both">Boleto + PIX</SelectItem>
@@ -895,7 +938,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent modal={false}>
                       <SelectItem value="IGPM">IGP-M</SelectItem>
                       <SelectItem value="IPCA">IPCA</SelectItem>
                       <SelectItem value="INPC">INPC</SelectItem>
