@@ -1081,7 +1081,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                 action: "cancel",
                 invoice_id: nfseInfo.asaas_invoice_id,
                 nfse_history_id: nfseInfo.id,
-                motivo: justification,
+                justification,
               },
             });
             if (error) throw error;
