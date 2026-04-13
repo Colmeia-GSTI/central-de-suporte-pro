@@ -64,7 +64,7 @@ type InvoiceWithClient = Tables<"invoices"> & {
   billing_provider: string | null;
 };
 
-type NfseByInvoice = Record<string, { status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null }>;
+type NfseByInvoice = Record<string, { id: string; status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null; asaas_invoice_id?: string | null }>;
 
 const statusLabels: Record<Enums<"invoice_status">, string> = {
   pending: "PENDENTE",
@@ -224,7 +224,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
       if (invoiceIds.length === 0) return {};
       const { data, error } = await supabase
         .from("nfse_history")
-        .select("invoice_id, status, numero_nfse, pdf_url, xml_url")
+        .select("id, invoice_id, status, numero_nfse, pdf_url, xml_url, asaas_invoice_id")
         .in("invoice_id", invoiceIds);
       if (error) throw error;
       const statusPriority: Record<string, number> = {
@@ -236,7 +236,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
         const existingPriority = existing ? (statusPriority[existing.status] ?? 99) : 99;
         const newPriority = statusPriority[n.status] ?? 99;
         if (newPriority < existingPriority) {
-          acc[n.invoice_id] = { status: n.status, numero_nfse: n.numero_nfse, pdf_url: n.pdf_url, xml_url: n.xml_url };
+          acc[n.invoice_id] = { id: n.id, status: n.status, numero_nfse: n.numero_nfse, pdf_url: n.pdf_url, xml_url: n.xml_url, asaas_invoice_id: n.asaas_invoice_id };
         }
         return acc;
       }, {});
@@ -1056,10 +1056,41 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
 
       {cancelNfseInvoice && (
         <CancelNfseDialog
-          invoice={cancelNfseInvoice}
           open={!!cancelNfseInvoice}
           onOpenChange={(open) => {
             if (!open) setCancelNfseInvoice(null);
+          }}
+          invoiceNumber={cancelNfseInvoice.invoice_number}
+          nfseNumber={nfseByInvoice[cancelNfseInvoice.id]?.numero_nfse}
+          onConfirm={async (justification: string) => {
+            const nfseInfo = nfseByInvoice[cancelNfseInvoice.id];
+            if (!nfseInfo?.asaas_invoice_id) throw new Error("NFS-e não possui ID no provedor");
+
+            // Save cancellation reason locally
+            await supabase
+              .from("nfse_history")
+              .update({
+                motivo_cancelamento: justification,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", nfseInfo.id);
+
+            // Cancel via provider
+            const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+              body: {
+                action: "cancel",
+                invoice_id: nfseInfo.asaas_invoice_id,
+                nfse_history_id: nfseInfo.id,
+                motivo: justification,
+              },
+            });
+            if (error) throw error;
+            if (!data.success) throw new Error(data.error || "Erro ao cancelar NFS-e");
+
+            toast.success("NFS-e cancelada com sucesso");
+            queryClient.invalidateQueries({ queryKey: ["nfse-by-invoices"] });
+            queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+            queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
           }}
         />
       )}
