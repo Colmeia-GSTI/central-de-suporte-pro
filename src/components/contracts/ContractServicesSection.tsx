@@ -3,13 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Table,
   TableBody,
@@ -18,7 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Package, History, PlusCircle } from "lucide-react";
+import { Plus, Trash2, Package, History, PlusCircle, Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
@@ -82,6 +78,7 @@ export function ContractServicesSection({
   const [unitValue, setUnitValue] = useState<number>(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isNewServiceOpen, setIsNewServiceOpen] = useState(false);
+  const [servicePopoverOpen, setServicePopoverOpen] = useState(false);
 
   // Keep track of original services for comparison
   const [originalServices, setOriginalServices] = useState<ContractService[]>(initialServices);
@@ -283,22 +280,48 @@ export function ContractServicesSection({
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm font-medium mb-1 block">Serviço</label>
           <div className="flex gap-2">
-            <Select value={selectedServiceId || undefined} onValueChange={(val) => {
-              setSelectedServiceId(val);
-              const svc = availableServices.find((s) => s.id === val);
-              if (svc) setUnitValue(svc.base_value * svc.multiplier);
-            }}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Selecione um serviço" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableServices.map((service) => (
-                  <SelectItem key={service.id} value={service.id}>
-                    {service.name} - {formatCurrencyBRLWithSymbol(service.base_value * service.multiplier)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={servicePopoverOpen} onOpenChange={setServicePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={servicePopoverOpen}
+                  className="flex-1 justify-between font-normal"
+                >
+                  {selectedServiceId
+                    ? availableServices.find((s) => s.id === selectedServiceId)?.name ?? "Selecione um serviço"
+                    : "Selecione um serviço"}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar serviço..." />
+                  <CommandList className="max-h-[200px]">
+                    <CommandEmpty>Nenhum serviço encontrado</CommandEmpty>
+                    <CommandGroup>
+                      {availableServices.map((service) => (
+                        <CommandItem
+                          key={service.id}
+                          value={service.name}
+                          onSelect={() => {
+                            setSelectedServiceId(service.id);
+                            setUnitValue(service.base_value * service.multiplier);
+                            setServicePopoverOpen(false);
+                          }}
+                        >
+                          <Check className={cn("mr-2 h-4 w-4", selectedServiceId === service.id ? "opacity-100" : "opacity-0")} />
+                          <span className="flex-1">{service.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {formatCurrencyBRLWithSymbol(service.base_value * service.multiplier)}
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
