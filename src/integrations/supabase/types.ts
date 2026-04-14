@@ -5087,6 +5087,7 @@ export type Database = {
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
+      try_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
       update_invoice_status: {
         Args: {
           p_boleto_error?: string
