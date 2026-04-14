@@ -255,6 +255,51 @@ export default function ContractsPage() {
           </div>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {isLoading ? (
+            <>
+              <div className="rounded-xl border bg-card p-6 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-8 w-16" />
+              </div>
+              <div className="rounded-xl border bg-card p-6 space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-8 w-28" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-xl border bg-card p-6 flex items-center gap-4 shadow-sm">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                  <FileText className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Contratos Ativos</p>
+                  <p className="text-2xl font-bold">
+                    {contracts?.filter((c) => c.status === "active").length ?? 0}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-xl border bg-card p-6 flex items-center gap-4 shadow-sm">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-status-success/10">
+                  <DollarSign className="h-6 w-6 text-status-success" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Receita Mensal Total</p>
+                  <p className="text-2xl font-bold">
+                    {formatCurrencyBRLWithSymbol(
+                      contracts
+                        ?.filter((c) => c.status === "active")
+                        .reduce((acc, c) => acc + (Number(c.monthly_value) || 0), 0) ?? 0
+                    )}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Table */}
         <div className="rounded-lg border bg-card overflow-x-auto">
           <Table>
