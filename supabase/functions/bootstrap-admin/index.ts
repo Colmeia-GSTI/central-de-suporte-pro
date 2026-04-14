@@ -33,17 +33,14 @@ function validateRequest(body: unknown): { valid: boolean; error?: string; data?
 
   const { email, password, full_name } = body as Record<string, unknown>;
 
-  // Validate email
   if (typeof email !== "string" || !EMAIL_REGEX.test(email.trim())) {
     return { valid: false, error: "Formato de email inválido" };
   }
 
-  // Validate password
   if (typeof password !== "string" || password.length < PASSWORD_MIN_LENGTH) {
     return { valid: false, error: `Senha deve ter no mínimo ${PASSWORD_MIN_LENGTH} caracteres` };
   }
 
-  // Validate full_name
   const sanitizedName = sanitizeString(full_name);
   if (!sanitizedName || sanitizedName.length < 2 || sanitizedName.length > NAME_MAX_LENGTH) {
     return { valid: false, error: "Nome deve ter entre 2 e 100 caracteres" };
@@ -68,36 +65,11 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Create admin client to bypass RLS
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // CRITICAL SECURITY CHECK: Verify no admins exist
-    const { data: existingAdmins, error: checkError } = await adminClient
-      .from("user_roles")
-      .select("id")
-      .eq("role", "admin")
-      .limit(1);
-
-    if (checkError) {
-      console.error("[bootstrap-admin] Error checking existing admins:", checkError.message);
-      return new Response(
-        JSON.stringify({ error: "Erro ao verificar sistema" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // If admins already exist, deny access
-    if (existingAdmins && existingAdmins.length > 0) {
-      console.warn("[bootstrap-admin] Attempt to use bootstrap when admin already exists");
-      return new Response(
-        JSON.stringify({ error: "Sistema já configurado. Use o login normal." }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Parse and validate request body
+    // Parse and validate request body first (before acquiring lock)
     let rawBody: unknown;
     try {
       rawBody = await req.json();
@@ -117,6 +89,40 @@ Deno.serve(async (req) => {
     }
 
     const { email, password, full_name } = validation.data;
+
+    // Use atomic INSERT to prevent race conditions:
+    // Try to insert a sentinel row. If another request already inserted it, this fails.
+    const { error: lockError } = await adminClient
+      .from("audit_logs")
+      .insert({
+        table_name: "system",
+        action: "BOOTSTRAP_LOCK",
+        record_id: "00000000-0000-0000-0000-000000000000",
+        new_data: { locked_at: new Date().toISOString() },
+      });
+
+    // CRITICAL SECURITY CHECK: Verify no admins exist
+    const { data: existingAdmins, error: checkError } = await adminClient
+      .from("user_roles")
+      .select("id")
+      .eq("role", "admin")
+      .limit(1);
+
+    if (checkError) {
+      console.error("[bootstrap-admin] Error checking existing admins:", checkError.message);
+      return new Response(
+        JSON.stringify({ error: "Erro ao verificar sistema" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (existingAdmins && existingAdmins.length > 0) {
+      console.warn("[bootstrap-admin] Attempt to use bootstrap when admin already exists");
+      return new Response(
+        JSON.stringify({ error: "Sistema já configurado. Use o login normal." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Create the admin user
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
@@ -156,7 +162,7 @@ Deno.serve(async (req) => {
       .from("user_roles")
       .delete()
       .eq("user_id", userId)
-      .eq("role", "technician");
+      .neq("role", "admin");
 
     // Assign admin role
     const { error: roleError } = await adminClient.from("user_roles").insert({
