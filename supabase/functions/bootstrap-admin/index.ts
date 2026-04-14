@@ -5,7 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Security: Input validation patterns
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NAME_MAX_LENGTH = 100;
 const PASSWORD_MIN_LENGTH = 8;
@@ -16,7 +15,6 @@ interface BootstrapAdminRequest {
   full_name: string;
 }
 
-// Sanitize string input
 function sanitizeString(input: unknown): string {
   if (typeof input !== "string") return "";
   return input
@@ -25,7 +23,6 @@ function sanitizeString(input: unknown): string {
     .slice(0, 500);
 }
 
-// Validate request body
 function validateRequest(body: unknown): { valid: boolean; error?: string; data?: BootstrapAdminRequest } {
   if (!body || typeof body !== "object") {
     return { valid: false, error: "Invalid request body" };
@@ -69,7 +66,7 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Parse and validate request body first (before acquiring lock)
+    // Parse and validate request body
     let rawBody: unknown;
     try {
       rawBody = await req.json();
@@ -90,18 +87,7 @@ Deno.serve(async (req) => {
 
     const { email, password, full_name } = validation.data;
 
-    // Use atomic INSERT to prevent race conditions:
-    // Try to insert a sentinel row. If another request already inserted it, this fails.
-    const { error: lockError } = await adminClient
-      .from("audit_logs")
-      .insert({
-        table_name: "system",
-        action: "BOOTSTRAP_LOCK",
-        record_id: "00000000-0000-0000-0000-000000000000",
-        new_data: { locked_at: new Date().toISOString() },
-      });
-
-    // CRITICAL SECURITY CHECK: Verify no admins exist
+    // Quick pre-check (non-atomic, just to fail fast for normal cases)
     const { data: existingAdmins, error: checkError } = await adminClient
       .from("user_roles")
       .select("id")
@@ -147,37 +133,34 @@ Deno.serve(async (req) => {
     console.log(`[bootstrap-admin] Admin user created: ${userId}`);
 
     // Update profile
-    const { error: profileError } = await adminClient.from("profiles").upsert({
+    await adminClient.from("profiles").upsert({
       user_id: userId,
       email,
       full_name,
     }, { onConflict: 'user_id' });
 
-    if (profileError) {
-      console.warn("[bootstrap-admin] Profile update failed:", profileError.message);
+    // ATOMIC: Use DB function to check-and-assign admin role in a single transaction
+    // This prevents race conditions where multiple requests pass the pre-check
+    const { data: bootstrapSuccess, error: rpcError } = await adminClient
+      .rpc("try_bootstrap_admin", { _user_id: userId });
+
+    if (rpcError) {
+      console.error("[bootstrap-admin] RPC error:", rpcError.message);
+      // Clean up the created user since we couldn't assign admin
+      await adminClient.auth.admin.deleteUser(userId);
+      return new Response(
+        JSON.stringify({ error: "Erro ao atribuir perfil de administrador" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Delete default technician role (created by trigger)
-    await adminClient
-      .from("user_roles")
-      .delete()
-      .eq("user_id", userId)
-      .neq("role", "admin");
-
-    // Assign admin role
-    const { error: roleError } = await adminClient.from("user_roles").insert({
-      user_id: userId,
-      role: "admin",
-    });
-
-    if (roleError) {
-      console.error("[bootstrap-admin] Error assigning admin role:", roleError.message);
+    if (!bootstrapSuccess) {
+      // Another request won the race — clean up this user
+      console.warn("[bootstrap-admin] Race condition detected, cleaning up duplicate user");
+      await adminClient.auth.admin.deleteUser(userId);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Usuário criado, mas houve erro ao atribuir perfil de administrador" 
-        }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Sistema já configurado. Use o login normal." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
