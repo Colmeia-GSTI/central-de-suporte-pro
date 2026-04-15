@@ -11,7 +11,12 @@ type DocTableName =
   | "doc_credentials"
   | "doc_contacts"
   | "doc_external_providers"
-  | "doc_routines";
+  | "doc_routines"
+  | "doc_licenses"
+  | "doc_vlans"
+  | "doc_vpn"
+  | "doc_firewall_rules"
+  | "doc_access_policies";
 
 interface UseDocTableCrudOptions {
   tableName: DocTableName;
