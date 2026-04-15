@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Building2, Server, Wifi, Monitor, Network, Camera, Key,
   Package, Globe, Lock, Users, Shield, Handshake, ClipboardList,
-  Construction,
+  Construction, Key as KeyIcon,
 } from "lucide-react";
 import { DocSectionClientInfo } from "./documentation/DocSectionClientInfo";
 import { DocSectionInfrastructure } from "./documentation/DocSectionInfrastructure";
@@ -18,6 +18,8 @@ import { DocTableDomains } from "./documentation/DocTableDomains";
 import { DocTableCredentials } from "./documentation/DocTableCredentials";
 import { DocTableExternalProviders } from "./documentation/DocTableExternalProviders";
 import { DocTableRoutines } from "./documentation/DocTableRoutines";
+import { DocTableLicenses } from "./documentation/DocTableLicenses";
+import { DocSectionSecurity } from "./documentation/DocSectionSecurity";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients">;
@@ -34,7 +36,7 @@ const sections = [
   { id: "4", title: "Estações e servidores", badge: "tabela", icon: Monitor },
   { id: "5", title: "Dispositivos de rede", badge: "tabela", icon: Network },
   { id: "6", title: "CFTV — Câmeras e NVR", badge: "tabela", icon: Camera },
-  { id: "7", title: "Licenças", badge: "tabela", icon: Key },
+  { id: "7", title: "Licenças", badge: "tabela", icon: KeyIcon },
   { id: "8", title: "Softwares e ERPs", badge: "tabela", icon: Package },
   { id: "9", title: "Domínios e DNS", badge: "tabela", icon: Globe },
   { id: "10", title: "Credenciais de acesso", badge: "tabela", icon: Lock },
@@ -52,10 +54,12 @@ function renderSectionContent(sectionId: string, clientId: string, client?: Clie
     case "4": return <DocTableWorkstations clientId={clientId} />;
     case "5": return <DocTableNetworkDevices clientId={clientId} />;
     case "6": return <DocTableCftv clientId={clientId} />;
+    case "7": return <DocTableLicenses clientId={clientId} />;
     case "8": return <DocTableSoftwareErp clientId={clientId} />;
     case "9": return <DocTableDomains clientId={clientId} />;
     case "10": return <DocTableCredentials clientId={clientId} />;
     case "11": return <DocSectionSupportHours clientId={clientId} />;
+    case "12": return <DocSectionSecurity clientId={clientId} />;
     case "13": return <DocTableExternalProviders clientId={clientId} />;
     case "14": return <DocTableRoutines clientId={clientId} />;
     default:
