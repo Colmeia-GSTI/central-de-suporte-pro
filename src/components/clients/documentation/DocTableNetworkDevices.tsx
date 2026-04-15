@@ -4,14 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, Network } from "lucide-react";
+import { Plus, Pencil, Trash2, Network, RefreshCw, Loader2 } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
+import { useDocSync } from "@/hooks/useDocSync";
 import { display } from "@/lib/doc-utils";
 
 interface Props { clientId: string; }
@@ -50,6 +52,7 @@ interface DeviceRow {
   reading_type: string | null;
   disks: string | null;
   ram: string | null;
+  data_source: string | null;
   [key: string]: unknown;
 }
 
@@ -59,14 +62,22 @@ const EMPTY: Omit<DeviceRow, "id"> = {
   port_count: null, vlans: null, unifi_device_id: null, ssids: null,
   connected_clients: null, connection_type: null, consumable: null,
   usage: null, os: null, integrated_software: null, reading_type: null,
-  disks: null, ram: null,
+  disks: null, ram: null, data_source: "Manual",
 };
+
+function SourceBadge({ source }: { source: string | null }) {
+  const s = (source || "Manual").toLowerCase();
+  if (s === "unifi") return <Badge variant="outline" className="text-blue-600 border-blue-300 text-[10px]">UniFi</Badge>;
+  if (s.includes("unifi") && s.includes("manual")) return <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">UniFi+Manual</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground text-[10px]">Manual</Badge>;
+}
 
 export function DocTableNetworkDevices({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<DeviceRow>({
     tableName: "doc_devices", clientId,
     filter: { column: "device_type", values: ["switch", "access_point", "printer", "tv", "clock", "facial", "nas", "other"] },
   });
+  const { syncingUnifi, unifiConfigured, syncUnifi } = useDocSync(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DeviceRow | null>(null);
@@ -75,7 +86,17 @@ export function DocTableNetworkDevices({ clientId }: Props) {
 
   const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setDrawerOpen(true); };
   const openEdit = (item: DeviceRow) => { setEditingItem(item); setForm({ ...EMPTY, ...item }); setDrawerOpen(true); };
-  const handleSave = async () => { if (editingItem) await update({ id: editingItem.id, ...form } as any); else await create(form as any); setDrawerOpen(false); };
+  const handleSave = async () => {
+    const saveData = { ...form };
+    if (editingItem) {
+      const origSource = (editingItem.data_source || "").toLowerCase();
+      if (origSource === "unifi") saveData.data_source = "unifi+manual";
+      await update({ id: editingItem.id, ...saveData } as any);
+    } else {
+      await create(saveData as any);
+    }
+    setDrawerOpen(false);
+  };
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   const typeLabel = (t: string | null) => DEVICE_TYPES.find(d => d.value === t)?.label || t || "—";
@@ -83,13 +104,22 @@ export function DocTableNetworkDevices({ clientId }: Props) {
 
   return (
     <div className="space-y-3">
+      {unifiConfigured && (
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={syncUnifi} disabled={syncingUnifi} className="gap-1.5">
+            {syncingUnifi ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Sincronizar UniFi
+          </Button>
+        </div>
+      )}
+
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground py-6">
           <Network className="h-8 w-8" /><p className="text-sm">Nenhum dispositivo de rede cadastrado</p>
         </div>
       ) : (
         <Table>
-          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Tipo</TableHead><TableHead>Modelo</TableHead><TableHead>IP</TableHead><TableHead>Localização</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Tipo</TableHead><TableHead>Modelo</TableHead><TableHead>IP</TableHead><TableHead>Localização</TableHead><TableHead>Origem</TableHead></TableRow></TableHeader>
           <TableBody>
             {items.map((item) => (
               <Collapsible key={item.id} open={expandedId === item.id} onOpenChange={(o) => setExpandedId(o ? item.id : null)} asChild>
@@ -101,11 +131,12 @@ export function DocTableNetworkDevices({ clientId }: Props) {
                       <TableCell>{display(item.brand_model)}</TableCell>
                       <TableCell className="font-mono text-xs">{display(item.ip_local)}</TableCell>
                       <TableCell>{display(item.physical_location)}</TableCell>
+                      <TableCell><SourceBadge source={item.data_source} /></TableCell>
                     </TableRow>
                   </CollapsibleTrigger>
                   <CollapsibleContent asChild>
                     <TableRow className="bg-muted/20">
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={6}>
                         <div className="py-3 space-y-3">
                           <div className="grid gap-3 sm:grid-cols-3 text-sm">
                             <div><span className="text-xs text-muted-foreground">MAC</span><p className="font-mono text-xs">{display(item.mac_address)}</p></div>
@@ -113,6 +144,7 @@ export function DocTableNetworkDevices({ clientId }: Props) {
                             {item.port_count && <div><span className="text-xs text-muted-foreground">Portas</span><p>{item.port_count}</p></div>}
                             {item.vlans && <div><span className="text-xs text-muted-foreground">VLANs</span><p>{item.vlans}</p></div>}
                             {item.ssids && <div><span className="text-xs text-muted-foreground">SSIDs</span><p>{item.ssids}</p></div>}
+                            {item.connected_clients != null && <div><span className="text-xs text-muted-foreground">Clientes</span><p>{item.connected_clients}</p></div>}
                           </div>
                           {item.notes && <div><span className="text-xs text-muted-foreground">Observações</span><p className="text-sm whitespace-pre-wrap">{item.notes}</p></div>}
                           <div className="flex gap-2 justify-end">
@@ -143,13 +175,12 @@ export function DocTableNetworkDevices({ clientId }: Props) {
             <div><Label>MAC address</Label><Input value={form.mac_address || ""} onChange={(e) => setForm({ ...form, mac_address: e.target.value })} /></div>
             <div><Label>Localização física</Label><Input value={form.physical_location || ""} onChange={(e) => setForm({ ...form, physical_location: e.target.value })} /></div>
 
-            {/* Conditional fields */}
             {dt === "switch" && (
               <>
                 <div><Label>Quantidade de portas</Label><Input type="number" value={form.port_count ?? ""} onChange={(e) => setForm({ ...form, port_count: e.target.value ? Number(e.target.value) : null })} /></div>
                 <div><Label>Firmware</Label><Input value={form.firmware || ""} onChange={(e) => setForm({ ...form, firmware: e.target.value })} /></div>
                 <div><Label>VLANs</Label><Input value={form.vlans || ""} onChange={(e) => setForm({ ...form, vlans: e.target.value })} /></div>
-                <div><Label>ID dispositivo UniFi</Label><Input value={form.unifi_device_id || ""} onChange={(e) => setForm({ ...form, unifi_device_id: e.target.value })} /></div>
+                <div><Label>ID dispositivo UniFi</Label><Input value={form.unifi_device_id || ""} onChange={(e) => setForm({ ...form, unifi_device_id: e.target.value })} readOnly={!!editingItem?.unifi_device_id} /></div>
               </>
             )}
             {dt === "access_point" && (
@@ -157,7 +188,7 @@ export function DocTableNetworkDevices({ clientId }: Props) {
                 <div><Label>SSIDs transmitidos</Label><Input value={form.ssids || ""} onChange={(e) => setForm({ ...form, ssids: e.target.value })} /></div>
                 <div><Label>Clientes conectados</Label><Input type="number" value={form.connected_clients ?? ""} onChange={(e) => setForm({ ...form, connected_clients: e.target.value ? Number(e.target.value) : null })} /></div>
                 <div><Label>Firmware</Label><Input value={form.firmware || ""} onChange={(e) => setForm({ ...form, firmware: e.target.value })} /></div>
-                <div><Label>ID dispositivo UniFi</Label><Input value={form.unifi_device_id || ""} onChange={(e) => setForm({ ...form, unifi_device_id: e.target.value })} /></div>
+                <div><Label>ID dispositivo UniFi</Label><Input value={form.unifi_device_id || ""} onChange={(e) => setForm({ ...form, unifi_device_id: e.target.value })} readOnly={!!editingItem?.unifi_device_id} /></div>
               </>
             )}
             {dt === "printer" && (

@@ -842,6 +842,7 @@ export type Database = {
           state: string | null
           state_registration: string | null
           trade_name: string | null
+          trmm_client_name: string | null
           updated_at: string
           whatsapp: string | null
           whatsapp_validated: boolean | null
@@ -866,6 +867,7 @@ export type Database = {
           state?: string | null
           state_registration?: string | null
           trade_name?: string | null
+          trmm_client_name?: string | null
           updated_at?: string
           whatsapp?: string | null
           whatsapp_validated?: boolean | null
@@ -890,6 +892,7 @@ export type Database = {
           state?: string | null
           state_registration?: string | null
           trade_name?: string | null
+          trmm_client_name?: string | null
           updated_at?: string
           whatsapp?: string | null
           whatsapp_validated?: boolean | null
@@ -2643,6 +2646,57 @@ export type Database = {
           },
           {
             foreignKeyName: "doc_support_hours_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_sync_log: {
+        Row: {
+          client_id: string
+          created_at: string
+          details: Json | null
+          devices_synced: number
+          error_message: string | null
+          id: string
+          source: string
+          status: string
+          synced_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          details?: Json | null
+          devices_synced?: number
+          error_message?: string | null
+          id?: string
+          source: string
+          status?: string
+          synced_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          details?: Json | null
+          devices_synced?: number
+          error_message?: string | null
+          id?: string
+          source?: string
+          status?: string
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_sync_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_sync_log_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"

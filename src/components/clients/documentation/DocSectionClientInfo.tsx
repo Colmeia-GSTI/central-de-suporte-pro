@@ -35,6 +35,7 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
     whatsapp: client.whatsapp || "",
     email: client.email || "",
     notes: client.notes || "",
+    trmm_client_name: (client as any).trmm_client_name || "",
   });
 
   const startEditing = () => {
@@ -47,6 +48,7 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
       whatsapp: client.whatsapp || "",
       email: client.email || "",
       notes: client.notes || "",
+      trmm_client_name: (client as any).trmm_client_name || "",
     });
     setIsEditing(true);
   };
@@ -60,7 +62,7 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
     }
   };
 
-  const display = (value: string | null | undefined) => value || "—";
+  const displayVal = (value: string | null | undefined) => value || "—";
 
   if (!isEditing) {
     return (
@@ -71,13 +73,14 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
           </Button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Razão Social" value={display(client.name)} />
-          <Field label="Nome Fantasia" value={display(client.trade_name)} />
-          <Field label="CNPJ / CPF" value={display(client.document)} />
-          <Field label="Endereço" value={display(client.address)} />
-          <Field label="Telefone" value={display(client.phone)} />
-          <Field label="WhatsApp" value={display(client.whatsapp)} />
-          <Field label="E-mail" value={display(client.email)} />
+          <Field label="Razão Social" value={displayVal(client.name)} />
+          <Field label="Nome Fantasia" value={displayVal(client.trade_name)} />
+          <Field label="CNPJ / CPF" value={displayVal(client.document)} />
+          <Field label="Endereço" value={displayVal(client.address)} />
+          <Field label="Telefone" value={displayVal(client.phone)} />
+          <Field label="WhatsApp" value={displayVal(client.whatsapp)} />
+          <Field label="E-mail" value={displayVal(client.email)} />
+          <Field label="Nome do cliente no TRMM" value={displayVal((client as any).trmm_client_name)} />
         </div>
         {(client.notes) && (
           <div>
@@ -126,6 +129,15 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
         <div className="sm:col-span-2">
           <Label>E-mail</Label>
           <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </div>
+        <div className="sm:col-span-2">
+          <Label>Nome do cliente no TRMM</Label>
+          <Input
+            value={form.trmm_client_name}
+            onChange={(e) => setForm({ ...form, trmm_client_name: e.target.value })}
+            placeholder="Exatamente como aparece no Tactical RMM"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">Usado para filtrar os agentes do TRMM que pertencem a este cliente</p>
         </div>
         <div className="sm:col-span-2">
           <Label>Observações gerais</Label>
