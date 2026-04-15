@@ -1,40 +1,38 @@
 
 
-## Plano: Migrar sync TRMM para client_external_mappings
+## Plano: Corrigir IP local nos dispositivos sincronizados do TRMM
 
-### 1. Edge Function `sync-doc-devices/index.ts`
+Duas Edge Functions salvam IPs de agentes TRMM — ambas precisam priorizar `local_ips` sobre `public_ip`.
 
-Substituir linhas 46-85 (busca por `trmm_client_name` + filtro por nome) por:
-- Busca em `client_external_mappings` com `client_id` + `external_source = 'tactical_rmm'`
-- Filtro primário por `external_id` numérico (`a.client_id` ou `a.client?.id`)
-- Fallback por `external_name` caso ID não bata
-- Mensagem de erro atualizada: "Cliente não mapeado no Tactical RMM. Configure em Operações → Mapeamentos."
+### 1. `sync-doc-devices/index.ts` (linha 126)
 
-### 2. Hook `useDocSync.ts`
+Já está correto:
+```typescript
+ip_local: Array.isArray(agent.local_ips) ? agent.local_ips.join(", ") : (agent.local_ip || null),
+```
+Usa `local_ips` com fallback para `local_ip`. Não usa `public_ip`. Nenhuma alteração necessária aqui.
 
-Substituir a query `trmmConfigured` (linhas 51-68): trocar busca de `clients.trmm_client_name` por busca em `client_external_mappings` com `external_source = 'tactical_rmm'` + verificação de `integration_settings` ativa.
+### 2. `tactical-rmm-sync/index.ts` (linha 322)
 
-### 3. `DocSyncStatusBar.tsx`
+Precisa de correção:
 
-- Texto "Não configurado" do TRMM → "Não mapeado — Configure em Operações → Mapeamentos"
-- Tornar clicável com `useNavigate` para `/settings?tab=mappings`
+```
+ANTES:
+ip_address: agent.local_ip || agent.public_ip,
 
-### 4. `DocSectionClientInfo.tsx`
+DEPOIS:
+ip_address: agent.local_ips
+  ? (Array.isArray(agent.local_ips) ? agent.local_ips[0] : String(agent.local_ips).split(',')[0].trim())
+  : (agent.local_ip || agent.public_ip),
+```
 
-Remover do formulário e da visualização:
-- Campo `trmm_client_name` do state `form`
-- Input "Nome do cliente no TRMM" do modo edição
-- Field "Nome do cliente no TRMM" do modo leitura
-- Referências em `startEditing`
-
-**Não** remover a coluna do banco.
+Prioriza `local_ips` (array ou string), fallback para `local_ip`, último recurso `public_ip`.
 
 ### Arquivos
 
 | Arquivo | Ação |
 |---|---|
-| `supabase/functions/sync-doc-devices/index.ts` | Editar trecho TRMM (linhas 46-85) |
-| `src/hooks/useDocSync.ts` | Editar query `trmmConfigured` |
-| `src/components/clients/documentation/DocSyncStatusBar.tsx` | Editar texto + link |
-| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Remover campo TRMM |
+| `supabase/functions/tactical-rmm-sync/index.ts` | Editar linha 322 — IP local |
+
+Apenas uma linha a alterar + deploy da Edge Function.
 
