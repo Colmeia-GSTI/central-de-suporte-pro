@@ -269,7 +269,6 @@ export default function ClientDetailPage() {
           <TabsContent value="documentation">
             <ClientDocumentation
               clientId={id!}
-              initialContent={client.documentation || ""}
             />
           </TabsContent>
 
