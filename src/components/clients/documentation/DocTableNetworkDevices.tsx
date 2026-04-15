@@ -4,8 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
+import { SourceBadge } from "./shared/SourceBadge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -65,12 +64,6 @@ const EMPTY: Omit<DeviceRow, "id"> = {
   disks: null, ram: null, data_source: "Manual",
 };
 
-function SourceBadge({ source }: { source: string | null }) {
-  const s = (source || "Manual").toLowerCase();
-  if (s === "unifi") return <Badge variant="outline" className="text-blue-600 border-blue-300 text-[10px]">UniFi</Badge>;
-  if (s.includes("unifi") && s.includes("manual")) return <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">UniFi+Manual</Badge>;
-  return <Badge variant="outline" className="text-muted-foreground text-[10px]">Manual</Badge>;
-}
 
 export function DocTableNetworkDevices({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<DeviceRow>({

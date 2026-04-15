@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { SourceBadge } from "./shared/SourceBadge";
+import { StatusBadge } from "./shared/StatusBadge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -56,12 +57,6 @@ const EMPTY: Omit<DeviceRow, "id"> = {
   mac_address: null, trmm_agent_id: null, data_source: "Manual", last_seen: null,
 };
 
-function SourceBadge({ source }: { source: string | null }) {
-  const s = (source || "Manual").toLowerCase();
-  if (s === "trmm") return <Badge variant="outline" className="text-blue-600 border-blue-300 text-[10px]">TRMM</Badge>;
-  if (s.includes("trmm") && s.includes("manual")) return <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">TRMM+Manual</Badge>;
-  return <Badge variant="outline" className="text-muted-foreground text-[10px]">Manual</Badge>;
-}
 
 export function DocTableWorkstations({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<DeviceRow>({
