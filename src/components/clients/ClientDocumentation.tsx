@@ -6,9 +6,17 @@ import {
   Package, Globe, Lock, Users, Shield, Handshake, ClipboardList,
   Construction,
 } from "lucide-react";
+import { DocSectionClientInfo } from "./documentation/DocSectionClientInfo";
+import { DocSectionInfrastructure } from "./documentation/DocSectionInfrastructure";
+import { DocSectionTelephony } from "./documentation/DocSectionTelephony";
+import { DocSectionSupportHours } from "./documentation/DocSectionSupportHours";
+import type { Tables } from "@/integrations/supabase/types";
+
+type Client = Tables<"clients">;
 
 interface ClientDocumentationProps {
   clientId: string;
+  client?: Client;
 }
 
 const sections = [
@@ -28,7 +36,27 @@ const sections = [
   { id: "14", title: "Rotinas e procedimentos", badge: "tabela", icon: ClipboardList, counter: "0 rotinas" },
 ] as const;
 
-export function ClientDocumentation({ clientId }: ClientDocumentationProps) {
+function renderSectionContent(sectionId: string, clientId: string, client?: Client) {
+  switch (sectionId) {
+    case "1":
+      return client ? <DocSectionClientInfo client={client} clientId={clientId} /> : null;
+    case "2":
+      return <DocSectionInfrastructure clientId={clientId} />;
+    case "3":
+      return <DocSectionTelephony clientId={clientId} />;
+    case "11":
+      return <DocSectionSupportHours clientId={clientId} />;
+    default:
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Construction className="h-8 w-8" />
+          <p className="text-sm">[Seção {sectionId} em construção]</p>
+        </div>
+      );
+  }
+}
+
+export function ClientDocumentation({ clientId, client }: ClientDocumentationProps) {
   return (
     <Card>
       <CardHeader>
@@ -55,11 +83,8 @@ export function ClientDocumentation({ clientId }: ClientDocumentationProps) {
                     {section.counter}
                   </span>
                 </AccordionTrigger>
-                <AccordionContent className="px-4 py-10">
-                  <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                    <Construction className="h-8 w-8" />
-                    <p className="text-sm">[Seção {section.id} em construção]</p>
-                  </div>
+                <AccordionContent className="px-4 py-6">
+                  {renderSectionContent(section.id, clientId, client)}
                 </AccordionContent>
               </AccordionItem>
             );

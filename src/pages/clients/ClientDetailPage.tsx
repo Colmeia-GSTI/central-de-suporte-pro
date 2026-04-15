@@ -269,6 +269,7 @@ export default function ClientDetailPage() {
           <TabsContent value="documentation">
             <ClientDocumentation
               clientId={id!}
+              client={client}
             />
           </TabsContent>
 
