@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Pencil, Trash2, Monitor, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
 import { useDocSync } from "@/hooks/useDocSync";
-import { display, statusColors } from "@/lib/doc-utils";
+import { display } from "@/lib/doc-utils";
 
 interface Props { clientId: string; }
 
