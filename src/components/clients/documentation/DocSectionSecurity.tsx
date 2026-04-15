@@ -12,8 +12,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Network, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Network, ShieldCheck, RefreshCw, Loader2 } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
+import { useDocSync } from "@/hooks/useDocSync";
 import { display } from "@/lib/doc-utils";
 
 interface Props { clientId: string; }
@@ -454,19 +455,30 @@ function PoliciesTab({ clientId }: Props) {
 
 export function DocSectionSecurity({ clientId }: Props) {
   const [activeTab, setActiveTab] = useState("vlans");
+  const { syncingUnifi, unifiConfigured, syncUnifi } = useDocSync(clientId);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-4">
-        <TabsTrigger value="vlans">VLANs</TabsTrigger>
-        <TabsTrigger value="vpn">VPN</TabsTrigger>
-        <TabsTrigger value="firewall">Firewall e Portas</TabsTrigger>
-        <TabsTrigger value="policies">Políticas de Acesso</TabsTrigger>
-      </TabsList>
-      <TabsContent value="vlans"><VlansTab clientId={clientId} /></TabsContent>
-      <TabsContent value="vpn"><VpnTab clientId={clientId} /></TabsContent>
-      <TabsContent value="firewall"><FirewallTab clientId={clientId} /></TabsContent>
-      <TabsContent value="policies"><PoliciesTab clientId={clientId} /></TabsContent>
-    </Tabs>
+    <div className="space-y-3">
+      {unifiConfigured && (
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={syncUnifi} disabled={syncingUnifi} className="gap-1.5">
+            {syncingUnifi ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Sincronizar UniFi
+          </Button>
+        </div>
+      )}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="vlans">VLANs</TabsTrigger>
+          <TabsTrigger value="vpn">VPN</TabsTrigger>
+          <TabsTrigger value="firewall">Firewall e Portas</TabsTrigger>
+          <TabsTrigger value="policies">Políticas de Acesso</TabsTrigger>
+        </TabsList>
+        <TabsContent value="vlans"><VlansTab clientId={clientId} /></TabsContent>
+        <TabsContent value="vpn"><VpnTab clientId={clientId} /></TabsContent>
+        <TabsContent value="firewall"><FirewallTab clientId={clientId} /></TabsContent>
+        <TabsContent value="policies"><PoliciesTab clientId={clientId} /></TabsContent>
+      </Tabs>
+    </div>
   );
 }
