@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Pencil, Save, X } from "lucide-react";
+import { Field } from "./shared/Field";
+import { display } from "@/lib/doc-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocSection } from "@/hooks/useDocSection";
 import { DocTableInternetLinks } from "./DocTableInternetLinks";
@@ -33,7 +35,7 @@ export function DocSectionTelephony({ clientId }: Props) {
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
   const d = data || EMPTY;
-  const display = (v: string | number | null | undefined) => (v != null && v !== "") ? String(v) : "—";
+  
 
   return (
     <div className="space-y-6">
@@ -79,6 +81,3 @@ export function DocSectionTelephony({ clientId }: Props) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (<div><p className="text-xs text-muted-foreground mb-0.5">{label}</p><p className="text-sm font-medium">{value}</p></div>);
-}

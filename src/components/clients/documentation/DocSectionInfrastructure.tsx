@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Save, X, Info } from "lucide-react";
+import { Field } from "./shared/Field";
+import { display } from "@/lib/doc-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocSection } from "@/hooks/useDocSection";
 
@@ -62,7 +64,6 @@ export function DocSectionInfrastructure({ clientId }: Props) {
   if (isLoading) return <Skeleton className="h-40 w-full" />;
 
   const d = data || EMPTY;
-  const display = (v: string | null | undefined) => v || "—";
   const showCloud = ["VPS", "Nuvem", "Híbrido"].includes(form.server_type || "");
   const showAd = form.active_directory === "Sim";
 
@@ -207,14 +208,6 @@ export function DocSectionInfrastructure({ clientId }: Props) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
-      <p className="text-sm font-medium">{value}</p>
-    </div>
-  );
-}
 
 function SubTitle({ children }: { children: React.ReactNode }) {
   return (

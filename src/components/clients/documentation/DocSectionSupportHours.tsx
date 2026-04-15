@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Pencil, Save, X } from "lucide-react";
+import { Field } from "./shared/Field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocSection } from "@/hooks/useDocSection";
 import { DocTableContacts } from "./DocTableContacts";
@@ -33,7 +34,7 @@ export function DocSectionSupportHours({ clientId }: Props) {
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
   const d = data || EMPTY;
-  const display = (v: string | null | undefined) => v || "—";
+  const displayFn = (v: string | null | undefined) => v || "—";
 
   return (
     <div className="space-y-6">
@@ -44,11 +45,11 @@ export function DocSectionSupportHours({ clientId }: Props) {
           <div className="space-y-4">
             <div className="flex justify-end"><Button variant="ghost" size="sm" onClick={startEditing}><Pencil className="h-4 w-4 mr-1" /> Editar</Button></div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Horário de atendimento" value={display(d.business_hours)} />
+              <Field label="Horário de atendimento" value={displayFn(d.business_hours)} />
               <Field label="Possui plantão / emergência" value={d.has_oncall ? "Sim" : "Não"} />
-              {d.has_oncall && <Field label="Telefone de plantão" value={display(d.oncall_phone)} />}
-              <Field label="SLA crítico" value={display(d.sla_critical)} />
-              <Field label="SLA normal" value={display(d.sla_normal)} />
+              {d.has_oncall && <Field label="Telefone de plantão" value={displayFn(d.oncall_phone)} />}
+              <Field label="SLA crítico" value={displayFn(d.sla_critical)} />
+              <Field label="SLA normal" value={displayFn(d.sla_normal)} />
             </div>
             {d.notes ? (<div><p className="text-xs text-muted-foreground mb-0.5">Observações</p><p className="text-sm font-medium whitespace-pre-wrap">{d.notes}</p></div>) : (<Field label="Observações" value="—" />)}
           </div>
@@ -80,6 +81,3 @@ export function DocSectionSupportHours({ clientId }: Props) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (<div><p className="text-xs text-muted-foreground mb-0.5">{label}</p><p className="text-sm font-medium">{value}</p></div>);
-}

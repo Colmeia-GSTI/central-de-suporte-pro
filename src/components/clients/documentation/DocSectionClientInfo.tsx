@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Save, X } from "lucide-react";
+import { Field } from "./shared/Field";
 import { useClientUpdate } from "@/hooks/useDocSection";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -145,11 +146,3 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
-      <p className="text-sm font-medium">{value}</p>
-    </div>
-  );
-}
