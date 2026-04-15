@@ -11,8 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, Monitor } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Pencil, Trash2, Monitor, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
+import { useDocSync } from "@/hooks/useDocSync";
 import { display, statusColors } from "@/lib/doc-utils";
 
 interface Props { clientId: string; }
@@ -23,7 +25,7 @@ const DEVICE_TYPES = [
   { value: "notebook", label: "Notebook" },
 ];
 const STATUSES = ["online", "offline", "overdue", "unknown"];
-const DATA_SOURCES = ["Manual", "Tactical RMM", "UniFi"];
+const DATA_SOURCES = ["Manual", "trmm", "trmm+manual"];
 
 interface DeviceRow {
   id: string;
@@ -54,11 +56,19 @@ const EMPTY: Omit<DeviceRow, "id"> = {
   mac_address: null, trmm_agent_id: null, data_source: "Manual", last_seen: null,
 };
 
+function SourceBadge({ source }: { source: string | null }) {
+  const s = (source || "Manual").toLowerCase();
+  if (s === "trmm") return <Badge variant="outline" className="text-blue-600 border-blue-300 text-[10px]">TRMM</Badge>;
+  if (s.includes("trmm") && s.includes("manual")) return <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">TRMM+Manual</Badge>;
+  return <Badge variant="outline" className="text-muted-foreground text-[10px]">Manual</Badge>;
+}
+
 export function DocTableWorkstations({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<DeviceRow>({
     tableName: "doc_devices", clientId,
     filter: { column: "device_type", values: ["workstation", "server", "notebook"] },
   });
+  const { syncingTrmm, trmmConfigured, syncTrmm } = useDocSync(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DeviceRow | null>(null);
@@ -69,8 +79,17 @@ export function DocTableWorkstations({ clientId }: Props) {
   const openEdit = (item: DeviceRow) => { setEditingItem(item); setForm({ ...EMPTY, ...item }); setDrawerOpen(true); };
 
   const handleSave = async () => {
-    if (editingItem) await update({ id: editingItem.id, ...form } as any);
-    else await create(form as any);
+    const saveData = { ...form };
+    // If editing a synced item, mark as +manual
+    if (editingItem) {
+      const origSource = (editingItem.data_source || "").toLowerCase();
+      if (origSource === "trmm") {
+        saveData.data_source = "trmm+manual";
+      }
+      await update({ id: editingItem.id, ...saveData } as any);
+    } else {
+      await create(saveData as any);
+    }
     setDrawerOpen(false);
   };
 
@@ -78,8 +97,31 @@ export function DocTableWorkstations({ clientId }: Props) {
 
   const typeLabel = (t: string | null) => DEVICE_TYPES.find(d => d.value === t)?.label || t || "—";
 
+  // Detect hostname conflicts: manual devices with same hostname as TRMM devices
+  const trmmNames = new Set(items.filter(i => i.trmm_agent_id).map(i => (i.name || "").toLowerCase()));
+  const conflicts = items.filter(i => !i.trmm_agent_id && i.name && trmmNames.has(i.name.toLowerCase()));
+
   return (
     <div className="space-y-3">
+      {/* Sync button and conflict banner */}
+      <div className="flex flex-wrap items-center gap-2">
+        {trmmConfigured && (
+          <Button variant="outline" size="sm" onClick={syncTrmm} disabled={syncingTrmm} className="gap-1.5">
+            {syncingTrmm ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Sincronizar TRMM
+          </Button>
+        )}
+      </div>
+
+      {conflicts.length > 0 && (
+        <Alert variant="destructive" className="py-2">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            {conflicts.length} dispositivo(s) aguardando revisão de conflito — hostname duplicado com agentes do TRMM.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground py-6">
           <Monitor className="h-8 w-8" /><p className="text-sm">Nenhum dispositivo cadastrado</p>
@@ -93,6 +135,7 @@ export function DocTableWorkstations({ clientId }: Props) {
               <TableHead>SO</TableHead>
               <TableHead>IP Local</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Origem</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -111,11 +154,12 @@ export function DocTableWorkstations({ clientId }: Props) {
                           {item.status || "unknown"}
                         </Badge>
                       </TableCell>
+                      <TableCell><SourceBadge source={item.data_source} /></TableCell>
                     </TableRow>
                   </CollapsibleTrigger>
                   <CollapsibleContent asChild>
                     <TableRow className="bg-muted/20">
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={6}>
                         <div className="py-3 space-y-3">
                           <div className="grid gap-3 sm:grid-cols-3 text-sm">
                             <div><span className="text-xs text-muted-foreground">Marca/Modelo</span><p>{display(item.brand_model)}</p></div>
@@ -126,7 +170,7 @@ export function DocTableWorkstations({ clientId }: Props) {
                             <div><span className="text-xs text-muted-foreground">Disco(s)</span><p>{display(item.disks)}</p></div>
                             <div><span className="text-xs text-muted-foreground">MAC</span><p className="font-mono text-xs">{display(item.mac_address)}</p></div>
                             <div><span className="text-xs text-muted-foreground">Localização</span><p>{display(item.physical_location)}</p></div>
-                            <div><span className="text-xs text-muted-foreground">Fonte</span><p>{display(item.data_source)}</p></div>
+                            {item.last_seen && <div><span className="text-xs text-muted-foreground">Última vez visto</span><p>{item.last_seen}</p></div>}
                           </div>
                           {item.notes && <div><span className="text-xs text-muted-foreground">Observações</span><p className="text-sm whitespace-pre-wrap">{item.notes}</p></div>}
                           <div className="flex gap-2 justify-end">
@@ -168,8 +212,7 @@ export function DocTableWorkstations({ clientId }: Props) {
               <div><Label>RAM</Label><Input value={form.ram || ""} onChange={(e) => setForm({ ...form, ram: e.target.value })} /></div>
               <div><Label>Disco(s)</Label><Input value={form.disks || ""} onChange={(e) => setForm({ ...form, disks: e.target.value })} /></div>
               <div><Label>MAC address</Label><Input value={form.mac_address || ""} onChange={(e) => setForm({ ...form, mac_address: e.target.value })} /></div>
-              <div><Label>ID agente TRMM</Label><Input value={form.trmm_agent_id || ""} onChange={(e) => setForm({ ...form, trmm_agent_id: e.target.value })} /></div>
-              <div><Label>Fonte dos dados</Label><Select value={form.data_source || "Manual"} onValueChange={(v) => setForm({ ...form, data_source: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DATA_SOURCES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label>ID agente TRMM</Label><Input value={form.trmm_agent_id || ""} onChange={(e) => setForm({ ...form, trmm_agent_id: e.target.value })} readOnly={!!editingItem?.trmm_agent_id} /></div>
             </TabsContent>
           </Tabs>
           <div className="flex gap-2 justify-end pt-4">
