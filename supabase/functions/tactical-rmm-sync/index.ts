@@ -319,7 +319,9 @@ serve(async (req) => {
         const deviceData: Record<string, any> = {
           name: agent.hostname || agent.agent_id,
           hostname: agent.hostname,
-          ip_address: agent.local_ip || agent.public_ip,
+          ip_address: agent.local_ips
+            ? (Array.isArray(agent.local_ips) ? agent.local_ips[0] : String(agent.local_ips).split(',')[0].trim())
+            : (agent.local_ip || agent.public_ip),
           is_online: agent.status === "online",
           device_type: "computer", // Always computer for RMM agents
           external_id: agent.agent_id,
