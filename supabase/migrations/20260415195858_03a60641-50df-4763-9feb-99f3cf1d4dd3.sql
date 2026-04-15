@@ -1,0 +1,1 @@
+ALTER TABLE public.doc_licenses ADD COLUMN credential_id uuid REFERENCES public.doc_credentials(id) ON DELETE SET NULL;
