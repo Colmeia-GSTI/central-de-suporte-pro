@@ -10,6 +10,14 @@ import { DocSectionClientInfo } from "./documentation/DocSectionClientInfo";
 import { DocSectionInfrastructure } from "./documentation/DocSectionInfrastructure";
 import { DocSectionTelephony } from "./documentation/DocSectionTelephony";
 import { DocSectionSupportHours } from "./documentation/DocSectionSupportHours";
+import { DocTableWorkstations } from "./documentation/DocTableWorkstations";
+import { DocTableNetworkDevices } from "./documentation/DocTableNetworkDevices";
+import { DocTableCftv } from "./documentation/DocTableCftv";
+import { DocTableSoftwareErp } from "./documentation/DocTableSoftwareErp";
+import { DocTableDomains } from "./documentation/DocTableDomains";
+import { DocTableCredentials } from "./documentation/DocTableCredentials";
+import { DocTableExternalProviders } from "./documentation/DocTableExternalProviders";
+import { DocTableRoutines } from "./documentation/DocTableRoutines";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients">;
@@ -20,32 +28,36 @@ interface ClientDocumentationProps {
 }
 
 const sections = [
-  { id: "1", title: "Dados gerais do cliente", badge: "campos fixos", icon: Building2, counter: "campos fixos" },
-  { id: "2", title: "Infraestrutura", badge: "misto", icon: Server, counter: "—" },
-  { id: "3", title: "Internet, conectividade e telefonia", badge: "misto", icon: Wifi, counter: "—" },
-  { id: "4", title: "Estações e servidores", badge: "tabela", icon: Monitor, counter: "0 dispositivos" },
-  { id: "5", title: "Dispositivos de rede", badge: "tabela", icon: Network, counter: "0 dispositivos" },
-  { id: "6", title: "CFTV — Câmeras e NVR", badge: "tabela", icon: Camera, counter: "0 dispositivos" },
-  { id: "7", title: "Licenças", badge: "tabela", icon: Key, counter: "0 licenças" },
-  { id: "8", title: "Softwares e ERPs", badge: "tabela", icon: Package, counter: "0 softwares" },
-  { id: "9", title: "Domínios e DNS", badge: "tabela", icon: Globe, counter: "0 domínios" },
-  { id: "10", title: "Credenciais de acesso", badge: "tabela", icon: Lock, counter: "0 credenciais" },
-  { id: "11", title: "Contatos e horários de suporte", badge: "misto", icon: Users, counter: "—" },
-  { id: "12", title: "Segurança e políticas de rede", badge: "misto", icon: Shield, counter: "—" },
-  { id: "13", title: "Prestadores externos", badge: "tabela", icon: Handshake, counter: "0 prestadores" },
-  { id: "14", title: "Rotinas e procedimentos", badge: "tabela", icon: ClipboardList, counter: "0 rotinas" },
+  { id: "1", title: "Dados gerais do cliente", badge: "campos fixos", icon: Building2 },
+  { id: "2", title: "Infraestrutura", badge: "misto", icon: Server },
+  { id: "3", title: "Internet, conectividade e telefonia", badge: "misto", icon: Wifi },
+  { id: "4", title: "Estações e servidores", badge: "tabela", icon: Monitor },
+  { id: "5", title: "Dispositivos de rede", badge: "tabela", icon: Network },
+  { id: "6", title: "CFTV — Câmeras e NVR", badge: "tabela", icon: Camera },
+  { id: "7", title: "Licenças", badge: "tabela", icon: Key },
+  { id: "8", title: "Softwares e ERPs", badge: "tabela", icon: Package },
+  { id: "9", title: "Domínios e DNS", badge: "tabela", icon: Globe },
+  { id: "10", title: "Credenciais de acesso", badge: "tabela", icon: Lock },
+  { id: "11", title: "Contatos e horários de suporte", badge: "misto", icon: Users },
+  { id: "12", title: "Segurança e políticas de rede", badge: "misto", icon: Shield },
+  { id: "13", title: "Prestadores externos", badge: "tabela", icon: Handshake },
+  { id: "14", title: "Rotinas e procedimentos", badge: "tabela", icon: ClipboardList },
 ] as const;
 
 function renderSectionContent(sectionId: string, clientId: string, client?: Client) {
   switch (sectionId) {
-    case "1":
-      return client ? <DocSectionClientInfo client={client} clientId={clientId} /> : null;
-    case "2":
-      return <DocSectionInfrastructure clientId={clientId} />;
-    case "3":
-      return <DocSectionTelephony clientId={clientId} />;
-    case "11":
-      return <DocSectionSupportHours clientId={clientId} />;
+    case "1": return client ? <DocSectionClientInfo client={client} clientId={clientId} /> : null;
+    case "2": return <DocSectionInfrastructure clientId={clientId} />;
+    case "3": return <DocSectionTelephony clientId={clientId} />;
+    case "4": return <DocTableWorkstations clientId={clientId} />;
+    case "5": return <DocTableNetworkDevices clientId={clientId} />;
+    case "6": return <DocTableCftv clientId={clientId} />;
+    case "8": return <DocTableSoftwareErp clientId={clientId} />;
+    case "9": return <DocTableDomains clientId={clientId} />;
+    case "10": return <DocTableCredentials clientId={clientId} />;
+    case "11": return <DocSectionSupportHours clientId={clientId} />;
+    case "13": return <DocTableExternalProviders clientId={clientId} />;
+    case "14": return <DocTableRoutines clientId={clientId} />;
     default:
       return (
         <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -79,9 +91,6 @@ export function ClientDocumentation({ clientId, client }: ClientDocumentationPro
                       {section.badge}
                     </Badge>
                   </div>
-                  <span className="ml-auto mr-3 text-xs text-muted-foreground shrink-0">
-                    {section.counter}
-                  </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-4 py-6">
                   {renderSectionContent(section.id, clientId, client)}
