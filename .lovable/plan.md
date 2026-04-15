@@ -1,89 +1,109 @@
 
 
-## Plano: Implementar Seções 1, 2, 3 e 11 da Documentação Técnica
+## Plano: Implementar Seções CRUD com Tabela Expansível e Drawer
+
+### Escopo
+
+Implementar 11 seções de tabela com CRUD completo na aba Documentação: Seções 3 (links), 4, 5, 6, 8, 9, 10, 11 (contatos), 13, 14. Seção 7 (Licenças) não foi mencionada no pedido — manter placeholder.
 
 ### Arquitetura
 
-Criar 4 componentes de seção + 1 hook reutilizável para o padrão read/edit/upsert.
+**1. Hook genérico `useDocTableCrud`** — Reutilizável para todas as seções de tabela.
+- Recebe `tableName`, `clientId`, filtro opcional (ex: `device_type IN (...)`)
+- Retorna `{ items, isLoading, create, update, remove, count }`
+- Usa React Query com invalidação automática
+- Mutation com toast de sucesso/erro
 
-### Componentes novos
+**2. Componente reutilizável `DocTableSection`** — Container visual padrão.
+- Recebe: `title`, `items`, `columns`, `renderRow`, `renderExpandedRow`, `drawerContent`, etc.
+- Tabela com linhas clicáveis que expandem inline (Collapsible)
+- Botões Editar/Excluir na linha expandida
+- Botão "+ Adicionar" abaixo da tabela
+- Sheet lateral (direita) para formulário de criação/edição
+- ConfirmDialog para exclusão
+- Empty state quando sem registros
 
-| Arquivo | Propósito |
-|---|---|
-| `src/hooks/useDocSection.ts` | Hook genérico para fetch + upsert de registros doc_ (1 por cliente) |
-| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Seção 1 — dados da tabela `clients` |
-| `src/components/clients/documentation/DocSectionInfrastructure.tsx` | Seção 2 — `doc_infrastructure` |
-| `src/components/clients/documentation/DocSectionTelephony.tsx` | Seção 3 — `doc_telephony` (só telefonia) |
-| `src/components/clients/documentation/DocSectionSupportHours.tsx` | Seção 11 — `doc_support_hours` |
+**3. Hook `useDocCredentialOptions`** — Para campos "referência → seção 10".
+- Busca credenciais do cliente e retorna como opções de select: `[Tipo] — [Sistema]`
 
-### Hook `useDocSection`
+### Componentes por seção
 
-- Recebe `tableName`, `clientId`, `selectColumns`
-- Query com `.eq('client_id', clientId).maybeSingle()`
-- Função `upsert` que faz insert ou update baseado na existência do registro
-- Retorna `{ data, isLoading, save, isSaving }`
-- Seção 1 usará variante especial (update direto na `clients` pelo `id`)
+| # | Componente | Tabela | Filtro |
+|---|---|---|---|
+| 3 | `DocTableInternetLinks` | doc_internet_links | — |
+| 4 | `DocTableWorkstations` | doc_devices | device_type IN (workstation, server, notebook) |
+| 5 | `DocTableNetworkDevices` | doc_devices | device_type IN (switch, access_point, printer, tv, clock, facial, nas, other) |
+| 6 | `DocTableCftv` | doc_cftv | — |
+| 8 | `DocTableSoftwareErp` | doc_software_erp | — |
+| 9 | `DocTableDomains` | doc_domains | — |
+| 10 | `DocTableCredentials` | doc_credentials | — |
+| 11 | `DocTableContacts` | doc_contacts | — |
+| 13 | `DocTableExternalProviders` | doc_external_providers | — |
+| 14 | `DocTableRoutines` | doc_routines | — |
 
-### Padrão visual de cada seção
+Todos ficam em `src/components/clients/documentation/`.
 
-- Estado `isEditing` local (useState)
-- **Modo leitura**: Grid de labels (text-muted-foreground text-xs) + valores (text-sm font-medium), campos vazios mostram "—". Botão "Editar" (ícone Pencil) no canto superior direito.
-- **Modo edição**: Mesmos campos como `Input`/`Select`/`Textarea`/`Switch`. Botões "Salvar" e "Cancelar" no rodapé.
-- Campos condicionais com `transition-all` para aparecer/sumir suavemente.
-- Subseções com `Separator` + título discreto (text-xs uppercase tracking-wider text-muted-foreground).
+### Detalhes de implementação por seção
 
-### Seção 1 — Dados gerais do cliente
+**Seção 3 — Links de Internet**: Colunas: Tipo, Provedor, Plano, IP, Vencimento. Badge de dias restantes no vencimento. Drawer com select de tipo, campos de IP, date picker para vencimento.
 
-- Lê da query existente `["client", id]` (já carregada no `ClientDetailPage`)
-- Passa o `client` como prop do `ClientDetailPage` para `ClientDocumentation` e depois para o componente
-- Campos: name, trade_name, document (máscara CNPJ), address, phone, whatsapp, email, notes
-- Upsert = `supabase.from('clients').update({...}).eq('id', clientId)`
-- Após salvar, `invalidateQueries(['client', clientId])`
+**Seção 4 — Estações/Servidores**: Status com badge colorido (online=verde, offline=vermelho, overdue=amarelo, unknown=cinza). Drawer com 2 abas (Tabs): "Geral" e "Detalhes". Campo `last_seen` readonly quando `data_source !== 'manual'`.
 
-### Seção 2 — Infraestrutura
+**Seção 5 — Dispositivos de rede**: Campos condicionais por `device_type`. Drawer mostra/oculta campos extras conforme tipo selecionado (Switch: portas/VLANs, AP: SSIDs/clientes, Impressora: conexão/toner, TV: uso/SO, Relógio: software/leitura, Facial: acesso/RH, NAS: RAID/capacidade).
 
-- Tabela: `doc_infrastructure`
-- 3 subseções visuais: "Geral", "Rede — Console UniFi", "Rede — Gateway / Firewall"
-- Campo `cloud_provider` visível apenas se `server_type` in ['VPS', 'Nuvem', 'Híbrido']
-- Campo `ad_location` visível apenas se `active_directory` = 'Sim'
-- Notas informativas em badges discretos nas subseções UniFi e Gateway
+**Seção 6 — CFTV**: Campos condicionais NVR vs Câmera. Para câmeras, select de NVR vinculado busca doc_cftv WHERE device_type='nvr' AND client_id. Credencial como referência → seção 10.
 
-### Seção 3 — Telefonia
+**Seção 8 — Softwares**: Toggle `support_contract` controla visibilidade de `support_expiry`. Credencial como referência.
 
-- Tabela: `doc_telephony`
-- Campos: type (select), provider, extensions_count, support_phone, notes
-- Links de internet ficam como placeholder "[Tabela de links em construção]"
+**Seção 9 — Domínios**: Badge de vencimento: <30 dias → vermelho, <60 dias → amarelo. Credenciais de registrador e DNS como referências.
 
-### Seção 11 — Horários de suporte
+**Seção 10 — Credenciais**: Senha exibida como `••••••••` com botão copiar (clipboard API). Password input com toggle mostrar/ocultar no drawer. Campos MFA condicionais.
 
-- Tabela: `doc_support_hours`
-- Campo `oncall_phone` visível apenas se `has_oncall` = true
-- Switch para `has_oncall`
+**Seção 11 — Contatos**: Toggle `is_emergency` para emergência. Integrar abaixo dos campos fixos já implementados.
 
-### Alteração em `ClientDocumentation.tsx`
+**Seção 13 — Prestadores**: Credencial como referência. Date picker para vencimento contrato.
 
-- Importar os 4 componentes
-- No render do accordion, para seções 1/2/3/11 renderizar o componente específico em vez do placeholder
-- Seções restantes mantêm o placeholder atual
-- Passar `clientId` para cada componente
+**Seção 14 — Rotinas**: Campo `procedure` como textarea grande. Date picker para última execução.
 
-### Alteração em `ClientDetailPage.tsx`
+### Utilidades compartilhadas
 
-- Passar `client` como prop para `ClientDocumentation` (para seção 1 reutilizar os dados já carregados)
+**Função `daysUntil(date)`**: Retorna texto formatado ("em 45 dias", "vencido há 3 dias", "hoje") + cor para badges de vencimento.
 
-### Banco de dados
+### Contadores dinâmicos
 
-Nenhuma migração necessária — todas as tabelas e colunas já existem.
+Atualizar `ClientDocumentation.tsx` para buscar contadores reais via queries paralelas (head count) e passar para o array de seções. Usar `useQuery` com `select: 'id'` + `.eq('client_id')` para cada tabela, retornando `.length`.
 
-### Arquivos modificados/criados
+### Integração
+
+- Atualizar `DocSectionTelephony` para substituir placeholder de links pelo `DocTableInternetLinks`
+- Atualizar `DocSectionSupportHours` para substituir placeholder de contatos pelo `DocTableContacts`
+- Atualizar `ClientDocumentation.tsx`: mapear seções 4–10, 13, 14 para os novos componentes
+- Atualizar `useDocSection.ts`: não precisa mudar (usado apenas para campos fixos)
+
+### Arquivos
 
 | Arquivo | Ação |
 |---|---|
-| `src/hooks/useDocSection.ts` | Criar |
-| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Criar |
-| `src/components/clients/documentation/DocSectionInfrastructure.tsx` | Criar |
-| `src/components/clients/documentation/DocSectionTelephony.tsx` | Criar |
-| `src/components/clients/documentation/DocSectionSupportHours.tsx` | Criar |
-| `src/components/clients/ClientDocumentation.tsx` | Editar — integrar componentes |
-| `src/pages/clients/ClientDetailPage.tsx` | Editar — passar `client` como prop |
+| `src/hooks/useDocTableCrud.ts` | Criar — hook genérico CRUD para tabelas doc_ |
+| `src/hooks/useDocCredentialOptions.ts` | Criar — opções de credenciais para selects |
+| `src/lib/doc-utils.ts` | Criar — utilitários (daysUntil, etc.) |
+| `src/components/clients/documentation/DocTableInternetLinks.tsx` | Criar |
+| `src/components/clients/documentation/DocTableWorkstations.tsx` | Criar |
+| `src/components/clients/documentation/DocTableNetworkDevices.tsx` | Criar |
+| `src/components/clients/documentation/DocTableCftv.tsx` | Criar |
+| `src/components/clients/documentation/DocTableSoftwareErp.tsx` | Criar |
+| `src/components/clients/documentation/DocTableDomains.tsx` | Criar |
+| `src/components/clients/documentation/DocTableCredentials.tsx` | Criar |
+| `src/components/clients/documentation/DocTableContacts.tsx` | Criar |
+| `src/components/clients/documentation/DocTableExternalProviders.tsx` | Criar |
+| `src/components/clients/documentation/DocTableRoutines.tsx` | Criar |
+| `src/components/clients/documentation/DocSectionTelephony.tsx` | Editar — integrar links |
+| `src/components/clients/documentation/DocSectionSupportHours.tsx` | Editar — integrar contatos |
+| `src/components/clients/ClientDocumentation.tsx` | Editar — contadores dinâmicos + integrar seções |
+
+### Observações
+
+- Seção 7 (Licenças) e Seção 12 (Segurança) ficam com placeholder — não incluídas no pedido
+- Sem integrações TRMM/UniFi — apenas CRUD manual
+- Sheet lateral usa `sm:max-w-lg` para formulários mais largos
 
