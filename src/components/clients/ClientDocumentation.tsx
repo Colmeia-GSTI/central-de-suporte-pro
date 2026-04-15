@@ -21,6 +21,8 @@ import { DocTableRoutines } from "./documentation/DocTableRoutines";
 import { DocTableLicenses } from "./documentation/DocTableLicenses";
 import { DocSectionSecurity } from "./documentation/DocSectionSecurity";
 import { DocSyncStatusBar } from "./documentation/DocSyncStatusBar";
+import { DocAlertsPanel } from "./documentation/DocAlertsPanel";
+import { useDocAlerts } from "@/hooks/useDocAlerts";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients">;
@@ -74,21 +76,43 @@ function renderSectionContent(sectionId: string, clientId: string, client?: Clie
 }
 
 export function ClientDocumentation({ clientId, client }: ClientDocumentationProps) {
+  const { alerts, criticalCount, warningCount, acknowledge, isAcknowledging, sectionCounts, severityBySection } = useDocAlerts(clientId);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Documentação Técnica</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        <DocAlertsPanel
+          alerts={alerts}
+          criticalCount={criticalCount}
+          warningCount={warningCount}
+          onAcknowledge={acknowledge}
+          isAcknowledging={isAcknowledging}
+        />
         <DocSyncStatusBar clientId={clientId} />
         <Accordion type="single" defaultValue="section-1" collapsible className="w-full">
           {sections.map((section) => {
             const Icon = section.icon;
+            const alertCount = sectionCounts[section.id] || 0;
+            const alertSeverity = severityBySection[section.id];
             return (
               <AccordionItem key={section.id} value={`section-${section.id}`} className="border-b-0">
                 <AccordionTrigger className="hover:no-underline hover:bg-muted/30 px-4 py-3 rounded-none data-[state=open]:bg-muted/40">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <Icon className="h-4 w-4 shrink-0 text-primary" />
+                    <div className="relative shrink-0">
+                      <Icon className="h-4 w-4 text-primary" />
+                      {alertCount > 0 && (
+                        <span
+                          className={`absolute -top-1.5 -right-1.5 flex items-center justify-center h-3.5 w-3.5 rounded-full text-[9px] font-bold text-white ${
+                            alertSeverity === "critical" ? "bg-destructive" : "bg-warning"
+                          }`}
+                        >
+                          {alertCount}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-primary/70 font-mono text-xs shrink-0 w-5 text-right">
                       {section.id.padStart(2, "0")}
                     </span>
