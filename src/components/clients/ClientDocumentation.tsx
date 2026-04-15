@@ -20,6 +20,7 @@ import { DocTableExternalProviders } from "./documentation/DocTableExternalProvi
 import { DocTableRoutines } from "./documentation/DocTableRoutines";
 import { DocTableLicenses } from "./documentation/DocTableLicenses";
 import { DocSectionSecurity } from "./documentation/DocSectionSecurity";
+import { DocSyncStatusBar } from "./documentation/DocSyncStatusBar";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Client = Tables<"clients">;
@@ -79,6 +80,7 @@ export function ClientDocumentation({ clientId, client }: ClientDocumentationPro
         <CardTitle>Documentação Técnica</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        <DocSyncStatusBar clientId={clientId} />
         <Accordion type="single" defaultValue="section-1" collapsible className="w-full">
           {sections.map((section) => {
             const Icon = section.icon;
