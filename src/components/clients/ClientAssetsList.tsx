@@ -25,7 +25,8 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, Activity, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, FileText, AlertTriangle } from "lucide-react";
+import { SourceBadge } from "./documentation/shared/SourceBadge";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -613,7 +614,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                         )}
                       </TableCell>
                       <TableCell>
-                        <OriginBadge origin={item.origin} />
+                        <SourceBadge source={item.origin} />
                       </TableCell>
                       <TableCell>
                         {item.documented ? (
@@ -705,36 +706,6 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
 
 // --- Sub-components ---
 
-function OriginBadge({ origin }: { origin: UnifiedAssetItem["origin"] }) {
-  switch (origin) {
-    case "unifi":
-      return (
-        <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
-          <Wifi className="h-3 w-3 mr-1" />UniFi
-        </Badge>
-      );
-    case "checkmk":
-      return (
-        <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-          <Activity className="h-3 w-3 mr-1" />CheckMK
-        </Badge>
-      );
-    case "trmm":
-      return (
-        <Badge variant="default" className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-          <Monitor className="h-3 w-3 mr-1" />Tactical RMM
-        </Badge>
-      );
-    case "manual":
-      return <Badge variant="outline" className="text-xs">Manual</Badge>;
-    case "doc_only":
-      return (
-        <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-          <FileText className="h-3 w-3 mr-1" />Documentação
-        </Badge>
-      );
-  }
-}
 
 function DocDeviceDetails({ doc, monitored }: { doc: DocDevice; monitored: MonitoredDevice | null }) {
   const fields = [

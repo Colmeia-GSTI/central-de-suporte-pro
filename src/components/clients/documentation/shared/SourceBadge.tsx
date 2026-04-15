@@ -20,6 +20,9 @@ export function SourceBadge({ source }: SourceBadgeProps) {
   if (s === "checkmk") {
     return <Badge variant="outline" className="text-purple-600 border-purple-300 text-[10px]">CheckMK</Badge>;
   }
+  if (s === "doc_only" || s === "documentation") {
+    return <Badge variant="outline" className="text-muted-foreground border-muted text-[10px]">Documentação</Badge>;
+  }
   if (s.includes("trmm") && s.includes("manual")) {
     return <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">TRMM+Manual</Badge>;
   }
