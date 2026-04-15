@@ -1461,6 +1461,1368 @@ export type Database = {
         }
         Relationships: []
       }
+      doc_access_policies: {
+        Row: {
+          affected_group: string | null
+          client_id: string
+          configured_via: string | null
+          created_at: string
+          exceptions: string | null
+          id: string
+          notes: string | null
+          policy_type: string | null
+          reason: string | null
+          target: string | null
+          unifi_rule_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          affected_group?: string | null
+          client_id: string
+          configured_via?: string | null
+          created_at?: string
+          exceptions?: string | null
+          id?: string
+          notes?: string | null
+          policy_type?: string | null
+          reason?: string | null
+          target?: string | null
+          unifi_rule_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affected_group?: string | null
+          client_id?: string
+          configured_via?: string | null
+          created_at?: string
+          exceptions?: string | null
+          id?: string
+          notes?: string | null
+          policy_type?: string | null
+          reason?: string | null
+          target?: string | null
+          unifi_rule_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_access_policies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_access_policies_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_antivirus_solutions: {
+        Row: {
+          client_id: string
+          console_url: string | null
+          created_at: string
+          credential_id: string | null
+          id: string
+          notes: string | null
+          scope: string | null
+          solution: string | null
+          updated_at: string
+          version: string | null
+        }
+        Insert: {
+          client_id: string
+          console_url?: string | null
+          created_at?: string
+          credential_id?: string | null
+          id?: string
+          notes?: string | null
+          scope?: string | null
+          solution?: string | null
+          updated_at?: string
+          version?: string | null
+        }
+        Update: {
+          client_id?: string
+          console_url?: string | null
+          created_at?: string
+          credential_id?: string | null
+          id?: string
+          notes?: string | null
+          scope?: string | null
+          solution?: string | null
+          updated_at?: string
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_antivirus_solutions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_antivirus_solutions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_antivirus_solutions_credential_id_fkey"
+            columns: ["credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_backup_solutions: {
+        Row: {
+          backup_type: string | null
+          client_id: string
+          created_at: string
+          credential_id: string | null
+          destination: string | null
+          frequency: string | null
+          id: string
+          last_verified: string | null
+          notes: string | null
+          retention: string | null
+          solution: string | null
+          updated_at: string
+        }
+        Insert: {
+          backup_type?: string | null
+          client_id: string
+          created_at?: string
+          credential_id?: string | null
+          destination?: string | null
+          frequency?: string | null
+          id?: string
+          last_verified?: string | null
+          notes?: string | null
+          retention?: string | null
+          solution?: string | null
+          updated_at?: string
+        }
+        Update: {
+          backup_type?: string | null
+          client_id?: string
+          created_at?: string
+          credential_id?: string | null
+          destination?: string | null
+          frequency?: string | null
+          id?: string
+          last_verified?: string | null
+          notes?: string | null
+          retention?: string | null
+          solution?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_backup_solutions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_backup_solutions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_backup_solutions_credential_id_fkey"
+            columns: ["credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_cftv: {
+        Row: {
+          brand_model: string | null
+          camera_type: string | null
+          channels: number | null
+          client_id: string
+          created_at: string
+          credential_id: string | null
+          device_type: string | null
+          id: string
+          ip: string | null
+          name: string | null
+          notes: string | null
+          nvr_channel: number | null
+          nvr_id: string | null
+          physical_location: string | null
+          power_type: string | null
+          remote_access: string | null
+          resolution: string | null
+          retention_days: number | null
+          storage_size: string | null
+          updated_at: string
+        }
+        Insert: {
+          brand_model?: string | null
+          camera_type?: string | null
+          channels?: number | null
+          client_id: string
+          created_at?: string
+          credential_id?: string | null
+          device_type?: string | null
+          id?: string
+          ip?: string | null
+          name?: string | null
+          notes?: string | null
+          nvr_channel?: number | null
+          nvr_id?: string | null
+          physical_location?: string | null
+          power_type?: string | null
+          remote_access?: string | null
+          resolution?: string | null
+          retention_days?: number | null
+          storage_size?: string | null
+          updated_at?: string
+        }
+        Update: {
+          brand_model?: string | null
+          camera_type?: string | null
+          channels?: number | null
+          client_id?: string
+          created_at?: string
+          credential_id?: string | null
+          device_type?: string | null
+          id?: string
+          ip?: string | null
+          name?: string | null
+          notes?: string | null
+          nvr_channel?: number | null
+          nvr_id?: string | null
+          physical_location?: string | null
+          power_type?: string | null
+          remote_access?: string | null
+          resolution?: string | null
+          retention_days?: number | null
+          storage_size?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_cftv_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_cftv_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_cftv_credential_id_fkey"
+            columns: ["credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_cftv_nvr_id_fkey"
+            columns: ["nvr_id"]
+            isOneToOne: false
+            referencedRelation: "doc_cftv"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_contacts: {
+        Row: {
+          availability: string | null
+          client_id: string
+          created_at: string
+          email: string | null
+          id: string
+          is_emergency: boolean | null
+          name: string | null
+          notes: string | null
+          phone: string | null
+          role: string | null
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
+          availability?: string | null
+          client_id: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_emergency?: boolean | null
+          name?: string | null
+          notes?: string | null
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          availability?: string | null
+          client_id?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_emergency?: boolean | null
+          name?: string | null
+          notes?: string | null
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_credentials: {
+        Row: {
+          access_type: string | null
+          client_id: string
+          created_at: string
+          id: string
+          mfa_backup_code: string | null
+          mfa_enabled: boolean | null
+          mfa_type: string | null
+          notes: string | null
+          password_encrypted: string | null
+          port: string | null
+          system_name: string | null
+          updated_at: string
+          url: string | null
+          username: string | null
+        }
+        Insert: {
+          access_type?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          mfa_backup_code?: string | null
+          mfa_enabled?: boolean | null
+          mfa_type?: string | null
+          notes?: string | null
+          password_encrypted?: string | null
+          port?: string | null
+          system_name?: string | null
+          updated_at?: string
+          url?: string | null
+          username?: string | null
+        }
+        Update: {
+          access_type?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          mfa_backup_code?: string | null
+          mfa_enabled?: boolean | null
+          mfa_type?: string | null
+          notes?: string | null
+          password_encrypted?: string | null
+          port?: string | null
+          system_name?: string | null
+          updated_at?: string
+          url?: string | null
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_credentials_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_credentials_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_devices: {
+        Row: {
+          brand_model: string | null
+          client_id: string
+          connected_clients: number | null
+          connection_type: string | null
+          consumable: string | null
+          cpu: string | null
+          created_at: string
+          data_source: string | null
+          device_type: string | null
+          disks: string | null
+          firmware: string | null
+          id: string
+          integrated_software: string | null
+          ip_local: string | null
+          last_seen: string | null
+          mac_address: string | null
+          name: string | null
+          notes: string | null
+          os: string | null
+          physical_location: string | null
+          port_count: number | null
+          primary_user: string | null
+          ram: string | null
+          reading_type: string | null
+          serial_number: string | null
+          ssids: string | null
+          status: string | null
+          trmm_agent_id: string | null
+          unifi_device_id: string | null
+          updated_at: string
+          usage: string | null
+          vlans: string | null
+        }
+        Insert: {
+          brand_model?: string | null
+          client_id: string
+          connected_clients?: number | null
+          connection_type?: string | null
+          consumable?: string | null
+          cpu?: string | null
+          created_at?: string
+          data_source?: string | null
+          device_type?: string | null
+          disks?: string | null
+          firmware?: string | null
+          id?: string
+          integrated_software?: string | null
+          ip_local?: string | null
+          last_seen?: string | null
+          mac_address?: string | null
+          name?: string | null
+          notes?: string | null
+          os?: string | null
+          physical_location?: string | null
+          port_count?: number | null
+          primary_user?: string | null
+          ram?: string | null
+          reading_type?: string | null
+          serial_number?: string | null
+          ssids?: string | null
+          status?: string | null
+          trmm_agent_id?: string | null
+          unifi_device_id?: string | null
+          updated_at?: string
+          usage?: string | null
+          vlans?: string | null
+        }
+        Update: {
+          brand_model?: string | null
+          client_id?: string
+          connected_clients?: number | null
+          connection_type?: string | null
+          consumable?: string | null
+          cpu?: string | null
+          created_at?: string
+          data_source?: string | null
+          device_type?: string | null
+          disks?: string | null
+          firmware?: string | null
+          id?: string
+          integrated_software?: string | null
+          ip_local?: string | null
+          last_seen?: string | null
+          mac_address?: string | null
+          name?: string | null
+          notes?: string | null
+          os?: string | null
+          physical_location?: string | null
+          port_count?: number | null
+          primary_user?: string | null
+          ram?: string | null
+          reading_type?: string | null
+          serial_number?: string | null
+          ssids?: string | null
+          status?: string | null
+          trmm_agent_id?: string | null
+          unifi_device_id?: string | null
+          updated_at?: string
+          usage?: string | null
+          vlans?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_devices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_devices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_domains: {
+        Row: {
+          alert_days: number | null
+          client_id: string
+          created_at: string
+          dns_credential_id: string | null
+          dns_panel_url: string | null
+          dns_provider: string | null
+          domain: string | null
+          expiry_date: string | null
+          id: string
+          notes: string | null
+          registrar: string | null
+          registrar_credential_id: string | null
+          registrar_panel_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          alert_days?: number | null
+          client_id: string
+          created_at?: string
+          dns_credential_id?: string | null
+          dns_panel_url?: string | null
+          dns_provider?: string | null
+          domain?: string | null
+          expiry_date?: string | null
+          id?: string
+          notes?: string | null
+          registrar?: string | null
+          registrar_credential_id?: string | null
+          registrar_panel_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alert_days?: number | null
+          client_id?: string
+          created_at?: string
+          dns_credential_id?: string | null
+          dns_panel_url?: string | null
+          dns_provider?: string | null
+          domain?: string | null
+          expiry_date?: string | null
+          id?: string
+          notes?: string | null
+          registrar?: string | null
+          registrar_credential_id?: string | null
+          registrar_panel_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_domains_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_domains_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_domains_dns_credential_id_fkey"
+            columns: ["dns_credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_domains_registrar_credential_id_fkey"
+            columns: ["registrar_credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_external_providers: {
+        Row: {
+          client_id: string
+          company_name: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          contract_expiry: string | null
+          contract_type: string | null
+          created_at: string
+          credential_id: string | null
+          id: string
+          notes: string | null
+          panel_url: string | null
+          service_type: string | null
+          support_hours: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          company_name?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          contract_expiry?: string | null
+          contract_type?: string | null
+          created_at?: string
+          credential_id?: string | null
+          id?: string
+          notes?: string | null
+          panel_url?: string | null
+          service_type?: string | null
+          support_hours?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          company_name?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          contract_expiry?: string | null
+          contract_type?: string | null
+          created_at?: string
+          credential_id?: string | null
+          id?: string
+          notes?: string | null
+          panel_url?: string | null
+          service_type?: string | null
+          support_hours?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_external_providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_external_providers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_external_providers_credential_id_fkey"
+            columns: ["credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_firewall_rules: {
+        Row: {
+          action: string | null
+          client_id: string
+          context: string | null
+          created_at: string
+          data_source: string | null
+          destination: string | null
+          id: string
+          name: string | null
+          notes: string | null
+          port: string | null
+          protocol: string | null
+          rule_type: string | null
+          source: string | null
+          unifi_rule_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          action?: string | null
+          client_id: string
+          context?: string | null
+          created_at?: string
+          data_source?: string | null
+          destination?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          port?: string | null
+          protocol?: string | null
+          rule_type?: string | null
+          source?: string | null
+          unifi_rule_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action?: string | null
+          client_id?: string
+          context?: string | null
+          created_at?: string
+          data_source?: string | null
+          destination?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          port?: string | null
+          protocol?: string | null
+          rule_type?: string | null
+          source?: string | null
+          unifi_rule_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_firewall_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_firewall_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_infrastructure: {
+        Row: {
+          active_directory: string | null
+          ad_location: string | null
+          client_id: string
+          cloud_provider: string | null
+          created_at: string
+          file_server: string | null
+          gateway_firmware: string | null
+          gateway_ip_lan: string | null
+          gateway_ip_wan: string | null
+          gateway_model: string | null
+          id: string
+          notes: string | null
+          server_type: string | null
+          unifi_admin_credential_id: string | null
+          unifi_console_ip: string | null
+          unifi_console_model: string | null
+          unifi_firmware: string | null
+          unifi_uptime: string | null
+          updated_at: string
+        }
+        Insert: {
+          active_directory?: string | null
+          ad_location?: string | null
+          client_id: string
+          cloud_provider?: string | null
+          created_at?: string
+          file_server?: string | null
+          gateway_firmware?: string | null
+          gateway_ip_lan?: string | null
+          gateway_ip_wan?: string | null
+          gateway_model?: string | null
+          id?: string
+          notes?: string | null
+          server_type?: string | null
+          unifi_admin_credential_id?: string | null
+          unifi_console_ip?: string | null
+          unifi_console_model?: string | null
+          unifi_firmware?: string | null
+          unifi_uptime?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active_directory?: string | null
+          ad_location?: string | null
+          client_id?: string
+          cloud_provider?: string | null
+          created_at?: string
+          file_server?: string | null
+          gateway_firmware?: string | null
+          gateway_ip_lan?: string | null
+          gateway_ip_wan?: string | null
+          gateway_model?: string | null
+          id?: string
+          notes?: string | null
+          server_type?: string | null
+          unifi_admin_credential_id?: string | null
+          unifi_console_ip?: string | null
+          unifi_console_model?: string | null
+          unifi_firmware?: string | null
+          unifi_uptime?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_infrastructure_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_infrastructure_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_infrastructure_unifi_admin_credential_id_fkey"
+            columns: ["unifi_admin_credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_internet_links: {
+        Row: {
+          alert_days: number | null
+          client_id: string
+          contract_expiry: string | null
+          created_at: string
+          id: string
+          link_type: string | null
+          notes: string | null
+          plan_speed: string | null
+          provider: string | null
+          public_ip: string | null
+          support_phone: string | null
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          alert_days?: number | null
+          client_id: string
+          contract_expiry?: string | null
+          created_at?: string
+          id?: string
+          link_type?: string | null
+          notes?: string | null
+          plan_speed?: string | null
+          provider?: string | null
+          public_ip?: string | null
+          support_phone?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alert_days?: number | null
+          client_id?: string
+          contract_expiry?: string | null
+          created_at?: string
+          id?: string
+          link_type?: string | null
+          notes?: string | null
+          plan_speed?: string | null
+          provider?: string | null
+          public_ip?: string | null
+          support_phone?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_internet_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_internet_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_licenses: {
+        Row: {
+          alert_days: number | null
+          client_id: string
+          cloud_console_url: string | null
+          created_at: string
+          devices_covered: number | null
+          expiry_date: string | null
+          id: string
+          key: string | null
+          license_model: string | null
+          license_type: string | null
+          linked_device: string | null
+          linked_email: string | null
+          months_contracted: number | null
+          notes: string | null
+          product_name: string | null
+          quantity_in_use: number | null
+          quantity_total: number | null
+          start_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          alert_days?: number | null
+          client_id: string
+          cloud_console_url?: string | null
+          created_at?: string
+          devices_covered?: number | null
+          expiry_date?: string | null
+          id?: string
+          key?: string | null
+          license_model?: string | null
+          license_type?: string | null
+          linked_device?: string | null
+          linked_email?: string | null
+          months_contracted?: number | null
+          notes?: string | null
+          product_name?: string | null
+          quantity_in_use?: number | null
+          quantity_total?: number | null
+          start_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alert_days?: number | null
+          client_id?: string
+          cloud_console_url?: string | null
+          created_at?: string
+          devices_covered?: number | null
+          expiry_date?: string | null
+          id?: string
+          key?: string | null
+          license_model?: string | null
+          license_type?: string | null
+          linked_device?: string | null
+          linked_email?: string | null
+          months_contracted?: number | null
+          notes?: string | null
+          product_name?: string | null
+          quantity_in_use?: number | null
+          quantity_total?: number | null
+          start_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_licenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_licenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_routines: {
+        Row: {
+          client_id: string
+          created_at: string
+          frequency: string | null
+          id: string
+          last_executed: string | null
+          name: string | null
+          notes: string | null
+          procedure: string | null
+          responsible: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          frequency?: string | null
+          id?: string
+          last_executed?: string | null
+          name?: string | null
+          notes?: string | null
+          procedure?: string | null
+          responsible?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          frequency?: string | null
+          id?: string
+          last_executed?: string | null
+          name?: string | null
+          notes?: string | null
+          procedure?: string | null
+          responsible?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_routines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_routines_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_software_erp: {
+        Row: {
+          access_url: string | null
+          category: string | null
+          client_id: string
+          created_at: string
+          credential_id: string | null
+          id: string
+          name: string | null
+          notes: string | null
+          support_contract: string | null
+          support_expiry: string | null
+          support_hours: string | null
+          trmm_software_match: string | null
+          updated_at: string
+          vendor: string | null
+          vendor_email: string | null
+          vendor_phone: string | null
+          version: string | null
+        }
+        Insert: {
+          access_url?: string | null
+          category?: string | null
+          client_id: string
+          created_at?: string
+          credential_id?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          support_contract?: string | null
+          support_expiry?: string | null
+          support_hours?: string | null
+          trmm_software_match?: string | null
+          updated_at?: string
+          vendor?: string | null
+          vendor_email?: string | null
+          vendor_phone?: string | null
+          version?: string | null
+        }
+        Update: {
+          access_url?: string | null
+          category?: string | null
+          client_id?: string
+          created_at?: string
+          credential_id?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          support_contract?: string | null
+          support_expiry?: string | null
+          support_hours?: string | null
+          trmm_software_match?: string | null
+          updated_at?: string
+          vendor?: string | null
+          vendor_email?: string | null
+          vendor_phone?: string | null
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_software_erp_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_software_erp_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_software_erp_credential_id_fkey"
+            columns: ["credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_support_hours: {
+        Row: {
+          business_hours: string | null
+          client_id: string
+          created_at: string
+          has_oncall: boolean | null
+          id: string
+          notes: string | null
+          oncall_phone: string | null
+          sla_critical: string | null
+          sla_normal: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_hours?: string | null
+          client_id: string
+          created_at?: string
+          has_oncall?: boolean | null
+          id?: string
+          notes?: string | null
+          oncall_phone?: string | null
+          sla_critical?: string | null
+          sla_normal?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_hours?: string | null
+          client_id?: string
+          created_at?: string
+          has_oncall?: boolean | null
+          id?: string
+          notes?: string | null
+          oncall_phone?: string | null
+          sla_critical?: string | null
+          sla_normal?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_support_hours_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_support_hours_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_telephony: {
+        Row: {
+          client_id: string
+          created_at: string
+          extensions_count: number | null
+          id: string
+          notes: string | null
+          provider: string | null
+          support_phone: string | null
+          system: string | null
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          extensions_count?: number | null
+          id?: string
+          notes?: string | null
+          provider?: string | null
+          support_phone?: string | null
+          system?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          extensions_count?: number | null
+          id?: string
+          notes?: string | null
+          provider?: string | null
+          support_phone?: string | null
+          system?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_telephony_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_telephony_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_vlans: {
+        Row: {
+          client_id: string
+          created_at: string
+          data_source: string | null
+          dhcp_enabled: boolean | null
+          gateway: string | null
+          id: string
+          ip_range: string | null
+          isolated: boolean | null
+          name: string | null
+          notes: string | null
+          purpose: string | null
+          unifi_network_id: string | null
+          updated_at: string
+          vlan_id: number | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          data_source?: string | null
+          dhcp_enabled?: boolean | null
+          gateway?: string | null
+          id?: string
+          ip_range?: string | null
+          isolated?: boolean | null
+          name?: string | null
+          notes?: string | null
+          purpose?: string | null
+          unifi_network_id?: string | null
+          updated_at?: string
+          vlan_id?: number | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          data_source?: string | null
+          dhcp_enabled?: boolean | null
+          gateway?: string | null
+          id?: string
+          ip_range?: string | null
+          isolated?: boolean | null
+          name?: string | null
+          notes?: string | null
+          purpose?: string | null
+          unifi_network_id?: string | null
+          updated_at?: string
+          vlan_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_vlans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_vlans_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doc_vpn: {
+        Row: {
+          client_id: string
+          created_at: string
+          data_source: string | null
+          id: string
+          name: string | null
+          notes: string | null
+          port: string | null
+          protocol: string | null
+          server: string | null
+          unifi_vpn_id: string | null
+          updated_at: string
+          users_configured: string | null
+          vpn_type: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          data_source?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          port?: string | null
+          protocol?: string | null
+          server?: string | null
+          unifi_vpn_id?: string | null
+          updated_at?: string
+          users_configured?: string | null
+          vpn_type?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          data_source?: string | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          port?: string | null
+          protocol?: string | null
+          server?: string | null
+          unifi_vpn_id?: string | null
+          updated_at?: string
+          users_configured?: string | null
+          vpn_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_vpn_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_vpn_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       economic_indices: {
         Row: {
           accumulated_12m: number | null
