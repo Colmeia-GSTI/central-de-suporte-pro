@@ -1,57 +1,89 @@
 
 
-## Plano: Substituir editor Markdown por acordeão de Documentação Técnica
+## Plano: Implementar Seções 1, 2, 3 e 11 da Documentação Técnica
 
-### O que será feito
+### Arquitetura
 
-Reescrever completamente o componente `ClientDocumentation` removendo o editor Markdown e substituindo por um acordeão com 14 seções colapsáveis, cada uma representando um módulo da documentação técnica do cliente.
+Criar 4 componentes de seção + 1 hook reutilizável para o padrão read/edit/upsert.
 
-### Alterações
+### Componentes novos
 
-#### 1. Reescrever `src/components/clients/ClientDocumentation.tsx`
-
-- Remover todo o código atual (editor Markdown, preview, botões Split/Editar/Visualizar/Salvar)
-- Novo componente usando `Accordion` do Radix (já disponível em `src/components/ui/accordion.tsx`) no modo `type="single"` com `defaultValue="section-1"`
-- Props simplificadas: apenas `clientId: string` (remover `initialContent`)
-
-**Estrutura das 14 seções:**
-
-| # | Título | Badge | Ícone |
-|---|--------|-------|-------|
-| 1 | Dados gerais do cliente | campos fixos | Building2 |
-| 2 | Infraestrutura | misto | Server |
-| 3 | Internet, conectividade e telefonia | misto | Wifi |
-| 4 | Estações e servidores | tabela | Monitor |
-| 5 | Dispositivos de rede | tabela | Network |
-| 6 | CFTV — Câmeras e NVR | tabela | Camera |
-| 7 | Licenças | tabela | Key |
-| 8 | Softwares e ERPs | tabela | Package |
-| 9 | Domínios e DNS | tabela | Globe |
-| 10 | Credenciais de acesso | tabela | Lock |
-| 11 | Contatos e horários de suporte | misto | Users |
-| 12 | Segurança e políticas de rede | misto | Shield |
-| 13 | Prestadores externos | tabela | Handshake |
-| 14 | Rotinas e procedimentos | tabela | ClipboardList |
-
-**Cada cabeçalho terá:**
-- Número da seção + título
-- Badge discreto ("campos fixos" / "tabela" / "misto")
-- Contador placeholder alinhado à direita (ex: "—")
-- Chevron animado (já incluso no `AccordionTrigger`)
-
-**Corpo:** Placeholder `[Seção X em construção]` com ícone e texto centralizado.
-
-**Estilo:** Fundo do cabeçalho com `bg-muted/30`, corpo sem borda pesada, badges usando variant `outline`.
-
-#### 2. Atualizar `src/pages/clients/ClientDetailPage.tsx`
-
-- Remover prop `initialContent` da chamada ao `ClientDocumentation`
-- Manter apenas `clientId={id!}`
-
-### Arquivos
-
-| Arquivo | Mudança |
+| Arquivo | Propósito |
 |---|---|
-| `src/components/clients/ClientDocumentation.tsx` | Reescrita completa |
-| `src/pages/clients/ClientDetailPage.tsx` | Remover prop `initialContent` |
+| `src/hooks/useDocSection.ts` | Hook genérico para fetch + upsert de registros doc_ (1 por cliente) |
+| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Seção 1 — dados da tabela `clients` |
+| `src/components/clients/documentation/DocSectionInfrastructure.tsx` | Seção 2 — `doc_infrastructure` |
+| `src/components/clients/documentation/DocSectionTelephony.tsx` | Seção 3 — `doc_telephony` (só telefonia) |
+| `src/components/clients/documentation/DocSectionSupportHours.tsx` | Seção 11 — `doc_support_hours` |
+
+### Hook `useDocSection`
+
+- Recebe `tableName`, `clientId`, `selectColumns`
+- Query com `.eq('client_id', clientId).maybeSingle()`
+- Função `upsert` que faz insert ou update baseado na existência do registro
+- Retorna `{ data, isLoading, save, isSaving }`
+- Seção 1 usará variante especial (update direto na `clients` pelo `id`)
+
+### Padrão visual de cada seção
+
+- Estado `isEditing` local (useState)
+- **Modo leitura**: Grid de labels (text-muted-foreground text-xs) + valores (text-sm font-medium), campos vazios mostram "—". Botão "Editar" (ícone Pencil) no canto superior direito.
+- **Modo edição**: Mesmos campos como `Input`/`Select`/`Textarea`/`Switch`. Botões "Salvar" e "Cancelar" no rodapé.
+- Campos condicionais com `transition-all` para aparecer/sumir suavemente.
+- Subseções com `Separator` + título discreto (text-xs uppercase tracking-wider text-muted-foreground).
+
+### Seção 1 — Dados gerais do cliente
+
+- Lê da query existente `["client", id]` (já carregada no `ClientDetailPage`)
+- Passa o `client` como prop do `ClientDetailPage` para `ClientDocumentation` e depois para o componente
+- Campos: name, trade_name, document (máscara CNPJ), address, phone, whatsapp, email, notes
+- Upsert = `supabase.from('clients').update({...}).eq('id', clientId)`
+- Após salvar, `invalidateQueries(['client', clientId])`
+
+### Seção 2 — Infraestrutura
+
+- Tabela: `doc_infrastructure`
+- 3 subseções visuais: "Geral", "Rede — Console UniFi", "Rede — Gateway / Firewall"
+- Campo `cloud_provider` visível apenas se `server_type` in ['VPS', 'Nuvem', 'Híbrido']
+- Campo `ad_location` visível apenas se `active_directory` = 'Sim'
+- Notas informativas em badges discretos nas subseções UniFi e Gateway
+
+### Seção 3 — Telefonia
+
+- Tabela: `doc_telephony`
+- Campos: type (select), provider, extensions_count, support_phone, notes
+- Links de internet ficam como placeholder "[Tabela de links em construção]"
+
+### Seção 11 — Horários de suporte
+
+- Tabela: `doc_support_hours`
+- Campo `oncall_phone` visível apenas se `has_oncall` = true
+- Switch para `has_oncall`
+
+### Alteração em `ClientDocumentation.tsx`
+
+- Importar os 4 componentes
+- No render do accordion, para seções 1/2/3/11 renderizar o componente específico em vez do placeholder
+- Seções restantes mantêm o placeholder atual
+- Passar `clientId` para cada componente
+
+### Alteração em `ClientDetailPage.tsx`
+
+- Passar `client` como prop para `ClientDocumentation` (para seção 1 reutilizar os dados já carregados)
+
+### Banco de dados
+
+Nenhuma migração necessária — todas as tabelas e colunas já existem.
+
+### Arquivos modificados/criados
+
+| Arquivo | Ação |
+|---|---|
+| `src/hooks/useDocSection.ts` | Criar |
+| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Criar |
+| `src/components/clients/documentation/DocSectionInfrastructure.tsx` | Criar |
+| `src/components/clients/documentation/DocSectionTelephony.tsx` | Criar |
+| `src/components/clients/documentation/DocSectionSupportHours.tsx` | Criar |
+| `src/components/clients/ClientDocumentation.tsx` | Editar — integrar componentes |
+| `src/pages/clients/ClientDetailPage.tsx` | Editar — passar `client` como prop |
 
