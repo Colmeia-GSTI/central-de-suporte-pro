@@ -1,77 +1,98 @@
 
 
-## Plano: Implementar Seções 7 (Licenças) e 12 (Segurança)
+## Plano: Sincronização TRMM e UniFi com Documentação Técnica
 
 ### Banco de dados
 
-**Migração necessária**: Adicionar `credential_id` na tabela `doc_licenses` para referência à seção 10 (usado no tipo Antivírus).
+**Migração 1** — Novas colunas e tabela:
 
 ```sql
-ALTER TABLE public.doc_licenses ADD COLUMN credential_id uuid REFERENCES public.doc_credentials(id) ON DELETE SET NULL;
+-- Campo de mapeamento TRMM na tabela clients
+ALTER TABLE public.clients ADD COLUMN trmm_client_name text;
+
+-- Tabela de log de sincronização
+CREATE TABLE public.doc_sync_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+  source text NOT NULL,
+  synced_at timestamptz NOT NULL DEFAULT now(),
+  devices_synced int NOT NULL DEFAULT 0,
+  details jsonb DEFAULT '{}',
+  status text NOT NULL DEFAULT 'success',
+  error_message text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.doc_sync_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Staff can manage doc_sync_log" ON public.doc_sync_log
+  FOR ALL TO authenticated USING (public.is_staff(auth.uid()));
 ```
 
-### Hook `useDocTableCrud`
+### Edge Function: `sync-doc-devices`
 
-Adicionar 5 tabelas ao type union: `doc_licenses`, `doc_vlans`, `doc_vpn`, `doc_firewall_rules`, `doc_access_policies`.
+Nova Edge Function dedicada à sincronização com doc_devices (separada das funções existentes que sincronizam com `monitored_devices`).
 
-### Seção 7 — Licenças (`DocTableLicenses.tsx`)
+**Ações suportadas:**
 
-**Componente novo**: `src/components/clients/documentation/DocTableLicenses.tsx`
+- `sync_trmm` — Recebe `client_id`, busca `trmm_client_name` do cliente, chama a API do TRMM (`GET /agents/`), filtra por `client_name`, faz upsert em `doc_devices` usando `trmm_agent_id` como chave. Campos protegidos (ram, primary_user, physical_location, notes) nunca sobrescritos se já preenchidos. Detecta conflitos de hostname. Registra em `doc_sync_log`.
 
-- Tabela: `doc_licenses`
-- Colunas resumo: Produto, Tipo, Qtd, Vencimento, Alerta
-- Badge de vencimento reutilizando `daysUntil()` + badge verde "OK" quando >60 dias, e sem badge para perpétuas
-- Drawer com campo `license_type` como primeiro campo (select: Windows / Office/M365 / Antivírus / Outro)
-- **Campos condicionais por tipo**:
-  - **Windows**: license_model (OEM/Retail/Volume/MAK/KMS), key, linked_device, quantity_total. Campo extra "Servidor KMS/MAK" se modelo = Volume ou MAK. Sem campos de data.
-  - **Office/M365**: license_model (Assinatura mensal/anual/Perpétua/OEM), key, linked_email, quantity_total, quantity_in_use, start_date, expiry_date (oculto se Perpétua), alert_days (default 60)
-  - **Antivírus**: key, devices_covered, months_contracted, start_date, expiry_date (auto-calculado de start + months, editável), alert_days (default 30), cloud_console_url, credential_id (ref seção 10). Barra de progresso na linha expandida.
-  - **Outro**: license_model, key, quantity_total, quantity_in_use, start_date, expiry_date, alert_days
-- **Barra de progresso antivírus**: `Progress` component. Cálculo: `(diasDecorridos / diasTotais) * 100`. Cores: ≤70% verde, ≤90% amarelo, >90% vermelho.
-- **Auto-cálculo vencimento antivírus**: `useEffect` que recalcula `expiry_date` quando `start_date` ou `months_contracted` mudam no drawer.
-- Password input com botão copiar para campo `key`.
+- `sync_unifi` — Recebe `client_id`, busca controllers do cliente em `unifi_controllers`, para cada controller ativo:
+  1. Autentica (direct login ou cloud API key)
+  2. Busca dispositivos → upsert em `doc_devices` (switches, APs, gateways)
+  3. Busca SSIDs → atualiza campo `ssids` nos APs
+  4. Busca VLANs → upsert em `doc_vlans`
+  5. Busca firewall rules → upsert em `doc_firewall_rules`
+  6. Busca port forwards → upsert em `doc_firewall_rules`
+  7. Busca VPNs → upsert em `doc_vpn`
+  8. Atualiza `doc_infrastructure` (gateway_model, gateway_ip_wan, etc.)
+  9. Registra em `doc_sync_log`
 
-### Seção 12 — Segurança (`DocSectionSecurity.tsx`)
+- `sync_all` — Executa ambos para o `client_id`.
 
-**Componente novo**: `src/components/clients/documentation/DocSectionSecurity.tsx`
+**Regra de proteção de dados manuais:** Ao fazer upsert, se o registro existente tem `data_source` contendo `+manual`, nunca sobrescrever os campos protegidos. Se o técnico edita um campo de um registro integrado, o frontend muda `data_source` para `trmm+manual` ou `unifi+manual`.
 
-- Usa `Tabs` (horizontal) com 4 abas: VLANs, VPN, Firewall e Portas, Políticas de Acesso
-- Cada aba renderiza um sub-componente de tabela CRUD
-- Aba ativa gerenciada por `useState` (persiste enquanto seção aberta)
+**Detecção de conflitos TRMM:** Se um agente TRMM tem hostname igual a um `doc_devices` existente sem `trmm_agent_id`, não faz merge automático. Retorna lista de conflitos no response.
 
-**4 sub-componentes** (inline no mesmo arquivo para simplicidade, ou separados se ficarem grandes — vou manter inline pois seguem o mesmo padrão):
+### Frontend — Componentes modificados
 
-**Aba VLANs** (`doc_vlans`):
-- Colunas: ID VLAN, Nome, Finalidade, Range IP, Origem
-- Badge origem: UniFi → verde, Manual → cinza
-- Drawer: vlan_id (number), name, purpose, ip_range, gateway, dhcp_enabled (toggle), isolated (toggle), unifi_network_id, data_source (select), notes
+**1. `DocSectionClientInfo.tsx`** — Adicionar campo "Nome do cliente no TRMM" (`trmm_client_name`) no formulário e modo leitura.
 
-**Aba VPN** (`doc_vpn`):
-- Colunas: Nome, Tipo, Servidor, Usuários, Origem
-- Drawer: name, vpn_type (select), server, port, protocol (select), users_configured (textarea), unifi_vpn_id, data_source, notes
+**2. `DocTableWorkstations.tsx`** — Adicionar:
+- Coluna "Origem" com badges (TRMM=azul, Manual=cinza, TRMM+Manual=verde)
+- Botão "Sincronizar TRMM" no topo (chama Edge Function, mostra loading, toast resultado)
+- Banner de conflitos quando existirem dispositivos com hostname duplicado
 
-**Aba Firewall** (`doc_firewall_rules`):
-- Colunas: Descrição, Tipo, Origem → Destino, Porta, Ação
-- Badge ação: Permitir → verde, Bloquear → vermelho
-- Drawer: name, rule_type (select), source, destination, port, protocol (select), action (select), context (textarea), unifi_rule_id, data_source
+**3. `DocTableNetworkDevices.tsx`** — Adicionar:
+- Coluna "Origem" com badges (UniFi=azul, Manual=cinza, UniFi+Manual=verde)
+- Botão "Sincronizar UniFi" no topo
 
-**Aba Políticas** (`doc_access_policies`):
-- Colunas: Tipo, Alvo, Grupo, Configurado via
-- Badge tipo: Bloqueio → vermelho, Liberação → verde
-- Drawer: policy_type (select), target, affected_group, reason, exceptions, configured_via (select), unifi_rule_id, notes
+**4. `DocSectionSecurity.tsx`** — Adicionar botão "Sincronizar UniFi" no topo (sincroniza VLANs, firewall, VPN)
 
-### Integração
+**5. `ClientDocumentation.tsx`** — Adicionar barra de status de integração no topo:
+- Status TRMM: última sync, dispositivos sincronizados, ou "Não configurado"
+- Status UniFi: última sync, contadores, ou "Não configurado"
+- Botão "Sincronizar tudo"
 
-- `ClientDocumentation.tsx`: Adicionar cases "7" e "12" no switch, importar os 2 novos componentes
-- `useDocTableCrud.ts`: Expandir o type union com as 5 novas tabelas
+**6. Hook `useDocSync.ts`** — Novo hook para:
+- Buscar último log de sync (`doc_sync_log`) por source e client_id
+- Executar sync (invoke Edge Function)
+- Verificar se TRMM/UniFi estão configurados para o cliente
+
+### Lógica de `data_source` na edição
+
+Nos componentes `DocTableWorkstations` e `DocTableNetworkDevices`, ao salvar edição de um item com `data_source = 'trmm'`, automaticamente mudar para `'trmm+manual'`. Idem para `'unifi'` → `'unifi+manual'`.
 
 ### Arquivos
 
 | Arquivo | Ação |
 |---|---|
-| Migração SQL | Adicionar `credential_id` em `doc_licenses` |
-| `src/hooks/useDocTableCrud.ts` | Adicionar 5 tabelas ao type |
-| `src/components/clients/documentation/DocTableLicenses.tsx` | Criar |
-| `src/components/clients/documentation/DocSectionSecurity.tsx` | Criar |
-| `src/components/clients/ClientDocumentation.tsx` | Integrar seções 7 e 12 |
+| Migração SQL | `trmm_client_name` + `doc_sync_log` |
+| `supabase/functions/sync-doc-devices/index.ts` | Criar — Edge Function de sync |
+| `src/hooks/useDocSync.ts` | Criar — hook de status e execução de sync |
+| `src/components/clients/documentation/DocSyncStatusBar.tsx` | Criar — barra de status no topo |
+| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Editar — campo `trmm_client_name` |
+| `src/components/clients/documentation/DocTableWorkstations.tsx` | Editar — coluna Origem, botão sync, conflitos |
+| `src/components/clients/documentation/DocTableNetworkDevices.tsx` | Editar — coluna Origem, botão sync |
+| `src/components/clients/documentation/DocSectionSecurity.tsx` | Editar — botão sync UniFi |
+| `src/components/clients/ClientDocumentation.tsx` | Editar — integrar barra de status |
 
