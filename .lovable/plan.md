@@ -1,36 +1,57 @@
 
 
-## Plano: Painel de Contadores na Listagem de Contratos
+## Plano: Substituir editor Markdown por acordeão de Documentação Técnica
 
 ### O que será feito
 
-Adicionar um painel com 2 cards de estatísticas entre o campo de busca e a tabela, mostrando:
+Reescrever completamente o componente `ClientDocumentation` removendo o editor Markdown e substituindo por um acordeão com 14 seções colapsáveis, cada uma representando um módulo da documentação técnica do cliente.
 
-1. **Contratos Ativos** — contagem de contratos com `status = 'active'`
-2. **Receita Mensal Total** — soma do `monthly_value` de todos os contratos ativos
+### Alterações
 
-### Visual
+#### 1. Reescrever `src/components/clients/ClientDocumentation.tsx`
 
-```text
-┌──────────────────────┐  ┌──────────────────────┐
-│ 📄 Contratos Ativos  │  │ 💰 Receita Mensal    │
-│        12            │  │    R$ 24.500,00       │
-└──────────────────────┘  └──────────────────────┘
-```
+- Remover todo o código atual (editor Markdown, preview, botões Split/Editar/Visualizar/Salvar)
+- Novo componente usando `Accordion` do Radix (já disponível em `src/components/ui/accordion.tsx`) no modo `type="single"` com `defaultValue="section-1"`
+- Props simplificadas: apenas `clientId: string` (remover `initialContent`)
 
-### Alterações em `src/pages/contracts/ContractsPage.tsx`
+**Estrutura das 14 seções:**
 
-1. **Calcular os contadores a partir dos dados já carregados** (`contracts`), sem query adicional:
-   - `activeCount = contracts.filter(c => c.status === 'active').length`
-   - `totalMonthly = contracts.filter(c => c.status === 'active').reduce(sum de monthly_value)`
+| # | Título | Badge | Ícone |
+|---|--------|-------|-------|
+| 1 | Dados gerais do cliente | campos fixos | Building2 |
+| 2 | Infraestrutura | misto | Server |
+| 3 | Internet, conectividade e telefonia | misto | Wifi |
+| 4 | Estações e servidores | tabela | Monitor |
+| 5 | Dispositivos de rede | tabela | Network |
+| 6 | CFTV — Câmeras e NVR | tabela | Camera |
+| 7 | Licenças | tabela | Key |
+| 8 | Softwares e ERPs | tabela | Package |
+| 9 | Domínios e DNS | tabela | Globe |
+| 10 | Credenciais de acesso | tabela | Lock |
+| 11 | Contatos e horários de suporte | misto | Users |
+| 12 | Segurança e políticas de rede | misto | Shield |
+| 13 | Prestadores externos | tabela | Handshake |
+| 14 | Rotinas e procedimentos | tabela | ClipboardList |
 
-2. **Renderizar 2 cards** usando `Card` + ícones (`FileText`, `DollarSign`) no estilo consistente com o `AnimatedStatCard` do Dashboard, posicionados entre a busca e a tabela em um grid `grid-cols-2`.
+**Cada cabeçalho terá:**
+- Número da seção + título
+- Badge discreto ("campos fixos" / "tabela" / "misto")
+- Contador placeholder alinhado à direita (ex: "—")
+- Chevron animado (já incluso no `AccordionTrigger`)
 
-3. **Loading state**: Exibir `Skeleton` nos cards enquanto `isLoading` for `true`.
+**Corpo:** Placeholder `[Seção X em construção]` com ícone e texto centralizado.
 
-### Arquivo
+**Estilo:** Fundo do cabeçalho com `bg-muted/30`, corpo sem borda pesada, badges usando variant `outline`.
+
+#### 2. Atualizar `src/pages/clients/ClientDetailPage.tsx`
+
+- Remover prop `initialContent` da chamada ao `ClientDocumentation`
+- Manter apenas `clientId={id!}`
+
+### Arquivos
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/contracts/ContractsPage.tsx` | Adicionar grid de 2 stat cards entre busca e tabela |
+| `src/components/clients/ClientDocumentation.tsx` | Reescrita completa |
+| `src/pages/clients/ClientDetailPage.tsx` | Remover prop `initialContent` |
 
