@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, ChevronDown, Pencil, Trash2, CalendarIcon, Wifi } from "lucide-react";
+import { Plus, Pencil, Trash2, CalendarIcon, Wifi } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
 import { daysUntil, display } from "@/lib/doc-utils";
 import { format, parseISO } from "date-fns";

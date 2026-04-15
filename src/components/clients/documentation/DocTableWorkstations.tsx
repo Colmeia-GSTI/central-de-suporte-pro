@@ -144,10 +144,7 @@ export function DocTableWorkstations({ clientId }: Props) {
                       <TableCell>{display(item.os)}</TableCell>
                       <TableCell className="font-mono text-xs">{display(item.ip_local)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="gap-1.5">
-                          <span className={`h-2 w-2 rounded-full ${statusColors[item.status || "unknown"]}`} />
-                          {item.status || "unknown"}
-                        </Badge>
+                        <StatusBadge status={item.status} />
                       </TableCell>
                       <TableCell><SourceBadge source={item.data_source} /></TableCell>
                     </TableRow>

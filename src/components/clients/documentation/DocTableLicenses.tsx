@@ -92,7 +92,7 @@ function getAntivirusProgress(row: LicenseRow) {
 
 export function DocTableLicenses({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<LicenseRow>({ tableName: "doc_licenses", clientId });
-  const credOptions = useDocCredentialOptions(clientId);
+  const { options: credOptions } = useDocCredentialOptions(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LicenseRow | null>(null);
