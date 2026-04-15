@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Server, Wifi, Loader2 } from "lucide-react";
 import { useDocSync } from "@/hooks/useDocSync";
+import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -18,6 +19,7 @@ function formatSyncTime(dateStr: string): string {
 }
 
 export function DocSyncStatusBar({ clientId }: Props) {
+  const navigate = useNavigate();
   const {
     syncingTrmm, syncingUnifi, syncingAll,
     trmmConfigured, unifiConfigured,
@@ -48,7 +50,13 @@ export function DocSyncStatusBar({ clientId }: Props) {
             <span>Nunca sincronizado</span>
           )
         ) : (
-          <span className="text-muted-foreground/50">Não configurado</span>
+          <button
+            type="button"
+            className="text-primary hover:underline cursor-pointer"
+            onClick={() => navigate("/settings?tab=mappings")}
+          >
+            Não mapeado — Configure em Operações → Mapeamentos
+          </button>
         )}
       </div>
 

@@ -47,17 +47,18 @@ export function useDocSync(clientId: string) {
     staleTime: 60_000,
   });
 
-  // Check if TRMM is configured for this client
+  // Check if TRMM is mapped for this client via client_external_mappings
   const { data: trmmConfigured } = useQuery({
     queryKey: ["trmm-configured", clientId],
     queryFn: async () => {
-      const { data: client } = await supabase
-        .from("clients")
-        .select("trmm_client_name")
-        .eq("id", clientId)
-        .single();
+      const { data: mapping } = await supabase
+        .from("client_external_mappings")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("external_source", "tactical_rmm")
+        .maybeSingle();
 
-      if (!client?.trmm_client_name) return false;
+      if (!mapping) return false;
 
       const { data: settings } = await supabase
         .from("integration_settings")
