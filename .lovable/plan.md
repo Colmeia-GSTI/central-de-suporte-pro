@@ -1,98 +1,86 @@
 
 
-## Plano: Sincronização TRMM e UniFi com Documentação Técnica
+## Plano: Sistema de Alertas de Vencimento na Documentação
 
-### Banco de dados
-
-**Migração 1** — Novas colunas e tabela:
+### 1. Banco de Dados — Migração
 
 ```sql
--- Campo de mapeamento TRMM na tabela clients
-ALTER TABLE public.clients ADD COLUMN trmm_client_name text;
-
--- Tabela de log de sincronização
-CREATE TABLE public.doc_sync_log (
+CREATE TABLE public.doc_alerts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id uuid NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
-  source text NOT NULL,
-  synced_at timestamptz NOT NULL DEFAULT now(),
-  devices_synced int NOT NULL DEFAULT 0,
-  details jsonb DEFAULT '{}',
-  status text NOT NULL DEFAULT 'success',
-  error_message text,
-  created_at timestamptz NOT NULL DEFAULT now()
+  alert_type text NOT NULL, -- 'license' / 'domain' / 'link' / 'software' / 'provider'
+  reference_table text NOT NULL,
+  reference_id uuid NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL,
+  expiry_date date NOT NULL,
+  days_remaining int NOT NULL,
+  severity text NOT NULL DEFAULT 'info', -- 'critical' / 'warning' / 'info'
+  status text NOT NULL DEFAULT 'active', -- 'active' / 'acknowledged' / 'resolved'
+  acknowledged_by uuid REFERENCES auth.users(id),
+  acknowledged_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-ALTER TABLE public.doc_sync_log ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Staff can manage doc_sync_log" ON public.doc_sync_log
-  FOR ALL TO authenticated USING (public.is_staff(auth.uid()));
+ALTER TABLE public.doc_alerts ENABLE ROW LEVEL SECURITY;
+CREATE INDEX idx_doc_alerts_client_status ON public.doc_alerts(client_id, status);
+CREATE UNIQUE INDEX idx_doc_alerts_ref ON public.doc_alerts(reference_table, reference_id) WHERE status = 'active';
+CREATE POLICY "Staff can manage doc_alerts" ON public.doc_alerts FOR ALL TO authenticated USING (public.is_staff(auth.uid()));
 ```
 
-### Edge Function: `sync-doc-devices`
+### 2. Edge Function: `check-doc-expiries`
 
-Nova Edge Function dedicada à sincronização com doc_devices (separada das funções existentes que sincronizam com `monitored_devices`).
+Varre 5 tabelas para gerar/atualizar alertas:
 
-**Ações suportadas:**
+| Tabela | Campo data | Campo alerta | Campo nome |
+|---|---|---|---|
+| `doc_licenses` | `expiry_date` | `alert_days` | `product_name` |
+| `doc_domains` | `expiry_date` | `alert_days` | `domain` |
+| `doc_internet_links` | `contract_expiry` | `alert_days` (default 30) | `provider` |
+| `doc_software_erp` | `support_expiry` | 30 (fixo) | `name` + `vendor` |
+| `doc_external_providers` | `contract_expiry` | 30 (fixo) | `company_name` + `service_type` |
 
-- `sync_trmm` — Recebe `client_id`, busca `trmm_client_name` do cliente, chama a API do TRMM (`GET /agents/`), filtra por `client_name`, faz upsert em `doc_devices` usando `trmm_agent_id` como chave. Campos protegidos (ram, primary_user, physical_location, notes) nunca sobrescritos se já preenchidos. Detecta conflitos de hostname. Registra em `doc_sync_log`.
+Lógica idempotente:
+- `days_remaining <= alert_days` → upsert alerta ativo (INSERT ou UPDATE)
+- `days_remaining > alert_days` com alerta ativo → marcar `resolved`
+- `days_remaining < 0` → severity `critical`, "Vencido há X dias"
+- `days_remaining <= 7` → `critical`; `<= 30` → `warning`; resto → `info`
 
-- `sync_unifi` — Recebe `client_id`, busca controllers do cliente em `unifi_controllers`, para cada controller ativo:
-  1. Autentica (direct login ou cloud API key)
-  2. Busca dispositivos → upsert em `doc_devices` (switches, APs, gateways)
-  3. Busca SSIDs → atualiza campo `ssids` nos APs
-  4. Busca VLANs → upsert em `doc_vlans`
-  5. Busca firewall rules → upsert em `doc_firewall_rules`
-  6. Busca port forwards → upsert em `doc_firewall_rules`
-  7. Busca VPNs → upsert em `doc_vpn`
-  8. Atualiza `doc_infrastructure` (gateway_model, gateway_ip_wan, etc.)
-  9. Registra em `doc_sync_log`
+Ao criar novo alerta: insere notificação para técnicos do cliente (tabela `notifications`), com `related_type = 'client'` e `related_id = client_id`.
 
-- `sync_all` — Executa ambos para o `client_id`.
+### 3. Hook: `useDocAlerts.ts`
 
-**Regra de proteção de dados manuais:** Ao fazer upsert, se o registro existente tem `data_source` contendo `+manual`, nunca sobrescrever os campos protegidos. Se o técnico edita um campo de um registro integrado, o frontend muda `data_source` para `trmm+manual` ou `unifi+manual`.
+- Busca alertas ativos por `client_id` via React Query
+- Mutation `acknowledge(alertId)` → update status + acknowledged_by/at
+- Retorna contadores por seção (mapa `sectionId → count`) e por severidade
 
-**Detecção de conflitos TRMM:** Se um agente TRMM tem hostname igual a um `doc_devices` existente sem `trmm_agent_id`, não faz merge automático. Retorna lista de conflitos no response.
+### 4. Painel de Alertas (`DocAlertsPanel.tsx`)
 
-### Frontend — Componentes modificados
+Componente acima da `DocSyncStatusBar`:
+- Se zero alertas → não renderiza
+- Banner colapsável: "X alertas de vencimento" + badge vermelho/amarelo
+- Lista expandida com ícone de severidade, título, descrição, data, botão "Reconhecer"
+- Ordenação: critical primeiro, depois `days_remaining` ASC
 
-**1. `DocSectionClientInfo.tsx`** — Adicionar campo "Nome do cliente no TRMM" (`trmm_client_name`) no formulário e modo leitura.
+### 5. Badges nas Seções do Acordeão
 
-**2. `DocTableWorkstations.tsx`** — Adicionar:
-- Coluna "Origem" com badges (TRMM=azul, Manual=cinza, TRMM+Manual=verde)
-- Botão "Sincronizar TRMM" no topo (chama Edge Function, mostra loading, toast resultado)
-- Banner de conflitos quando existirem dispositivos com hostname duplicado
+Atualizar `ClientDocumentation.tsx`:
+- Usar `useDocAlerts(clientId)` para obter contadores por seção
+- Mapear `alert_type` → seção: license→7, domain→9, link→3, software→8, provider→13
+- Renderizar badge numérico vermelho/amarelo no `AccordionTrigger` das seções com alertas
 
-**3. `DocTableNetworkDevices.tsx`** — Adicionar:
-- Coluna "Origem" com badges (UniFi=azul, Manual=cinza, UniFi+Manual=verde)
-- Botão "Sincronizar UniFi" no topo
+### 6. Indicadores nas Tabelas
 
-**4. `DocSectionSecurity.tsx`** — Adicionar botão "Sincronizar UniFi" no topo (sincroniza VLANs, firewall, VPN)
-
-**5. `ClientDocumentation.tsx`** — Adicionar barra de status de integração no topo:
-- Status TRMM: última sync, dispositivos sincronizados, ou "Não configurado"
-- Status UniFi: última sync, contadores, ou "Não configurado"
-- Botão "Sincronizar tudo"
-
-**6. Hook `useDocSync.ts`** — Novo hook para:
-- Buscar último log de sync (`doc_sync_log`) por source e client_id
-- Executar sync (invoke Edge Function)
-- Verificar se TRMM/UniFi estão configurados para o cliente
-
-### Lógica de `data_source` na edição
-
-Nos componentes `DocTableWorkstations` e `DocTableNetworkDevices`, ao salvar edição de um item com `data_source = 'trmm'`, automaticamente mudar para `'trmm+manual'`. Idem para `'unifi'` → `'unifi+manual'`.
+As tabelas já usam `daysUntil()` localmente. Manter esse cálculo local (mais simples e responsivo) — os alertas servem para o painel e notificações, não para substituir os badges inline.
 
 ### Arquivos
 
 | Arquivo | Ação |
 |---|---|
-| Migração SQL | `trmm_client_name` + `doc_sync_log` |
-| `supabase/functions/sync-doc-devices/index.ts` | Criar — Edge Function de sync |
-| `src/hooks/useDocSync.ts` | Criar — hook de status e execução de sync |
-| `src/components/clients/documentation/DocSyncStatusBar.tsx` | Criar — barra de status no topo |
-| `src/components/clients/documentation/DocSectionClientInfo.tsx` | Editar — campo `trmm_client_name` |
-| `src/components/clients/documentation/DocTableWorkstations.tsx` | Editar — coluna Origem, botão sync, conflitos |
-| `src/components/clients/documentation/DocTableNetworkDevices.tsx` | Editar — coluna Origem, botão sync |
-| `src/components/clients/documentation/DocSectionSecurity.tsx` | Editar — botão sync UniFi |
-| `src/components/clients/ClientDocumentation.tsx` | Editar — integrar barra de status |
+| Migração SQL | Criar `doc_alerts` |
+| `supabase/functions/check-doc-expiries/index.ts` | Criar |
+| `src/hooks/useDocAlerts.ts` | Criar |
+| `src/components/clients/documentation/DocAlertsPanel.tsx` | Criar |
+| `src/components/clients/ClientDocumentation.tsx` | Editar — integrar painel + badges |
 
