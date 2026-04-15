@@ -78,7 +78,7 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
           <Field label="Telefone" value={displayVal(client.phone)} />
           <Field label="WhatsApp" value={displayVal(client.whatsapp)} />
           <Field label="E-mail" value={displayVal(client.email)} />
-          <Field label="Nome do cliente no TRMM" value={displayVal((client as any).trmm_client_name)} />
+          
         </div>
         {(client.notes) && (
           <div>
@@ -127,15 +127,6 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
         <div className="sm:col-span-2">
           <Label>E-mail</Label>
           <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label>Nome do cliente no TRMM</Label>
-          <Input
-            value={form.trmm_client_name}
-            onChange={(e) => setForm({ ...form, trmm_client_name: e.target.value })}
-            placeholder="Exatamente como aparece no Tactical RMM"
-          />
-          <p className="text-[11px] text-muted-foreground mt-1">Usado para filtrar os agentes do TRMM que pertencem a este cliente</p>
         </div>
         <div className="sm:col-span-2">
           <Label>Observações gerais</Label>
