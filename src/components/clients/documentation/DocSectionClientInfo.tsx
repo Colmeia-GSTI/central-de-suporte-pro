@@ -35,7 +35,6 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
     whatsapp: client.whatsapp || "",
     email: client.email || "",
     notes: client.notes || "",
-    trmm_client_name: (client as any).trmm_client_name || "",
   });
 
   const startEditing = () => {
@@ -48,7 +47,6 @@ export function DocSectionClientInfo({ client, clientId }: Props) {
       whatsapp: client.whatsapp || "",
       email: client.email || "",
       notes: client.notes || "",
-      trmm_client_name: (client as any).trmm_client_name || "",
     });
     setIsEditing(true);
   };

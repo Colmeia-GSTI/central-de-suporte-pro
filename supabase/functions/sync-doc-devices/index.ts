@@ -44,15 +44,16 @@ function mergeWithProtection(newData: Record<string, unknown>, existing: Record<
 
 // ─── TRMM SYNC ────────────────────────────────────────────────────────────────
 async function syncTrmm(supabase: ReturnType<typeof createClient>, clientId: string) {
-  // Get client's trmm_client_name
-  const { data: client } = await supabase
-    .from("clients")
-    .select("trmm_client_name")
-    .eq("id", clientId)
-    .single();
+  // Buscar mapeamento via client_external_mappings
+  const { data: mapping } = await supabase
+    .from("client_external_mappings")
+    .select("external_id, external_name")
+    .eq("client_id", clientId)
+    .eq("external_source", "tactical_rmm")
+    .maybeSingle();
 
-  if (!client?.trmm_client_name) {
-    return { success: false, error: "Nome do cliente no TRMM não configurado" };
+  if (!mapping) {
+    return { success: false, error: "Cliente não mapeado no Tactical RMM. Configure em Operações → Mapeamentos." };
   }
 
   // Get TRMM settings
@@ -78,11 +79,23 @@ async function syncTrmm(supabase: ReturnType<typeof createClient>, clientId: str
   if (!agentsRes.ok) throw new Error(`TRMM API error: ${agentsRes.status}`);
   const agents = await agentsRes.json();
 
-  // Filter by client_name
-  const clientAgents = agents.filter((a: any) => {
-    const name = a.client_name || a.client?.name || "";
-    return name.toLowerCase() === client.trmm_client_name.toLowerCase();
+  // Filtrar agentes pelo external_id numérico (mais robusto que nome)
+  let clientAgents = agents.filter((a: unknown) => {
+    const agent = a as Record<string, unknown>;
+    const clientObj = agent.client as Record<string, unknown> | undefined;
+    return String(agent.client_id ?? "") === String(mapping.external_id)
+      || String(clientObj?.id ?? "") === String(mapping.external_id);
   });
+
+  // Fallback por nome caso o ID não bata
+  if (clientAgents.length === 0 && mapping.external_name) {
+    clientAgents = agents.filter((a: unknown) => {
+      const agent = a as Record<string, unknown>;
+      const clientObj = agent.client as Record<string, unknown> | undefined;
+      const name = (agent.client_name as string) || (clientObj?.name as string) || "";
+      return name.toLowerCase() === (mapping.external_name as string).toLowerCase();
+    });
+  }
 
   // Get existing doc_devices for this client with trmm source
   const { data: existingDevices } = await supabase
