@@ -1524,6 +1524,75 @@ export type Database = {
           },
         ]
       }
+      doc_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          client_id: string
+          created_at: string
+          days_remaining: number
+          description: string
+          expiry_date: string
+          id: string
+          reference_id: string
+          reference_table: string
+          severity: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type: string
+          client_id: string
+          created_at?: string
+          days_remaining: number
+          description: string
+          expiry_date: string
+          id?: string
+          reference_id: string
+          reference_table: string
+          severity?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          client_id?: string
+          created_at?: string
+          days_remaining?: number
+          description?: string
+          expiry_date?: string
+          id?: string
+          reference_id?: string
+          reference_table?: string
+          severity?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doc_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       doc_antivirus_solutions: {
         Row: {
           client_id: string
