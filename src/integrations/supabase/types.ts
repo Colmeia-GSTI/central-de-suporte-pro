@@ -2375,6 +2375,7 @@ export type Database = {
           client_id: string
           cloud_console_url: string | null
           created_at: string
+          credential_id: string | null
           devices_covered: number | null
           expiry_date: string | null
           id: string
@@ -2396,6 +2397,7 @@ export type Database = {
           client_id: string
           cloud_console_url?: string | null
           created_at?: string
+          credential_id?: string | null
           devices_covered?: number | null
           expiry_date?: string | null
           id?: string
@@ -2417,6 +2419,7 @@ export type Database = {
           client_id?: string
           cloud_console_url?: string | null
           created_at?: string
+          credential_id?: string | null
           devices_covered?: number | null
           expiry_date?: string | null
           id?: string
@@ -2446,6 +2449,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doc_licenses_credential_id_fkey"
+            columns: ["credential_id"]
+            isOneToOne: false
+            referencedRelation: "doc_credentials"
             referencedColumns: ["id"]
           },
         ]
