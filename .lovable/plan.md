@@ -1,38 +1,23 @@
 
 
-## Plano: Corrigir IP local nos dispositivos sincronizados do TRMM
+## Plano: Corrigir IP na aba Ativos
 
-Duas Edge Functions salvam IPs de agentes TRMM — ambas precisam priorizar `local_ips` sobre `public_ip`.
+### Problema
+O campo `ip` do merge usa `doc.ip_local` diretamente, que pode conter múltiplos IPs separados por vírgula. Além disso, se `ip_local` estiver vazio, cai para `monitored_devices.ip_address` que pode ser IP público.
 
-### 1. `sync-doc-devices/index.ts` (linha 126)
+### Correção
 
-Já está correto:
-```typescript
-ip_local: Array.isArray(agent.local_ips) ? agent.local_ips.join(", ") : (agent.local_ip || null),
-```
-Usa `local_ips` com fallback para `local_ip`. Não usa `public_ip`. Nenhuma alteração necessária aqui.
-
-### 2. `tactical-rmm-sync/index.ts` (linha 322)
-
-Precisa de correção:
+**Arquivo:** `src/components/clients/ClientAssetsList.tsx` — linha 252
 
 ```
 ANTES:
-ip_address: agent.local_ip || agent.public_ip,
+ip: doc.ip_local || matched?.ip_address || "",
 
 DEPOIS:
-ip_address: agent.local_ips
-  ? (Array.isArray(agent.local_ips) ? agent.local_ips[0] : String(agent.local_ips).split(',')[0].trim())
-  : (agent.local_ip || agent.public_ip),
+ip: doc.ip_local
+  ? doc.ip_local.split(',')[0].trim()
+  : matched?.ip_address || "",
 ```
 
-Prioriza `local_ips` (array ou string), fallback para `local_ip`, último recurso `public_ip`.
-
-### Arquivos
-
-| Arquivo | Ação |
-|---|---|
-| `supabase/functions/tactical-rmm-sync/index.ts` | Editar linha 322 — IP local |
-
-Apenas uma linha a alterar + deploy da Edge Function.
+Uma única linha alterada. Nada mais é modificado.
 
