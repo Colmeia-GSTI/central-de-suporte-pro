@@ -249,7 +249,9 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         name: doc.name || "Sem nome",
         deviceType: doc.device_type || "other",
         brandModel: doc.brand_model || "",
-        ip: doc.ip_local || matched?.ip_address || "",
+        ip: doc.ip_local
+          ? doc.ip_local.split(',')[0].trim()
+          : matched?.ip_address || "",
         statusOnline: matched ? matched.is_online : null,
         statusLabel: matched ? (matched.is_online ? "Online" : "Offline") : "Desconhecido",
         origin: matched ? (matched.external_source === "unifi" ? "unifi" : matched.external_source === "checkmk" ? "checkmk" : "trmm") : origin,
