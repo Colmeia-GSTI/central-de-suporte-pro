@@ -6,6 +6,8 @@ import { logger } from "@/lib/logger";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TicketFilters } from "@/components/tickets/TicketFilters";
+import { Input } from "@/components/ui/input";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -90,6 +92,7 @@ export default function TicketsPage() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [technicianFilter, setTechnicianFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export default function TicketsPage() {
     priorityFilter !== "all",
     technicianFilter !== "all",
     clientFilter !== "all",
+    typeFilter !== "all",
   ].filter(Boolean).length;
 
   // ── Bulk mutations ──
@@ -161,20 +165,7 @@ export default function TicketsPage() {
     onError: () => toast({ title: "Erro ao atribuir chamados em lote", variant: "destructive" }),
   });
 
-  const { data: staffMembers = [] } = useQuery({
-    queryKey: ["staff-members-filter"],
-    queryFn: async () => {
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("user_roles").select("user_id").in("role", ["technician", "manager", "admin"]);
-      if (rolesError) throw rolesError;
-      const staffIds = [...new Set((rolesData || []).map((r) => r.user_id))];
-      if (staffIds.length === 0) return [];
-      const { data, error } = await supabase.from("profiles").select("user_id, full_name").in("user_id", staffIds).order("full_name");
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: staffMembers = [] } = useTechnicianList();
 
   const { data: clientsForFilter = [] } = useQuery({
     queryKey: ["clients-filter"],
@@ -200,7 +191,7 @@ export default function TicketsPage() {
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["tickets", debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, cursor],
+    queryKey: ["tickets", debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, typeFilter, cursor],
     queryFn: async () => {
       let query = supabase
         .from("tickets")
@@ -236,6 +227,11 @@ export default function TicketsPage() {
       if (technicianFilter === "unassigned") query = query.is("assigned_to", null);
       else if (technicianFilter !== "all") query = query.eq("assigned_to", technicianFilter);
       if (clientFilter !== "all") query = query.eq("client_id", clientFilter);
+
+      // Type filter
+      if (typeFilter === "external") query = query.eq("is_internal", false);
+      else if (typeFilter === "internal") query = query.eq("is_internal", true).eq("origin", "internal");
+      else if (typeFilter === "task") query = query.eq("is_internal", true).eq("origin", "task");
 
       const { data, error, count } = await query;
       if (error) throw error;
@@ -359,12 +355,13 @@ export default function TicketsPage() {
   };
   const handleResetPagination = () => { setCursor(null); setPreviousCursors([]); };
 
-  useEffect(() => { handleResetPagination(); }, [debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter]);
+  useEffect(() => { handleResetPagination(); }, [debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, typeFilter]);
 
   const clearAllFilters = () => {
     setPriorityFilter("all");
     setTechnicianFilter("all");
     setClientFilter("all");
+    setTypeFilter("all");
   };
 
   return (
