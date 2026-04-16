@@ -153,7 +153,14 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     asset: null,
   });
   const [selectedItem, setSelectedItem] = useState<UnifiedAssetItem | null>(null);
+  const [linkDialogAsset, setLinkDialogAsset] = useState<{
+    id: string; client_id: string; name: string; asset_type: string;
+    brand?: string | null; model?: string | null; serial_number?: string | null;
+    ip_address?: string | null; location?: string | null; notes?: string | null;
+  } | null>(null);
+  const [manualLinkDialog, setManualLinkDialog] = useState<{ open: boolean; assetId: string }>({ open: false, assetId: "" });
   const { toast } = useToast();
+  const { syncFieldsToDoc } = useDocDeviceSync();
   const queryClient = useQueryClient();
 
   const form = useForm<AssetFormData>({
