@@ -250,6 +250,13 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
           const { error: tagError } = await supabase.from("ticket_tag_assignments").insert(tagAssignments);
           if (tagError) logger.warn("Failed to assign tags", "Tickets", { error: tagError.message });
         }
+
+        // Fire-and-forget — não bloquear criação do chamado
+        supabase.functions.invoke("send-ticket-notification", {
+          body: { ticket_id: newTicket.id, event_type: "created" }
+        }).catch(err =>
+          logger.warn("Failed to send creation notification", "Tickets", { error: err?.message })
+        );
       }
     },
     onSuccess: () => {
