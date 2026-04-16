@@ -142,6 +142,7 @@ export type Database = {
           brand: string | null
           client_id: string
           created_at: string
+          doc_device_id: string | null
           id: string
           ip_address: string | null
           location: string | null
@@ -160,6 +161,7 @@ export type Database = {
           brand?: string | null
           client_id: string
           created_at?: string
+          doc_device_id?: string | null
           id?: string
           ip_address?: string | null
           location?: string | null
@@ -178,6 +180,7 @@ export type Database = {
           brand?: string | null
           client_id?: string
           created_at?: string
+          doc_device_id?: string | null
           id?: string
           ip_address?: string | null
           location?: string | null
@@ -204,6 +207,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_doc_device_id_fkey"
+            columns: ["doc_device_id"]
+            isOneToOne: false
+            referencedRelation: "doc_devices"
             referencedColumns: ["id"]
           },
           {
