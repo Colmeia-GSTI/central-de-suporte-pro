@@ -175,10 +175,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assets")
-        .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes, purchase_date, purchase_value")
+        .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes, purchase_date, purchase_value, doc_device_id")
         .eq("client_id", clientId)
         .order("name");
       if (error) throw error;
+      return data as Asset[];
       return data;
     },
   });
