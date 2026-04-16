@@ -307,12 +307,31 @@ Deno.serve(async (req) => {
           emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
         }
 
-        try {
-          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
-            body: { to: emailTo, subject: emailSubject, html: emailHtml },
-          });
+        // Fetch contract notification_message
+        let notificationMessage: string | null = null;
+        let contractName = "";
+        if (invoice.contract_id) {
+          const { data: contractData } = await supabase
+            .from("contracts")
+            .select("notification_message, name")
+            .eq("id", invoice.contract_id)
+            .single();
+          notificationMessage = contractData?.notification_message || null;
+          contractName = contractData?.name || "";
+        }
 
-          if (emailError) throw emailError;
+        // Apply personalized message
+        emailHtml = applyNotificationMessage(emailHtml, notificationMessage, {
+          cliente: client.name,
+          valor: formatCurrency(invoice.amount),
+          vencimento: formatDate(invoice.due_date),
+          fatura: String(invoice.invoice_number),
+          contrato: contractName,
+          boleto: invoice.boleto_barcode || "",
+          pix: invoice.pix_code || "",
+        });
+
+        try {
 
           await supabase.from("message_logs").insert({
             channel: "email",
