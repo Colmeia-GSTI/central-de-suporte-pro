@@ -197,22 +197,37 @@ Deno.serve(async (req) => {
 
     const companyName = company?.nome_fantasia || company?.razao_social || "Empresa";
 
-    // Generate signed URL for PDF
+    // Generate signed URLs for PDF and XML (7 days = 604800 seconds)
+    const SIGNED_URL_EXPIRY = 604800;
+
     let pdfSignedUrl = nfse.pdf_url;
     if (nfse.pdf_url.startsWith("nfse-files/")) {
       const path = nfse.pdf_url.replace("nfse-files/", "");
       const { data: signedData, error: signError } = await supabase.storage
         .from("nfse-files")
-        .createSignedUrl(path, 86400);
+        .createSignedUrl(path, SIGNED_URL_EXPIRY);
 
       if (signError) {
-        console.error("[send-nfse-notification] Error creating signed URL:", signError);
+        console.error("[send-nfse-notification] Error creating PDF signed URL:", signError);
         return new Response(
           JSON.stringify({ error: "Erro ao gerar link do PDF" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       pdfSignedUrl = signedData.signedUrl;
+    }
+
+    let xmlSignedUrl = "";
+    if (nfse.xml_url) {
+      if (nfse.xml_url.startsWith("nfse-files/")) {
+        const xmlPath = nfse.xml_url.replace("nfse-files/", "");
+        const { data: xmlSigned } = await supabase.storage
+          .from("nfse-files")
+          .createSignedUrl(xmlPath, SIGNED_URL_EXPIRY);
+        xmlSignedUrl = xmlSigned?.signedUrl || "";
+      } else {
+        xmlSignedUrl = nfse.xml_url;
+      }
     }
 
     const clientData = nfse.clients;
