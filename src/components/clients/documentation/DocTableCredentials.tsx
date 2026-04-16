@@ -17,7 +17,7 @@ import { toast } from "sonner";
 
 interface Props { clientId: string; }
 
-const ACCESS_TYPES = ["RDP", "SSH", "VPN", "Admin local", "Painel web", "E-mail admin", "Nuvem", "ERP", "NVR", "Outro"];
+const ACCESS_TYPES = ["RDP", "SSH", "VPN", "Admin local", "Painel web", "E-mail admin", "SSO / E-mail", "Nuvem", "ERP", "NVR", "Outro"];
 
 interface CredRow {
   id: string;
