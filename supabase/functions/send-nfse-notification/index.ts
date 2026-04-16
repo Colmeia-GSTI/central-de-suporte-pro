@@ -251,6 +251,7 @@ Deno.serve(async (req) => {
       valor: valorFormatted,
       competencia: competenciaFormatted,
       pdf_url: pdfSignedUrl,
+      xml_url: xmlSignedUrl,
       company_name: companyName,
     };
 
@@ -258,7 +259,7 @@ Deno.serve(async (req) => {
 
     // Send via Email
     if (channels.includes("email")) {
-      const emailTo = client?.financial_email || client?.email;
+      const emailTo = client?.email || client?.financial_email;
       
       if (!emailTo) {
         results.push({ channel: "email", success: false, error: "Cliente não possui email cadastrado" });
@@ -296,12 +297,17 @@ Deno.serve(async (req) => {
               </table>
             </div>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primary_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primary_color}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                 📄 Baixar PDF da NFS-e
               </a>
             </div>
+            ${xmlSignedUrl ? `
+            <p style="text-align: center; margin-top: 10px;">
+              <a href="${xmlSignedUrl}" style="color: #6b7280; font-size: 13px;">📋 Baixar XML da NFS-e</a>
+            </p>
+            ` : ""}
             <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              Este link expira em 24 horas. Caso precise do documento após esse período, entre em contato conosco.
+              Sua Nota Fiscal de Serviços referente ao mês de ${competenciaFormatted} está disponível. Os links expiram em 7 dias.
             </p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             <p style="color: #666;">
