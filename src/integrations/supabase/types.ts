@@ -2472,6 +2472,7 @@ export type Database = {
           months_contracted: number | null
           notes: string | null
           product_name: string | null
+          product_version: string | null
           quantity_in_use: number | null
           quantity_total: number | null
           start_date: string | null
@@ -2497,6 +2498,7 @@ export type Database = {
           months_contracted?: number | null
           notes?: string | null
           product_name?: string | null
+          product_version?: string | null
           quantity_in_use?: number | null
           quantity_total?: number | null
           start_date?: string | null
@@ -2522,6 +2524,7 @@ export type Database = {
           months_contracted?: number | null
           notes?: string | null
           product_name?: string | null
+          product_version?: string | null
           quantity_in_use?: number | null
           quantity_total?: number | null
           start_date?: string | null

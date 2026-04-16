@@ -50,6 +50,7 @@ interface LicenseRow {
   id: string;
   license_type: string | null;
   product_name: string | null;
+  product_version: string | null;
   license_model: string | null;
   key: string | null;
   key_activated: boolean | null;
@@ -71,7 +72,7 @@ interface LicenseRow {
 }
 
 const EMPTY: Omit<LicenseRow, "id"> = {
-  license_type: null, product_name: null, license_model: null, key: null,
+  license_type: null, product_name: null, product_version: null, license_model: null, key: null,
   key_activated: true, key_activated_at: null,
   linked_device: null, linked_email: null, linked_emails: null,
   quantity_total: 1, quantity_in_use: null,
@@ -218,50 +219,48 @@ function InlineCredentialForm({ clientId, onCreated, onCancel }: {
   );
 }
 
-// --- Product Name Combobox ---
-function ProductNameCombobox({ value, onChange, clientId }: {
+// --- Generic License Field Combobox ---
+function LicenseFieldCombobox({ value, onChange, clientId, queryKey, fetchFn, placeholder, disabled, disabledPlaceholder }: {
   value: string;
   onChange: (v: string) => void;
   clientId: string;
+  queryKey: string[];
+  fetchFn: () => Promise<string[]>;
+  placeholder: string;
+  disabled?: boolean;
+  disabledPlaceholder?: string;
 }) {
   const [open, setOpen] = useState(false);
 
   const { data: suggestions = [] } = useQuery({
-    queryKey: ["doc-license-products", clientId],
-    queryFn: async () => {
-      const { data } = await (supabase.from("doc_licenses") as any)
-        .select("product_name")
-        .eq("client_id", clientId)
-        .not("product_name", "is", null)
-        .order("product_name");
-      return [...new Set((data ?? []).map((r: any) => r.product_name).filter(Boolean))] as string[];
-    },
+    queryKey,
+    queryFn: fetchFn,
     staleTime: 5 * 60 * 1000,
+    enabled: !disabled,
   });
 
-  // If no suggestions, render plain input
+  if (disabled) {
+    return <Input disabled placeholder={disabledPlaceholder || placeholder} />;
+  }
+
   if (suggestions.length === 0) {
-    return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Nome do produto" />;
+    return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />;
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-10">
-          {value || "Nome do produto"}
+          {value || placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
-          <CommandInput
-            placeholder="Buscar ou digitar novo..."
-            value={value}
-            onValueChange={onChange}
-          />
+          <CommandInput placeholder="Buscar ou digitar novo..." value={value} onValueChange={onChange} />
           <CommandList>
             <CommandEmpty>
-              <span className="text-xs text-muted-foreground">Nenhum produto encontrado — o texto digitado será usado</span>
+              <span className="text-xs text-muted-foreground">Nenhum encontrado — o texto digitado será usado</span>
             </CommandEmpty>
             <CommandGroup>
               {suggestions.filter(s => s.toLowerCase().includes((value || "").toLowerCase())).map(s => (
@@ -409,7 +408,10 @@ export function DocTableLicenses({ clientId }: Props) {
                 <>
                   <CollapsibleTrigger asChild>
                     <TableRow className="cursor-pointer hover:bg-muted/30">
-                      <TableCell className="font-medium">{display(item.product_name)}</TableCell>
+                      <TableCell className="font-medium">
+                        <div>{display(item.product_name)}</div>
+                        {item.product_version && <div className="text-xs text-muted-foreground">{item.product_version}</div>}
+                      </TableCell>
                       <TableCell>{TYPE_LABEL_MAP[item.license_type ?? ""] ?? display(item.license_type)}</TableCell>
                       <TableCell>{display(item.quantity_total ?? item.devices_covered)}</TableCell>
                       <TableCell>{item.key_activated === false ? "—" : isPerpetual(item) ? "Perpétua" : item.expiry_date ? format(parseISO(item.expiry_date), "dd/MM/yyyy") : "—"}</TableCell>
@@ -421,6 +423,7 @@ export function DocTableLicenses({ clientId }: Props) {
                       <TableCell colSpan={5}>
                         <div className="py-3 space-y-3">
                           <div className="grid gap-3 sm:grid-cols-3 text-sm">
+                            {item.product_version && <div><span className="text-xs text-muted-foreground">Versão / Módulo</span><p>{item.product_version}</p></div>}
                             <div><span className="text-xs text-muted-foreground">Modelo</span><p>{display(item.license_model)}</p></div>
                             {item.linked_device && <div><span className="text-xs text-muted-foreground">Dispositivo</span><p>{item.linked_device}</p></div>}
                             {getEmails(item).length > 0 && (
@@ -467,14 +470,49 @@ export function DocTableLicenses({ clientId }: Props) {
           <SheetHeader><SheetTitle>{editingItem ? "Editar licença" : "Nova licença"}</SheetTitle></SheetHeader>
           <div className="space-y-4 mt-4">
             <div><Label>Tipo de licença *</Label>
-              <Select value={form.license_type || ""} onValueChange={(v) => setForm({ ...EMPTY, license_type: v, product_name: form.product_name, notes: form.notes })}>
+              <Select value={form.license_type || ""} onValueChange={(v) => setForm({ ...EMPTY, license_type: v, product_name: form.product_name, product_version: form.product_version, notes: form.notes })}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{LICENSE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Nome do produto *</Label>
-              <ProductNameCombobox value={form.product_name || ""} onChange={(v) => setForm({ ...form, product_name: v })} clientId={clientId} />
+              <Label>Produto *</Label>
+              <LicenseFieldCombobox
+                value={form.product_name || ""}
+                onChange={(v) => setForm({ ...form, product_name: v, product_version: null })}
+                clientId={clientId}
+                queryKey={["doc-license-products", clientId]}
+                fetchFn={async () => {
+                  const { data } = await (supabase.from("doc_licenses") as any)
+                    .select("product_name")
+                    .eq("client_id", clientId)
+                    .not("product_name", "is", null)
+                    .order("product_name");
+                  return [...new Set((data ?? []).map((r: any) => r.product_name).filter(Boolean))] as string[];
+                }}
+                placeholder="Ex: Bitdefender GravityZone"
+              />
+            </div>
+            <div>
+              <Label>Versão / Módulo</Label>
+              <LicenseFieldCombobox
+                value={form.product_version || ""}
+                onChange={(v) => setForm({ ...form, product_version: v })}
+                clientId={clientId}
+                queryKey={["doc-license-versions", clientId, form.product_name || ""]}
+                fetchFn={async () => {
+                  const { data } = await (supabase.from("doc_licenses") as any)
+                    .select("product_version")
+                    .eq("client_id", clientId)
+                    .eq("product_name", form.product_name)
+                    .not("product_version", "is", null)
+                    .order("product_version");
+                  return [...new Set((data ?? []).map((r: any) => r.product_version).filter(Boolean))] as string[];
+                }}
+                placeholder="Ex: Full Disk Encryption"
+                disabled={!form.product_name}
+                disabledPlaceholder="Selecione o produto primeiro"
+              />
             </div>
 
             {/* Model select — not for antivirus */}
