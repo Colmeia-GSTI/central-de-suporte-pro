@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TicketFilters } from "@/components/tickets/TicketFilters";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -24,7 +25,7 @@ import {
 import {
   Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight,
   Play, X, LayoutList, Kanban, ChevronDown, Users, AlertCircle,
-  SlidersHorizontal, Building2, Tag,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
@@ -32,6 +33,7 @@ import { TicketsKanbanView } from "@/components/tickets/TicketsKanbanView";
 import { TicketStatsBar } from "@/components/tickets/TicketStatsBar";
 import { TicketMobileCard } from "@/components/tickets/TicketMobileCard";
 import { useSavedViews } from "@/hooks/useSavedViews";
+import { useTechnicianList } from "@/hooks/useTechnicianList";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
 import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
@@ -90,6 +92,7 @@ export default function TicketsPage() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [technicianFilter, setTechnicianFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export default function TicketsPage() {
     priorityFilter !== "all",
     technicianFilter !== "all",
     clientFilter !== "all",
+    typeFilter !== "all",
   ].filter(Boolean).length;
 
   // ── Bulk mutations ──
@@ -161,20 +165,7 @@ export default function TicketsPage() {
     onError: () => toast({ title: "Erro ao atribuir chamados em lote", variant: "destructive" }),
   });
 
-  const { data: staffMembers = [] } = useQuery({
-    queryKey: ["staff-members-filter"],
-    queryFn: async () => {
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("user_roles").select("user_id").in("role", ["technician", "manager", "admin"]);
-      if (rolesError) throw rolesError;
-      const staffIds = [...new Set((rolesData || []).map((r) => r.user_id))];
-      if (staffIds.length === 0) return [];
-      const { data, error } = await supabase.from("profiles").select("user_id, full_name").in("user_id", staffIds).order("full_name");
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: staffMembers = [] } = useTechnicianList();
 
   const { data: clientsForFilter = [] } = useQuery({
     queryKey: ["clients-filter"],
@@ -200,7 +191,7 @@ export default function TicketsPage() {
   const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["tickets", debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, cursor],
+    queryKey: ["tickets", debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, typeFilter, cursor],
     queryFn: async () => {
       let query = supabase
         .from("tickets")
@@ -236,6 +227,11 @@ export default function TicketsPage() {
       if (technicianFilter === "unassigned") query = query.is("assigned_to", null);
       else if (technicianFilter !== "all") query = query.eq("assigned_to", technicianFilter);
       if (clientFilter !== "all") query = query.eq("client_id", clientFilter);
+
+      // Type filter
+      if (typeFilter === "external") query = query.eq("is_internal", false);
+      else if (typeFilter === "internal") query = query.eq("is_internal", true).eq("origin", "internal");
+      else if (typeFilter === "task") query = query.eq("is_internal", true).eq("origin", "task");
 
       const { data, error, count } = await query;
       if (error) throw error;
@@ -359,12 +355,13 @@ export default function TicketsPage() {
   };
   const handleResetPagination = () => { setCursor(null); setPreviousCursors([]); };
 
-  useEffect(() => { handleResetPagination(); }, [debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter]);
+  useEffect(() => { handleResetPagination(); }, [debouncedSearch, statusFilter, priorityFilter, technicianFilter, clientFilter, typeFilter]);
 
   const clearAllFilters = () => {
     setPriorityFilter("all");
     setTechnicianFilter("all");
     setClientFilter("all");
+    setTypeFilter("all");
   };
 
   return (
@@ -401,6 +398,11 @@ export default function TicketsPage() {
               setTechnicianFilter("all");
               setStatusFilter(filter);
             }
+          }}
+          activeTypeFilter={typeFilter}
+          onTypeFilterChange={(type) => {
+            setTypeFilter(type);
+            handleResetPagination();
           }}
         />
 
@@ -507,94 +509,28 @@ export default function TicketsPage() {
           )}
         </div>
 
-        {/* Expandable filter bar */}
         {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="flex flex-wrap items-center gap-2 p-2.5 bg-muted/20 border border-border/50 rounded-lg"
-          >
-            {/* Mobile Status filter */}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32 h-8 text-xs sm:hidden">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Ativos</SelectItem>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="open">Aberto</SelectItem>
-                <SelectItem value="in_progress">Em Andamento</SelectItem>
-                <SelectItem value="waiting">Aguardando</SelectItem>
-                <SelectItem value="resolved">Resolvido</SelectItem>
-                <SelectItem value="closed">Fechado</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <AlertCircle className="h-3 w-3 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Prioridade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas prioridades</SelectItem>
-                <SelectItem value="critical">Crítica</SelectItem>
-                <SelectItem value="high">Alta</SelectItem>
-                <SelectItem value="medium">Média</SelectItem>
-                <SelectItem value="low">Baixa</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <Users className="h-3 w-3 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Técnico" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos técnicos</SelectItem>
-                <SelectItem value="unassigned">Sem técnico</SelectItem>
-                {staffMembers.map((s) => (
-                  <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <Building2 className="h-3 w-3 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Cliente" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos clientes</SelectItem>
-                {clientsForFilter.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {activeFilterCount > 0 && (
-              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-7 text-xs" onClick={clearAllFilters}>
-                <X className="h-3 w-3" />
-                Limpar
-              </Button>
-            )}
-
-            <div className="ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => {
-                  const name = window.prompt("Nome para esta vista:");
-                  if (!name?.trim()) return;
-                  saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
-                  toast({ title: `Vista "${name.trim()}" salva` });
-                }}
-              >
-                Salvar Vista
-              </Button>
-            </div>
-          </motion.div>
+          <TicketFilters
+            statusFilter={statusFilter}
+            priorityFilter={priorityFilter}
+            technicianFilter={technicianFilter}
+            clientFilter={clientFilter}
+            typeFilter={typeFilter}
+            onStatusChange={setStatusFilter}
+            onPriorityChange={setPriorityFilter}
+            onTechnicianChange={setTechnicianFilter}
+            onClientChange={setClientFilter}
+            onTypeChange={setTypeFilter}
+            clients={clientsForFilter}
+            onClearAll={clearAllFilters}
+            onSaveView={() => {
+              const name = window.prompt("Nome para esta vista:");
+              if (!name?.trim()) return;
+              saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
+              toast({ title: `Vista "${name.trim()}" salva` });
+            }}
+            activeFilterCount={activeFilterCount}
+          />
         )}
 
         {/* Bulk Action Bar */}

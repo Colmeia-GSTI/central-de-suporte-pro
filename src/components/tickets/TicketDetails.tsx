@@ -17,6 +17,7 @@ import { TicketDetailsTab } from "./TicketDetailsTab";
 import { TicketCommentsTab } from "./TicketCommentsTab";
 import { TicketHistoryTab } from "./TicketHistoryTab";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { TicketTypeBadge } from "./TicketTypeBadge";
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
@@ -70,6 +71,7 @@ export function TicketDetails({ ticket, onClose, initialTab, onTransfer, onPause
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm text-muted-foreground font-mono">#{ticket.ticket_number}</span>
+              <TicketTypeBadge isInternal={ticket.is_internal} origin={ticket.origin} />
               <Badge className={statusColors[ticket.status]}>{statusLabels[ticket.status]}</Badge>
             </div>
             <h2 className="text-lg font-semibold leading-snug">{ticket.title}</h2>
