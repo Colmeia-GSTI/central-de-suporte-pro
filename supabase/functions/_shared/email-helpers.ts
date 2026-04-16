@@ -201,6 +201,36 @@ export function applyNotificationMessage(
   return baseHtml + personalizedSection;
 }
 
+// ── Plain-text notification message (for WhatsApp) ──────────────
+
+/**
+ * Applies a contract's custom notification_message to a plain-text message.
+ * Appends a separator + personalised block after the base message.
+ */
+export function applyNotificationMessageText(
+  baseMessage: string,
+  notificationMessage: string | null,
+  variables: {
+    cliente: string;
+    valor: string;
+    vencimento: string;
+    fatura: string;
+    contrato?: string;
+  },
+): string {
+  if (!notificationMessage?.trim()) return baseMessage;
+
+  let custom = notificationMessage;
+  custom = custom.replace(/\{cliente\}/g, variables.cliente);
+  custom = custom.replace(/\{valor\}/g, variables.valor);
+  custom = custom.replace(/\{vencimento\}/g, variables.vencimento);
+  custom = custom.replace(/\{fatura\}/g, variables.fatura);
+  if (variables.contrato)
+    custom = custom.replace(/\{contrato\}/g, variables.contrato);
+
+  return `${baseMessage}\n\n━━━━━━━━━━━━━━━━━━━━\n${custom}`;
+}
+
 // ── Email template fetching ─────────────────────────────────────
 
 export interface EmailTemplate {
