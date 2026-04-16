@@ -48,6 +48,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { TicketTypeBadge } from "@/components/tickets/TicketTypeBadge";
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
@@ -764,7 +765,12 @@ export default function TicketsPage() {
                               aria-label={`Selecionar #${ticket.ticket_number}`}
                             />
                           </TableCell>
-                          <TableCell className="py-1.5 font-mono text-xs text-muted-foreground">#{ticket.ticket_number}</TableCell>
+                          <TableCell className="py-1.5">
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-xs text-muted-foreground">#{ticket.ticket_number}</span>
+                              <TicketTypeBadge isInternal={ticket.is_internal} origin={ticket.origin} />
+                            </div>
+                          </TableCell>
                           <TableCell className="py-1.5">
                             <span className="max-w-[220px] truncate block text-sm font-medium text-foreground">{ticket.title}</span>
                           </TableCell>
