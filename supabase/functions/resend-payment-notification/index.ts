@@ -5,10 +5,10 @@ import {
   wrapInEmailLayout,
   replaceVariables,
   applyNotificationMessage,
+  applyNotificationMessageText,
   formatCurrencyBRL,
   formatDateBR,
   getEmailTemplate,
-  type EmailLayoutOptions,
 } from "../_shared/email-helpers.ts";
 
 /**
@@ -337,8 +337,30 @@ Deno.serve(async (req) => {
         }
 
         try {
+          // Apply contract custom message
+          if (invoice.contract_id) {
+            const { data: contractForWa } = await supabase
+              .from("contracts")
+              .select("notification_message, name")
+              .eq("id", invoice.contract_id)
+              .single();
+            whatsappMessage = applyNotificationMessageText(whatsappMessage, contractForWa?.notification_message || null, {
+              cliente: client.name,
+              valor: formatCurrencyBRL(invoice.amount),
+              vencimento: formatDateBR(invoice.due_date),
+              fatura: String(invoice.invoice_number),
+              contrato: contractForWa?.name || "",
+            });
+          }
+
           const { error: whatsappError } = await supabase.functions.invoke("send-whatsapp", {
-            body: { to: client.whatsapp, message: whatsappMessage, relatedType: "invoice", relatedId: invoice_id },
+            body: {
+              to: client.whatsapp,
+              message: whatsappMessage,
+              userId: client.id,
+              relatedType: "invoice",
+              relatedId: invoice_id,
+            },
           });
 
           if (whatsappError) throw whatsappError;

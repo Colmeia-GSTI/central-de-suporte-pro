@@ -5,6 +5,7 @@ import {
   wrapInEmailLayout,
   replaceVariables,
   applyNotificationMessage,
+  applyNotificationMessageText,
   formatCurrencyBRL,
   formatDateBR,
   getEmailTemplate,
@@ -224,7 +225,7 @@ Deno.serve(async (req) => {
       // Send WhatsApp
       if (whatsappActive && client.whatsapp) {
         try {
-          const whatsappMessage = `⚠️ *Lembrete de Vencimento*
+          let whatsappMessage = `⚠️ *Lembrete de Vencimento*
 
 Olá *${client.name}*,
 
@@ -237,13 +238,46 @@ Sua fatura está próxima do vencimento:
 
 Para evitar juros e multas, efetue o pagamento até a data de vencimento.`;
 
+          // Apply contract custom message
+          if (invoice.contract_id) {
+            const { data: contractForWa } = await supabase
+              .from("contracts")
+              .select("notification_message, name")
+              .eq("id", invoice.contract_id)
+              .single();
+            whatsappMessage = applyNotificationMessageText(whatsappMessage, contractForWa?.notification_message || null, {
+              cliente: client.name,
+              valor: amountFormatted,
+              vencimento: dueDateFormatted,
+              fatura: String(invoice.invoice_number),
+              contrato: contractForWa?.name || "",
+            });
+          }
+
           const { error: whatsappError } = await supabase.functions.invoke("send-whatsapp", {
-            body: { to: client.whatsapp, message: whatsappMessage },
+            body: {
+              to: client.whatsapp,
+              message: whatsappMessage,
+              userId: client.id,
+              relatedType: "invoice",
+              relatedId: invoice.id,
+            },
           });
 
           if (!whatsappError) {
             result.whatsapp = true;
             console.log(`WhatsApp sent to ${client.whatsapp} for invoice #${invoice.invoice_number}`);
+
+            await supabase.from("message_logs").insert({
+              channel: "whatsapp",
+              recipient: client.whatsapp,
+              message: whatsappMessage.slice(0, 500),
+              status: "sent",
+              sent_at: new Date().toISOString(),
+              related_type: "invoice",
+              related_id: invoice.id,
+              user_id: client.id,
+            });
           }
         } catch (error) {
           console.error("Error sending WhatsApp:", error);
