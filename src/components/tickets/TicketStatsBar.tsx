@@ -45,6 +45,8 @@ function StatCard({ label, value, icon, dotColor, isActive, onClick }: StatCardP
 interface TicketStatsBarProps {
   onFilterChange?: (filter: string) => void;
   activeFilter?: string;
+  onTypeFilterChange?: (type: string) => void;
+  activeTypeFilter?: string;
 }
 
 export function TicketStatsBar({ onFilterChange, activeFilter }: TicketStatsBarProps) {

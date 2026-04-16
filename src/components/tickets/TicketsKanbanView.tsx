@@ -9,6 +9,7 @@ import { Building2, User, GripVertical, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { TicketTypeBadge } from "./TicketTypeBadge";
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: { id: string; name: string } | null;
@@ -125,6 +126,7 @@ export function TicketsKanbanView({ tickets, onTicketClick }: TicketsKanbanViewP
                       <div className="flex items-center gap-1.5">
                         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <span className="text-xs text-muted-foreground font-mono">#{ticket.ticket_number}</span>
+                        <TicketTypeBadge isInternal={ticket.is_internal} origin={ticket.origin} />
                       </div>
                       <Badge className={`text-[10px] px-1.5 py-0 h-5 border-0 ${prio.bgClass}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${prio.dotClass} mr-1`} />
