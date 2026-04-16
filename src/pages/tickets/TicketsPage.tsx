@@ -7,7 +7,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TicketFilters } from "@/components/tickets/TicketFilters";
-import { Input } from "@/components/ui/input";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -26,7 +25,7 @@ import {
 import {
   Plus, Search, Ticket, Eye, Clock, ChevronLeft, ChevronRight,
   Play, X, LayoutList, Kanban, ChevronDown, Users, AlertCircle,
-  SlidersHorizontal, Building2, Tag,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
@@ -34,6 +33,7 @@ import { TicketsKanbanView } from "@/components/tickets/TicketsKanbanView";
 import { TicketStatsBar } from "@/components/tickets/TicketStatsBar";
 import { TicketMobileCard } from "@/components/tickets/TicketMobileCard";
 import { useSavedViews } from "@/hooks/useSavedViews";
+import { useTechnicianList } from "@/hooks/useTechnicianList";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
 import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
