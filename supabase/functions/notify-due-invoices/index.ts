@@ -226,6 +226,22 @@ Deno.serve(async (req) => {
             emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
           }
 
+          // Apply contract notification_message if available
+          if (invoice.contract_id) {
+            const { data: contractData } = await supabase
+              .from("contracts")
+              .select("notification_message, name")
+              .eq("id", invoice.contract_id)
+              .single();
+            emailHtml = applyNotificationMessage(emailHtml, contractData?.notification_message || null, {
+              cliente: client.name,
+              valor: amountFormatted,
+              vencimento: dueDateFormatted,
+              fatura: String(invoice.invoice_number),
+              contrato: contractData?.name || "",
+            });
+          }
+
           const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
             body: { to: clientEmail, subject: emailSubject, html: emailHtml },
           });
