@@ -144,18 +144,22 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
       );
 
-      const { data: emailSettings } = await supabase
-        .from("email_settings")
-        .select("*")
-        .limit(1)
+      // Fetch from integration_settings (resend config) first, then fall back to defaults
+      const { data: resendSettings } = await supabase
+        .from("integration_settings")
+        .select("settings")
+        .eq("integration_type", "resend")
+        .eq("is_active", true)
         .maybeSingle();
 
+      const resendConfig = resendSettings?.settings as { default_from_email?: string; default_from_name?: string } | null;
+
       if (!senderName) {
-        senderName = "Colmeia TI";
+        senderName = resendConfig?.default_from_name || "Colmeia TI";
       }
 
       if (!senderEmail) {
-        senderEmail = "noreply@suporte.colmeiagsti.com";
+        senderEmail = resendConfig?.default_from_email || "noreply@suporte.colmeiagsti.com";
       }
 
       // Log send attempt

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { applyNotificationMessage } from "../_shared/notification-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
