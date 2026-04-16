@@ -1,72 +1,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { applyNotificationMessage } from "../_shared/notification-helpers.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-interface EmailSettings {
-  logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-  footer_text: string;
-}
-
-interface EmailTemplate {
-  subject_template: string;
-  html_template: string;
-  is_active: boolean;
-}
-
-function replaceVariables(template: string, data: Record<string, string>): string {
-  let result = template;
-  Object.entries(data).forEach(([key, value]) => {
-    const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-    result = result.replace(regex, value || "");
-  });
-  Object.entries(data).forEach(([key, value]) => {
-    const conditionalRegex = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{/${key}\\}\\}`, "g");
-    if (value) {
-      result = result.replace(conditionalRegex, "$1");
-    } else {
-      result = result.replace(conditionalRegex, "");
-    }
-  });
-  return result;
-}
-
-function wrapInEmailLayout(content: string, settings: EmailSettings): string {
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
-    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
-    .email-header { background: ${settings.primary_color}; padding: 24px; text-align: center; }
-    .email-header img { max-height: 50px; max-width: 200px; }
-    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
-    .email-content h2 { margin-top: 0; color: #111827; }
-    .email-content a { color: ${settings.primary_color}; }
-    .email-footer { background: ${settings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      ${settings.logo_url ? `<img src="${settings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">Colmeia</span>`}
-    </div>
-    <div class="email-content">
-      ${content}
-    </div>
-    <div class="email-footer">
-      ${settings.footer_text}
-    </div>
-  </div>
-</body>
-</html>`;
-}
+import {
+  corsHeaders,
+  getEmailSettings,
+  wrapInEmailLayout,
+  replaceVariables,
+  applyNotificationMessage,
+  formatCurrencyBRL,
+  formatDateBR,
+  getEmailTemplate,
+} from "../_shared/email-helpers.ts";
 
 interface Invoice {
   id: string;
@@ -75,6 +17,8 @@ interface Invoice {
   due_date: string;
   status: string;
   client_id: string;
+  contract_id: string | null;
+  boleto_url: string | null;
   clients: {
     id: string;
     name: string;
@@ -105,25 +49,17 @@ Deno.serve(async (req) => {
     const targetDateStr = targetDate.toISOString().split('T')[0];
     const today = new Date().toISOString().split('T')[0];
 
-    // Fetch settings, template, and invoices in parallel
-    const [settingsRes, templateRes, invoicesRes, evolutionRes] = await Promise.all([
-      supabase.from("email_settings").select("*").limit(1).single(),
-      supabase.from("email_templates").select("*").eq("template_type", "invoice_reminder").maybeSingle(),
+    // Fetch settings, template, invoices, and integrations in parallel
+    const [emailSettings, emailTemplate, invoicesRes, evolutionRes] = await Promise.all([
+      getEmailSettings(supabase),
+      getEmailTemplate(supabase, "invoice_reminder"),
       supabase.from("invoices").select(`
-        id, invoice_number, amount, due_date, status, client_id, contract_id,
+        id, invoice_number, amount, due_date, status, client_id, contract_id, boleto_url,
         clients (id, name, email, financial_email, whatsapp)
       `).eq("status", "pending").gte("due_date", today).lte("due_date", targetDateStr),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
     ]);
 
-    const emailSettings: EmailSettings = settingsRes.data || {
-      logo_url: null,
-      primary_color: "#f59e0b",
-      secondary_color: "#1f2937",
-      footer_text: "Esta é uma mensagem automática. Em caso de dúvidas, entre em contato conosco.",
-    };
-
-    const emailTemplate: EmailTemplate | null = templateRes.data?.is_active ? templateRes.data : null;
     const invoices = invoicesRes.data;
     const whatsappActive = evolutionRes.data?.is_active;
 
@@ -148,7 +84,7 @@ Deno.serve(async (req) => {
       const client = invoice.clients as unknown as Invoice['clients'];
       if (!client) continue;
 
-      // Check if notification already sent for this invoice (dedup)
+      // Dedup check
       const { data: existingNotif } = await supabase
         .from("invoice_notification_logs")
         .select("id")
@@ -161,7 +97,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Verificar NFS-e vinculada - se existe mas XML não disponível, pular
+      // Check NFS-e XML availability
       const { data: linkedNfse } = await supabase
         .from("nfse_history")
         .select("id, status, pdf_url, xml_url")
@@ -184,12 +120,11 @@ Deno.serve(async (req) => {
 
       const dueDate = new Date(invoice.due_date);
       const daysUntilDue = Math.ceil((dueDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-      const dueDateFormatted = dueDate.toLocaleDateString('pt-BR');
-      const amountFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(invoice.amount);
+      const dueDateFormatted = formatDateBR(invoice.due_date);
+      const amountFormatted = formatCurrencyBRL(invoice.amount);
 
       const result = { invoice_id: invoice.id, client: client.name, email: false, whatsapp: false, notification: false };
 
-      // Template variables
       const templateVars: Record<string, string> = {
         client_name: client.name,
         invoice_number: String(invoice.invoice_number),
@@ -212,7 +147,7 @@ Deno.serve(async (req) => {
           } else {
             emailSubject = `⚠️ Lembrete: Fatura #${invoice.invoice_number} vence em ${daysUntilDue} dia(s)`;
             const defaultContent = `
-              <h2 style="color: ${emailSettings.primary_color};">⚠️ Lembrete de Vencimento</h2>
+              <h2 style="color: ${emailSettings.primaryColor};">⚠️ Lembrete de Vencimento</h2>
               <p>Olá <strong>${client.name}</strong>,</p>
               <p>Este é um lembrete de que sua fatura está próxima do vencimento:</p>
               <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -226,7 +161,7 @@ Deno.serve(async (req) => {
             emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
           }
 
-          // Apply contract notification_message if available
+          // Apply contract notification_message
           if (invoice.contract_id) {
             const { data: contractData } = await supabase
               .from("contracts")
@@ -242,15 +177,39 @@ Deno.serve(async (req) => {
             });
           }
 
+          // Build boleto attachment
+          const attachments: { filename: string; path: string }[] = [];
+          if (invoice.boleto_url) {
+            // Resolve signed URL for boleto
+            const resolveStoragePath = (p: string) => {
+              if (p.startsWith("http")) return null;
+              if (p.startsWith("invoice-documents/")) return { bucket: "invoice-documents", path: p.replace("invoice-documents/", "") };
+              return null;
+            };
+            const resolved = resolveStoragePath(invoice.boleto_url);
+            if (resolved) {
+              const { data: signedData } = await supabase.storage.from(resolved.bucket).createSignedUrl(resolved.path, 604800);
+              if (signedData?.signedUrl) {
+                attachments.push({ filename: `Boleto_${invoice.invoice_number}.pdf`, path: signedData.signedUrl });
+              }
+            } else if (invoice.boleto_url.startsWith("http")) {
+              attachments.push({ filename: `Boleto_${invoice.invoice_number}.pdf`, path: invoice.boleto_url });
+            }
+          }
+
           const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
-            body: { to: clientEmail, subject: emailSubject, html: emailHtml },
+            body: {
+              to: clientEmail,
+              subject: emailSubject,
+              html: emailHtml,
+              ...(attachments.length > 0 ? { attachments } : {}),
+            },
           });
 
           if (!emailError) {
             result.email = true;
             console.log(`Email sent to ${clientEmail} for invoice #${invoice.invoice_number}`);
 
-            // Atualizar status do email na fatura
             await supabase.from("invoices").update({
               email_status: "enviado",
               email_sent_at: new Date().toISOString(),
@@ -315,7 +274,7 @@ Para evitar juros e multas, efetue o pagamento até a data de vencimento.`;
         console.error("Error creating notifications:", error);
       }
 
-      // Log notification to prevent duplicates on re-run
+      // Log notification to prevent duplicates
       if (result.email || result.whatsapp) {
         const logs = [];
         if (result.email) {

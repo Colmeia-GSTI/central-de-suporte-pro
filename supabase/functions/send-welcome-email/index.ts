@@ -1,9 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import {
+  corsHeaders,
+  getEmailSettings,
+  wrapInEmailLayout,
+} from "../_shared/email-helpers.ts";
 
 interface WelcomeRequest {
   client_id: string;
@@ -40,26 +40,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch company info and email settings in parallel
-    const [companyRes, emailSettingsRes, resendSettingsRes] = await Promise.all([
-      supabase.from("company_settings").select("razao_social, nome_fantasia, telefone, email").limit(1).maybeSingle(),
-      supabase.from("email_settings").select("*").limit(1).maybeSingle(),
-      supabase.from("integration_settings").select("settings").eq("integration_type", "resend").eq("is_active", true).maybeSingle(),
+    // Fetch email settings and company contact info in parallel
+    const [emailSettings, companyRes] = await Promise.all([
+      getEmailSettings(supabase),
+      supabase.from("company_settings").select("telefone, email").limit(1).maybeSingle(),
     ]);
 
-    const company = companyRes.data;
-    const companyName = company?.nome_fantasia || company?.razao_social || "Colmeia TI";
-    const companyPhone = company?.telefone || "";
-    const companyEmail = company?.email || "";
-
-    const emailSettings = emailSettingsRes.data || {
-      logo_url: null,
-      primary_color: "#f59e0b",
-      secondary_color: "#1f2937",
-      footer_text: "Este é um e-mail automático. Em caso de dúvidas, entre em contato.",
-    };
-
-    const subject = `Bem-vindo(a) à ${companyName}!`;
+    const companyPhone = companyRes.data?.telefone || "";
+    const companyEmail = companyRes.data?.email || "";
 
     const contactSection = (companyPhone || companyEmail)
       ? `<p style="margin-top: 15px;">Em caso de dúvidas, entre em contato conosco:</p>
@@ -70,45 +58,24 @@ Deno.serve(async (req) => {
          </p>`
       : "";
 
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
-    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
-    .email-header { background: ${emailSettings.primary_color}; padding: 24px; text-align: center; }
-    .email-header img { max-height: 50px; max-width: 200px; }
-    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
-    .email-content h2 { margin-top: 0; color: #111827; }
-    .email-footer { background: ${emailSettings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      ${emailSettings.logo_url ? `<img src="${emailSettings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">${companyName}</span>`}
-    </div>
-    <div class="email-content">
-      <h2 style="color: ${emailSettings.primary_color};">🎉 Bem-vindo(a)!</h2>
+    const subject = `Bem-vindo(a) à ${emailSettings.companyName}!`;
+
+    const content = `
+      <h2 style="color: ${emailSettings.primaryColor};">🎉 Bem-vindo(a)!</h2>
       <p>Olá <strong>${client_name}</strong>,</p>
-      <p>Seu cadastro foi realizado com sucesso na <strong>${companyName}</strong>.</p>
+      <p>Seu cadastro foi realizado com sucesso na <strong>${emailSettings.companyName}</strong>.</p>
       <p>A partir de agora você receberá suas faturas e documentos fiscais por este e-mail.</p>
       ${contactSection}
       <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
       <p style="color: #6b7280;">
         Atenciosamente,<br>
-        <strong>${companyName}</strong>
+        <strong>${emailSettings.companyName}</strong>
       </p>
-    </div>
-    <div class="email-footer">
-      ${emailSettings.footer_text}
-    </div>
-  </div>
-</body>
-</html>`;
+    `;
 
-    // Send via send-email-resend (fire-and-forget style — don't propagate errors)
+    const htmlContent = wrapInEmailLayout(content, emailSettings);
+
+    // Send via send-email-resend (fire-and-forget — don't propagate errors)
     try {
       const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
         body: { to: client_email, subject, html: htmlContent },
@@ -116,7 +83,6 @@ Deno.serve(async (req) => {
 
       if (emailError) {
         console.error("[send-welcome-email] Email send error:", emailError);
-        // Log failure but don't propagate
         await supabase.from("message_logs").insert({
           channel: "email",
           recipient: client_email,
@@ -140,7 +106,6 @@ Deno.serve(async (req) => {
       }
     } catch (err) {
       console.error("[send-welcome-email] Exception:", err);
-      // Never propagate — the client creation must not be affected
     }
 
     return new Response(
@@ -150,7 +115,6 @@ Deno.serve(async (req) => {
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Erro desconhecido";
     console.error("[send-welcome-email] Error:", errorMsg);
-    // Return 200 even on error to not affect the trigger
     return new Response(
       JSON.stringify({ success: false, error: errorMsg }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

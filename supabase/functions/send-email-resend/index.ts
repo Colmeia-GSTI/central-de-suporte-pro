@@ -1,15 +1,16 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { corsHeaders } from "../_shared/email-helpers.ts";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_SUBJECT_LENGTH = 200;
 const MAX_HTML_LENGTH = 50000;
 const MAX_RECIPIENTS = 50;
+
+interface EmailAttachment {
+  filename: string;
+  content?: string; // base64
+  path?: string;    // URL
+}
 
 interface EmailRequest {
   to: string | string[];
@@ -18,6 +19,7 @@ interface EmailRequest {
   text?: string;
   from_name?: string;
   from_email?: string;
+  attachments?: EmailAttachment[];
 }
 
 function sanitizeEmails(input: string | string[]): { valid: boolean; emails: string[]; error?: string } {
@@ -105,7 +107,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { to, subject, html, text, from_name, from_email } = body as EmailRequest;
+    const { to, subject, html, text, from_name, from_email, attachments } = body as EmailRequest;
 
     // Validate recipients
     const emailValidation = sanitizeEmails(to);
@@ -134,17 +136,16 @@ Deno.serve(async (req) => {
     const sanitizedHtml = sanitizeHtml(html);
     const sanitizedText = text ? String(text).slice(0, MAX_HTML_LENGTH) : sanitizedHtml.replace(/<[^>]*>/g, "");
 
-    // Determine sender - use provided or fetch from email_settings / company_settings
+    // Determine sender - use provided or fetch from integration_settings
     let senderName = from_name || "";
     let senderEmail = from_email || "";
 
-    if (!senderName || !senderEmail) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-      );
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
-      // Fetch from integration_settings (resend config) first, then fall back to defaults
+    if (!senderName || !senderEmail) {
       const { data: resendSettings } = await supabase
         .from("integration_settings")
         .select("settings")
@@ -161,29 +162,46 @@ Deno.serve(async (req) => {
       if (!senderEmail) {
         senderEmail = resendConfig?.default_from_email || "noreply@suporte.colmeiagsti.com";
       }
-
-      // Log send attempt
-      const supabaseForLogs = supabase;
-      // Fire-and-forget logging
-      Promise.resolve().then(async () => {
-        try {
-          for (const recipient of emailValidation.emails) {
-            await supabaseForLogs.from("message_logs").insert({
-              channel: "email",
-              recipient,
-              message: sanitizedHtml.slice(0, 500),
-              status: "pending",
-              sent_at: null,
-            });
-          }
-        } catch (logErr) {
-          console.warn("[send-email-resend] Log error:", logErr);
-        }
-      });
     }
+
+    // Fire-and-forget logging for pending
+    Promise.resolve().then(async () => {
+      try {
+        for (const recipient of emailValidation.emails) {
+          await supabase.from("message_logs").insert({
+            channel: "email",
+            recipient,
+            message: sanitizedHtml.slice(0, 500),
+            status: "pending",
+            sent_at: null,
+          });
+        }
+      } catch (logErr) {
+        console.warn("[send-email-resend] Log error:", logErr);
+      }
+    });
 
     const fromValue = `${senderName} <${senderEmail}>`;
     console.log(`[send-email-resend] Sending to ${emailValidation.emails.length} recipient(s) from ${fromValue}`);
+
+    // Build Resend API body
+    const resendBody: Record<string, unknown> = {
+      from: fromValue,
+      to: emailValidation.emails,
+      subject: sanitizedSubject,
+      html: sanitizedHtml,
+      text: sanitizedText,
+    };
+
+    // Include attachments if provided
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      resendBody.attachments = attachments.map((a) => ({
+        filename: a.filename,
+        ...(a.content ? { content: a.content } : {}),
+        ...(a.path ? { path: a.path } : {}),
+      }));
+      console.log(`[send-email-resend] Including ${attachments.length} attachment(s)`);
+    }
 
     // Send via Resend API
     const controller = new AbortController();
@@ -195,13 +213,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${resendApiKey}`,
       },
-      body: JSON.stringify({
-        from: fromValue,
-        to: emailValidation.emails,
-        subject: sanitizedSubject,
-        html: sanitizedHtml,
-        text: sanitizedText,
-      }),
+      body: JSON.stringify(resendBody),
       signal: controller.signal,
     });
 
@@ -213,11 +225,6 @@ Deno.serve(async (req) => {
       const errMsg = resendData?.message || resendData?.error || `Resend API error: ${resendResponse.status}`;
       console.error(`[send-email-resend] Resend error:`, errMsg);
 
-      // Update message logs to failed
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL") ?? "",
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-      );
       for (const recipient of emailValidation.emails) {
         await supabase.from("message_logs").insert({
           channel: "email",
@@ -236,11 +243,6 @@ Deno.serve(async (req) => {
 
     console.log(`[send-email-resend] Email sent successfully. ID: ${resendData?.id}`);
 
-    // Update message logs to sent
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
     for (const recipient of emailValidation.emails) {
       await supabase.from("message_logs").insert({
         channel: "email",
