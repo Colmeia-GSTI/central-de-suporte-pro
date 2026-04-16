@@ -6,6 +6,7 @@ import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useTechnicianList } from "@/hooks/useTechnicianList";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +26,11 @@ import { TagsInput } from "@/components/tickets/TagsInput";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText, Building2, AlertCircle, Tag, User, Phone, Mail, Globe,
-  MessageSquare, ChevronRight, ChevronLeft, Check, Loader2,
+  MessageSquare, ChevronRight, ChevronLeft, Check, Loader2, Lock, CheckSquare,
 } from "lucide-react";
 import type { Enums } from "@/integrations/supabase/types";
+
+type TicketType = "external" | "internal" | "task";
 
 const ticketSchema = z.object({
   title: z.string()
@@ -41,7 +44,7 @@ const ticketSchema = z.object({
   category_id: z.string().optional(),
   subcategory_id: z.string().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]),
-  origin: z.enum(["portal", "phone", "email", "chat", "whatsapp"]),
+  origin: z.enum(["portal", "phone", "email", "chat", "whatsapp", "internal", "task"]),
   assigned_to: z.string().optional(),
 });
 
@@ -79,12 +82,19 @@ const originConfig = {
   whatsapp: { label: "WhatsApp", icon: Phone },
 };
 
+const ticketTypeConfig: Record<TicketType, { label: string; description: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  external: { label: "Chamado Externo", description: "Atendimento ao cliente com notificação", icon: FileText, color: "bg-primary/10 border-primary/40 text-primary" },
+  internal: { label: "Chamado Interno", description: "Tratamento interno sem notificar cliente", icon: Lock, color: "bg-blue-500/10 border-blue-500/40 text-blue-600" },
+  task: { label: "Tarefa Interna", description: "Tarefa da equipe sem cliente", icon: CheckSquare, color: "bg-purple-500/10 border-purple-500/40 text-purple-600" },
+};
+
 export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [ticketType, setTicketType] = useState<TicketType>("external");
 
   const form = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
@@ -141,21 +151,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: technicians = [] } = useQuery({
-    queryKey: ["technicians-select"],
-    queryFn: async () => {
-      const { data: rolesData, error: rolesError } = await supabase
-        .from("user_roles").select("user_id").in("role", ["technician", "manager", "admin"]);
-      if (rolesError) throw rolesError;
-      const staffIds = [...new Set((rolesData || []).map((r) => r.user_id))];
-      if (staffIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("profiles").select("user_id, full_name").in("user_id", staffIds).order("full_name");
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: technicians = [] } = useTechnicianList();
 
   const selectedClientId = form.watch("client_id");
   const { data: clientContacts = [] } = useQuery({
@@ -187,6 +183,19 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
     form.setValue("requester_contact_id", "");
   }, [form]);
 
+  const handleTicketTypeChange = (type: TicketType) => {
+    setTicketType(type);
+    if (type === "internal") {
+      form.setValue("origin", "internal");
+    } else if (type === "task") {
+      form.setValue("origin", "task");
+      form.setValue("client_id", "");
+      form.setValue("requester_contact_id", "");
+    } else {
+      form.setValue("origin", "portal");
+    }
+  };
+
   // Step validation
   const canProceed = useMemo(() => {
     if (step === 0) {
@@ -199,19 +208,23 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
 
   const mutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
+      const isInternal = ticketType !== "external";
+
       const payload = {
         title: data.title,
         description: data.description,
-        client_id: data.client_id || null,
-        requester_contact_id: data.requester_contact_id || null,
+        client_id: ticketType === "task" ? null : (data.client_id || null),
+        requester_contact_id: ticketType === "task" ? null : (data.requester_contact_id || null),
         category_id: data.category_id || null,
         subcategory_id: data.subcategory_id || null,
         priority: data.priority as Enums<"ticket_priority">,
-        origin: data.origin as Enums<"ticket_origin">,
+        origin: (ticketType === "internal" ? "internal" : ticketType === "task" ? "task" : data.origin) as Enums<"ticket_origin">,
         assigned_to: data.assigned_to || null,
         created_by: user?.id,
         status: (data.assigned_to ? "in_progress" : "open") as Enums<"ticket_status">,
         first_response_at: data.assigned_to ? new Date().toISOString() : null,
+        is_internal: isInternal,
+        sla_deadline: isInternal ? null : undefined,
       };
 
       const { data: newTicket, error } = await supabase
@@ -219,12 +232,13 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
       if (error) throw error;
 
       if (newTicket?.id) {
+        const commentPrefix = ticketType === "task" ? "Tarefa criada" : ticketType === "internal" ? "Chamado interno criado" : "Chamado criado";
         const { error: historyError } = await supabase.from("ticket_history").insert({
           ticket_id: newTicket.id,
           user_id: user?.id,
           old_status: null,
           new_status: payload.status,
-          comment: data.assigned_to ? "Chamado criado e atribuído" : "Chamado criado",
+          comment: data.assigned_to ? `${commentPrefix} e atribuído` : commentPrefix,
         });
         if (historyError) logger.warn("Failed to insert creation history", "Tickets", { error: historyError.message });
 
@@ -242,7 +256,8 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
-      toast({ title: "Chamado criado com sucesso!" });
+      const label = ticketType === "task" ? "Tarefa criada com sucesso!" : ticketType === "internal" ? "Chamado interno criado com sucesso!" : "Chamado criado com sucesso!";
+      toast({ title: label });
       onSuccess();
     },
     onError: (error) => {
@@ -264,6 +279,35 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {wasRestored && <DraftRecoveryBanner onClear={clearDraft} />}
+
+        {/* Ticket Type Selection */}
+        <div className="space-y-2">
+          <FormLabel className="text-sm font-semibold">Tipo de Chamado</FormLabel>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {(Object.entries(ticketTypeConfig) as [TicketType, typeof ticketTypeConfig.external][]).map(([key, cfg]) => {
+              const Icon = cfg.icon;
+              const isSelected = ticketType === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleTicketTypeChange(key)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all active:scale-[0.98] ${
+                    isSelected ? cfg.color + " font-semibold border-2" : "bg-card border-border text-muted-foreground hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight">{cfg.label}</p>
+                    <p className="text-[10px] opacity-70 leading-tight mt-0.5">{cfg.description}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <Separator />
 
         {/* Step Indicator */}
         <div className="flex items-center gap-1">
@@ -322,14 +366,14 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-base font-semibold">
-                        Qual o problema? <span className="text-destructive">*</span>
+                        {ticketType === "task" ? "O que precisa ser feito?" : "Qual o problema?"} <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormDescription>
-                        Um título curto e claro ajuda na triagem rápida
+                        {ticketType === "task" ? "Descreva a tarefa de forma clara" : "Um título curto e claro ajuda na triagem rápida"}
                       </FormDescription>
                       <FormControl>
                         <Input
-                          placeholder="Ex: Impressora não liga, Email não envia, Sistema travando..."
+                          placeholder={ticketType === "task" ? "Ex: Atualizar firmware dos switches, Configurar backup..." : "Ex: Impressora não liga, Email não envia, Sistema travando..."}
                           className="text-base h-12"
                           {...field}
                         />
@@ -348,14 +392,16 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-base font-semibold">
-                        Descreva em detalhes <span className="text-destructive">*</span>
+                        {ticketType === "task" ? "Detalhes da tarefa" : "Descreva em detalhes"} <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormDescription>
-                        Quanto mais detalhes, mais rápido o diagnóstico. Inclua: quando começou, frequência, passos tentados.
+                        {ticketType === "task"
+                          ? "Inclua instruções, prazos e critérios de conclusão."
+                          : "Quanto mais detalhes, mais rápido o diagnóstico. Inclua: quando começou, frequência, passos tentados."}
                       </FormDescription>
                       <FormControl>
                         <Textarea
-                          placeholder="Descreva o problema em detalhes..."
+                          placeholder={ticketType === "task" ? "Descreva a tarefa em detalhes..." : "Descreva o problema em detalhes..."}
                           rows={5}
                           className="text-base resize-none"
                           {...field}
@@ -369,85 +415,110 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                   )}
                 />
 
-                {/* KB Suggestions */}
-                <KBSuggestions
-                  title={form.watch("title")}
-                  description={form.watch("description")}
-                />
+                {/* KB Suggestions — only for external */}
+                {ticketType === "external" && (
+                  <KBSuggestions
+                    title={form.watch("title")}
+                    description={form.watch("description")}
+                  />
+                )}
               </div>
             )}
 
             {/* Step 2: Context */}
             {step === 1 && (
               <div className="space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="client_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cliente</FormLabel>
-                        <Select
-                          onValueChange={(value) => handleClientChange(value, field.onChange)}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione um cliente" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {clients.map((client) => (
-                              <SelectItem key={client.id} value={client.id}>
-                                {client.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                {/* Task info banner */}
+                {ticketType === "task" && (
+                  <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg px-4 py-3 text-sm text-purple-700 dark:text-purple-300">
+                    <CheckSquare className="h-4 w-4 inline mr-2" />
+                    Tarefa interna da equipe — não vinculada a cliente
+                  </div>
+                )}
 
-                  <FormField
-                    control={form.control}
-                    name="requester_contact_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contato Solicitante</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={!selectedClientId || clientContacts.length === 0}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={
-                                !selectedClientId ? "Selecione um cliente primeiro"
-                                : clientContacts.length === 0 ? "Nenhum contato cadastrado"
-                                : "Selecione o solicitante"
-                              } />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {clientContacts.map((contact) => (
-                              <SelectItem key={contact.id} value={contact.id}>
-                                <div className="flex items-center gap-2">
-                                  <User className="h-3 w-3 text-muted-foreground" />
-                                  <span>{contact.name}</span>
-                                  {contact.role && (
-                                    <span className="text-muted-foreground text-xs">— {contact.role}</span>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
+                {/* Internal info banner */}
+                {ticketType === "internal" && (
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+                    <Lock className="h-4 w-4 inline mr-2" />
+                    Chamado interno — o cliente não será notificado
+                  </div>
+                )}
+
+                {/* Client + Contact — hidden for task, shown for external/internal */}
+                {ticketType !== "task" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="client_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Cliente {ticketType === "external" && <span className="text-destructive">*</span>}
+                          </FormLabel>
+                          <Select
+                            onValueChange={(value) => handleClientChange(value, field.onChange)}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione um cliente" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {clients.map((client) => (
+                                <SelectItem key={client.id} value={client.id}>
+                                  {client.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {ticketType === "external" && (
+                      <FormField
+                        control={form.control}
+                        name="requester_contact_id"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Contato Solicitante</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                              disabled={!selectedClientId || clientContacts.length === 0}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder={
+                                    !selectedClientId ? "Selecione um cliente primeiro"
+                                    : clientContacts.length === 0 ? "Nenhum contato cadastrado"
+                                    : "Selecione o solicitante"
+                                  } />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {clientContacts.map((contact) => (
+                                  <SelectItem key={contact.id} value={contact.id}>
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-3 w-3 text-muted-foreground" />
+                                      <span>{contact.name}</span>
+                                      {contact.role && (
+                                        <span className="text-muted-foreground text-xs">— {contact.role}</span>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     )}
-                  />
-                </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField
@@ -515,37 +586,40 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="origin"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Canal de Origem</FormLabel>
-                      <div className="flex flex-wrap gap-2">
-                        {(Object.entries(originConfig) as [string, { label: string; icon: React.ComponentType<{ className?: string }> }][]).map(([key, cfg]) => {
-                          const Icon = cfg.icon;
-                          const isSelected = field.value === key;
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              onClick={() => field.onChange(key)}
-                              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-all active:scale-[0.98] ${
-                                isSelected
-                                  ? "bg-primary/10 border-primary/40 text-primary font-medium"
-                                  : "bg-card border-border text-muted-foreground hover:bg-muted/50"
-                              }`}
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                              {cfg.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Origin selector — only for external */}
+                {ticketType === "external" && (
+                  <FormField
+                    control={form.control}
+                    name="origin"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Canal de Origem</FormLabel>
+                        <div className="flex flex-wrap gap-2">
+                          {(Object.entries(originConfig) as [string, { label: string; icon: React.ComponentType<{ className?: string }> }][]).map(([key, cfg]) => {
+                            const Icon = cfg.icon;
+                            const isSelected = field.value === key;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => field.onChange(key)}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-all active:scale-[0.98] ${
+                                  isSelected
+                                    ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                                    : "bg-card border-border text-muted-foreground hover:bg-muted/50"
+                                }`}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                                {cfg.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
             )}
 
@@ -580,6 +654,13 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
                     </FormItem>
                   )}
                 />
+
+                {/* SLA notice for internal */}
+                {ticketType !== "external" && (
+                  <div className="bg-muted/30 border rounded-lg px-4 py-2 text-xs text-muted-foreground">
+                    ⏱️ SLA não será aplicado — {ticketType === "task" ? "tarefas internas" : "chamados internos"} não possuem prazo de atendimento.
+                  </div>
+                )}
 
                 <FormField
                   control={form.control}
@@ -627,18 +708,24 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
 
                 {/* Summary Preview */}
                 <div className="bg-muted/30 border rounded-xl p-4 space-y-3">
-                  <p className="text-sm font-semibold text-muted-foreground">Resumo do Chamado</p>
+                  <p className="text-sm font-semibold text-muted-foreground">Resumo</p>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <span className="text-muted-foreground">Título:</span>
-                      <p className="font-medium truncate">{form.watch("title") || "-"}</p>
+                      <span className="text-muted-foreground">Tipo:</span>
+                      <p className="font-medium">{ticketTypeConfig[ticketType].label}</p>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Cliente:</span>
-                      <p className="font-medium truncate">
-                        {clients.find((c) => c.id === form.watch("client_id"))?.name || "Não selecionado"}
-                      </p>
+                      <span className="text-muted-foreground">Título:</span>
+                      <p className="font-medium truncate">{form.watch("title") || "—"}</p>
                     </div>
+                    {ticketType !== "task" && (
+                      <div>
+                        <span className="text-muted-foreground">Cliente:</span>
+                        <p className="font-medium truncate">
+                          {clients.find((c) => c.id === form.watch("client_id"))?.name || "Não selecionado"}
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <span className="text-muted-foreground">Prioridade:</span>
                       <Badge className={`ml-1 ${priorityConfig[form.watch("priority")]?.color || ""}`}>
@@ -702,7 +789,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  Criar Chamado
+                  {ticketType === "task" ? "Criar Tarefa" : ticketType === "internal" ? "Criar Interno" : "Criar Chamado"}
                 </>
               )}
             </Button>
