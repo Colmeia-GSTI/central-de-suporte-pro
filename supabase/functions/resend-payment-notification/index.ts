@@ -332,6 +332,11 @@ Deno.serve(async (req) => {
         });
 
         try {
+          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
+            body: { to: emailTo, subject: emailSubject, html: emailHtml },
+          });
+
+          if (emailError) throw emailError;
 
           await supabase.from("message_logs").insert({
             channel: "email",
