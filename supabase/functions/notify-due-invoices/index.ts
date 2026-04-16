@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { applyNotificationMessage } from "../_shared/notification-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -109,7 +110,7 @@ Deno.serve(async (req) => {
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "invoice_reminder").maybeSingle(),
       supabase.from("invoices").select(`
-        id, invoice_number, amount, due_date, status, client_id,
+        id, invoice_number, amount, due_date, status, client_id, contract_id,
         clients (id, name, email, financial_email, whatsapp)
       `).eq("status", "pending").gte("due_date", today).lte("due_date", targetDateStr),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
@@ -223,6 +224,22 @@ Deno.serve(async (req) => {
               <p>Para evitar juros e multas, por favor efetue o pagamento até a data de vencimento.</p>
             `;
             emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
+          }
+
+          // Apply contract notification_message if available
+          if (invoice.contract_id) {
+            const { data: contractData } = await supabase
+              .from("contracts")
+              .select("notification_message, name")
+              .eq("id", invoice.contract_id)
+              .single();
+            emailHtml = applyNotificationMessage(emailHtml, contractData?.notification_message || null, {
+              cliente: client.name,
+              valor: amountFormatted,
+              vencimento: dueDateFormatted,
+              fatura: String(invoice.invoice_number),
+              contrato: contractData?.name || "",
+            });
           }
 
           const { error: emailError } = await supabase.functions.invoke("send-email-resend", {

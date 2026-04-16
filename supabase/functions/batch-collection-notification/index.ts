@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { applyNotificationMessage } from "../_shared/notification-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,6 +86,7 @@ interface Invoice {
   invoice_number: number;
   amount: number;
   due_date: string;
+  contract_id: string | null;
   clients: ClientInfo | null;
 }
 
@@ -119,7 +121,7 @@ Deno.serve(async (req) => {
     const [settingsRes, templateRes, invoicesRes, whatsappRes] = await Promise.all([
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", templateType).maybeSingle(),
-      supabase.from("invoices").select(`id, invoice_number, amount, due_date, clients(name, email, financial_email, whatsapp)`).in("id", invoice_ids),
+      supabase.from("invoices").select(`id, invoice_number, amount, due_date, contract_id, clients(name, email, financial_email, whatsapp)`).in("id", invoice_ids),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
     ]);
 
@@ -200,6 +202,22 @@ Deno.serve(async (req) => {
               emailSubject = defaultTemplate.subject;
               const contentHtml = defaultTemplate.body(client.name, invoice.invoice_number, formattedAmount, formattedDate);
               emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+            }
+
+            // Apply contract notification_message
+            if (invoice.contract_id) {
+              const { data: contractData } = await supabase
+                .from("contracts")
+                .select("notification_message, name")
+                .eq("id", invoice.contract_id)
+                .single();
+              emailHtml = applyNotificationMessage(emailHtml, contractData?.notification_message || null, {
+                cliente: client.name,
+                valor: formattedAmount,
+                vencimento: formattedDate,
+                fatura: String(invoice.invoice_number),
+                contrato: contractData?.name || "",
+              });
             }
 
             const { error: emailError } = await supabase.functions.invoke("send-email-resend", {

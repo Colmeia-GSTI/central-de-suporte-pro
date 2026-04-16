@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "nfse").single(),
       supabase.from("nfse_history").select(`
-        id, numero_nfse, pdf_url, xml_url, valor_servico, competencia, client_id,
+        id, numero_nfse, pdf_url, xml_url, valor_servico, competencia, client_id, invoice_id,
         clients (name, email, whatsapp, financial_email)
       `).eq("id", nfse_history_id).maybeSingle(),
     ]);
@@ -197,22 +197,37 @@ Deno.serve(async (req) => {
 
     const companyName = company?.nome_fantasia || company?.razao_social || "Empresa";
 
-    // Generate signed URL for PDF
+    // Generate signed URLs for PDF and XML (7 days = 604800 seconds)
+    const SIGNED_URL_EXPIRY = 604800;
+
     let pdfSignedUrl = nfse.pdf_url;
     if (nfse.pdf_url.startsWith("nfse-files/")) {
       const path = nfse.pdf_url.replace("nfse-files/", "");
       const { data: signedData, error: signError } = await supabase.storage
         .from("nfse-files")
-        .createSignedUrl(path, 86400);
+        .createSignedUrl(path, SIGNED_URL_EXPIRY);
 
       if (signError) {
-        console.error("[send-nfse-notification] Error creating signed URL:", signError);
+        console.error("[send-nfse-notification] Error creating PDF signed URL:", signError);
         return new Response(
           JSON.stringify({ error: "Erro ao gerar link do PDF" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       pdfSignedUrl = signedData.signedUrl;
+    }
+
+    let xmlSignedUrl = "";
+    if (nfse.xml_url) {
+      if (nfse.xml_url.startsWith("nfse-files/")) {
+        const xmlPath = nfse.xml_url.replace("nfse-files/", "");
+        const { data: xmlSigned } = await supabase.storage
+          .from("nfse-files")
+          .createSignedUrl(xmlPath, SIGNED_URL_EXPIRY);
+        xmlSignedUrl = xmlSigned?.signedUrl || "";
+      } else {
+        xmlSignedUrl = nfse.xml_url;
+      }
     }
 
     const clientData = nfse.clients;
@@ -236,6 +251,7 @@ Deno.serve(async (req) => {
       valor: valorFormatted,
       competencia: competenciaFormatted,
       pdf_url: pdfSignedUrl,
+      xml_url: xmlSignedUrl,
       company_name: companyName,
     };
 
@@ -243,7 +259,7 @@ Deno.serve(async (req) => {
 
     // Send via Email
     if (channels.includes("email")) {
-      const emailTo = client?.financial_email || client?.email;
+      const emailTo = client?.email || client?.financial_email;
       
       if (!emailTo) {
         results.push({ channel: "email", success: false, error: "Cliente não possui email cadastrado" });
@@ -281,12 +297,17 @@ Deno.serve(async (req) => {
               </table>
             </div>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primary_color}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primary_color}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                 📄 Baixar PDF da NFS-e
               </a>
             </div>
+            ${xmlSignedUrl ? `
+            <p style="text-align: center; margin-top: 10px;">
+              <a href="${xmlSignedUrl}" style="color: #6b7280; font-size: 13px;">📋 Baixar XML da NFS-e</a>
+            </p>
+            ` : ""}
             <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              Este link expira em 24 horas. Caso precise do documento após esse período, entre em contato conosco.
+              Sua Nota Fiscal de Serviços referente ao mês de ${competenciaFormatted} está disponível. Os links expiram em 7 dias.
             </p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             <p style="color: #666;">
@@ -305,6 +326,16 @@ Deno.serve(async (req) => {
             console.error("[send-nfse-notification] Email error:", emailError);
             const detailed = await readInvokeError(emailError);
             results.push({ channel: "email", success: false, error: detailed || "Erro ao enviar email" });
+            // Log failure to invoice_notification_logs
+            if (nfse.invoice_id) {
+              await supabase.from("invoice_notification_logs").insert({
+                invoice_id: nfse.invoice_id,
+                notification_type: "nfse",
+                channel: "email",
+                success: false,
+                error_message: detailed || "Erro ao enviar email",
+              }).then(() => {});
+            }
           } else {
             results.push({ channel: "email", success: true });
             await supabase.from("nfse_event_logs").insert({
@@ -315,6 +346,16 @@ Deno.serve(async (req) => {
               source: "send-nfse-notification",
               details: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
+            // Log success to invoice_notification_logs
+            if (nfse.invoice_id) {
+              await supabase.from("invoice_notification_logs").insert({
+                invoice_id: nfse.invoice_id,
+                notification_type: "nfse",
+                channel: "email",
+                success: true,
+                recipient: emailTo,
+              }).then(() => {});
+            }
           }
         } catch (e: unknown) {
           const errMsg = e instanceof Error ? e.message : "Erro desconhecido";
