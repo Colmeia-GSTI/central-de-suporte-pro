@@ -1,11 +1,13 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Building2, Server, Wifi, Monitor, Network, Camera, Key,
   Package, Globe, Lock, Users, Shield, Handshake, ClipboardList,
-  Construction, Key as KeyIcon,
+  Construction, Key as KeyIcon, Download, Loader2,
 } from "lucide-react";
+import { useDocPdfGenerator } from "@/hooks/useDocPdfGenerator";
 import { DocSectionClientInfo } from "./documentation/DocSectionClientInfo";
 import { DocSectionInfrastructure } from "./documentation/DocSectionInfrastructure";
 import { DocSectionTelephony } from "./documentation/DocSectionTelephony";
