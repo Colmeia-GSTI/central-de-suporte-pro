@@ -300,6 +300,8 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     // 3. Manual assets
     for (const a of assets) {
       const isDuplicate = docHostnames.has(a.name?.toLowerCase());
+      const hasDocLink = !!a.doc_device_id;
+      const linkedDoc = hasDocLink ? docDevices.find(d => d.id === a.doc_device_id) || null : null;
       items.push({
         key: `asset-${a.id}`,
         name: a.name,
@@ -309,11 +311,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         statusOnline: null,
         statusLabel: statusLabels[a.status] || a.status,
         origin: "manual",
-        documented: false,
-        docDevice: null,
+        documented: hasDocLink,
+        docDevice: linkedDoc,
         monitoredDevice: null,
         asset: a,
-        possibleDuplicate: isDuplicate,
+        possibleDuplicate: isDuplicate && !hasDocLink,
       });
     }
 
