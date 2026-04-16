@@ -791,6 +791,19 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         onConfirm={() => deleteConfirm.asset && deleteMutation.mutate(deleteConfirm.asset.id)}
         isLoading={deleteMutation.isPending}
       />
+
+      <DocDeviceLinkDialog
+        open={!!linkDialogAsset}
+        onOpenChange={(open) => !open && setLinkDialogAsset(null)}
+        asset={linkDialogAsset}
+      />
+
+      <DocDeviceManualLinkDialog
+        open={manualLinkDialog.open}
+        onOpenChange={(open) => setManualLinkDialog({ ...manualLinkDialog, open })}
+        assetId={manualLinkDialog.assetId}
+        clientId={clientId}
+      />
     </Card>
   );
 }
