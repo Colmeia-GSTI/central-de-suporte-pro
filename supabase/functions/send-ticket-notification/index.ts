@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const requesterContact = ticket.requester_contact;
-    if (evolutionSettings?.is_active && requesterContact?.whatsapp && requesterContact?.notify_whatsapp !== false) {
+    if (evolutionSettings?.is_active && requesterContact?.whatsapp && requesterContact?.notify_whatsapp !== false && !isInternal) {
       console.log(`[send-ticket-notification] Sending WhatsApp to requester: ${requesterContact.name}`);
 
       try {
