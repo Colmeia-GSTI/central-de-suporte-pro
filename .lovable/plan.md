@@ -1,46 +1,64 @@
 
 
-## Plano: Configurar CRON + Dados de Teste + Validar Alertas
+## Plano: Correções em DocTableLicenses + Migração
 
-### Correção 1 — doc-utils.ts
-Já corrigido. O arquivo está limpo, sem duplicatas.
+### Correção 1 — Padronizar license_type para inglês/minúsculo
 
-### Correção 2 — CRON para check-doc-expiries
-Inserir o agendamento via SQL (insert tool, não migração):
+Alterar `DocTableLicenses.tsx`:
 
+- `LICENSE_TYPES` de `["Windows", "Office/M365", "Antivírus", "Outro"]` para objetos `{ value, label }`:
+  ```
+  { value: "windows", label: "Windows" }
+  { value: "office", label: "Office / Microsoft 365" }
+  { value: "antivirus", label: "Antivírus" }
+  { value: "other", label: "Outro" }
+  ```
+- Todas as comparações no componente (`isPerpetual`, `getAntivirusProgress`, `modelOptions`, blocos condicionais do formulário) passam a usar os valores em inglês.
+- Na tabela de listagem, exibir o label amigável via mapeamento.
+- `isPerpetual`: `"windows"`, `"office"` + `"Perpétua"`, `"other"` + `"Perpétua"`.
+- `getAntivirusProgress`: `"antivirus"`.
+- useEffect auto-calc: `"antivirus"`.
+
+### Correção 2 — Campo linked_emails (array)
+
+**Migração SQL:**
 ```sql
-SELECT cron.schedule(
-  'check-doc-expiries-daily',
-  '0 9 * * *',
-  $$
-  SELECT net.http_post(
-    url:='https://silefpsayliwqtoskkdz.supabase.co/functions/v1/check-doc-expiries',
-    headers:='{"Content-Type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpbGVmcHNheWxpd3F0b3Nra2R6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MDY5OTEsImV4cCI6MjA4NTE4Mjk5MX0.jInzavP_pXbuKvgfb4AVobm9E3yNnwewgR2o1IcK7ic"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
-  $$
-);
+ALTER TABLE doc_licenses ADD COLUMN linked_emails text[] DEFAULT '{}';
 ```
 
-### Correção 3 — Dados de teste
-Inserir 2 licenças de teste para o cliente Abido (`51385ab8-82f5-4ba0-9b08-77bf711c522e`):
+**No componente** (bloco `office`):
+- Substituir o input único de e-mail por um componente inline de tags:
+  - Estado local `emailInput` para o campo de digitação.
+  - Lista de e-mails renderizada como `Badge` com botão X para remover.
+  - Botão "+" e Enter para adicionar.
+  - Limite de 6 e-mails, validação básica com regex.
+  - Texto informativo abaixo.
+- Interface `LicenseRow` ganha `linked_emails: string[] | null`.
+- `EMPTY` ganha `linked_emails: null`.
+- `openEdit`: ao carregar, fazer fallback `linked_emails ?? (linked_email ? [linked_email] : [])`.
+- `handleSave`: gravar `linked_emails` no payload.
+- Na listagem expandida, exibir os e-mails do array (com fallback para `linked_email`).
 
-| Produto | Vencimento | Expectativa |
-|---|---|---|
-| Bitdefender GravityZone - TESTE | hoje + 5 dias | severity = warning |
-| Microsoft 365 Business - TESTE | hoje - 3 dias | severity = critical |
+### Correção 3 — Expiry date read-only no antivírus
 
-### Correção 4 — Executar e validar
-1. Deploy da Edge Function `check-doc-expiries`
-2. Invocar via `curl_edge_functions`
-3. Verificar doc_alerts populada com 2 registros
-4. Confirmar severidades corretas
+No bloco `antivirus` do formulário:
+- Campo de data de vencimento com `readOnly`, `disabled`, classe `text-muted-foreground`.
+- Label: "Data de vencimento (calculado automaticamente)".
+- Se `!form.start_date || !form.months_contracted`, exibir "—" em vez do input.
 
-### Arquivos
-| Arquivo | Ação |
+### Correção 4 — Limpar dados de teste
+
+Executar via insert tool (DELETE):
+```sql
+DELETE FROM doc_licenses WHERE product_name LIKE '% - TESTE';
+DELETE FROM doc_alerts WHERE title LIKE '%TESTE%' OR description LIKE '%TESTE%';
+```
+
+### Arquivos alterados
+
+| Arquivo | Acao |
 |---|---|
-| `src/lib/doc-utils.ts` | Nenhuma (já corrigido) |
-| CRON (SQL insert) | Agendar job diário |
-| doc_licenses (SQL insert) | 2 registros de teste |
-| Edge Function | Deploy + invoke manual |
+| `src/components/clients/documentation/DocTableLicenses.tsx` | Correções 1, 2, 3 |
+| Migração SQL | ADD COLUMN `linked_emails text[]` |
+| Insert tool (DELETE) | Limpar dados de teste |
 
