@@ -65,7 +65,7 @@ export function useDocPdfGenerator(clientId: string) {
         fetchSingle("doc_telephony", clientId),
         fetchSingle("doc_support_hours", clientId),
         fetchTable("doc_internet_links", clientId),
-        fetchTable("doc_devices", clientId),
+        supabase.from("doc_devices").select("id, name, device_type, brand_model, serial_number, os, cpu, ram, disks, ip_local, mac_address, firmware, status, last_seen, primary_user, physical_location, trmm_agent_id, unifi_device_id, data_source").eq("client_id", clientId).then(r => r.data ?? []),
         fetchTable("doc_cftv", clientId),
         fetchTable("doc_licenses", clientId),
         fetchTable("doc_software_erp", clientId),
