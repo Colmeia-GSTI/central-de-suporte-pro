@@ -399,6 +399,11 @@ export default function TicketsPage() {
               setStatusFilter(filter);
             }
           }}
+          activeTypeFilter={typeFilter}
+          onTypeFilterChange={(type) => {
+            setTypeFilter(type);
+            handleResetPagination();
+          }}
         />
 
         {/* Compact Search + Filters Row */}
@@ -504,94 +509,28 @@ export default function TicketsPage() {
           )}
         </div>
 
-        {/* Expandable filter bar */}
         {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="flex flex-wrap items-center gap-2 p-2.5 bg-muted/20 border border-border/50 rounded-lg"
-          >
-            {/* Mobile Status filter */}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32 h-8 text-xs sm:hidden">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Ativos</SelectItem>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="open">Aberto</SelectItem>
-                <SelectItem value="in_progress">Em Andamento</SelectItem>
-                <SelectItem value="waiting">Aguardando</SelectItem>
-                <SelectItem value="resolved">Resolvido</SelectItem>
-                <SelectItem value="closed">Fechado</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <AlertCircle className="h-3 w-3 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Prioridade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas prioridades</SelectItem>
-                <SelectItem value="critical">Crítica</SelectItem>
-                <SelectItem value="high">Alta</SelectItem>
-                <SelectItem value="medium">Média</SelectItem>
-                <SelectItem value="low">Baixa</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <Users className="h-3 w-3 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Técnico" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos técnicos</SelectItem>
-                <SelectItem value="unassigned">Sem técnico</SelectItem>
-                {staffMembers.map((s) => (
-                  <SelectItem key={s.user_id} value={s.user_id}>{s.full_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={clientFilter} onValueChange={setClientFilter}>
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <Building2 className="h-3 w-3 mr-1 text-muted-foreground" />
-                <SelectValue placeholder="Cliente" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos clientes</SelectItem>
-                {clientsForFilter.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {activeFilterCount > 0 && (
-              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground h-7 text-xs" onClick={clearAllFilters}>
-                <X className="h-3 w-3" />
-                Limpar
-              </Button>
-            )}
-
-            <div className="ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => {
-                  const name = window.prompt("Nome para esta vista:");
-                  if (!name?.trim()) return;
-                  saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
-                  toast({ title: `Vista "${name.trim()}" salva` });
-                }}
-              >
-                Salvar Vista
-              </Button>
-            </div>
-          </motion.div>
+          <TicketFilters
+            statusFilter={statusFilter}
+            priorityFilter={priorityFilter}
+            technicianFilter={technicianFilter}
+            clientFilter={clientFilter}
+            typeFilter={typeFilter}
+            onStatusChange={setStatusFilter}
+            onPriorityChange={setPriorityFilter}
+            onTechnicianChange={setTechnicianFilter}
+            onClientChange={setClientFilter}
+            onTypeChange={setTypeFilter}
+            clients={clientsForFilter}
+            onClearAll={clearAllFilters}
+            onSaveView={() => {
+              const name = window.prompt("Nome para esta vista:");
+              if (!name?.trim()) return;
+              saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
+              toast({ title: `Vista "${name.trim()}" salva` });
+            }}
+            activeFilterCount={activeFilterCount}
+          />
         )}
 
         {/* Bulk Action Bar */}
