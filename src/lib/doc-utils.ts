@@ -30,7 +30,26 @@ export function display(v: string | number | boolean | null | undefined): string
   return String(v);
 }
 
+const assetToDeviceMap: Record<string, string> = {
+  computer: "workstation",
+  notebook: "notebook",
+  server: "server",
+  printer: "printer",
+  switch: "switch",
+  router: "other",
+  other: "other",
+};
+
+export function mapAssetTypeToDeviceType(assetType: string): string {
+  return assetToDeviceMap[assetType] || "other";
+}
+
 export const statusColors: Record<string, string> = {
+  online: "bg-green-500",
+  offline: "bg-red-500",
+  overdue: "bg-yellow-500",
+  unknown: "bg-gray-400",
+};
   online: "bg-green-500",
   offline: "bg-red-500",
   overdue: "bg-yellow-500",
