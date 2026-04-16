@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
       throw new Error("Ticket not found");
     }
     const ticket = ticketRes.data;
+    const isInternal = ticket.is_internal === true;
 
     console.log(`[send-ticket-notification] Ticket #${ticket.ticket_number} - ${ticket.title}`);
 
@@ -90,8 +91,8 @@ Deno.serve(async (req) => {
       .select("*, profiles:user_id(id, user_id, full_name, email, whatsapp_number, telegram_chat_id, notify_email, notify_whatsapp, notify_telegram)")
       .eq("client_id", ticket.client?.id);
 
-    // Send Email
-    if (ticket.client?.email) {
+    // Send Email to client — only for external tickets
+    if (ticket.client?.email && !isInternal) {
       try {
         let emailSubject: string;
         let emailHtml: string;
