@@ -1,0 +1,1 @@
+ALTER TABLE doc_licenses ADD COLUMN IF NOT EXISTS product_version text;
