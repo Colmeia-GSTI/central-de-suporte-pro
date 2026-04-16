@@ -219,50 +219,48 @@ function InlineCredentialForm({ clientId, onCreated, onCancel }: {
   );
 }
 
-// --- Product Name Combobox ---
-function ProductNameCombobox({ value, onChange, clientId }: {
+// --- Generic License Field Combobox ---
+function LicenseFieldCombobox({ value, onChange, clientId, queryKey, fetchFn, placeholder, disabled, disabledPlaceholder }: {
   value: string;
   onChange: (v: string) => void;
   clientId: string;
+  queryKey: string[];
+  fetchFn: () => Promise<string[]>;
+  placeholder: string;
+  disabled?: boolean;
+  disabledPlaceholder?: string;
 }) {
   const [open, setOpen] = useState(false);
 
   const { data: suggestions = [] } = useQuery({
-    queryKey: ["doc-license-products", clientId],
-    queryFn: async () => {
-      const { data } = await (supabase.from("doc_licenses") as any)
-        .select("product_name")
-        .eq("client_id", clientId)
-        .not("product_name", "is", null)
-        .order("product_name");
-      return [...new Set((data ?? []).map((r: any) => r.product_name).filter(Boolean))] as string[];
-    },
+    queryKey,
+    queryFn: fetchFn,
     staleTime: 5 * 60 * 1000,
+    enabled: !disabled,
   });
 
-  // If no suggestions, render plain input
+  if (disabled) {
+    return <Input disabled placeholder={disabledPlaceholder || placeholder} />;
+  }
+
   if (suggestions.length === 0) {
-    return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Nome do produto" />;
+    return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />;
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-10">
-          {value || "Nome do produto"}
+          {value || placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
-          <CommandInput
-            placeholder="Buscar ou digitar novo..."
-            value={value}
-            onValueChange={onChange}
-          />
+          <CommandInput placeholder="Buscar ou digitar novo..." value={value} onValueChange={onChange} />
           <CommandList>
             <CommandEmpty>
-              <span className="text-xs text-muted-foreground">Nenhum produto encontrado — o texto digitado será usado</span>
+              <span className="text-xs text-muted-foreground">Nenhum encontrado — o texto digitado será usado</span>
             </CommandEmpty>
             <CommandGroup>
               {suggestions.filter(s => s.toLowerCase().includes((value || "").toLowerCase())).map(s => (
