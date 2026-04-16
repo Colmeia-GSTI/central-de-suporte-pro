@@ -50,6 +50,7 @@ interface LicenseRow {
   id: string;
   license_type: string | null;
   product_name: string | null;
+  product_version: string | null;
   license_model: string | null;
   key: string | null;
   key_activated: boolean | null;
@@ -71,7 +72,7 @@ interface LicenseRow {
 }
 
 const EMPTY: Omit<LicenseRow, "id"> = {
-  license_type: null, product_name: null, license_model: null, key: null,
+  license_type: null, product_name: null, product_version: null, license_model: null, key: null,
   key_activated: true, key_activated_at: null,
   linked_device: null, linked_email: null, linked_emails: null,
   quantity_total: 1, quantity_in_use: null,
