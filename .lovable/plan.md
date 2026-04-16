@@ -1,79 +1,84 @@
 
 
-## Plano: Tarefa 1 (IP fix + SourceBadge) e Tarefa 2 (Aba Rede com doc_devices e VLANs)
+## Plano: Sincronização Bidirecional assets ↔ doc_devices
 
-### Tarefa 1 — ClientAssetsList.tsx
+### Visão Geral
 
-A correção de IP já está aplicada (linhas 252-253 já usam `split(',')[0].trim()`). Resta apenas:
+Adicionar campo `doc_device_id` em `assets` para vincular registros entre tabelas. Após salvar/editar ativos manuais, o técnico é convidado a vincular ou promover dados para `doc_devices` — sempre com confirmação explícita.
 
-**1a. Substituir OriginBadge local pelo SourceBadge compartilhado:**
-- Remover a função `OriginBadge` local (linhas 708-737)
-- Importar `SourceBadge` de `./documentation/shared/SourceBadge`
-- No render (linha 616), trocar `<OriginBadge origin={item.origin} />` por `<SourceBadge source={item.origin === "trmm" ? "trmm" : item.origin === "doc_only" ? "manual" : item.origin} />`
-- Remover imports não mais usados (`Activity`, `FileText` das linhas de OriginBadge)
+### Passo 1 — Migração
 
-### Tarefa 2 — Hook useUnifiedNetworkDevices + Aba Rede
-
-**2a. Criar hook `src/hooks/useUnifiedNetworkDevices.ts`:**
-
-Hook reutilizável que:
-- Recebe `clientId` e lista de `deviceTypes` (ex: `["switch", "access_point", "nas", "router", "other"]`)
-- Busca `doc_devices` filtrado por `device_type IN deviceTypes`
-- Busca `monitored_devices` filtrado por `external_source = 'unifi'`
-- Aplica merge idêntico ao da aba Ativos (doc como base, monitored para status)
-- Retorna `items`, `isLoading`, contadores
-
-**2b. Reescrever `ClientNetworkTab.tsx`:**
-
-Estrutura nova:
-
-```text
-┌─────────────────────────────────────────────┐
-│ UnifiConfigForm (já existe)                 │
-├─────────────────────────────────────────────┤
-│ Resumo: [Dispositivos: X] [VLANs: X]       │
-│         [Firewall: X →]                     │
-├─────────────────────────────────────────────┤
-│ Mapa de Topologia (se houver dados)         │
-├─────────────────────────────────────────────┤
-│ Sites UniFi (mantido como está)             │
-│   Dentro de cada site: DeviceGrid atualizado│
-│   com merge doc_devices + badges            │
-├─────────────────────────────────────────────┤
-│ Seção VLANs                                 │
-│   Tabela: ID | Nome | Finalidade | Range IP │
-│           | Gateway | DHCP | Isolada | Origem│
-│   ou: Card vazio com botão "Ir para Doc"    │
-└─────────────────────────────────────────────┘
+```sql
+ALTER TABLE assets ADD COLUMN doc_device_id uuid REFERENCES doc_devices(id) ON DELETE SET NULL;
+CREATE INDEX idx_assets_doc_device_id ON assets(doc_device_id);
 ```
 
-**Parte A — Merge de dispositivos:**
-- Usar o hook `useUnifiedNetworkDevices` para obter lista unificada
-- Atualizar `DeviceGrid` para mostrar: Nome, Tipo, Modelo (doc), IP (doc.ip_local prioridade), SSIDs/Portas, Localização, Status (monitored), Badge Documentado
-- Dispositivos apenas em `monitored_devices` → Badge "Não documentado" amarelo
+### Passo 2 — Utilitário de mapeamento (`doc-utils.ts`)
 
-**Parte B — Seção VLANs:**
-- Query `doc_vlans WHERE client_id = clientId`
-- Tabela com colunas: ID VLAN, Nome, Finalidade, Range IP, Gateway, DHCP (Sim/Não), Isolada (Sim/Não), Origem (SourceBadge)
-- Empty state com mensagem e botão que navega para aba Documentação
+Adicionar função exportada `mapAssetTypeToDeviceType`:
 
-**Parte C — Resumo no topo:**
-- 3 cards compactos substituindo os atuais (Sites, Devices Online, Clientes Wi-Fi)
-- Adicionar: Dispositivos de rede (count), VLANs configuradas (count), Regras de firewall (count de doc_firewall_rules)
-- Clique em "Regras de firewall" navega para aba Documentação (seção 12)
+| asset_type | device_type |
+|---|---|
+| computer | workstation |
+| notebook | notebook |
+| server | server |
+| printer | printer |
+| switch | switch |
+| router | other |
+| other | other |
 
-**Componentes reutilizados:**
-- `SourceBadge` para origem em VLANs e dispositivos
-- `StatusBadge` para status de dispositivos
-- `Field` onde aplicável no detalhe
+### Passo 3 — Hook `useDocDeviceSync`
+
+Novo hook em `src/hooks/useDocDeviceSync.ts` que encapsula:
+
+- `findMatch(clientId, name, serialNumber)` — busca doc_device por serial_number exato ou name lowercase, retorna o match ou null
+- `linkAsset(assetId, docDeviceId)` — UPDATE assets SET doc_device_id
+- `promoteToDoc(assetData)` — INSERT em doc_devices com mapeamento de campos, retorna id criado, depois faz linkAsset
+- `syncFieldsToDoc(docDeviceId, changedFields)` — UPDATE doc_devices (apenas name, brand_model, serial_number, ip_local, physical_location, notes)
+- Usa React Query mutations com invalidação de `client-assets`, `client-doc-devices`, `assets`
+
+### Passo 4 — Dialog de vinculação pós-save
+
+Novo componente `src/components/clients/DocDeviceLinkDialog.tsx`:
+
+**Estado 1 — Match encontrado:**
+> "Encontramos um dispositivo na Documentação com nome/serial similar: **[nome]**. Deseja vincular?"
+> [Vincular] [Não vincular]
+
+**Estado 2 — Sem match:**
+> "Deseja também adicionar este dispositivo à Documentação Técnica?"
+> [Adicionar à Documentação] [Agora não]
+
+### Passo 5 — Dialog de vinculação manual
+
+Novo componente `src/components/clients/DocDeviceManualLinkDialog.tsx`:
+- Select com doc_devices do cliente que NÃO têm asset vinculado (`WHERE id NOT IN (SELECT doc_device_id FROM assets WHERE doc_device_id IS NOT NULL AND client_id = ?)`)
+- Ao confirmar: `linkAsset(assetId, selectedDocDeviceId)`
+
+### Passo 6 — Alterações em `ClientAssetsList.tsx`
+
+1. **Fluxo de criação**: Após `saveMutation.onSuccess` para novo asset, abrir `DocDeviceLinkDialog` passando o asset recém-criado
+2. **Fluxo de edição**: Após `saveMutation.onSuccess` para edição de asset com `doc_device_id`, mostrar toast com ação "Sincronizar" que chama `syncFieldsToDoc`
+3. **Coluna "Documentado"**: Para itens manuais com `doc_device_id`, mostrar badge verde "Sim" (igual aos documentados) e tornar linha clicável para abrir detalhes
+4. **Botão "Vincular à Documentação"**: Na coluna de ações de ativos manuais sem `doc_device_id`, adicionar botão que abre `DocDeviceManualLinkDialog`
+5. **Merge logic**: Na seção 3 (manual assets), incluir `doc_device_id` na query do assets e usar para definir `documented: true` quando preenchido
+6. **Tooltip**: Ativos manuais sem vínculo mostram tooltip "Ativo manual sem vínculo com Documentação"
+
+### Passo 7 — Atualização no `AssetForm.tsx` (Inventário)
+
+A mesma lógica de vinculação pós-save se aplica ao formulário do Inventário (`/inventory`), que também salva em assets. Integrar o `DocDeviceLinkDialog` no `onSuccess` da mutation.
 
 ### Arquivos
 
 | Arquivo | Ação |
 |---|---|
-| `src/components/clients/ClientAssetsList.tsx` | Trocar OriginBadge → SourceBadge |
-| `src/hooks/useUnifiedNetworkDevices.ts` | Criar (hook de merge) |
-| `src/components/clients/ClientNetworkTab.tsx` | Reescrever com merge + VLANs + resumo |
+| Migração SQL | Criar (ADD COLUMN + INDEX) |
+| `src/lib/doc-utils.ts` | Adicionar `mapAssetTypeToDeviceType` |
+| `src/hooks/useDocDeviceSync.ts` | Criar (match, link, promote, sync) |
+| `src/components/clients/DocDeviceLinkDialog.tsx` | Criar (dialog pós-save) |
+| `src/components/clients/DocDeviceManualLinkDialog.tsx` | Criar (vinculação manual) |
+| `src/components/clients/ClientAssetsList.tsx` | Integrar dialogs, atualizar merge e UI |
+| `src/components/inventory/AssetForm.tsx` | Integrar dialog pós-save |
 
-Nenhuma alteração em tabelas, monitored_devices, ou topologia existente.
+Nenhuma alteração em tabelas existentes além do ADD COLUMN. Nenhuma sync automática — tudo com confirmação do técnico.
 
