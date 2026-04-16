@@ -1,10 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import {
+  corsHeaders,
+  getEmailSettings,
+  wrapInEmailLayout,
+  replaceVariables,
+  escapeHtml,
+  getEmailTemplate,
+} from "../_shared/email-helpers.ts";
 
 interface TicketNotificationRequest {
   ticket_id: string;
@@ -12,76 +14,12 @@ interface TicketNotificationRequest {
   comment?: string;
 }
 
-interface EmailSettings {
-  logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-  footer_text: string;
-}
-
-interface EmailTemplate {
-  subject_template: string;
-  html_template: string;
-  is_active: boolean;
-}
-
-function replaceVariables(template: string, data: Record<string, string>): string {
-  let result = template;
-  Object.entries(data).forEach(([key, value]) => {
-    const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-    result = result.replace(regex, value || "");
-  });
-  Object.entries(data).forEach(([key, value]) => {
-    const conditionalRegex = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{/${key}\\}\\}`, "g");
-    if (value) {
-      result = result.replace(conditionalRegex, "$1");
-    } else {
-      result = result.replace(conditionalRegex, "");
-    }
-  });
-  return result;
-}
-
-function wrapInEmailLayout(content: string, settings: EmailSettings): string {
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
-    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
-    .email-header { background: ${settings.primary_color}; padding: 24px; text-align: center; }
-    .email-header img { max-height: 50px; max-width: 200px; }
-    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
-    .email-content h2 { margin-top: 0; color: #111827; }
-    .email-content a { color: ${settings.primary_color}; }
-    .email-content blockquote { border-left: 3px solid ${settings.primary_color}; padding-left: 15px; margin: 15px 0; background: #f9fafb; padding: 12px 15px; }
-    .email-footer { background: ${settings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
+// Extra CSS for ticket-specific email classes
+const TICKET_EXTRA_CSS = `
     .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; font-weight: 500; background: #dbeafe; color: #1e40af; }
     .ticket-info { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #e5e7eb; }
-    .comment-box { background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid ${settings.primary_color}; }
-  </style>
-</head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      ${settings.logo_url ? `<img src="${settings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">Colmeia</span>`}
-    </div>
-    <div class="email-content">
-      ${content}
-    </div>
-    <div class="email-footer">
-      ${settings.footer_text}
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-function escapeHtml(text: string): string {
-  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-  return text.replace(/[&<>"']/g, (char) => map[char]);
-}
+    .comment-box { background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid currentColor; }
+`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -97,11 +35,10 @@ Deno.serve(async (req) => {
     const { ticket_id, event_type, comment }: TicketNotificationRequest = await req.json();
     console.log(`[send-ticket-notification] Processing ${event_type} for ticket ${ticket_id}`);
 
-    // Fetch settings, template, and ticket in parallel
     const templateType = `ticket_${event_type}`;
-    const [settingsRes, templateRes, ticketRes] = await Promise.all([
-      supabase.from("email_settings").select("*").limit(1).single(),
-      supabase.from("email_templates").select("*").eq("template_type", templateType).maybeSingle(),
+    const [emailSettings, emailTemplate, ticketRes] = await Promise.all([
+      getEmailSettings(supabase),
+      getEmailTemplate(supabase, templateType),
       supabase.from("tickets").select(`
         *, client:clients(id, name, email, phone, whatsapp),
         requester_contact:client_contacts!tickets_requester_contact_id_fkey(
@@ -110,14 +47,8 @@ Deno.serve(async (req) => {
       `).eq("id", ticket_id).single(),
     ]);
 
-    const emailSettings: EmailSettings = settingsRes.data || {
-      logo_url: null,
-      primary_color: "#f59e0b",
-      secondary_color: "#1f2937",
-      footer_text: "Este é um email automático. Por favor, não responda diretamente.",
-    };
-
-    const emailTemplate: EmailTemplate | null = templateRes.data?.is_active ? templateRes.data : null;
+    // Inject ticket-specific CSS via extraCss
+    const ticketEmailSettings = { ...emailSettings, extraCss: TICKET_EXTRA_CSS };
 
     if (ticketRes.error || !ticketRes.data) {
       console.error("Ticket not found:", ticketRes.error);
@@ -141,7 +72,6 @@ Deno.serve(async (req) => {
       resolved: `Seu chamado #${ticket.ticket_number} foi resolvido! Por favor, acesse o portal para avaliar o atendimento.`,
     };
 
-    // Template variables
     const templateVars: Record<string, string> = {
       client_name: ticket.client?.name || "Cliente",
       ticket_number: String(ticket.ticket_number),
@@ -160,7 +90,7 @@ Deno.serve(async (req) => {
       .select("*, profiles:user_id(id, user_id, full_name, email, whatsapp_number, telegram_chat_id, notify_email, notify_whatsapp, notify_telegram)")
       .eq("client_id", ticket.client?.id);
 
-    // Send Email notification
+    // Send Email
     if (ticket.client?.email) {
       try {
         let emailSubject: string;
@@ -169,7 +99,7 @@ Deno.serve(async (req) => {
         if (emailTemplate) {
           emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
           const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
-          emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+          emailHtml = wrapInEmailLayout(contentHtml, ticketEmailSettings);
         } else {
           emailSubject = `[Chamado #${ticket.ticket_number}] ${eventMessages[event_type]}`;
           const defaultContent = `
@@ -192,7 +122,7 @@ Deno.serve(async (req) => {
             ` : ''}
             <p>Acesse o portal do cliente para mais detalhes.</p>
           `;
-          emailHtml = wrapInEmailLayout(defaultContent, emailSettings);
+          emailHtml = wrapInEmailLayout(defaultContent, ticketEmailSettings);
         }
 
         const { data: emailResult, error: emailError } = await supabase.functions.invoke("send-email-resend", {
@@ -215,7 +145,7 @@ Deno.serve(async (req) => {
     const requesterContact = ticket.requester_contact;
     if (evolutionSettings?.is_active && requesterContact?.whatsapp && requesterContact?.notify_whatsapp !== false) {
       console.log(`[send-ticket-notification] Sending WhatsApp to requester: ${requesterContact.name}`);
-      
+
       try {
         const whatsappMessage = `🎫 *Atualização do seu Chamado*\n\n` +
           `📋 *Chamado:* #${ticket.ticket_number}\n` +

@@ -1,26 +1,16 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import {
+  corsHeaders,
+  getEmailSettings,
+  wrapInEmailLayout,
+  replaceVariables,
+  formatCurrencyBRL,
+  getEmailTemplate,
+} from "../_shared/email-helpers.ts";
 
 interface NfseNotificationRequest {
   nfse_history_id: string;
   channels: ("email" | "whatsapp")[];
-}
-
-interface EmailSettings {
-  logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-  footer_text: string;
-}
-
-interface EmailTemplate {
-  subject_template: string;
-  html_template: string;
-  is_active: boolean;
 }
 
 async function readInvokeError(err: unknown): Promise<string> {
@@ -48,62 +38,6 @@ async function readInvokeError(err: unknown): Promise<string> {
   }
 }
 
-function replaceVariables(template: string, data: Record<string, string>): string {
-  let result = template;
-  
-  // Replace simple variables {{variable}}
-  Object.entries(data).forEach(([key, value]) => {
-    const regex = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-    result = result.replace(regex, value || "");
-  });
-  
-  // Handle conditional blocks {{#variable}}...{{/variable}}
-  Object.entries(data).forEach(([key, value]) => {
-    const conditionalRegex = new RegExp(`\\{\\{#${key}\\}\\}([\\s\\S]*?)\\{\\{/${key}\\}\\}`, "g");
-    if (value) {
-      result = result.replace(conditionalRegex, "$1");
-    } else {
-      result = result.replace(conditionalRegex, "");
-    }
-  });
-  
-  return result;
-}
-
-function wrapInEmailLayout(content: string, settings: EmailSettings): string {
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f4f5; }
-    .email-container { max-width: 600px; margin: 0 auto; background: #fff; }
-    .email-header { background: ${settings.primary_color}; padding: 24px; text-align: center; }
-    .email-header img { max-height: 50px; max-width: 200px; }
-    .email-content { padding: 32px 24px; color: #1f2937; line-height: 1.6; }
-    .email-content h2 { margin-top: 0; color: #111827; }
-    .email-content a { color: ${settings.primary_color}; }
-    .email-content blockquote { border-left: 3px solid ${settings.primary_color}; padding-left: 15px; margin: 15px 0; background: #f9fafb; padding: 12px 15px; }
-    .email-content code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
-    .email-footer { background: ${settings.secondary_color}; color: #9ca3af; padding: 20px 24px; text-align: center; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      ${settings.logo_url ? `<img src="${settings.logo_url}" alt="Logo" />` : `<span style="color: #fff; font-size: 18px; font-weight: 600;">Colmeia</span>`}
-    </div>
-    <div class="email-content">
-      ${content}
-    </div>
-    <div class="email-footer">
-      ${settings.footer_text}
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -124,24 +58,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch email settings and template in parallel
-    const [settingsRes, templateRes, nfseRes] = await Promise.all([
-      supabase.from("email_settings").select("*").limit(1).single(),
-      supabase.from("email_templates").select("*").eq("template_type", "nfse").single(),
+    // Fetch settings, template, and NFS-e in parallel
+    const [emailSettings, emailTemplate, nfseRes] = await Promise.all([
+      getEmailSettings(supabase),
+      getEmailTemplate(supabase, "nfse"),
       supabase.from("nfse_history").select(`
         id, numero_nfse, pdf_url, xml_url, valor_servico, competencia, client_id, invoice_id,
         clients (name, email, whatsapp, financial_email)
       `).eq("id", nfse_history_id).maybeSingle(),
     ]);
-
-    const emailSettings: EmailSettings = settingsRes.data || {
-      logo_url: null,
-      primary_color: "#f59e0b",
-      secondary_color: "#1f2937",
-      footer_text: "Este é um email automático. Em caso de dúvidas, entre em contato.",
-    };
-
-    const emailTemplate: EmailTemplate | null = templateRes.data?.is_active ? templateRes.data : null;
 
     const nfse = nfseRes.data;
     if (nfseRes.error || !nfse) {
@@ -188,16 +113,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch company info
-    const { data: company } = await supabase
-      .from("company_settings")
-      .select("razao_social, nome_fantasia, telefone, email")
-      .limit(1)
-      .maybeSingle();
+    const companyName = emailSettings.companyName;
 
-    const companyName = company?.nome_fantasia || company?.razao_social || "Empresa";
-
-    // Generate signed URLs for PDF and XML (7 days = 604800 seconds)
+    // Generate signed URLs (7 days)
     const SIGNED_URL_EXPIRY = 604800;
 
     let pdfSignedUrl = nfse.pdf_url;
@@ -206,7 +124,6 @@ Deno.serve(async (req) => {
       const { data: signedData, error: signError } = await supabase.storage
         .from("nfse-files")
         .createSignedUrl(path, SIGNED_URL_EXPIRY);
-
       if (signError) {
         console.error("[send-nfse-notification] Error creating PDF signed URL:", signError);
         return new Response(
@@ -234,7 +151,7 @@ Deno.serve(async (req) => {
     const client = (Array.isArray(clientData) ? clientData[0] : clientData) as { name: string; email: string | null; whatsapp: string | null; financial_email: string | null } | null | undefined;
     const clientName = client?.name || "Cliente";
     const nfseNumber = nfse.numero_nfse || "N/A";
-    const valorFormatted = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(nfse.valor_servico || 0);
+    const valorFormatted = formatCurrencyBRL(nfse.valor_servico || 0);
 
     // Format competencia
     let competenciaFormatted = "";
@@ -244,7 +161,6 @@ Deno.serve(async (req) => {
       competenciaFormatted = `${months[parseInt(month, 10) - 1]}/${year}`;
     }
 
-    // Template variables
     const templateVars: Record<string, string> = {
       client_name: clientName,
       nfse_number: String(nfseNumber),
@@ -260,7 +176,7 @@ Deno.serve(async (req) => {
     // Send via Email
     if (channels.includes("email")) {
       const emailTo = client?.email || client?.financial_email;
-      
+
       if (!emailTo) {
         results.push({ channel: "email", success: false, error: "Cliente não possui email cadastrado" });
       } else {
@@ -268,12 +184,10 @@ Deno.serve(async (req) => {
         let emailHtml: string;
 
         if (emailTemplate) {
-          // Use custom template
           emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
           const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
           emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
         } else {
-          // Default template
           emailSubject = `NFS-e #${nfseNumber} - ${clientName} - ${valorFormatted}`;
           emailHtml = wrapInEmailLayout(`
             <h2>Nota Fiscal de Serviço Eletrônica</h2>
@@ -282,22 +196,13 @@ Deno.serve(async (req) => {
             <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
               <h3 style="margin-top: 0; color: #555;">Dados da NFS-e</h3>
               <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 8px 0; color: #666;">Número:</td>
-                  <td style="padding: 8px 0; font-weight: bold;">${nfseNumber}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #666;">Competência:</td>
-                  <td style="padding: 8px 0; font-weight: bold;">${competenciaFormatted}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #666;">Valor:</td>
-                  <td style="padding: 8px 0; font-weight: bold; color: #2563eb;">${valorFormatted}</td>
-                </tr>
+                <tr><td style="padding: 8px 0; color: #666;">Número:</td><td style="padding: 8px 0; font-weight: bold;">${nfseNumber}</td></tr>
+                <tr><td style="padding: 8px 0; color: #666;">Competência:</td><td style="padding: 8px 0; font-weight: bold;">${competenciaFormatted}</td></tr>
+                <tr><td style="padding: 8px 0; color: #666;">Valor:</td><td style="padding: 8px 0; font-weight: bold; color: #2563eb;">${valorFormatted}</td></tr>
               </table>
             </div>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primary_color}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+              <a href="${pdfSignedUrl}" style="background: ${emailSettings.primaryColor}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                 📄 Baixar PDF da NFS-e
               </a>
             </div>
@@ -317,16 +222,29 @@ Deno.serve(async (req) => {
           `, emailSettings);
         }
 
+        // Build attachments
+        const attachments: { filename: string; path: string }[] = [];
+        if (pdfSignedUrl) {
+          attachments.push({ filename: `NFSe_${nfseNumber}.pdf`, path: pdfSignedUrl });
+        }
+        if (xmlSignedUrl) {
+          attachments.push({ filename: `NFSe_${nfseNumber}.xml`, path: xmlSignedUrl });
+        }
+
         try {
           const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
-            body: { to: emailTo, subject: emailSubject, html: emailHtml },
+            body: {
+              to: emailTo,
+              subject: emailSubject,
+              html: emailHtml,
+              ...(attachments.length > 0 ? { attachments } : {}),
+            },
           });
 
           if (emailError) {
             console.error("[send-nfse-notification] Email error:", emailError);
             const detailed = await readInvokeError(emailError);
             results.push({ channel: "email", success: false, error: detailed || "Erro ao enviar email" });
-            // Log failure to invoice_notification_logs
             if (nfse.invoice_id) {
               await supabase.from("invoice_notification_logs").insert({
                 invoice_id: nfse.invoice_id,
@@ -346,7 +264,6 @@ Deno.serve(async (req) => {
               source: "send-nfse-notification",
               details: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
-            // Log success to invoice_notification_logs
             if (nfse.invoice_id) {
               await supabase.from("invoice_notification_logs").insert({
                 invoice_id: nfse.invoice_id,
