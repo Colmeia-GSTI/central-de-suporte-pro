@@ -2462,6 +2462,8 @@ export type Database = {
           expiry_date: string | null
           id: string
           key: string | null
+          key_activated: boolean | null
+          key_activated_at: string | null
           license_model: string | null
           license_type: string | null
           linked_device: string | null
@@ -2485,6 +2487,8 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           key?: string | null
+          key_activated?: boolean | null
+          key_activated_at?: string | null
           license_model?: string | null
           license_type?: string | null
           linked_device?: string | null
@@ -2508,6 +2512,8 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           key?: string | null
+          key_activated?: boolean | null
+          key_activated_at?: string | null
           license_model?: string | null
           license_type?: string | null
           linked_device?: string | null
