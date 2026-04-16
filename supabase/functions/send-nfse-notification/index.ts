@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "nfse").single(),
       supabase.from("nfse_history").select(`
-        id, numero_nfse, pdf_url, xml_url, valor_servico, competencia, client_id,
+        id, numero_nfse, pdf_url, xml_url, valor_servico, competencia, client_id, invoice_id,
         clients (name, email, whatsapp, financial_email)
       `).eq("id", nfse_history_id).maybeSingle(),
     ]);
@@ -326,6 +326,16 @@ Deno.serve(async (req) => {
             console.error("[send-nfse-notification] Email error:", emailError);
             const detailed = await readInvokeError(emailError);
             results.push({ channel: "email", success: false, error: detailed || "Erro ao enviar email" });
+            // Log failure to invoice_notification_logs
+            if (nfse.invoice_id) {
+              await supabase.from("invoice_notification_logs").insert({
+                invoice_id: nfse.invoice_id,
+                notification_type: "nfse",
+                channel: "email",
+                success: false,
+                error_message: detailed || "Erro ao enviar email",
+              }).then(() => {});
+            }
           } else {
             results.push({ channel: "email", success: true });
             await supabase.from("nfse_event_logs").insert({
@@ -336,6 +346,16 @@ Deno.serve(async (req) => {
               source: "send-nfse-notification",
               details: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
+            // Log success to invoice_notification_logs
+            if (nfse.invoice_id) {
+              await supabase.from("invoice_notification_logs").insert({
+                invoice_id: nfse.invoice_id,
+                notification_type: "nfse",
+                channel: "email",
+                success: true,
+                recipient: emailTo,
+              }).then(() => {});
+            }
           }
         } catch (e: unknown) {
           const errMsg = e instanceof Error ? e.message : "Erro desconhecido";
