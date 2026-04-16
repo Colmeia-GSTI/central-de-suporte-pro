@@ -1,93 +1,97 @@
 
 
-# Plan: Ticket Creation Notification + Push Integration + Error Boundary
+# Plan: Extract Filters + Type Filter + Stats Counters + Details Badge
 
 ## Summary
 
-Three corrections: (1) fire-and-forget notification on ticket creation, (2) push notification integration in the ticket notification Edge Function, (3) ErrorBoundary wrapper on NewTicketPage.
-
-## Audit Findings
-
-- **Zod schema**: Already includes `"internal"` and `"task"` — no fix needed.
-- **VAPID keys**: Frontend and backend both use `BDQ4g_RaLdz1m7aQEEezyJ8OGEdpBMXqY9q3iKE0gHr3Q9mIPhNQ3NqzV8xzuPfRDKxT_G8kHy9sXB7CvKP_RvU`. Match confirmed.
-- **push_subscriptions**: 2 records exist (2 users).
-- **application_logs**: Zero push-related log entries — push has never been triggered from ticket flow.
-- **sw-push.js**: Has `push`, `notificationclick`, and `notificationclose` handlers. The `notificationclick` handler already navigates to `event.notification.data?.url`. No fix needed.
-- **usePushNotifications**: Used in `NotificationSettings.tsx` (profile page) — not auto-registered at root. This is by design (opt-in).
-- **ErrorBoundary**: Already exists at `src/components/ErrorBoundary.tsx`.
-- **send-push-notification**: Accepts `{ type, user_ids, role_filter, data: { title, body, url, tag } }`. Has built-in `role_filter` support — no need to manually query `user_roles`.
+5 corrections: (1) extract inline filters to `TicketFilters.tsx`, (2) add type filter with query integration, (3) add internal/task counters to `TicketStatsBar`, (4) add `typeFilter` to queryKey, (5) add `TicketTypeBadge` to `TicketDetails` and `TicketsKanbanView`.
 
 ## Changes
 
-### 1. `src/components/tickets/TicketForm.tsx` — Add fire-and-forget notification
+### 1. New file: `src/components/tickets/TicketFilters.tsx`
 
-After tag assignments (line 252), add:
-
-```ts
-// Fire-and-forget — não bloquear criação do chamado
-supabase.functions.invoke("send-ticket-notification", {
-  body: { ticket_id: newTicket.id, event_type: "created" }
-}).catch(err =>
-  logger.warn("Failed to send creation notification", "Tickets", { error: err?.message })
-);
-```
-
-No `await`. No try/catch propagation. Internal tickets already guarded in the Edge Function.
-
-### 2. `supabase/functions/send-ticket-notification/index.ts` — Add push to staff
-
-After the Telegram block (around line 228), before the `return` response, add push notification dispatch:
+Extract lines 510-597 (expandable filter bar) from `TicketsPage.tsx` into a standalone component. Props:
 
 ```ts
-// Push notification to staff
-try {
-  await supabase.functions.invoke("send-push-notification", {
-    body: {
-      type: "ticket",
-      role_filter: ["admin", "manager", "technician"],
-      data: {
-        title: `Chamado #${ticket.ticket_number}`,
-        body: eventMessages[event_type],
-        url: `/tickets?open=${ticket_id}`,
-        tag: `ticket-${ticket_id}`,
-      }
-    }
-  });
-} catch (pushErr) {
-  console.error("[ticket-notification] Push error:", pushErr);
+interface TicketFiltersProps {
+  statusFilter: string;
+  priorityFilter: string;
+  technicianFilter: string;
+  clientFilter: string;
+  typeFilter: string;
+  onStatusChange: (v: string) => void;
+  onPriorityChange: (v: string) => void;
+  onTechnicianChange: (v: string) => void;
+  onClientChange: (v: string) => void;
+  onTypeChange: (v: string) => void;
+  onSearchChange: (v: string) => void;
+  clients: { id: string; name: string }[];
+  onClearAll: () => void;
+  onSaveView: () => void;
+  activeFilterCount: number;
 }
 ```
 
-Uses `role_filter` (already supported by `send-push-notification`) instead of manually querying `user_roles`. URL uses deep-linking pattern (`?open=id`).
+- Use `useTechnicianList()` internally instead of receiving technicians as prop (consolidation with existing hook).
+- Add a type filter Select: Todos os tipos / Externos / Internos / Tarefas.
+- Move the mobile status Select, priority, technician, client, clear button, and save view button here.
 
-### 3. `src/pages/tickets/NewTicketPage.tsx` — Wrap with ErrorBoundary
+### 2. `src/pages/tickets/TicketsPage.tsx`
 
-Import existing `ErrorBoundary` and wrap `TicketForm` with a fallback:
+- Add `typeFilter` state: `useState("all")`.
+- Replace inline filter block (lines 510-597) with `<TicketFilters ... />`.
+- Remove `staffMembers` query (lines 164-177) — now internal to `TicketFilters` via `useTechnicianList()`.
+- Add `typeFilter` to the queryKey (line 203).
+- Add type filter logic in the query function after `clientFilter` (line 238):
+  ```ts
+  if (typeFilter === "external") query = query.eq("is_internal", false);
+  else if (typeFilter === "internal") query = query.eq("is_internal", true).eq("origin", "internal");
+  else if (typeFilter === "task") query = query.eq("is_internal", true).eq("origin", "task");
+  ```
+- Add `typeFilter` to the `useEffect` dependency that resets pagination (line 362).
+- Update `clearAllFilters` to also reset `typeFilter`.
+- Update `activeFilterCount` to include `typeFilter !== "all"`.
+- Keep `staffMembers` for bulk assign dropdown — but switch it to `useTechnicianList()` to consolidate the duplicate query.
 
-```tsx
-<ErrorBoundary fallback={
-  <div className="text-center py-12 space-y-4">
-    <p className="text-muted-foreground">Erro ao carregar o formulário.</p>
-    <Button variant="outline" onClick={() => window.location.reload()}>Recarregar</Button>
-  </div>
-}>
-  <TicketForm ... />
-</ErrorBoundary>
-```
+### 3. `src/components/tickets/TicketStatsBar.tsx`
 
-## Files Modified
+- Add 2 new head queries for internal and task counts (parallel with existing):
+  ```ts
+  supabase.from("tickets").select("id", { count: "exact", head: true })
+    .eq("is_internal", true).eq("origin", "internal")
+    .not("status", "in", '("resolved","closed")'),
+  supabase.from("tickets").select("id", { count: "exact", head: true })
+    .eq("is_internal", true).eq("origin", "task")
+    .not("status", "in", '("resolved","closed")'),
+  ```
+- Add `onTypeFilterChange?: (type: string) => void` prop.
+- Render a secondary row below existing cards (only if internal + task > 0) with two clickable badges using `TicketTypeBadge` styling.
+
+### 4. `src/components/tickets/TicketDetails.tsx`
+
+- Import `TicketTypeBadge`.
+- Add badge next to `#{ticket.ticket_number}` (line 72):
+  ```tsx
+  <TicketTypeBadge isInternal={ticket.is_internal} origin={ticket.origin} />
+  ```
+
+### 5. `src/components/tickets/TicketsKanbanView.tsx`
+
+- Import `TicketTypeBadge`.
+- Add badge next to ticket number in the card (line 127):
+  ```tsx
+  <TicketTypeBadge isInternal={ticket.is_internal} origin={ticket.origin} />
+  ```
+
+## Files
 
 | File | Action |
 |------|--------|
-| `src/components/tickets/TicketForm.tsx` | Add fire-and-forget notification call |
-| `supabase/functions/send-ticket-notification/index.ts` | Add push notification to staff |
-| `src/pages/tickets/NewTicketPage.tsx` | Wrap TicketForm with ErrorBoundary |
+| `src/components/tickets/TicketFilters.tsx` | Create |
+| `src/pages/tickets/TicketsPage.tsx` | Edit: add typeFilter, replace inline filters, consolidate staffMembers |
+| `src/components/tickets/TicketStatsBar.tsx` | Edit: add internal/task counters |
+| `src/components/tickets/TicketDetails.tsx` | Edit: add TicketTypeBadge |
+| `src/components/tickets/TicketsKanbanView.tsx` | Edit: add TicketTypeBadge |
 
-No migrations. No new files. 3 files touched.
-
-## Diagnostic Report (to be included in final message)
-
-1. Push infra is fully wired (SW, hook, Edge Function, VAPID keys match, DB table populated)
-2. Push was never triggered from ticket flow — this plan adds that integration
-3. push_subscriptions has 2 records (2 distinct users)
+No migrations. No new hooks. 1 new file, 4 edited.
 
