@@ -344,10 +344,63 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: async (_: void, data: AssetFormData) => {
       queryClient.invalidateQueries({ queryKey: ["client-assets", clientId] });
-      toast({ title: editingAsset ? "Ativo atualizado" : "Ativo adicionado" });
+      const wasEditing = !!editingAsset;
+      const editedAsset = editingAsset;
+      toast({ title: wasEditing ? "Ativo atualizado" : "Ativo adicionado" });
       handleCloseForm();
+
+      if (wasEditing && editedAsset?.doc_device_id) {
+        // Offer sync to doc_devices
+        sonnerToast("Deseja sincronizar as alterações com a Documentação?", {
+          action: {
+            label: "Sincronizar",
+            onClick: async () => {
+              try {
+                await syncFieldsToDoc({
+                  docDeviceId: editedAsset.doc_device_id!,
+                  fields: {
+                    name: data.name,
+                    brand: data.brand || null,
+                    model: data.model || null,
+                    serial_number: data.serial_number || null,
+                    location: data.location || null,
+                  },
+                });
+                sonnerToast.success("Documentação atualizada");
+              } catch {
+                sonnerToast.error("Erro ao sincronizar");
+              }
+            },
+          },
+          duration: 8000,
+        });
+      } else if (!wasEditing) {
+        // New asset — find the newly created asset to get its id
+        const { data: newAssets } = await supabase
+          .from("assets")
+          .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes")
+          .eq("client_id", clientId)
+          .eq("name", data.name)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (newAssets && newAssets.length > 0) {
+          const a = newAssets[0];
+          setLinkDialogAsset({
+            id: a.id,
+            client_id: a.client_id,
+            name: a.name,
+            asset_type: a.asset_type,
+            brand: a.brand,
+            model: a.model,
+            serial_number: a.serial_number,
+            location: a.location,
+            notes: a.notes,
+          });
+        }
+      }
     },
     onError: (error: unknown) => {
       toast({ title: "Erro", description: getErrorMessage(error), variant: "destructive" });
