@@ -5,6 +5,7 @@ import { Building2, Clock, Play, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { TicketTypeBadge } from "@/components/tickets/TicketTypeBadge";
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
@@ -49,6 +50,7 @@ export function TicketMobileCard({ ticket, onView, onStart, isStartPending }: Ti
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-muted-foreground font-mono">#{ticket.ticket_number}</span>
+          <TicketTypeBadge isInternal={ticket.is_internal} origin={ticket.origin} />
           <span className={`w-2 h-2 rounded-full ${priorityDot[ticket.priority]}`} />
         </div>
         <Badge className={`text-[9px] px-1.5 py-0 h-4 ${statusColors[ticket.status]}`}>

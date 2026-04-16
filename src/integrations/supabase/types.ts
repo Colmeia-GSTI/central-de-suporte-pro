@@ -5598,6 +5598,7 @@ export type Database = {
           description: string | null
           first_response_at: string | null
           id: string
+          is_internal: boolean | null
           origin: Database["public"]["Enums"]["ticket_origin"]
           priority: Database["public"]["Enums"]["ticket_priority"]
           requester_contact_id: string | null
@@ -5628,6 +5629,7 @@ export type Database = {
           description?: string | null
           first_response_at?: string | null
           id?: string
+          is_internal?: boolean | null
           origin?: Database["public"]["Enums"]["ticket_origin"]
           priority?: Database["public"]["Enums"]["ticket_priority"]
           requester_contact_id?: string | null
@@ -5658,6 +5660,7 @@ export type Database = {
           description?: string | null
           first_response_at?: string | null
           id?: string
+          is_internal?: boolean | null
           origin?: Database["public"]["Enums"]["ticket_origin"]
           priority?: Database["public"]["Enums"]["ticket_priority"]
           requester_contact_id?: string | null
@@ -6692,7 +6695,14 @@ export type Database = {
       nfse_processing_status: "pendente" | "gerada" | "erro"
       support_model: "ticket" | "hours_bank" | "unlimited"
       technician_level: "bronze" | "silver" | "gold" | "platinum" | "diamond"
-      ticket_origin: "portal" | "phone" | "email" | "chat" | "whatsapp"
+      ticket_origin:
+        | "portal"
+        | "phone"
+        | "email"
+        | "chat"
+        | "whatsapp"
+        | "internal"
+        | "task"
       ticket_priority: "low" | "medium" | "high" | "critical"
       ticket_status:
         | "open"
@@ -6886,7 +6896,15 @@ export const Constants = {
       nfse_processing_status: ["pendente", "gerada", "erro"],
       support_model: ["ticket", "hours_bank", "unlimited"],
       technician_level: ["bronze", "silver", "gold", "platinum", "diamond"],
-      ticket_origin: ["portal", "phone", "email", "chat", "whatsapp"],
+      ticket_origin: [
+        "portal",
+        "phone",
+        "email",
+        "chat",
+        "whatsapp",
+        "internal",
+        "task",
+      ],
       ticket_priority: ["low", "medium", "high", "critical"],
       ticket_status: [
         "open",
