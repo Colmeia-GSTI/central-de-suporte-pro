@@ -25,14 +25,18 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, FileText, AlertTriangle, Link2 } from "lucide-react";
 import { SourceBadge } from "./documentation/shared/SourceBadge";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DocDeviceLinkDialog } from "./DocDeviceLinkDialog";
+import { DocDeviceManualLinkDialog } from "./DocDeviceManualLinkDialog";
+import { useDocDeviceSync } from "@/hooks/useDocDeviceSync";
 import type { Tables } from "@/integrations/supabase/types";
 
 const assetSchema = z.object({
