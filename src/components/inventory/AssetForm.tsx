@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,23 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
+import { DocDeviceLinkDialog } from "@/components/clients/DocDeviceLinkDialog";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 const assetSchema = z.object({
@@ -52,6 +45,11 @@ interface AssetFormProps {
 export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [linkDialogAsset, setLinkDialogAsset] = useState<{
+    id: string; client_id: string; name: string; asset_type: string;
+    brand?: string | null; model?: string | null; serial_number?: string | null;
+    ip_address?: string | null; location?: string | null; notes?: string | null;
+  } | null>(null);
 
   const form = useForm<AssetFormData>({
     resolver: zodResolver(assetSchema),
@@ -75,7 +73,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
     form,
     key: asset ? `asset_edit_${asset.id}` : "asset_new",
     storage: "session",
-    enabled: !asset, // Only persist for new assets
+    enabled: !asset,
   });
 
   const { data: clients = [] } = useQuery({
@@ -116,10 +114,39 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: async (_: void, data: AssetFormData) => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       toast({ title: asset ? "Ativo atualizado" : "Ativo criado" });
+
+      if (!asset) {
+        // New asset — offer doc_device link
+        const { data: newAssets } = await supabase
+          .from("assets")
+          .select("id, client_id, name, asset_type, brand, model, serial_number, location, notes")
+          .eq("client_id", data.client_id)
+          .eq("name", data.name)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (newAssets && newAssets.length > 0) {
+          const a = newAssets[0];
+          setLinkDialogAsset({
+            id: a.id,
+            client_id: a.client_id,
+            name: a.name,
+            asset_type: a.asset_type,
+            brand: a.brand,
+            model: a.model,
+            serial_number: a.serial_number,
+            ip_address: data.ip_address || null,
+            location: a.location,
+            notes: a.notes,
+          });
+          return; // Don't call onSuccess yet — wait for dialog
+        }
+      }
+
       onSuccess();
     },
     onError: (error) => {
@@ -133,194 +160,207 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
-        {wasRestored && <DraftRecoveryBanner onClear={clearDraft} />}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="col-span-2">
-                <FormLabel>Nome *</FormLabel>
-                <FormControl>
-                  <Input placeholder="Nome do ativo" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="asset_type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tipo *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+    <>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
+          {wasRestored && <DraftRecoveryBanner onClear={clearDraft} />}
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Nome *</FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <Input placeholder="Nome do ativo" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    <SelectItem value="computer">Computador</SelectItem>
-                    <SelectItem value="notebook">Notebook</SelectItem>
-                    <SelectItem value="server">Servidor</SelectItem>
-                    <SelectItem value="printer">Impressora</SelectItem>
-                    <SelectItem value="switch">Switch</SelectItem>
-                    <SelectItem value="router">Roteador</SelectItem>
-                    <SelectItem value="other">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+            <FormField
+              control={form.control}
+              name="asset_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipo *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="computer">Computador</SelectItem>
+                      <SelectItem value="notebook">Notebook</SelectItem>
+                      <SelectItem value="server">Servidor</SelectItem>
+                      <SelectItem value="printer">Impressora</SelectItem>
+                      <SelectItem value="switch">Switch</SelectItem>
+                      <SelectItem value="router">Roteador</SelectItem>
+                      <SelectItem value="other">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="active">Ativo</SelectItem>
+                      <SelectItem value="maintenance">Manutenção</SelectItem>
+                      <SelectItem value="loaned">Emprestado</SelectItem>
+                      <SelectItem value="disposed">Descartado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="client_id"
+              render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Cliente *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um cliente" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="brand"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Marca</FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <Input placeholder="Ex: Dell, HP" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    <SelectItem value="active">Ativo</SelectItem>
-                    <SelectItem value="maintenance">Manutenção</SelectItem>
-                    <SelectItem value="loaned">Emprestado</SelectItem>
-                    <SelectItem value="disposed">Descartado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="client_id"
-            render={({ field }) => (
-              <FormItem className="col-span-2">
-                <FormLabel>Cliente *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+            <FormField
+              control={form.control}
+              name="model"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Modelo</FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente" />
-                    </SelectTrigger>
+                    <Input placeholder="Ex: Optiplex 7090" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="brand"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Marca</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Dell, HP" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            <FormField
+              control={form.control}
+              name="serial_number"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Número de Série</FormLabel>
+                  <FormControl>
+                    <Input placeholder="S/N" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="model"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Modelo</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Optiplex 7090" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            <FormField
+              control={form.control}
+              name="ip_address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endereço IP</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: 192.168.1.100" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="serial_number"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Número de Série</FormLabel>
-                <FormControl>
-                  <Input placeholder="S/N" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            <FormField
+              control={form.control}
+              name="location"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Localização</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Sala 101" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="ip_address"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Endereço IP</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: 192.168.1.100" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Observações</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Notas sobre o ativo..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-          <FormField
-            control={form.control}
-            name="location"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Localização</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Sala 101" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={handleCancel}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Salvando..." : asset ? "Atualizar" : "Criar"}
+            </Button>
+          </div>
+        </form>
+      </Form>
 
-          <FormField
-            control={form.control}
-            name="notes"
-            render={({ field }) => (
-              <FormItem className="col-span-2">
-                <FormLabel>Observações</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Notas sobre o ativo..." {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={handleCancel}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Salvando..." : asset ? "Atualizar" : "Criar"}
-          </Button>
-        </div>
-      </form>
-    </Form>
+      <DocDeviceLinkDialog
+        open={!!linkDialogAsset}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLinkDialogAsset(null);
+            onSuccess();
+          }
+        }}
+        asset={linkDialogAsset}
+      />
+    </>
   );
 }

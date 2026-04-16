@@ -25,14 +25,18 @@ import {
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, FileText, AlertTriangle, Link2 } from "lucide-react";
 import { SourceBadge } from "./documentation/shared/SourceBadge";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DocDeviceLinkDialog } from "./DocDeviceLinkDialog";
+import { DocDeviceManualLinkDialog } from "./DocDeviceManualLinkDialog";
+import { useDocDeviceSync } from "@/hooks/useDocDeviceSync";
 import type { Tables } from "@/integrations/supabase/types";
 
 const assetSchema = z.object({
@@ -46,7 +50,7 @@ const assetSchema = z.object({
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
-type Asset = Pick<Tables<"assets">, "id" | "client_id" | "name" | "asset_type" | "brand" | "model" | "serial_number" | "status" | "location" | "notes" | "purchase_date" | "purchase_value">;
+type Asset = Pick<Tables<"assets">, "id" | "client_id" | "name" | "asset_type" | "brand" | "model" | "serial_number" | "status" | "location" | "notes" | "purchase_date" | "purchase_value"> & { doc_device_id?: string | null };
 type MonitoredDevice = Pick<Tables<"monitored_devices">, "id" | "name" | "hostname" | "ip_address" | "device_type" | "is_online" | "uptime_percent" | "last_seen_at" | "external_source" | "client_id">;
 
 interface DocDevice {
@@ -149,7 +153,14 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     asset: null,
   });
   const [selectedItem, setSelectedItem] = useState<UnifiedAssetItem | null>(null);
+  const [linkDialogAsset, setLinkDialogAsset] = useState<{
+    id: string; client_id: string; name: string; asset_type: string;
+    brand?: string | null; model?: string | null; serial_number?: string | null;
+    ip_address?: string | null; location?: string | null; notes?: string | null;
+  } | null>(null);
+  const [manualLinkDialog, setManualLinkDialog] = useState<{ open: boolean; assetId: string }>({ open: false, assetId: "" });
   const { toast } = useToast();
+  const { syncFieldsToDoc } = useDocDeviceSync();
   const queryClient = useQueryClient();
 
   const form = useForm<AssetFormData>({
@@ -171,10 +182,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assets")
-        .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes, purchase_date, purchase_value")
+        .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes, purchase_date, purchase_value, doc_device_id")
         .eq("client_id", clientId)
         .order("name");
       if (error) throw error;
+      return data as Asset[];
       return data;
     },
   });
@@ -288,6 +300,8 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     // 3. Manual assets
     for (const a of assets) {
       const isDuplicate = docHostnames.has(a.name?.toLowerCase());
+      const hasDocLink = !!a.doc_device_id;
+      const linkedDoc = hasDocLink ? docDevices.find(d => d.id === a.doc_device_id) || null : null;
       items.push({
         key: `asset-${a.id}`,
         name: a.name,
@@ -297,11 +311,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         statusOnline: null,
         statusLabel: statusLabels[a.status] || a.status,
         origin: "manual",
-        documented: false,
-        docDevice: null,
+        documented: hasDocLink,
+        docDevice: linkedDoc,
         monitoredDevice: null,
         asset: a,
-        possibleDuplicate: isDuplicate,
+        possibleDuplicate: isDuplicate && !hasDocLink,
       });
     }
 
@@ -332,10 +346,63 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: async (_: void, data: AssetFormData) => {
       queryClient.invalidateQueries({ queryKey: ["client-assets", clientId] });
-      toast({ title: editingAsset ? "Ativo atualizado" : "Ativo adicionado" });
+      const wasEditing = !!editingAsset;
+      const editedAsset = editingAsset;
+      toast({ title: wasEditing ? "Ativo atualizado" : "Ativo adicionado" });
       handleCloseForm();
+
+      if (wasEditing && editedAsset?.doc_device_id) {
+        // Offer sync to doc_devices
+        sonnerToast("Deseja sincronizar as alterações com a Documentação?", {
+          action: {
+            label: "Sincronizar",
+            onClick: async () => {
+              try {
+                await syncFieldsToDoc({
+                  docDeviceId: editedAsset.doc_device_id!,
+                  fields: {
+                    name: data.name,
+                    brand: data.brand || null,
+                    model: data.model || null,
+                    serial_number: data.serial_number || null,
+                    location: data.location || null,
+                  },
+                });
+                sonnerToast.success("Documentação atualizada");
+              } catch {
+                sonnerToast.error("Erro ao sincronizar");
+              }
+            },
+          },
+          duration: 8000,
+        });
+      } else if (!wasEditing) {
+        // New asset — find the newly created asset to get its id
+        const { data: newAssets } = await supabase
+          .from("assets")
+          .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes")
+          .eq("client_id", clientId)
+          .eq("name", data.name)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (newAssets && newAssets.length > 0) {
+          const a = newAssets[0];
+          setLinkDialogAsset({
+            id: a.id,
+            client_id: a.client_id,
+            name: a.name,
+            asset_type: a.asset_type,
+            brand: a.brand,
+            model: a.model,
+            serial_number: a.serial_number,
+            location: a.location,
+            notes: a.notes,
+          });
+        }
+      }
     },
     onError: (error: unknown) => {
       toast({ title: "Erro", description: getErrorMessage(error), variant: "destructive" });
@@ -623,9 +690,14 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                             Sim
                           </Badge>
                         ) : item.origin === "manual" ? (
-                          <Badge variant="outline" className="text-xs">
-                            Manual
-                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Badge variant="outline" className="text-xs">
+                                Manual
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>Ativo manual sem vínculo com Documentação</TooltipContent>
+                          </Tooltip>
                         ) : (
                           <Tooltip>
                             <TooltipTrigger>
@@ -640,6 +712,25 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                       <TableCell className="text-right">
                         {isManual && item.asset && (
                           <div className="flex items-center justify-end gap-2">
+                            {!item.documented && (
+                              <PermissionGate module="inventory" action="edit">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setManualLinkDialog({ open: true, assetId: item.asset!.id });
+                                      }}
+                                    >
+                                      <Link2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Vincular à Documentação</TooltipContent>
+                                </Tooltip>
+                              </PermissionGate>
+                            )}
                             <PermissionGate module="inventory" action="edit">
                               <Button
                                 variant="ghost"
@@ -699,6 +790,19 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         variant="destructive"
         onConfirm={() => deleteConfirm.asset && deleteMutation.mutate(deleteConfirm.asset.id)}
         isLoading={deleteMutation.isPending}
+      />
+
+      <DocDeviceLinkDialog
+        open={!!linkDialogAsset}
+        onOpenChange={(open) => !open && setLinkDialogAsset(null)}
+        asset={linkDialogAsset}
+      />
+
+      <DocDeviceManualLinkDialog
+        open={manualLinkDialog.open}
+        onOpenChange={(open) => setManualLinkDialog({ ...manualLinkDialog, open })}
+        assetId={manualLinkDialog.assetId}
+        clientId={clientId}
       />
     </Card>
   );
