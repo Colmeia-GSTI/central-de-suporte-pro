@@ -1,8 +1,9 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { TicketForm } from "@/components/tickets/TicketForm";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Ticket } from "lucide-react";
+import { ArrowLeft, Ticket, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function NewTicketPage() {

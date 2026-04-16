@@ -227,6 +227,26 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Push notification to staff
+    if (!isInternal) {
+      try {
+        await supabase.functions.invoke("send-push-notification", {
+          body: {
+            type: "ticket",
+            role_filter: ["admin", "manager", "technician"],
+            data: {
+              title: `Chamado #${ticket.ticket_number}`,
+              body: eventMessages[event_type],
+              url: `/tickets?open=${ticket_id}`,
+              tag: `ticket-${ticket_id}`,
+            }
+          }
+        });
+      } catch (pushErr) {
+        console.error("[ticket-notification] Push error:", pushErr);
+      }
+    }
+
     console.log("Ticket notification results:", results);
 
     return new Response(JSON.stringify({ success: true, results }), {
