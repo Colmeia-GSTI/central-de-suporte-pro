@@ -423,6 +423,7 @@ export function DocTableLicenses({ clientId }: Props) {
                       <TableCell colSpan={5}>
                         <div className="py-3 space-y-3">
                           <div className="grid gap-3 sm:grid-cols-3 text-sm">
+                            {item.product_version && <div><span className="text-xs text-muted-foreground">Versão / Módulo</span><p>{item.product_version}</p></div>}
                             <div><span className="text-xs text-muted-foreground">Modelo</span><p>{display(item.license_model)}</p></div>
                             {item.linked_device && <div><span className="text-xs text-muted-foreground">Dispositivo</span><p>{item.linked_device}</p></div>}
                             {getEmails(item).length > 0 && (
