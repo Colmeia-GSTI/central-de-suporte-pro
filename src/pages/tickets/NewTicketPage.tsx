@@ -47,11 +47,21 @@ export default function NewTicketPage() {
 
         {/* Form */}
         <div className="bg-card border rounded-2xl p-5 sm:p-8">
-          <TicketForm
-            onSuccess={handleSuccess}
-            onCancel={handleCancel}
-            initialData={initialData}
-          />
+          <ErrorBoundary fallback={
+            <div className="text-center py-12 space-y-4">
+              <p className="text-muted-foreground">Erro ao carregar o formulário.</p>
+              <Button variant="outline" onClick={() => window.location.reload()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Recarregar
+              </Button>
+            </div>
+          }>
+            <TicketForm
+              onSuccess={handleSuccess}
+              onCancel={handleCancel}
+              initialData={initialData}
+            />
+          </ErrorBoundary>
         </div>
       </motion.div>
     </AppLayout>
