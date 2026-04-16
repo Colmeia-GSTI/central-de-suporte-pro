@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,12 +11,18 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Pencil, Trash2, Key, Eye, EyeOff, Copy, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Pencil, Trash2, Key, Eye, EyeOff, Copy, X, Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
 import { useDocCredentialOptions } from "@/hooks/useDocCredentialOptions";
 import { daysUntil, display } from "@/lib/doc-utils";
 import { toast } from "sonner";
 import { addMonths, parseISO, differenceInDays, format } from "date-fns";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface Props { clientId: string; }
 
@@ -38,12 +44,16 @@ const OTHER_MODELS = ["Perpétua", "Assinatura", "OEM", "Outro"];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAILS = 6;
 
+const CRED_ACCESS_TYPES = ["RDP", "SSH", "VPN", "Admin local", "Painel web", "E-mail admin", "SSO / E-mail", "Nuvem", "ERP", "NVR", "Outro"];
+
 interface LicenseRow {
   id: string;
   license_type: string | null;
   product_name: string | null;
   license_model: string | null;
   key: string | null;
+  key_activated: boolean | null;
+  key_activated_at: string | null;
   linked_device: string | null;
   linked_email: string | null;
   linked_emails: string[] | null;
@@ -62,6 +72,7 @@ interface LicenseRow {
 
 const EMPTY: Omit<LicenseRow, "id"> = {
   license_type: null, product_name: null, license_model: null, key: null,
+  key_activated: true, key_activated_at: null,
   linked_device: null, linked_email: null, linked_emails: null,
   quantity_total: 1, quantity_in_use: null,
   devices_covered: null, months_contracted: null, start_date: null, expiry_date: null,
@@ -76,6 +87,7 @@ function isPerpetual(row: Omit<LicenseRow, "id">) {
 }
 
 function getExpiryBadge(row: LicenseRow) {
+  if (row.key_activated === false) return <Badge variant="secondary" className="text-[10px]">Não ativada</Badge>;
   if (isPerpetual(row)) return null;
   if (!row.expiry_date) return null;
   const info = daysUntil(row.expiry_date);
@@ -85,6 +97,7 @@ function getExpiryBadge(row: LicenseRow) {
 
 function getAntivirusProgress(row: LicenseRow) {
   if (row.license_type !== "antivirus" || !row.start_date || !row.expiry_date) return null;
+  if (row.key_activated === false) return null;
   const start = parseISO(row.start_date);
   const end = parseISO(row.expiry_date);
   const totalDays = differenceInDays(end, start);
@@ -111,6 +124,161 @@ function getEmails(row: LicenseRow): string[] {
   return [];
 }
 
+// --- Inline credential mini-form ---
+interface InlineCredFormState {
+  access_type: string;
+  system_name: string;
+  username: string;
+  password_encrypted: string;
+  notes: string;
+}
+
+const INLINE_CRED_EMPTY: InlineCredFormState = {
+  access_type: "", system_name: "", username: "", password_encrypted: "", notes: "",
+};
+
+function InlineCredentialForm({ clientId, onCreated, onCancel }: {
+  clientId: string;
+  onCreated: (id: string) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<InlineCredFormState>(INLINE_CRED_EMPTY);
+  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+  const isSso = form.access_type === "SSO / E-mail";
+
+  const handleSave = async () => {
+    if (!form.access_type || !form.system_name) {
+      toast.error("Preencha tipo e nome do sistema");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        client_id: clientId,
+        access_type: form.access_type,
+        system_name: form.system_name,
+        username: form.username || null,
+        password_encrypted: isSso ? null : (form.password_encrypted || null),
+        notes: form.notes || null,
+      };
+      const { data, error } = await (supabase.from("doc_credentials") as any)
+        .insert(payload).select("id").single();
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["doc_credentials_options", clientId] });
+      toast.success("Credencial criada");
+      onCreated(data.id);
+    } catch (e: any) {
+      toast.error("Erro ao criar credencial: " + (e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+      <p className="text-xs font-medium text-muted-foreground">Nova credencial rápida</p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-xs">Tipo de acesso *</Label>
+          <Select value={form.access_type} onValueChange={(v) => setForm({ ...form, access_type: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger>
+            <SelectContent>{CRED_ACCESS_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Sistema / Nome *</Label>
+          <Input className="h-8 text-xs" value={form.system_name} onChange={(e) => setForm({ ...form, system_name: e.target.value })} />
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs">{isSso ? "E-mail SSO" : "Usuário / E-mail"}</Label>
+        <Input className="h-8 text-xs" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+      </div>
+      {isSso ? (
+        <p className="text-xs text-muted-foreground italic">Autenticação via SSO — nenhuma senha armazenada</p>
+      ) : (
+        <div>
+          <Label className="text-xs">Senha</Label>
+          <Input type="password" className="h-8 text-xs" value={form.password_encrypted} onChange={(e) => setForm({ ...form, password_encrypted: e.target.value })} />
+        </div>
+      )}
+      <div>
+        <Label className="text-xs">Observações</Label>
+        <Input className="h-8 text-xs" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onCancel} disabled={saving}>Cancelar</Button>
+        <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={saving || !form.access_type || !form.system_name}>
+          {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+          Salvar credencial
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// --- Product Name Combobox ---
+function ProductNameCombobox({ value, onChange, clientId }: {
+  value: string;
+  onChange: (v: string) => void;
+  clientId: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ["doc-license-products", clientId],
+    queryFn: async () => {
+      const { data } = await (supabase.from("doc_licenses") as any)
+        .select("product_name")
+        .eq("client_id", clientId)
+        .not("product_name", "is", null)
+        .order("product_name");
+      return [...new Set((data ?? []).map((r: any) => r.product_name).filter(Boolean))] as string[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // If no suggestions, render plain input
+  if (suggestions.length === 0) {
+    return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Nome do produto" />;
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal h-10">
+          {value || "Nome do produto"}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Buscar ou digitar novo..."
+            value={value}
+            onValueChange={onChange}
+          />
+          <CommandList>
+            <CommandEmpty>
+              <span className="text-xs text-muted-foreground">Nenhum produto encontrado — o texto digitado será usado</span>
+            </CommandEmpty>
+            <CommandGroup>
+              {suggestions.filter(s => s.toLowerCase().includes((value || "").toLowerCase())).map(s => (
+                <CommandItem key={s} value={s} onSelect={() => { onChange(s); setOpen(false); }}>
+                  <Check className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
+                  {s}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// --- Main component ---
 export function DocTableLicenses({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<LicenseRow>({ tableName: "doc_licenses", clientId });
   const { options: credOptions } = useDocCredentialOptions(clientId);
@@ -121,25 +289,42 @@ export function DocTableLicenses({ clientId }: Props) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [emailInput, setEmailInput] = useState("");
+  const [showInlineCred, setShowInlineCred] = useState(false);
 
-  // Auto-calc expiry for antivirus
+  // Auto-calc expiry for antivirus when key is activated
   useEffect(() => {
-    if (form.license_type === "antivirus" && form.start_date && form.months_contracted) {
+    if (form.license_type === "antivirus" && form.start_date && form.months_contracted && form.key_activated !== false) {
       const calc = addMonths(parseISO(form.start_date), form.months_contracted);
       setForm(f => ({ ...f, expiry_date: format(calc, "yyyy-MM-dd") }));
     }
-  }, [form.start_date, form.months_contracted, form.license_type]);
+  }, [form.start_date, form.months_contracted, form.license_type, form.key_activated]);
 
-  const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setShowKey(false); setEmailInput(""); setDrawerOpen(true); };
+  const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setShowKey(false); setEmailInput(""); setShowInlineCred(false); setDrawerOpen(true); };
   const openEdit = (item: LicenseRow) => {
     const emails = getEmails(item);
     setEditingItem(item);
     setForm({ ...EMPTY, ...item, linked_emails: emails.length > 0 ? emails : null });
     setShowKey(false);
     setEmailInput("");
+    setShowInlineCred(false);
     setDrawerOpen(true);
   };
-  const handleSave = async () => { if (editingItem) await update({ id: editingItem.id, ...form } as any); else await create(form as any); setDrawerOpen(false); };
+
+  const handleSave = async () => {
+    // Always null out legacy linked_email, use linked_emails only
+    const payload = { ...form, linked_email: null };
+
+    // If key not activated, clear date fields
+    if (payload.key_activated === false) {
+      payload.start_date = null;
+      payload.expiry_date = null;
+      payload.key_activated_at = null;
+    }
+
+    if (editingItem) await update({ id: editingItem.id, ...payload } as any);
+    else await create(payload as any);
+    setDrawerOpen(false);
+  };
 
   const copyToClipboard = async (text: string | null) => {
     if (!text) return;
@@ -162,9 +347,50 @@ export function DocTableLicenses({ clientId }: Props) {
     setForm({ ...form, linked_emails: current.filter(e => e !== email) });
   };
 
+  const notActivated = form.key_activated === false;
+
   if (isLoading) return <Skeleton className="h-32 w-full" />;
 
   const modelOptions = form.license_type === "windows" ? WINDOWS_MODELS : form.license_type === "office" ? OFFICE_MODELS : OTHER_MODELS;
+
+  // Credential select section (reused in antivirus and other)
+  const credentialSection = (
+    <div className="space-y-2">
+      <Label>Credencial do console</Label>
+      <Select value={form.credential_id || ""} onValueChange={(v) => setForm({ ...form, credential_id: v || null })}>
+        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+        <SelectContent>{credOptions.map(o => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}</SelectContent>
+      </Select>
+      {!showInlineCred ? (
+        <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setShowInlineCred(true)}>
+          <Plus className="h-3 w-3 mr-1" />Cadastrar nova credencial
+        </Button>
+      ) : (
+        <InlineCredentialForm
+          clientId={clientId}
+          onCreated={(id) => {
+            setForm({ ...form, credential_id: id });
+            setShowInlineCred(false);
+          }}
+          onCancel={() => setShowInlineCred(false)}
+        />
+      )}
+    </div>
+  );
+
+  // Key activation toggle (shown for all license types that have a key field)
+  const keyActivationToggle = (
+    <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
+      <Switch
+        checked={notActivated}
+        onCheckedChange={(checked) => setForm({ ...form, key_activated: !checked })}
+      />
+      <div>
+        <Label className="text-sm cursor-pointer">Chave ainda não ativada</Label>
+        <p className="text-xs text-muted-foreground">A chave foi comprada mas ainda não foi utilizada/ativada</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-3">
@@ -175,7 +401,7 @@ export function DocTableLicenses({ clientId }: Props) {
       ) : (
         <Table>
           <TableHeader><TableRow>
-            <TableHead>Produto</TableHead><TableHead>Tipo</TableHead><TableHead>Qtd</TableHead><TableHead>Vencimento</TableHead><TableHead>Alerta</TableHead>
+            <TableHead>Produto</TableHead><TableHead>Tipo</TableHead><TableHead>Qtd</TableHead><TableHead>Vencimento</TableHead><TableHead>Status</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {items.map((item) => (
@@ -186,7 +412,7 @@ export function DocTableLicenses({ clientId }: Props) {
                       <TableCell className="font-medium">{display(item.product_name)}</TableCell>
                       <TableCell>{TYPE_LABEL_MAP[item.license_type ?? ""] ?? display(item.license_type)}</TableCell>
                       <TableCell>{display(item.quantity_total ?? item.devices_covered)}</TableCell>
-                      <TableCell>{isPerpetual(item) ? "Perpétua" : item.expiry_date ? format(parseISO(item.expiry_date), "dd/MM/yyyy") : "—"}</TableCell>
+                      <TableCell>{item.key_activated === false ? "—" : isPerpetual(item) ? "Perpétua" : item.expiry_date ? format(parseISO(item.expiry_date), "dd/MM/yyyy") : "—"}</TableCell>
                       <TableCell>{getExpiryBadge(item)}</TableCell>
                     </TableRow>
                   </CollapsibleTrigger>
@@ -246,7 +472,10 @@ export function DocTableLicenses({ clientId }: Props) {
                 <SelectContent>{LICENSE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Nome do produto *</Label><Input value={form.product_name || ""} onChange={(e) => setForm({ ...form, product_name: e.target.value })} /></div>
+            <div>
+              <Label>Nome do produto *</Label>
+              <ProductNameCombobox value={form.product_name || ""} onChange={(v) => setForm({ ...form, product_name: v })} clientId={clientId} />
+            </div>
 
             {/* Model select — not for antivirus */}
             {form.license_type && form.license_type !== "antivirus" && (
@@ -270,12 +499,15 @@ export function DocTableLicenses({ clientId }: Props) {
               </div>
             </div>
 
+            {/* Key activation toggle */}
+            {keyActivationToggle}
+
             {/* Windows-specific */}
             {form.license_type === "windows" && (<>
               <div><Label>Dispositivo vinculado</Label><Input value={form.linked_device || ""} onChange={(e) => setForm({ ...form, linked_device: e.target.value })} /></div>
               <div><Label>Quantidade</Label><Input type="number" value={form.quantity_total ?? ""} onChange={(e) => setForm({ ...form, quantity_total: Number(e.target.value) || null })} /></div>
               {(form.license_model === "Volume" || form.license_model === "MAK") && (
-                <div><Label>Servidor KMS / MAK</Label><Input value={(form as any).kms_server || ""} onChange={(e) => setForm({ ...form, linked_device: e.target.value })} placeholder="Ex: kms.empresa.local" /></div>
+                <div><Label>Servidor KMS / MAK</Label><Input value={form.linked_device || ""} onChange={(e) => setForm({ ...form, linked_device: e.target.value })} placeholder="Ex: kms.empresa.local" /></div>
               )}
             </>)}
 
@@ -318,9 +550,19 @@ export function DocTableLicenses({ clientId }: Props) {
                 <div><Label>Qtd total</Label><Input type="number" value={form.quantity_total ?? ""} onChange={(e) => setForm({ ...form, quantity_total: Number(e.target.value) || null })} /></div>
                 <div><Label>Qtd em uso</Label><Input type="number" value={form.quantity_in_use ?? ""} onChange={(e) => setForm({ ...form, quantity_in_use: Number(e.target.value) || null })} /></div>
               </div>
-              <div><Label>Data de início</Label><Input type="date" value={form.start_date || ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} /></div>
+              <div>
+                <Label>Data de início</Label>
+                <Input type="date" value={form.start_date || ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} disabled={notActivated} placeholder={notActivated ? "— (não ativada)" : undefined} />
+              </div>
               {form.license_model !== "Perpétua" && (
-                <div><Label>Data de vencimento</Label><Input type="date" value={form.expiry_date || ""} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} /></div>
+                <div>
+                  <Label>Data de vencimento</Label>
+                  {notActivated ? (
+                    <p className="text-sm text-muted-foreground mt-1 italic">Será calculado ao ativar</p>
+                  ) : (
+                    <Input type="date" value={form.expiry_date || ""} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} />
+                  )}
+                </div>
               )}
               <div><Label>Dias para alerta</Label><Input type="number" value={form.alert_days ?? 60} onChange={(e) => setForm({ ...form, alert_days: Number(e.target.value) || 60 })} /></div>
             </>)}
@@ -329,12 +571,17 @@ export function DocTableLicenses({ clientId }: Props) {
             {form.license_type === "antivirus" && (<>
               <div><Label>Dispositivos cobertos</Label><Input type="number" value={form.devices_covered ?? ""} onChange={(e) => setForm({ ...form, devices_covered: Number(e.target.value) || null })} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Data de início *</Label><Input type="date" value={form.start_date || ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} /></div>
+                <div>
+                  <Label>Data de início *</Label>
+                  <Input type="date" value={form.start_date || ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} disabled={notActivated} placeholder={notActivated ? "— (não ativada)" : undefined} />
+                </div>
                 <div><Label>Meses contratados</Label><Input type="number" value={form.months_contracted ?? ""} onChange={(e) => setForm({ ...form, months_contracted: Number(e.target.value) || null })} /></div>
               </div>
               <div>
                 <Label className="text-muted-foreground">Data de vencimento (calculado automaticamente)</Label>
-                {form.start_date && form.months_contracted ? (
+                {notActivated ? (
+                  <p className="text-sm text-muted-foreground mt-1 italic">Será calculado ao ativar</p>
+                ) : form.start_date && form.months_contracted ? (
                   <Input type="date" value={form.expiry_date || ""} readOnly disabled className="text-muted-foreground bg-muted/50" />
                 ) : (
                   <p className="text-sm text-muted-foreground mt-1">—</p>
@@ -342,12 +589,7 @@ export function DocTableLicenses({ clientId }: Props) {
               </div>
               <div><Label>Dias para alerta</Label><Input type="number" value={form.alert_days ?? 30} onChange={(e) => setForm({ ...form, alert_days: Number(e.target.value) || 30 })} /></div>
               <div><Label>URL console cloud</Label><Input value={form.cloud_console_url || ""} onChange={(e) => setForm({ ...form, cloud_console_url: e.target.value })} /></div>
-              <div><Label>Credencial do console</Label>
-                <Select value={form.credential_id || ""} onValueChange={(v) => setForm({ ...form, credential_id: v || null })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{credOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              {credentialSection}
             </>)}
 
             {/* Other-specific */}
@@ -356,9 +598,20 @@ export function DocTableLicenses({ clientId }: Props) {
                 <div><Label>Qtd total</Label><Input type="number" value={form.quantity_total ?? ""} onChange={(e) => setForm({ ...form, quantity_total: Number(e.target.value) || null })} /></div>
                 <div><Label>Qtd em uso</Label><Input type="number" value={form.quantity_in_use ?? ""} onChange={(e) => setForm({ ...form, quantity_in_use: Number(e.target.value) || null })} /></div>
               </div>
-              <div><Label>Data de início</Label><Input type="date" value={form.start_date || ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} /></div>
-              <div><Label>Data de vencimento</Label><Input type="date" value={form.expiry_date || ""} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} /></div>
+              <div>
+                <Label>Data de início</Label>
+                <Input type="date" value={form.start_date || ""} onChange={(e) => setForm({ ...form, start_date: e.target.value })} disabled={notActivated} placeholder={notActivated ? "— (não ativada)" : undefined} />
+              </div>
+              <div>
+                <Label>Data de vencimento</Label>
+                {notActivated ? (
+                  <p className="text-sm text-muted-foreground mt-1 italic">Será calculado ao ativar</p>
+                ) : (
+                  <Input type="date" value={form.expiry_date || ""} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} />
+                )}
+              </div>
               <div><Label>Dias para alerta</Label><Input type="number" value={form.alert_days ?? 30} onChange={(e) => setForm({ ...form, alert_days: Number(e.target.value) || 30 })} /></div>
+              {credentialSection}
             </>)}
 
             <div><Label>Observações</Label><Textarea value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} /></div>
