@@ -79,11 +79,28 @@ function renderSectionContent(sectionId: string, clientId: string, client?: Clie
 
 export function ClientDocumentation({ clientId, client }: ClientDocumentationProps) {
   const { alerts, criticalCount, warningCount, acknowledge, isAcknowledging, sectionCounts, severityBySection } = useDocAlerts(clientId);
+  const { generatePdf, isGenerating } = useDocPdfGenerator(clientId);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Documentação Técnica</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>Documentação Técnica</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generatePdf}
+            disabled={isGenerating}
+            aria-label="Exportar documentação em PDF"
+          >
+            {isGenerating ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {isGenerating ? "Gerando PDF..." : "Exportar PDF"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <DocAlertsPanel
