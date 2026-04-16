@@ -408,7 +408,10 @@ export function DocTableLicenses({ clientId }: Props) {
                 <>
                   <CollapsibleTrigger asChild>
                     <TableRow className="cursor-pointer hover:bg-muted/30">
-                      <TableCell className="font-medium">{display(item.product_name)}</TableCell>
+                      <TableCell className="font-medium">
+                        <div>{display(item.product_name)}</div>
+                        {item.product_version && <div className="text-xs text-muted-foreground">{item.product_version}</div>}
+                      </TableCell>
                       <TableCell>{TYPE_LABEL_MAP[item.license_type ?? ""] ?? display(item.license_type)}</TableCell>
                       <TableCell>{display(item.quantity_total ?? item.devices_covered)}</TableCell>
                       <TableCell>{item.key_activated === false ? "—" : isPerpetual(item) ? "Perpétua" : item.expiry_date ? format(parseISO(item.expiry_date), "dd/MM/yyyy") : "—"}</TableCell>
