@@ -1,11 +1,13 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Building2, Server, Wifi, Monitor, Network, Camera, Key,
   Package, Globe, Lock, Users, Shield, Handshake, ClipboardList,
-  Construction, Key as KeyIcon,
+  Construction, Key as KeyIcon, Download, Loader2,
 } from "lucide-react";
+import { useDocPdfGenerator } from "@/hooks/useDocPdfGenerator";
 import { DocSectionClientInfo } from "./documentation/DocSectionClientInfo";
 import { DocSectionInfrastructure } from "./documentation/DocSectionInfrastructure";
 import { DocSectionTelephony } from "./documentation/DocSectionTelephony";
@@ -77,11 +79,28 @@ function renderSectionContent(sectionId: string, clientId: string, client?: Clie
 
 export function ClientDocumentation({ clientId, client }: ClientDocumentationProps) {
   const { alerts, criticalCount, warningCount, acknowledge, isAcknowledging, sectionCounts, severityBySection } = useDocAlerts(clientId);
+  const { generatePdf, isGenerating } = useDocPdfGenerator(clientId);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Documentação Técnica</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>Documentação Técnica</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generatePdf}
+            disabled={isGenerating}
+            aria-label="Exportar documentação em PDF"
+          >
+            {isGenerating ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {isGenerating ? "Gerando PDF..." : "Exportar PDF"}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <DocAlertsPanel
