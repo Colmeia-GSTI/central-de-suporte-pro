@@ -50,8 +50,3 @@ export const statusColors: Record<string, string> = {
   overdue: "bg-yellow-500",
   unknown: "bg-gray-400",
 };
-  online: "bg-green-500",
-  offline: "bg-red-500",
-  overdue: "bg-yellow-500",
-  unknown: "bg-gray-400",
-};
