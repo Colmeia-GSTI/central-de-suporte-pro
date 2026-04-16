@@ -1,64 +1,88 @@
 
 
-## Plano: Correções em DocTableLicenses + Migração
+# Plan: Consolidate Email Helpers + PDF Attachments
 
-### Correção 1 — Padronizar license_type para inglês/minúsculo
+## Summary
 
-Alterar `DocTableLicenses.tsx`:
+Two independent improvements: (1) extract duplicated email utility functions from 6 Edge Functions into `_shared/email-helpers.ts`, and (2) add PDF attachment support to billing emails via Resend's `attachments` API.
 
-- `LICENSE_TYPES` de `["Windows", "Office/M365", "Antivírus", "Outro"]` para objetos `{ value, label }`:
-  ```
-  { value: "windows", label: "Windows" }
-  { value: "office", label: "Office / Microsoft 365" }
-  { value: "antivirus", label: "Antivírus" }
-  { value: "other", label: "Outro" }
-  ```
-- Todas as comparações no componente (`isPerpetual`, `getAntivirusProgress`, `modelOptions`, blocos condicionais do formulário) passam a usar os valores em inglês.
-- Na tabela de listagem, exibir o label amigável via mapeamento.
-- `isPerpetual`: `"windows"`, `"office"` + `"Perpétua"`, `"other"` + `"Perpétua"`.
-- `getAntivirusProgress`: `"antivirus"`.
-- useEffect auto-calc: `"antivirus"`.
+## Audit Results
 
-### Correção 2 — Campo linked_emails (array)
+**Duplicated code found in 6 Edge Functions:**
+- `resend-payment-notification` — `replaceVariables`, `wrapInEmailLayout`, `EmailSettings`, `EmailTemplate`
+- `notify-due-invoices` — same 4 items
+- `batch-collection-notification` — same 4 items
+- `send-nfse-notification` — same 4 items
+- `send-ticket-notification` — same 4 items (+ extra CSS for ticket styles)
+- `send-welcome-email` — inline HTML layout (not using the function, but same pattern)
 
-**Migração SQL:**
-```sql
-ALTER TABLE doc_licenses ADD COLUMN linked_emails text[] DEFAULT '{}';
-```
+**`InvoiceActionsPopover` vs `InvoiceInlineActions`:** These are NOT redundant. `InvoiceInlineActions` renders inline icon buttons in the table row. `InvoiceActionsPopover` renders a `...` dropdown menu with text actions. They serve different purposes and both are used in `BillingInvoicesTab.tsx`. No consolidation needed.
 
-**No componente** (bloco `office`):
-- Substituir o input único de e-mail por um componente inline de tags:
-  - Estado local `emailInput` para o campo de digitação.
-  - Lista de e-mails renderizada como `Badge` com botão X para remover.
-  - Botão "+" e Enter para adicionar.
-  - Limite de 6 e-mails, validação básica com regex.
-  - Texto informativo abaixo.
-- Interface `LicenseRow` ganha `linked_emails: string[] | null`.
-- `EMPTY` ganha `linked_emails: null`.
-- `openEdit`: ao carregar, fazer fallback `linked_emails ?? (linked_email ? [linked_email] : [])`.
-- `handleSave`: gravar `linked_emails` no payload.
-- Na listagem expandida, exibir os e-mails do array (com fallback para `linked_email`).
+---
 
-### Correção 3 — Expiry date read-only no antivírus
+## Part 1 — Create `_shared/email-helpers.ts`
 
-No bloco `antivirus` do formulário:
-- Campo de data de vencimento com `readOnly`, `disabled`, classe `text-muted-foreground`.
-- Label: "Data de vencimento (calculado automaticamente)".
-- Se `!form.start_date || !form.months_contracted`, exibir "—" em vez do input.
+Create a shared module with:
+- `EmailLayoutOptions` interface
+- `getEmailSettings(supabase)` — fetches from `email_settings` + `company_settings`
+- `wrapInEmailLayout(content, options)` — the consolidated HTML layout (using the richest version from `send-nfse-notification` which includes `blockquote` and `code` styles)
+- `replaceVariables(template, data)` — mustache-style variable replacement with conditional blocks
+- `formatCurrencyBRL(value)` and `formatDateBR(date)` — formatting helpers
+- `corsHeaders` constant
+- Re-export `applyNotificationMessage` from existing `notification-helpers.ts`
 
-### Correção 4 — Limpar dados de teste
+**Updated Edge Functions** (remove local duplicates, import from shared):
+1. `resend-payment-notification/index.ts` — remove ~50 lines
+2. `notify-due-invoices/index.ts` — remove ~50 lines
+3. `batch-collection-notification/index.ts` — remove ~50 lines
+4. `send-nfse-notification/index.ts` — remove ~55 lines
+5. `send-ticket-notification/index.ts` — remove ~55 lines (keep extra ticket CSS via options parameter)
+6. `send-welcome-email/index.ts` — refactor to use `wrapInEmailLayout` + `getEmailSettings`
 
-Executar via insert tool (DELETE):
-```sql
-DELETE FROM doc_licenses WHERE product_name LIKE '% - TESTE';
-DELETE FROM doc_alerts WHERE title LIKE '%TESTE%' OR description LIKE '%TESTE%';
-```
+**Estimated lines removed:** ~260 lines of duplicated code across 6 files.
 
-### Arquivos alterados
+---
 
-| Arquivo | Acao |
-|---|---|
-| `src/components/clients/documentation/DocTableLicenses.tsx` | Correções 1, 2, 3 |
-| Migração SQL | ADD COLUMN `linked_emails text[]` |
-| Insert tool (DELETE) | Limpar dados de teste |
+## Part 2 — PDF Attachments in Billing Emails
+
+### Step A: Update `send-email-resend`
+- Add `attachments` field to `EmailRequest` interface
+- Pass `attachments` array through to the Resend API body (Resend supports `{ filename, path }` where `path` is a URL)
+
+### Step B: Update `resend-payment-notification`
+- After generating signed URLs for boleto and NFS-e PDFs, build an `attachments` array
+- Pass to `send-email-resend` alongside existing HTML (links remain in the body as fallback)
+
+### Step C: Update `send-nfse-notification`
+- Attach NFS-e PDF and XML via signed URLs
+
+### Step D: Update `notify-due-invoices`
+- Attach boleto PDF only (no NFS-e for reminders to avoid confusion)
+
+---
+
+## Part 3 — Cleanup
+
+- Merge `_shared/notification-helpers.ts` into `_shared/email-helpers.ts` (single shared file)
+- Delete `_shared/notification-helpers.ts`
+- Update all imports from `notification-helpers.ts` to `email-helpers.ts`
+- Verify no unused imports in all modified files
+
+---
+
+## Files Modified
+
+| File | Action |
+|------|--------|
+| `supabase/functions/_shared/email-helpers.ts` | **Create** — consolidated helpers |
+| `supabase/functions/_shared/notification-helpers.ts` | **Delete** — merged into email-helpers |
+| `supabase/functions/send-email-resend/index.ts` | Add attachments passthrough |
+| `supabase/functions/resend-payment-notification/index.ts` | Use shared helpers + add attachments |
+| `supabase/functions/notify-due-invoices/index.ts` | Use shared helpers + add boleto attachment |
+| `supabase/functions/batch-collection-notification/index.ts` | Use shared helpers |
+| `supabase/functions/send-nfse-notification/index.ts` | Use shared helpers + add PDF/XML attachments |
+| `supabase/functions/send-ticket-notification/index.ts` | Use shared helpers |
+| `supabase/functions/send-welcome-email/index.ts` | Use shared helpers |
+
+All 8 affected Edge Functions will be redeployed after changes.
 
