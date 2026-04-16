@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", "invoice_reminder").maybeSingle(),
       supabase.from("invoices").select(`
-        id, invoice_number, amount, due_date, status, client_id,
+        id, invoice_number, amount, due_date, status, client_id, contract_id,
         clients (id, name, email, financial_email, whatsapp)
       `).eq("status", "pending").gte("due_date", today).lte("due_date", targetDateStr),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
