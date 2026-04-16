@@ -470,14 +470,49 @@ export function DocTableLicenses({ clientId }: Props) {
           <SheetHeader><SheetTitle>{editingItem ? "Editar licença" : "Nova licença"}</SheetTitle></SheetHeader>
           <div className="space-y-4 mt-4">
             <div><Label>Tipo de licença *</Label>
-              <Select value={form.license_type || ""} onValueChange={(v) => setForm({ ...EMPTY, license_type: v, product_name: form.product_name, notes: form.notes })}>
+              <Select value={form.license_type || ""} onValueChange={(v) => setForm({ ...EMPTY, license_type: v, product_name: form.product_name, product_version: form.product_version, notes: form.notes })}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>{LICENSE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Nome do produto *</Label>
-              <ProductNameCombobox value={form.product_name || ""} onChange={(v) => setForm({ ...form, product_name: v })} clientId={clientId} />
+              <Label>Produto *</Label>
+              <LicenseFieldCombobox
+                value={form.product_name || ""}
+                onChange={(v) => setForm({ ...form, product_name: v, product_version: null })}
+                clientId={clientId}
+                queryKey={["doc-license-products", clientId]}
+                fetchFn={async () => {
+                  const { data } = await (supabase.from("doc_licenses") as any)
+                    .select("product_name")
+                    .eq("client_id", clientId)
+                    .not("product_name", "is", null)
+                    .order("product_name");
+                  return [...new Set((data ?? []).map((r: any) => r.product_name).filter(Boolean))] as string[];
+                }}
+                placeholder="Ex: Bitdefender GravityZone"
+              />
+            </div>
+            <div>
+              <Label>Versão / Módulo</Label>
+              <LicenseFieldCombobox
+                value={form.product_version || ""}
+                onChange={(v) => setForm({ ...form, product_version: v })}
+                clientId={clientId}
+                queryKey={["doc-license-versions", clientId, form.product_name || ""]}
+                fetchFn={async () => {
+                  const { data } = await (supabase.from("doc_licenses") as any)
+                    .select("product_version")
+                    .eq("client_id", clientId)
+                    .eq("product_name", form.product_name)
+                    .not("product_version", "is", null)
+                    .order("product_version");
+                  return [...new Set((data ?? []).map((r: any) => r.product_version).filter(Boolean))] as string[];
+                }}
+                placeholder="Ex: Full Disk Encryption"
+                disabled={!form.product_name}
+                disabledPlaceholder="Selecione o produto primeiro"
+              />
             </div>
 
             {/* Model select — not for antivirus */}
