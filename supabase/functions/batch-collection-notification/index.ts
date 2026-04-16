@@ -86,6 +86,7 @@ interface Invoice {
   invoice_number: number;
   amount: number;
   due_date: string;
+  contract_id: string | null;
   clients: ClientInfo | null;
 }
 
@@ -201,6 +202,22 @@ Deno.serve(async (req) => {
               emailSubject = defaultTemplate.subject;
               const contentHtml = defaultTemplate.body(client.name, invoice.invoice_number, formattedAmount, formattedDate);
               emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+            }
+
+            // Apply contract notification_message
+            if (invoice.contract_id) {
+              const { data: contractData } = await supabase
+                .from("contracts")
+                .select("notification_message, name")
+                .eq("id", invoice.contract_id)
+                .single();
+              emailHtml = applyNotificationMessage(emailHtml, contractData?.notification_message || null, {
+                cliente: client.name,
+                valor: formattedAmount,
+                vencimento: formattedDate,
+                fatura: String(invoice.invoice_number),
+                contrato: contractData?.name || "",
+              });
             }
 
             const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
