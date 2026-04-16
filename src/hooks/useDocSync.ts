@@ -44,7 +44,7 @@ export function useDocSync(clientId: string) {
       if (error) throw error;
       return (data || []) as unknown as SyncLog[];
     },
-    staleTime: 60_000,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Check if TRMM is mapped for this client via client_external_mappings
