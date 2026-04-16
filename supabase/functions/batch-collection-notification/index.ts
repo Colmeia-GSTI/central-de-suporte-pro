@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
     const [settingsRes, templateRes, invoicesRes, whatsappRes] = await Promise.all([
       supabase.from("email_settings").select("*").limit(1).single(),
       supabase.from("email_templates").select("*").eq("template_type", templateType).maybeSingle(),
-      supabase.from("invoices").select(`id, invoice_number, amount, due_date, clients(name, email, financial_email, whatsapp)`).in("id", invoice_ids),
+      supabase.from("invoices").select(`id, invoice_number, amount, due_date, contract_id, clients(name, email, financial_email, whatsapp)`).in("id", invoice_ids),
       supabase.from("integration_settings").select("settings, is_active").eq("integration_type", "evolution_api").single(),
     ]);
 
