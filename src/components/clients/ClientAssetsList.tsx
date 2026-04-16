@@ -50,7 +50,7 @@ const assetSchema = z.object({
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
-type Asset = Pick<Tables<"assets">, "id" | "client_id" | "name" | "asset_type" | "brand" | "model" | "serial_number" | "status" | "location" | "notes" | "purchase_date" | "purchase_value">;
+type Asset = Pick<Tables<"assets">, "id" | "client_id" | "name" | "asset_type" | "brand" | "model" | "serial_number" | "status" | "location" | "notes" | "purchase_date" | "purchase_value"> & { doc_device_id?: string | null };
 type MonitoredDevice = Pick<Tables<"monitored_devices">, "id" | "name" | "hostname" | "ip_address" | "device_type" | "is_online" | "uptime_percent" | "last_seen_at" | "external_source" | "client_id">;
 
 interface DocDevice {
