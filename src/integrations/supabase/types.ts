@@ -2466,6 +2466,7 @@ export type Database = {
           license_type: string | null
           linked_device: string | null
           linked_email: string | null
+          linked_emails: string[] | null
           months_contracted: number | null
           notes: string | null
           product_name: string | null
@@ -2488,6 +2489,7 @@ export type Database = {
           license_type?: string | null
           linked_device?: string | null
           linked_email?: string | null
+          linked_emails?: string[] | null
           months_contracted?: number | null
           notes?: string | null
           product_name?: string | null
@@ -2510,6 +2512,7 @@ export type Database = {
           license_type?: string | null
           linked_device?: string | null
           linked_email?: string | null
+          linked_emails?: string[] | null
           months_contracted?: number | null
           notes?: string | null
           product_name?: string | null

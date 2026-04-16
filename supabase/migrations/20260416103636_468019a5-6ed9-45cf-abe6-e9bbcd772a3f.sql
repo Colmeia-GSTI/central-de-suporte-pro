@@ -1,0 +1,1 @@
+ALTER TABLE doc_licenses ADD COLUMN linked_emails text[] DEFAULT '{}';
