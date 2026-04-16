@@ -690,9 +690,14 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                             Sim
                           </Badge>
                         ) : item.origin === "manual" ? (
-                          <Badge variant="outline" className="text-xs">
-                            Manual
-                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Badge variant="outline" className="text-xs">
+                                Manual
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>Ativo manual sem vínculo com Documentação</TooltipContent>
+                          </Tooltip>
                         ) : (
                           <Tooltip>
                             <TooltipTrigger>
@@ -707,6 +712,25 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                       <TableCell className="text-right">
                         {isManual && item.asset && (
                           <div className="flex items-center justify-end gap-2">
+                            {!item.documented && (
+                              <PermissionGate module="inventory" action="edit">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setManualLinkDialog({ open: true, assetId: item.asset!.id });
+                                      }}
+                                    >
+                                      <Link2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Vincular à Documentação</TooltipContent>
+                                </Tooltip>
+                              </PermissionGate>
+                            )}
                             <PermissionGate module="inventory" action="edit">
                               <Button
                                 variant="ghost"
