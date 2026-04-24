@@ -1,108 +1,126 @@
-# Plano: Rastreabilidade de Envios de Email
+# Plano: Reenvio manual de email de confirmação
 
-## Diagnóstico
+## Contexto
+O `auth-email-hook` está deployado mas silencioso (Send Email Hook não configurado no painel Supabase — exige ação manual do dono do projeto). Esta entrega cria um caminho independente para reenviar o email de confirmação via `send-email-resend`, limpa 2 usuários de teste órfãos e melhora a UX no Login/Register.
 
-Auditando o código + banco encontrei **a causa raiz** dos sintomas reportados:
+---
 
-1. `message_logs.user_id` é **NOT NULL**. Nenhuma Edge Function passa user_id. Os inserts falham silenciosamente dentro de `try/catch` ⇒ explica os "apenas 2 logs em 30 dias".
-2. `invoice_notification_logs` tem `UNIQUE(invoice_id, notification_type, channel)`. `notify-due-invoices` faz `upsert`, então reenvios não geram nova linha.
-3. `send-email-resend` grava 3× por email (pending + sent/failed) sem correlação por message_id, sem `related_type/related_id`, sem capturar `external_message_id` do Resend.
-4. Em `generate-monthly-invoices` e similares, `email_sent_at` é setado por trigger/UPDATE antes da resposta do Resend.
+## Passo 1 — Limpeza de usuários órfãos (migration)
 
-## Migrações SQL (3)
+Migração `cleanup_orphan_test_users` removendo (na ordem) `user_roles` → `profiles` → `auth.users` para os 2 emails de teste de março/2026:
+- `teste.final.fluxo@testlovable.com`
+- `teste.trigger.auto@testlovable.com`
 
-```sql
--- 1) Permitir logs de jobs automáticos
-ALTER TABLE public.message_logs ALTER COLUMN user_id DROP NOT NULL;
+Bloco `DO $$ ... $$` com `RAISE NOTICE` reportando contagens removidas. Idempotente: se nenhum user existir, sai sem erro.
 
--- 2) Permitir histórico real de reenvios
-ALTER TABLE public.invoice_notification_logs DROP CONSTRAINT uq_invoice_notification;
--- adicionar coluna recipient para o painel
-ALTER TABLE public.invoice_notification_logs
-  ADD COLUMN IF NOT EXISTS recipient text;
-CREATE INDEX IF NOT EXISTS idx_invoice_notif_logs_invoice_sent
-  ON public.invoice_notification_logs (invoice_id, sent_at DESC);
+> Nota: a deleção em `auth.users` em cascata limpa também `auth.identities` e `auth.sessions` (FKs nativas).
 
--- 3) Corrigir inconsistência (#120 e similares)
-UPDATE public.invoices
-   SET email_status = 'enviado'
- WHERE email_sent_at IS NOT NULL AND email_status IS NULL;
--- (linhas afetadas reportadas após execução; auditoria atual: 2 linhas)
-```
+---
 
-## Mudanças em Edge Functions
+## Passo 2 — Edge Function `resend-confirmation`
 
-### `send-email-resend/index.ts` (refatoração principal)
+**Novo arquivo:** `supabase/functions/resend-confirmation/index.ts`
 
-- Adicionar ao `EmailRequest`: `related_type`, `related_id`, `user_id`, `notification_type` (este último apenas propagado para o helper invoice — não vai pra `message_logs`).
-- **Remover** o insert `pending` (decisão aprovada). Gravar **uma única linha** ao final com:
-  - `status: 'sent' | 'failed'`
-  - `sent_at: now()` apenas em sucesso
-  - `error_message` em falha
-  - `related_type`, `related_id`, `user_id` recebidos
-  - `external_message_id: resendData.id` em sucesso
-- Retornar no JSON de resposta: `{ success, id, error? }` para que o caller saiba se gravar `email_sent_at`.
+Fluxo:
+1. Valida `{ email }` (regex + trim/lowercase).
+2. `supabase.auth.admin.listUsers()` → busca usuário pelo email.
+   - Não existe → `404 { error: "Email não cadastrado" }`.
+   - Já confirmado (`email_confirmed_at`) → `200 { already_confirmed: true, message: "Conta já ativada..." }`.
+3. **Rate limit**: conta linhas em `message_logs` com `user_id = user.id`, `related_type = 'user_signup'`, `status = 'sent'`, `sent_at >= now() - 1h`. Se ≥ 3 → `429 { error: "rate_limited" }`.
+4. `supabase.auth.admin.generateLink({ type: 'signup', email })` → captura `properties.action_link`.
+5. Monta HTML usando `getEmailSettings` + `wrapInEmailLayout` + `escapeHtml` do `_shared/email-helpers.ts` (reutiliza branding já existente — cores, logo, footer da `email_settings`).
+6. Invoca `send-email-resend` com:
+   - `subject: "Confirme seu cadastro - Colmeia"`
+   - `related_type: 'user_signup'`, `related_id: user.id`, `user_id: user.id` (para rastreio em `message_logs`).
+7. Retorna `{ success: true, message: "Email de confirmação reenviado" }`.
 
-### Helper compartilhado novo: `_shared/notification-logger.ts`
+CORS, timeout e validação seguem o mesmo padrão das outras functions. Sem subdiretórios. JWT verification: público (precisa funcionar antes do login).
 
-Função `logInvoiceNotification(supabase, { invoice_id, notification_type, channel, recipient, success, error_message })` — encapsula o insert em `invoice_notification_logs` para evitar duplicação. Usada por todas as funções que enviam notificações de fatura.
+**`supabase/config.toml`**: adicionar `[functions.resend-confirmation] verify_jwt = false`.
 
-### Atualizar callers (passar contexto + gravar log + corrigir email_sent_at)
+**Deploy:** `supabase--deploy_edge_functions(["resend-confirmation"])`.
 
-| Função | related_type | notification_type | Ajuste extra |
-|---|---|---|---|
-| `resend-payment-notification` | invoice | `payment_resend` | grava log; atualiza invoice só se sucesso |
-| `notify-due-invoices` | invoice | `payment_reminder` | trocar `upsert` por `insert`; remover dedup-por-existência (manter dedup só por janela de 24h via `sent_at`) |
-| `batch-collection-notification` | invoice | `batch_collection` | passar contexto; já loga, manter |
-| `generate-monthly-invoices` | invoice | `invoice_created` | mover UPDATE de `email_sent_at` para **depois** da resposta de `send-email-resend`; gravar log |
-| `send-nfse-notification` | nfse | `nfse` | passar contexto; já loga |
-| `send-ticket-notification` | ticket | `ticket_<event>` | passar contexto |
-| `send-welcome-email` | client | `welcome` | passar contexto |
-| `send-alert-notification`, `check-no-contact-tickets`, `send-notification` | (variado) | apenas `related_type/notification_type` quando aplicável | sem log invoice |
+---
 
-## Frontend — Painel de Histórico de Notificações
+## Passo 3 — `src/pages/Login.tsx`
 
-**Local:** `src/components/billing/InvoiceNotificationHistory.tsx` (componente novo, ≤ 50 linhas).
+Mudanças mínimas, reutilizando UI existente:
 
-**Integração:** abrir como `Sheet` (mobile-first) a partir do popover de ações de fatura existente (`ContractInvoiceActionsMenu` / detalhes da fatura). Botão novo: "Histórico de envios".
+- Novo estado: `pendingConfirmEmail: string | null` e `resending: boolean`.
+- Quando `error.message === "Email not confirmed"`:
+  - Toast com título "Confirme seu email" e descrição "Seu email ainda não foi confirmado."
+  - `setPendingConfirmEmail(emailToUse)` para revelar o botão.
+- Abaixo do formulário (dentro do `CardFooter`, antes do "Esqueci minha senha"), renderizar condicionalmente:
+  ```tsx
+  {pendingConfirmEmail && (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full"
+      disabled={resending}
+      onClick={handleResend}
+    >
+      {resending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+      Reenviar email de confirmação
+    </Button>
+  )}
+  ```
+- `handleResend`: chama `supabase.functions.invoke("resend-confirmation", { body: { email: pendingConfirmEmail } })`.
+  - Sucesso → toast verde "Email enviado. Verifique sua caixa de entrada e spam."
+  - Erro `rate_limited` (status 429 ou `data.error === 'rate_limited'`) → toast laranja `variant: "default"` "Aguarde alguns minutos antes de solicitar novamente."
+  - Erro genérico → toast destrutivo com a mensagem.
+- Limpa `pendingConfirmEmail` em sucesso.
 
-**Conteúdo:** `Table` shadcn com colunas Data, Canal (Badge), Tipo, Status (Badge verde/vermelho), Destinatário, Erro. Query React Query:
+Sem novos componentes — apenas o `Button`/`Loader2` já importados.
 
-```ts
-supabase.from('invoice_notification_logs')
-  .select('*').eq('invoice_id', id).order('sent_at', { ascending: false }).limit(50);
-```
+---
 
-`Skeleton` no carregamento, empty state padrão. Sem realtime (sob demanda).
+## Passo 4 — `src/pages/Register.tsx`
 
-## Limpeza
+Substituir o redirect imediato para `/login` por uma tela de confirmação inline:
 
-- Remover dedup-por-existência em `notify-due-invoices` (substituída por janela temporal via `sent_at > now() - 24h`).
-- Consolidar inserts de `invoice_notification_logs` no novo helper.
-- Verificar imports não usados em todas as funções tocadas.
-- TypeScript: `bun tsc --noEmit` sem erros.
+- Migrar de `toast` (sonner) → manter sonner (consistente com o arquivo).
+- Novo estado: `signedUpEmail: string | null` e `resending: boolean`.
+- Após `signUp` bem-sucedido: `setSignedUpEmail(email)` (não navega).
+- Renderiza condicionalmente `signedUpEmail ? <ConfirmationCard /> : <RegisterForm />` dentro do mesmo `<Card>`:
+  - Título: "Cadastro realizado com sucesso!"
+  - Descrição: "Enviamos um email de confirmação para **{email}**. Verifique sua caixa de entrada e clique no link para ativar sua conta."
+  - Botão primário: "Reenviar email" (chama `resend-confirmation`).
+  - Texto auxiliar: "Não recebeu? Verifique sua pasta de spam ou clique em Reenviar após alguns minutos."
+  - Link: "Ir para o login" (`/login`).
 
-## Resumo de Arquivos
+Estados de toast (sucesso/rate-limit/erro) idênticos aos do Login. O componente é pequeno o suficiente para ficar inline (≤ 50 linhas), então não cria novo arquivo.
+
+---
+
+## Passo 5 — Instruções para o usuário (resposta final)
+
+Bloco em PT-BR explicando como ativar o `Send Email Hook` no painel Supabase (URL com `silefpsayliwqtoskkdz`, método POST, sem secret), e que o botão "Reenviar email de confirmação" funciona como contingência enquanto o hook não está ligado.
+
+---
+
+## Limpeza e validação final
+
+- `bunx tsc --noEmit` deve sair com código 0.
+- Sem imports órfãos em Login/Register.
+- `auth-email-hook` permanece deployado e intacto (continuará funcionando assim que o usuário ativar o hook no painel).
+- Reutilização total dos helpers existentes (`email-helpers.ts`, `useAuth`, componentes shadcn).
+
+---
+
+## Arquivos tocados
 
 | Arquivo | Ação |
 |---|---|
-| migração SQL (3 statements) | Criar |
-| `supabase/functions/_shared/notification-logger.ts` | Criar |
-| `supabase/functions/send-email-resend/index.ts` | Editar (refatoração) |
-| `supabase/functions/resend-payment-notification/index.ts` | Editar |
-| `supabase/functions/notify-due-invoices/index.ts` | Editar |
-| `supabase/functions/batch-collection-notification/index.ts` | Editar |
-| `supabase/functions/generate-monthly-invoices/index.ts` | Editar (corrigir email_sent_at) |
-| `supabase/functions/send-nfse-notification/index.ts` | Editar |
-| `supabase/functions/send-ticket-notification/index.ts` | Editar |
-| `supabase/functions/send-welcome-email/index.ts` | Editar |
-| `supabase/functions/send-alert-notification/index.ts` | Editar (contexto apenas) |
-| `supabase/functions/check-no-contact-tickets/index.ts` | Editar (contexto apenas) |
-| `supabase/functions/send-notification/index.ts` | Editar (contexto apenas) |
-| `src/components/billing/InvoiceNotificationHistory.tsx` | Criar |
-| `src/components/contracts/ContractInvoiceActionsMenu.tsx` (ou equivalente) | Editar (botão "Histórico") |
+| `supabase/migrations/<timestamp>_cleanup_orphan_test_users.sql` | criar |
+| `supabase/functions/resend-confirmation/index.ts` | criar |
+| `supabase/config.toml` | adicionar bloco da função |
+| `src/pages/Login.tsx` | editar (botão reenvio condicional) |
+| `src/pages/Register.tsx` | editar (tela de confirmação inline) |
 
-## Reporte ao final
-1. Lista de arquivos alterados
-2. 3 migrações aplicadas + nº de linhas afetadas pelo UPDATE de #120
-3. Confirmação `tsc --noEmit` limpo
+## Detalhes técnicos
+
+- `message_logs` **não tem coluna** `notification_type` — usa `related_type='user_signup'` como filtro de rate limit (consistente com outras functions já refatoradas).
+- `auth.admin.generateLink` exige service role key (já disponível em `SUPABASE_SERVICE_ROLE_KEY`).
+- `verify_jwt = false` é necessário porque a função é chamada pré-login.
+- Email branding herda de `email_settings` + `company_settings` automaticamente (mesmo padrão do `send-welcome-email`).
