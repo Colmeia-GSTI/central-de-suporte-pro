@@ -806,10 +806,13 @@ Deno.serve(async (req) => {
                   </div>`;
               }
 
-              await supabase.functions.invoke("send-email-resend", {
+              const { data: emailRes, error: emailErr } = await supabase.functions.invoke("send-email-resend", {
                 body: {
                   to: clientEmail,
                   subject: `Nova Fatura #${newInvoice.invoice_number} - ${referenceMonth}`,
+                  related_type: "invoice",
+                  related_id: newInvoice.id,
+                  user_id: contract.client_id,
                   html: `
                     <h2>Nova Fatura Disponível</h2>
                     <p>Olá,</p>
@@ -841,28 +844,51 @@ Deno.serve(async (req) => {
                   `,
                 },
               });
-              console.log(`[GEN-INVOICES] Email enviado para ${clientEmail}`);
 
-              // Record email success in invoice status
-              await supabase
-                .from("invoices")
-                .update({
+              const emailOk = !emailErr && emailRes?.success === true;
+              const emailErrMsg = emailErr?.message || emailRes?.error || null;
+
+              if (emailOk) {
+                console.log(`[GEN-INVOICES] Email enviado para ${clientEmail}`);
+                await supabase.from("invoices").update({
                   email_status: "enviado",
                   email_sent_at: new Date().toISOString(),
-                })
-                .eq("id", newInvoice.id);
+                  email_error_msg: null,
+                }).eq("id", newInvoice.id);
+              } else {
+                console.error(`[GEN-INVOICES] Falha email ${clientEmail}: ${emailErrMsg}`);
+                await supabase.from("invoices").update({
+                  email_status: "erro",
+                  email_error_msg: String(emailErrMsg || "Falha desconhecida").slice(0, 500),
+                }).eq("id", newInvoice.id);
+              }
+
+              await supabase.from("invoice_notification_logs").insert({
+                invoice_id: newInvoice.id,
+                notification_type: "invoice_created",
+                channel: "email",
+                recipient: clientEmail,
+                success: emailOk,
+                error_message: emailOk ? null : String(emailErrMsg || "").slice(0, 1000),
+                sent_at: new Date().toISOString(),
+              });
             }
           } catch (emailError) {
             console.error(`[GEN-INVOICES] Erro ao enviar email para ${clientEmail}:`, emailError);
-
-            // Record email error in invoice status
-            await supabase
-              .from("invoices")
-              .update({
-                email_status: "erro",
-                email_error_msg: emailError instanceof Error ? emailError.message : "Erro ao enviar email",
-              })
-              .eq("id", newInvoice.id);
+            const msg = emailError instanceof Error ? emailError.message : "Erro ao enviar email";
+            await supabase.from("invoices").update({
+              email_status: "erro",
+              email_error_msg: msg.slice(0, 500),
+            }).eq("id", newInvoice.id);
+            await supabase.from("invoice_notification_logs").insert({
+              invoice_id: newInvoice.id,
+              notification_type: "invoice_created",
+              channel: "email",
+              recipient: clientEmail,
+              success: false,
+              error_message: msg.slice(0, 1000),
+              sent_at: new Date().toISOString(),
+            });
           }
         }
 
