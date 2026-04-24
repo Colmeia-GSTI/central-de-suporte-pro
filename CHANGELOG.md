@@ -19,6 +19,8 @@ Categorias usadas em cada entrada:
 ## [Não lançado]
 
 ### Adicionado
+- **Sistema de Feature Flags** (`feature_flags` + `useFeatureFlag` + `/settings/feature-flags`): infraestrutura para ligar/desligar funcionalidades em runtime sem redeploy. Suporta rollout gradual (FNV-1a determinístico), filtro por role e whitelist por user_id. Apenas admin gerencia. Documentação em `FEATURE_FLAGS.md`.
+
 ### Modificado
 ### Corrigido
 ### Removido

@@ -3080,6 +3080,45 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_flags: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean
+          enabled_for_roles: string[] | null
+          enabled_for_user_ids: string[] | null
+          id: string
+          key: string
+          rollout_percentage: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          enabled_for_roles?: string[] | null
+          enabled_for_user_ids?: string[] | null
+          id?: string
+          key: string
+          rollout_percentage?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          enabled_for_roles?: string[] | null
+          enabled_for_user_ids?: string[] | null
+          id?: string
+          key?: string
+          rollout_percentage?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       financial_entries: {
         Row: {
           amount: number
