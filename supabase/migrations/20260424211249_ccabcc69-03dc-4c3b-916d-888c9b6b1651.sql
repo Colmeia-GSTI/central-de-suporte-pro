@@ -1,0 +1,1 @@
+DELETE FROM public.feature_flags WHERE key = 'test_flag';
