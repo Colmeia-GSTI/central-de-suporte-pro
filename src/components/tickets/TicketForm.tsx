@@ -29,6 +29,7 @@ import {
   MessageSquare, ChevronRight, ChevronLeft, Check, Loader2, Lock, CheckSquare,
 } from "lucide-react";
 import type { Enums } from "@/integrations/supabase/types";
+import { buildTicketPayload } from "@/lib/ticket-payload";
 
 type TicketType = "external" | "internal" | "task";
 
@@ -208,24 +209,7 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
 
   const mutation = useMutation({
     mutationFn: async (data: TicketFormData) => {
-      const isInternal = ticketType !== "external";
-
-      const payload = {
-        title: data.title,
-        description: data.description,
-        client_id: ticketType === "task" ? null : (data.client_id || null),
-        requester_contact_id: ticketType === "task" ? null : (data.requester_contact_id || null),
-        category_id: data.category_id || null,
-        subcategory_id: data.subcategory_id || null,
-        priority: data.priority as Enums<"ticket_priority">,
-        origin: (ticketType === "internal" ? "internal" : ticketType === "task" ? "task" : data.origin) as Enums<"ticket_origin">,
-        assigned_to: data.assigned_to || null,
-        created_by: user?.id,
-        status: (data.assigned_to ? "in_progress" : "open") as Enums<"ticket_status">,
-        first_response_at: data.assigned_to ? new Date().toISOString() : null,
-        is_internal: isInternal,
-        sla_deadline: isInternal ? null : undefined,
-      };
+      const payload = buildTicketPayload({ data, ticketType, userId: user?.id });
 
       const { data: newTicket, error } = await supabase
         .from("tickets").insert(payload).select("id").single();

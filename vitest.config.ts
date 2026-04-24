@@ -9,6 +9,17 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      include: [
+        "src/lib/ticket-payload.ts",
+        "src/pages/Login.tsx",
+        "supabase/functions/generate-monthly-invoices/logic.ts",
+        "supabase/functions/notify-due-invoices/logic.ts",
+        "supabase/functions/resend-confirmation/logic.ts",
+      ],
+    },
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
