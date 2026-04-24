@@ -23,6 +23,8 @@ project_id = "silefpsayliwqtoskkdz"
     verify_jwt = false
   [functions.renegotiate-invoice]
     verify_jwt = false
+  [functions.resend-confirmation]
+    verify_jwt = false
   [functions.send-email-smtp]
     verify_jwt = false
   [functions.send-nfse-notification]
