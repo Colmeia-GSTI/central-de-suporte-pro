@@ -116,8 +116,6 @@ export function UsersTab() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("confirm-user-email", {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
-        body: undefined,
       });
       if (error) {
         logger.error("Failed to fetch confirmation status", "Users", { error: error.message });
@@ -173,15 +171,17 @@ export function UsersTab() {
   // Mutation to confirm a user's email
   const confirmEmailMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } = await supabase.functions.invoke("confirm-user-email?action=confirm", {
-        body: { user_id: userId },
+      const { data, error } = await supabase.functions.invoke("confirm-user-email", {
+        body: { action: "confirm", user_id: userId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      if (!data?.success) throw new Error("Falha ao ativar usuário");
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-confirmation-status"] });
+      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
       toast({ title: "Usuário ativado com sucesso", description: "O email foi confirmado e o usuário já pode acessar o sistema." });
     },
     onError: (error: Error) => {

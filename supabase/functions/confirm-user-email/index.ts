@@ -54,8 +54,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action") || "list";
+    // Suportar action via body (POST) ou query string (GET legacy)
+    let action = "list";
+    let bodyUserId: string | undefined;
+
+    if (req.method === "POST") {
+      const body = await req.json().catch(() => ({}));
+      action = body?.action || "list";
+      bodyUserId = body?.user_id;
+    } else {
+      const url = new URL(req.url);
+      action = url.searchParams.get("action") || "list";
+    }
 
     if (action === "list") {
       // List users with their email confirmation status
@@ -81,8 +91,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "confirm") {
-      const body = await req.json();
-      const userId = body.user_id;
+      const userId = bodyUserId;
 
       if (!userId || typeof userId !== "string") {
         return new Response(
@@ -135,7 +144,7 @@ Deno.serve(async (req) => {
       console.log(`[confirm-user-email] User ${userId} confirmed by admin ${requestingUser.id}`);
 
       return new Response(
-        JSON.stringify({ success: true }),
+        JSON.stringify({ success: true, message: "Usuário confirmado" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
