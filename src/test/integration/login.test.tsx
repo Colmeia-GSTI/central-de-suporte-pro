@@ -3,7 +3,6 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test/helpers/render";
-import { createSupabaseMock } from "@/test/mocks/supabase";
 
 const navigateMock = vi.fn();
 
@@ -26,18 +25,18 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
-const { client: supaClient } = createSupabaseMock({
-  functions: {
-    "resolve-username": ({ body }: { body?: { username?: string } } = {}) =>
-      body?.username === "knownuser"
-        ? { data: { email: "known@test.com" }, error: null }
-        : { data: { error: "Usuário não encontrado" }, error: null },
-  },
+vi.mock("@/integrations/supabase/client", () => {
+  const { createSupabaseMock } = require("@/test/mocks/supabase");
+  const { client } = createSupabaseMock({
+    functions: {
+      "resolve-username": (body: { username?: string } = {}) =>
+        body?.username === "knownuser"
+          ? { data: { email: "known@test.com" }, error: null }
+          : { data: { error: "Usuário não encontrado" }, error: null },
+    },
+  });
+  return { supabase: client };
 });
-
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: supaClient,
-}));
 
 import Login from "@/pages/Login";
 
