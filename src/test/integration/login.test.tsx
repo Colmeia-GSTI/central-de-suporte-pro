@@ -25,8 +25,8 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
-vi.mock("@/integrations/supabase/client", () => {
-  const { createSupabaseMock } = require("@/test/mocks/supabase");
+vi.mock("@/integrations/supabase/client", async () => {
+  const { createSupabaseMock } = await import("@/test/mocks/supabase");
   const { client } = createSupabaseMock({
     functions: {
       "resolve-username": (body: { username?: string } = {}) =>
