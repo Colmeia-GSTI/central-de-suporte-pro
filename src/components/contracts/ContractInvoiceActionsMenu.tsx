@@ -52,6 +52,7 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
   const [pixDialogOpen, setPixDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const {
     generatingPayment,
@@ -202,6 +203,12 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
             </>
           )}
 
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+            <History className="mr-2 h-4 w-4" />
+            Histórico de envios
+          </DropdownMenuItem>
+
           {/* Cancelar Fatura */}
           {(invoice.status === "pending" || invoice.status === "overdue") && (
             <>
@@ -219,6 +226,12 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
       </DropdownMenu>
 
       {/* Dialogs */}
+      <InvoiceNotificationHistory
+        invoiceId={invoice.id}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+      />
+
       {nfseDialogOpen && (
         <EmitNfseDialog
           open={nfseDialogOpen}
