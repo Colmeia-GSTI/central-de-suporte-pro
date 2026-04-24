@@ -82,12 +82,11 @@ export function useFeatureFlags() {
 }
 
 export function useFeatureFlag(key: string): boolean {
-  const { user, role } = useAuth();
+  const { user, roles } = useAuth();
   const { data: flags } = useFeatureFlags();
 
   const userId = user?.id ?? null;
-  const userRoles = role ? [role] : [];
   const flag = flags?.find((f) => f.key === key);
 
-  return evaluateFlag(flag, userId, userRoles);
+  return evaluateFlag(flag, userId, roles ?? []);
 }
