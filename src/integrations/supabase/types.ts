@@ -3455,6 +3455,7 @@ export type Database = {
           id: string
           invoice_id: string
           notification_type: string
+          recipient: string | null
           sent_at: string | null
           success: boolean | null
         }
@@ -3465,6 +3466,7 @@ export type Database = {
           id?: string
           invoice_id: string
           notification_type: string
+          recipient?: string | null
           sent_at?: string | null
           success?: boolean | null
         }
@@ -3475,6 +3477,7 @@ export type Database = {
           id?: string
           invoice_id?: string
           notification_type?: string
+          recipient?: string | null
           sent_at?: string | null
           success?: boolean | null
         }
@@ -3964,7 +3967,7 @@ export type Database = {
           related_type: string | null
           sent_at: string | null
           status: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           channel: string
@@ -3980,7 +3983,7 @@ export type Database = {
           related_type?: string | null
           sent_at?: string | null
           status?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           channel?: string
@@ -3996,7 +3999,7 @@ export type Database = {
           related_type?: string | null
           sent_at?: string | null
           status?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }

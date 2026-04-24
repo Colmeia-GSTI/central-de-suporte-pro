@@ -1,123 +1,108 @@
+# Plano: Rastreabilidade de Envios de Email
 
-# Plano: Ativar usuários pendentes + corrigir bug crítico de ativação
+## Diagnóstico
 
-## Diagnóstico confirmado
+Auditando o código + banco encontrei **a causa raiz** dos sintomas reportados:
 
-**Bug raiz** em `UsersTab.tsx` L176:
-```ts
-supabase.functions.invoke("confirm-user-email?action=confirm", { body: { user_id: userId } })
-```
-O método `invoke()` trata `"confirm-user-email?action=confirm"` como **nome literal da função** — a query string é ignorada. A Edge Function recebe a request sem `?action=confirm`, lê `searchParams.get("action") || "list"` e retorna o **listamento de usuários** em vez de confirmar. O frontend então mostra "sucesso" porque `data` chega populado e nenhum erro é lançado.
+1. `message_logs.user_id` é **NOT NULL**. Nenhuma Edge Function passa user_id. Os inserts falham silenciosamente dentro de `try/catch` ⇒ explica os "apenas 2 logs em 30 dias".
+2. `invoice_notification_logs` tem `UNIQUE(invoice_id, notification_type, channel)`. `notify-due-invoices` faz `upsert`, então reenvios não geram nova linha.
+3. `send-email-resend` grava 3× por email (pending + sent/failed) sem correlação por message_id, sem `related_type/related_id`, sem capturar `external_message_id` do Resend.
+4. Em `generate-monthly-invoices` e similares, `email_sent_at` é setado por trigger/UPDATE antes da resposta do Resend.
 
-**Listagem (L117)** já está correta — usa GET sem body, e a Edge Function default action é "list".
-
-**create-user / create-client-user**: já usam `email_confirm: true`. Apenas falta comentário explicativo.
-
----
-
-## Mudanças
-
-### 1. Migração SQL — ativar usuários pendentes
+## Migrações SQL (3)
 
 ```sql
-UPDATE auth.users 
-SET email_confirmed_at = NOW(),
-    updated_at = NOW()
-WHERE email IN (
-  'luana@capasemu.com.br',
-  'engenharia9@airduto.com.br'
-)
-AND email_confirmed_at IS NULL;
+-- 1) Permitir logs de jobs automáticos
+ALTER TABLE public.message_logs ALTER COLUMN user_id DROP NOT NULL;
+
+-- 2) Permitir histórico real de reenvios
+ALTER TABLE public.invoice_notification_logs DROP CONSTRAINT uq_invoice_notification;
+-- adicionar coluna recipient para o painel
+ALTER TABLE public.invoice_notification_logs
+  ADD COLUMN IF NOT EXISTS recipient text;
+CREATE INDEX IF NOT EXISTS idx_invoice_notif_logs_invoice_sent
+  ON public.invoice_notification_logs (invoice_id, sent_at DESC);
+
+-- 3) Corrigir inconsistência (#120 e similares)
+UPDATE public.invoices
+   SET email_status = 'enviado'
+ WHERE email_sent_at IS NOT NULL AND email_status IS NULL;
+-- (linhas afetadas reportadas após execução; auditoria atual: 2 linhas)
 ```
 
-Reportar quantas linhas foram afetadas.
+## Mudanças em Edge Functions
 
-### 2. `supabase/functions/confirm-user-email/index.ts`
+### `send-email-resend/index.ts` (refatoração principal)
 
-Substituir leitura de query string pelo body. Como a action `list` continua sendo chamada via GET (sem body), tratar ambos os caminhos:
+- Adicionar ao `EmailRequest`: `related_type`, `related_id`, `user_id`, `notification_type` (este último apenas propagado para o helper invoice — não vai pra `message_logs`).
+- **Remover** o insert `pending` (decisão aprovada). Gravar **uma única linha** ao final com:
+  - `status: 'sent' | 'failed'`
+  - `sent_at: now()` apenas em sucesso
+  - `error_message` em falha
+  - `related_type`, `related_id`, `user_id` recebidos
+  - `external_message_id: resendData.id` em sucesso
+- Retornar no JSON de resposta: `{ success, id, error? }` para que o caller saiba se gravar `email_sent_at`.
+
+### Helper compartilhado novo: `_shared/notification-logger.ts`
+
+Função `logInvoiceNotification(supabase, { invoice_id, notification_type, channel, recipient, success, error_message })` — encapsula o insert em `invoice_notification_logs` para evitar duplicação. Usada por todas as funções que enviam notificações de fatura.
+
+### Atualizar callers (passar contexto + gravar log + corrigir email_sent_at)
+
+| Função | related_type | notification_type | Ajuste extra |
+|---|---|---|---|
+| `resend-payment-notification` | invoice | `payment_resend` | grava log; atualiza invoice só se sucesso |
+| `notify-due-invoices` | invoice | `payment_reminder` | trocar `upsert` por `insert`; remover dedup-por-existência (manter dedup só por janela de 24h via `sent_at`) |
+| `batch-collection-notification` | invoice | `batch_collection` | passar contexto; já loga, manter |
+| `generate-monthly-invoices` | invoice | `invoice_created` | mover UPDATE de `email_sent_at` para **depois** da resposta de `send-email-resend`; gravar log |
+| `send-nfse-notification` | nfse | `nfse` | passar contexto; já loga |
+| `send-ticket-notification` | ticket | `ticket_<event>` | passar contexto |
+| `send-welcome-email` | client | `welcome` | passar contexto |
+| `send-alert-notification`, `check-no-contact-tickets`, `send-notification` | (variado) | apenas `related_type/notification_type` quando aplicável | sem log invoice |
+
+## Frontend — Painel de Histórico de Notificações
+
+**Local:** `src/components/billing/InvoiceNotificationHistory.tsx` (componente novo, ≤ 50 linhas).
+
+**Integração:** abrir como `Sheet` (mobile-first) a partir do popover de ações de fatura existente (`ContractInvoiceActionsMenu` / detalhes da fatura). Botão novo: "Histórico de envios".
+
+**Conteúdo:** `Table` shadcn com colunas Data, Canal (Badge), Tipo, Status (Badge verde/vermelho), Destinatário, Erro. Query React Query:
 
 ```ts
-// Suportar action via body (POST) ou query string (GET legacy)
-let action = "list";
-let userId: string | undefined;
-
-if (req.method === "POST") {
-  const body = await req.json().catch(() => ({}));
-  action = body.action || "list";
-  userId = body.user_id;
-} else {
-  const url = new URL(req.url);
-  action = url.searchParams.get("action") || "list";
-}
+supabase.from('invoice_notification_logs')
+  .select('*').eq('invoice_id', id).order('sent_at', { ascending: false }).limit(50);
 ```
 
-Retornar resposta padronizada no confirm:
-```ts
-return new Response(
-  JSON.stringify({ success: true, message: "Usuário confirmado" }),
-  { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-);
-```
+`Skeleton` no carregamento, empty state padrão. Sem realtime (sob demanda).
 
-### 3. `src/components/settings/UsersTab.tsx`
+## Limpeza
 
-**L176** — corrigir invoke:
-```ts
-const { data, error } = await supabase.functions.invoke("confirm-user-email", {
-  body: { action: "confirm", user_id: userId },
-});
-if (error) throw error;
-if (data?.error) throw new Error(data.error);
-if (!data?.success) throw new Error("Falha ao ativar usuário");
-return data;
-```
+- Remover dedup-por-existência em `notify-due-invoices` (substituída por janela temporal via `sent_at > now() - 24h`).
+- Consolidar inserts de `invoice_notification_logs` no novo helper.
+- Verificar imports não usados em todas as funções tocadas.
+- TypeScript: `bun tsc --noEmit` sem erros.
 
-**onSuccess** — invalidar também `users-with-roles` para refletir status:
-```ts
-onSuccess: () => {
-  queryClient.invalidateQueries({ queryKey: ["user-confirmation-status"] });
-  queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
-  toast({ title: "Usuário ativado com sucesso", ... });
-},
-```
-
-### 4. `supabase/functions/create-user/index.ts` (L167)
-
-Adicionar comentário explicativo (sem mudar comportamento):
-```ts
-// email_confirm: true — admin-created users bypass email confirmation flow.
-// Welcome email is sent separately via send-welcome-email.
-email_confirm: true,
-```
-
-### 5. `supabase/functions/create-client-user/index.ts` (L170 e L209)
-
-Mesmo comentário nas duas ocorrências de `email_confirm: true`.
-
-### 6. Limpeza
-
-- Remover `headers: { "Content-Type": "application/json" }` redundante na query de listagem (L119) — `invoke` adiciona automaticamente.
-- Verificar imports não utilizados em `UsersTab.tsx` após mudanças.
-- TypeScript sem erros.
-
----
-
-## Arquivos
+## Resumo de Arquivos
 
 | Arquivo | Ação |
-|---------|------|
-| Migração SQL | Criar (ativar 2 usuários) |
-| `supabase/functions/confirm-user-email/index.ts` | Editar: action via body |
-| `src/components/settings/UsersTab.tsx` | Editar: invoke correto + invalidação |
-| `supabase/functions/create-user/index.ts` | Editar: comentário |
-| `supabase/functions/create-client-user/index.ts` | Editar: comentário (2 locais) |
+|---|---|
+| migração SQL (3 statements) | Criar |
+| `supabase/functions/_shared/notification-logger.ts` | Criar |
+| `supabase/functions/send-email-resend/index.ts` | Editar (refatoração) |
+| `supabase/functions/resend-payment-notification/index.ts` | Editar |
+| `supabase/functions/notify-due-invoices/index.ts` | Editar |
+| `supabase/functions/batch-collection-notification/index.ts` | Editar |
+| `supabase/functions/generate-monthly-invoices/index.ts` | Editar (corrigir email_sent_at) |
+| `supabase/functions/send-nfse-notification/index.ts` | Editar |
+| `supabase/functions/send-ticket-notification/index.ts` | Editar |
+| `supabase/functions/send-welcome-email/index.ts` | Editar |
+| `supabase/functions/send-alert-notification/index.ts` | Editar (contexto apenas) |
+| `supabase/functions/check-no-contact-tickets/index.ts` | Editar (contexto apenas) |
+| `supabase/functions/send-notification/index.ts` | Editar (contexto apenas) |
+| `src/components/billing/InvoiceNotificationHistory.tsx` | Criar |
+| `src/components/contracts/ContractInvoiceActionsMenu.tsx` (ou equivalente) | Editar (botão "Histórico") |
 
-Sem novos arquivos. Sem novos hooks. 4 arquivos editados + 1 migração.
-
----
-
-## Relatório final (a incluir)
-
-1. Linhas afetadas pela migração de ativação
-2. Bug raiz: query string ignorada por `invoke()`
-3. Confirmar que `create-user` / `create-client-user` já usavam `email_confirm: true` (apenas documentado)
+## Reporte ao final
+1. Lista de arquivos alterados
+2. 3 migrações aplicadas + nº de linhas afetadas pelo UPDATE de #120
+3. Confirmação `tsc --noEmit` limpo
