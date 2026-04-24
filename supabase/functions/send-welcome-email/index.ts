@@ -78,7 +78,13 @@ Deno.serve(async (req) => {
     // Send via send-email-resend (fire-and-forget — don't propagate errors)
     try {
       const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
-        body: { to: client_email, subject, html: htmlContent },
+        body: {
+          to: client_email,
+          subject,
+          html: htmlContent,
+          related_type: "client",
+          related_id: client_id,
+        },
       });
 
       if (emailError) {
