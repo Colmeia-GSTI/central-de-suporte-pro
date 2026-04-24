@@ -15,6 +15,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,15 +57,22 @@ export default function Login() {
       const { error } = await signIn(emailToUse, password);
 
       if (error) {
-        toast({
-          title: "Erro ao entrar",
-          description: error.message === "Invalid login credentials"
-            ? "Usuário ou senha incorretos"
-            : error.message === "Email not confirmed"
-            ? "Seu email ainda não foi confirmado. Verifique sua caixa de entrada."
-            : error.message,
-          variant: "destructive",
-        });
+        if (error.message === "Email not confirmed") {
+          setPendingConfirmEmail(emailToUse);
+          toast({
+            title: "Confirme seu email",
+            description: "Seu email ainda não foi confirmado. Use o botão abaixo para reenviar o link.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro ao entrar",
+            description: error.message === "Invalid login credentials"
+              ? "Usuário ou senha incorretos"
+              : error.message,
+            variant: "destructive",
+          });
+        }
         setIsLoading(false);
         return;
       }
@@ -77,6 +86,45 @@ export default function Login() {
         variant: "destructive",
       });
       setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!pendingConfirmEmail) return;
+    setResending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("resend-confirmation", {
+        body: { email: pendingConfirmEmail },
+      });
+
+      if (error || data?.error === "rate_limited") {
+        const isRate = data?.error === "rate_limited" || /429/.test(error?.message ?? "");
+        toast({
+          title: isRate ? "Aguarde um momento" : "Não foi possível reenviar",
+          description: isRate
+            ? "Aguarde alguns minutos antes de solicitar novamente."
+            : (data?.error || error?.message || "Tente novamente em instantes."),
+          variant: isRate ? "default" : "destructive",
+        });
+        return;
+      }
+
+      if (data?.already_confirmed) {
+        toast({
+          title: "Conta já ativada",
+          description: "Sua conta já está confirmada. Faça login normalmente.",
+        });
+        setPendingConfirmEmail(null);
+        return;
+      }
+
+      toast({
+        title: "Email enviado",
+        description: "Verifique sua caixa de entrada e spam.",
+      });
+      setPendingConfirmEmail(null);
+    } finally {
+      setResending(false);
     }
   };
 
