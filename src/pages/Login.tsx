@@ -212,6 +212,19 @@ export default function Login() {
                   {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Entrando...</> : "Entrar na Colmeia"}
                 </Button>
               </motion.div>
+
+              {pendingConfirmEmail && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={resending}
+                  onClick={handleResendConfirmation}
+                >
+                  {resending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Reenviar email de confirmação
+                </Button>
+              )}
               
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }} className="text-sm text-muted-foreground">
                 <Link to="/forgot-password" className="text-primary hover:underline font-medium">
