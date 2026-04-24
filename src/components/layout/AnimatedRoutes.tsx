@@ -49,6 +49,7 @@ const KnowledgeArticlePage = lazyWithRetry(() => import("@/pages/knowledge/Knowl
 const TVDashboardPage = lazyWithRetry(() => import("@/pages/tv-dashboard/TVDashboardPage"));
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings/SettingsPage"));
 const CertificateDashboardPage = lazyWithRetry(() => import("@/pages/settings/CertificateDashboardPage"));
+const FeatureFlagsPage = lazyWithRetry(() => import("@/pages/settings/FeatureFlagsPage"));
 const ReportsPage = lazyWithRetry(() => import("@/pages/reports/ReportsPage"));
 const ClientPortalPage = lazyWithRetry(() => import("@/pages/client-portal/ClientPortalPage"));
 const ProfilePage = lazyWithRetry(() => import("@/pages/profile/ProfilePage"));
@@ -164,6 +165,7 @@ export function AnimatedRoutes() {
       <Route path="/reports" element={<ProtectedRoute allowedRoles={["admin", "manager", "financial"]}><LazyPage><ReportsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LazyPage><SettingsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/settings/certificates" element={<ProtectedRoute allowedRoles={["admin", "financial"]}><LazyPage><CertificateDashboardPage /></LazyPage></ProtectedRoute>} />
+      <Route path="/settings/feature-flags" element={<ProtectedRoute allowedRoles={["admin"]}><LazyPage><FeatureFlagsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><LazyPage><ProfilePage /></LazyPage></ProtectedRoute>} />
       
       {/* 404 */}
