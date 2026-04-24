@@ -161,10 +161,12 @@ Deno.serve(async (req) => {
     const { email, password, full_name, phone, roles } = validation.data;
 
     // Create the user
+    // email_confirm: true — admin-created users bypass email confirmation flow intentionally.
+    // Welcome email is sent separately via send-welcome-email when applicable.
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email
+      email_confirm: true,
       user_metadata: { full_name },
     });
 
