@@ -163,6 +163,7 @@ Deno.serve(async (req) => {
     console.log(`Synthetic email: ${syntheticEmail}`);
 
     // Tentar criar usuário no Supabase Auth
+    // email_confirm: true — admin-created users bypass email confirmation flow intentionally.
     let authUserId: string;
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email: syntheticEmail,
@@ -203,6 +204,7 @@ Deno.serve(async (req) => {
             await adminClient.auth.admin.deleteUser(orphanProfile.user_id);
 
             // Recriar
+            // email_confirm: true — admin-created users bypass email confirmation flow intentionally.
             const { data: retryUser, error: retryError } = await adminClient.auth.admin.createUser({
               email: syntheticEmail,
               password,
