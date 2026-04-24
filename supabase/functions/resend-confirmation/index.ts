@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
 
     // 3. Generate signup confirmation link
     const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-      type: "signup",
+      type: "magiclink",
       email,
     });
 
