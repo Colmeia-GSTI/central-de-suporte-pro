@@ -357,17 +357,7 @@ Para evitar juros e multas, efetue o pagamento até a data de vencimento.`;
         console.error("Error creating notifications:", error);
       }
 
-      // Log notification to prevent duplicates
-      if (result.email || result.whatsapp) {
-        const logs = [];
-        if (result.email) {
-          logs.push({ invoice_id: invoice.id, notification_type: "payment_reminder", channel: "email", recipient: client.financial_email || client.email });
-        }
-        if (result.whatsapp) {
-          logs.push({ invoice_id: invoice.id, notification_type: "payment_reminder", channel: "whatsapp", recipient: client.whatsapp });
-        }
-        await supabase.from("invoice_notification_logs").upsert(logs, { onConflict: "invoice_id,notification_type,channel" });
-      }
+      // Logs já gravados via logInvoiceNotification (sucesso e falha) por canal acima.
 
       results.push(result);
     }
