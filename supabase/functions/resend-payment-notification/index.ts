@@ -10,6 +10,7 @@ import {
   formatDateBR,
   getEmailTemplate,
 } from "../_shared/email-helpers.ts";
+import { logInvoiceNotification } from "../_shared/notification-logger.ts";
 
 /**
  * Resolve a stored file path into bucket + object path for signed URL generation.
@@ -256,27 +257,23 @@ Deno.serve(async (req) => {
         }
 
         try {
-          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
+          const { data: emailRes, error: emailError } = await supabase.functions.invoke("send-email-resend", {
             body: {
               to: emailTo,
               subject: emailSubject,
               html: emailHtml,
+              related_type: "invoice",
+              related_id: invoice_id,
+              user_id: client.id,
               ...(attachments.length > 0 ? { attachments } : {}),
             },
           });
 
-          if (emailError) throw emailError;
-
-          await supabase.from("message_logs").insert({
-            channel: "email",
-            recipient: emailTo,
-            message: `Reenvio de cobrança - Fatura #${invoice.invoice_number}`,
-            status: "sent",
-            sent_at: new Date().toISOString(),
-            related_type: "invoice",
-            related_id: invoice_id,
-            user_id: client.id,
-          });
+          const emailOk = !emailError && emailRes?.success === true;
+          if (!emailOk) {
+            const errMsg = emailError?.message || emailRes?.error || "Erro ao enviar email";
+            throw new Error(errMsg);
+          }
 
           results.push({ channel: "email", success: true });
           console.log(`[RESEND] Email enviado para ${emailTo}`);
@@ -286,6 +283,14 @@ Deno.serve(async (req) => {
             email_sent_at: new Date().toISOString(),
             email_error_msg: null,
           }).eq("id", invoice_id);
+
+          await logInvoiceNotification(supabase, {
+            invoice_id,
+            notification_type: "payment_resend",
+            channel: "email",
+            recipient: emailTo,
+            success: true,
+          });
         } catch (emailError: unknown) {
           console.error("[RESEND] Erro ao enviar email:", emailError);
           const errMsg = emailError instanceof Error ? emailError.message : "Erro desconhecido";
@@ -293,8 +298,17 @@ Deno.serve(async (req) => {
 
           await supabase.from("invoices").update({
             email_status: "erro",
-            email_error_msg: errMsg,
+            email_error_msg: errMsg.slice(0, 500),
           }).eq("id", invoice_id);
+
+          await logInvoiceNotification(supabase, {
+            invoice_id,
+            notification_type: "payment_resend",
+            channel: "email",
+            recipient: emailTo,
+            success: false,
+            error_message: errMsg,
+          });
         }
       }
     }
@@ -366,10 +380,25 @@ Deno.serve(async (req) => {
           if (whatsappError) throw whatsappError;
           results.push({ channel: "whatsapp", success: true });
           console.log(`[RESEND] WhatsApp enviado para ${client.whatsapp.slice(0, 4)}****`);
+          await logInvoiceNotification(supabase, {
+            invoice_id,
+            notification_type: "payment_resend",
+            channel: "whatsapp",
+            recipient: client.whatsapp,
+            success: true,
+          });
         } catch (whatsappError: unknown) {
           console.error("[RESEND] Erro ao enviar WhatsApp:", whatsappError);
           const errMsg = whatsappError instanceof Error ? whatsappError.message : "Erro desconhecido";
           results.push({ channel: "whatsapp", success: false, error: errMsg, errorCode: "WHATSAPP_SEND_ERROR" });
+          await logInvoiceNotification(supabase, {
+            invoice_id,
+            notification_type: "payment_resend",
+            channel: "whatsapp",
+            recipient: client.whatsapp,
+            success: false,
+            error_message: errMsg,
+          });
         }
       }
     }
