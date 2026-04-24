@@ -20,6 +20,10 @@ interface EmailRequest {
   from_name?: string;
   from_email?: string;
   attachments?: EmailAttachment[];
+  // Contexto para rastreamento em message_logs
+  related_type?: string;   // 'invoice', 'ticket', 'nfse', 'client', etc.
+  related_id?: string;
+  user_id?: string;
 }
 
 function sanitizeEmails(input: string | string[]): { valid: boolean; emails: string[]; error?: string } {
@@ -72,6 +76,16 @@ setInterval(() => {
   }
 }, 60_000);
 
+// deno-lint-ignore no-explicit-any
+async function logBatch(supabase: any, rows: Record<string, unknown>[]) {
+  if (rows.length === 0) return;
+  try {
+    await supabase.from("message_logs").insert(rows);
+  } catch (logErr) {
+    console.warn("[send-email-resend] Log error:", logErr);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -107,7 +121,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { to, subject, html, text, from_name, from_email, attachments } = body as EmailRequest;
+    const payload = body as EmailRequest;
+    const { to, subject, html, text, from_name, from_email, attachments, related_type, related_id, user_id } = payload;
 
     // Validate recipients
     const emailValidation = sanitizeEmails(to);
@@ -136,7 +151,6 @@ Deno.serve(async (req) => {
     const sanitizedHtml = sanitizeHtml(html);
     const sanitizedText = text ? String(text).slice(0, MAX_HTML_LENGTH) : sanitizedHtml.replace(/<[^>]*>/g, "");
 
-    // Determine sender - use provided or fetch from integration_settings
     let senderName = from_name || "";
     let senderEmail = from_email || "";
 
@@ -154,37 +168,13 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       const resendConfig = resendSettings?.settings as { default_from_email?: string; default_from_name?: string } | null;
-
-      if (!senderName) {
-        senderName = resendConfig?.default_from_name || "Colmeia TI";
-      }
-
-      if (!senderEmail) {
-        senderEmail = resendConfig?.default_from_email || "noreply@suporte.colmeiagsti.com";
-      }
+      if (!senderName) senderName = resendConfig?.default_from_name || "Colmeia TI";
+      if (!senderEmail) senderEmail = resendConfig?.default_from_email || "noreply@suporte.colmeiagsti.com";
     }
-
-    // Fire-and-forget logging for pending
-    Promise.resolve().then(async () => {
-      try {
-        for (const recipient of emailValidation.emails) {
-          await supabase.from("message_logs").insert({
-            channel: "email",
-            recipient,
-            message: sanitizedHtml.slice(0, 500),
-            status: "pending",
-            sent_at: null,
-          });
-        }
-      } catch (logErr) {
-        console.warn("[send-email-resend] Log error:", logErr);
-      }
-    });
 
     const fromValue = `${senderName} <${senderEmail}>`;
     console.log(`[send-email-resend] Sending to ${emailValidation.emails.length} recipient(s) from ${fromValue}`);
 
-    // Build Resend API body
     const resendBody: Record<string, unknown> = {
       from: fromValue,
       to: emailValidation.emails,
@@ -193,7 +183,6 @@ Deno.serve(async (req) => {
       text: sanitizedText,
     };
 
-    // Include attachments if provided
     if (attachments && Array.isArray(attachments) && attachments.length > 0) {
       resendBody.attachments = attachments.map((a) => ({
         filename: a.filename,
@@ -220,48 +209,53 @@ Deno.serve(async (req) => {
     clearTimeout(timeout);
 
     const resendData = await resendResponse.json();
+    const messagePreview = sanitizedHtml.slice(0, 500);
 
     if (!resendResponse.ok) {
       const errMsg = resendData?.message || resendData?.error || `Resend API error: ${resendResponse.status}`;
       console.error(`[send-email-resend] Resend error:`, errMsg);
 
-      for (const recipient of emailValidation.emails) {
-        await supabase.from("message_logs").insert({
-          channel: "email",
-          recipient,
-          message: sanitizedHtml.slice(0, 500),
-          status: "failed",
-          error_message: errMsg.slice(0, 500),
-        }).then(() => {});
-      }
+      await logBatch(supabase, emailValidation.emails.map((recipient) => ({
+        channel: "email",
+        recipient,
+        message: messagePreview,
+        status: "failed",
+        error_message: String(errMsg).slice(0, 500),
+        related_type: related_type ?? null,
+        related_id: related_id ?? null,
+        user_id: user_id ?? null,
+      })));
 
       return new Response(
-        JSON.stringify({ error: errMsg }),
+        JSON.stringify({ success: false, error: errMsg }),
         { status: resendResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[send-email-resend] Email sent successfully. ID: ${resendData?.id}`);
+    const providerId = resendData?.id ?? null;
+    console.log(`[send-email-resend] Email sent successfully. ID: ${providerId}`);
 
-    for (const recipient of emailValidation.emails) {
-      await supabase.from("message_logs").insert({
-        channel: "email",
-        recipient,
-        message: sanitizedHtml.slice(0, 500),
-        status: "sent",
-        sent_at: new Date().toISOString(),
-      }).then(() => {});
-    }
+    await logBatch(supabase, emailValidation.emails.map((recipient) => ({
+      channel: "email",
+      recipient,
+      message: messagePreview,
+      status: "sent",
+      sent_at: new Date().toISOString(),
+      external_message_id: providerId,
+      related_type: related_type ?? null,
+      related_id: related_id ?? null,
+      user_id: user_id ?? null,
+    })));
 
     return new Response(
-      JSON.stringify({ success: true, message: "Email enviado com sucesso", id: resendData?.id }),
+      JSON.stringify({ success: true, message: "Email enviado com sucesso", id: providerId }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[send-email-resend] Unexpected error:", errorMsg);
     return new Response(
-      JSON.stringify({ error: errorMsg }),
+      JSON.stringify({ success: false, error: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
