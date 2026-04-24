@@ -10,6 +10,7 @@ import {
   formatDateBR,
   getEmailTemplate,
 } from "../_shared/email-helpers.ts";
+import { logInvoiceNotification } from "../_shared/notification-logger.ts";
 
 interface BatchRequest {
   invoice_ids: string[];
@@ -151,23 +152,33 @@ Deno.serve(async (req) => {
               });
             }
 
-            const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
-              body: { to: email, subject: emailSubject, html: emailHtml },
+            const { data: emailRes, error: emailError } = await supabase.functions.invoke("send-email-resend", {
+              body: {
+                to: email,
+                subject: emailSubject,
+                html: emailHtml,
+                related_type: "invoice",
+                related_id: invoice.id,
+                user_id: client.id,
+              },
             });
 
-            if (emailError) {
+            const emailOk = !emailError && emailRes?.success === true;
+            if (!emailOk) {
+              const errMsg = emailError?.message || emailRes?.error || "Erro ao enviar";
               results.email.failed++;
-              results.email.errors.push(`${client.name}: ${emailError.message}`);
+              results.email.errors.push(`${client.name}: ${errMsg}`);
             } else {
               results.email.sent++;
             }
 
-            await supabase.from("invoice_notification_logs").insert({
+            await logInvoiceNotification(supabase, {
               invoice_id: invoice.id,
               notification_type: "batch_collection",
               channel: "email",
-              success: !emailError,
-              error_message: emailError?.message,
+              recipient: email,
+              success: emailOk,
+              error_message: emailOk ? null : (emailError?.message || emailRes?.error || null),
             });
           } catch (err: unknown) {
             results.email.failed++;
@@ -217,12 +228,13 @@ Deno.serve(async (req) => {
               results.whatsapp.sent++;
             }
 
-            await supabase.from("invoice_notification_logs").insert({
+            await logInvoiceNotification(supabase, {
               invoice_id: invoice.id,
               notification_type: "batch_collection",
               channel: "whatsapp",
+              recipient: phone,
               success: !whatsappError,
-              error_message: whatsappError?.message,
+              error_message: whatsappError?.message ?? null,
             });
           } catch (err: unknown) {
             results.whatsapp.failed++;

@@ -44,7 +44,8 @@
     "https://deno.land/x/denomailer@1.6.0/config/mail/mod.ts": "a7fafa3386a45a585d7983d816b09ddc28b2f2b84097a614f1e38685b1f62868",
     "https://deno.land/x/denomailer@1.6.0/deps.ts": "12bef188bb2a490fedc82ac1889f3d438e8a15887c423b045fee532b31a43102",
     "https://deno.land/x/denomailer@1.6.0/mod.ts": "71a197dff098194ab53691abd3c9d22a276ef04e1382eb85f5632dbcb5a83bf3",
-    "https://esm.sh/@supabase/supabase-js@2.99.1": "b9af3c549dd42b12e1be07c340d8efa1552a6748ab70e5b9c483bbe8ad3dc3b3"
+    "https://esm.sh/@supabase/supabase-js@2.99.1": "b9af3c549dd42b12e1be07c340d8efa1552a6748ab70e5b9c483bbe8ad3dc3b3",
+    "https://esm.sh/zod@3.23.8": "15e60c792ac21d4818f181671c7c74bf33bf7526d487dc524911e42785d8b5c2"
   },
   "workspace": {
     "packageJson": {
@@ -84,6 +85,7 @@
         "npm:@radix-ui/react-toggle-group@^1.1.10",
         "npm:@radix-ui/react-toggle@^1.1.9",
         "npm:@radix-ui/react-tooltip@^1.2.7",
+        "npm:@react-pdf/renderer@^4.5.1",
         "npm:@supabase/supabase-js@^2.90.1",
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tanstack/react-query@^5.83.0",

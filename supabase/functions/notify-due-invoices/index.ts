@@ -10,6 +10,7 @@ import {
   formatDateBR,
   getEmailTemplate,
 } from "../_shared/email-helpers.ts";
+import { logInvoiceNotification } from "../_shared/notification-logger.ts";
 
 interface Invoice {
   id: string;
@@ -85,16 +86,18 @@ Deno.serve(async (req) => {
       const client = invoice.clients as unknown as Invoice['clients'];
       if (!client) continue;
 
-      // Dedup check
-      const { data: existingNotif } = await supabase
+      // Dedup: skip se já notificado nas últimas 24h (permite reenvios em janelas distintas)
+      const dedupCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentNotif } = await supabase
         .from("invoice_notification_logs")
         .select("id")
         .eq("invoice_id", invoice.id)
         .eq("notification_type", "payment_reminder")
+        .gte("sent_at", dedupCutoff)
         .limit(1);
 
-      if (existingNotif && existingNotif.length > 0) {
-        console.log(`[NOTIFY-DUE] Skipping invoice #${invoice.invoice_number} - already notified`);
+      if (recentNotif && recentNotif.length > 0) {
+        console.log(`[NOTIFY-DUE] Skipping invoice #${invoice.invoice_number} - notified in last 24h`);
         continue;
       }
 
@@ -198,16 +201,22 @@ Deno.serve(async (req) => {
             }
           }
 
-          const { error: emailError } = await supabase.functions.invoke("send-email-resend", {
+          const { data: emailRes, error: emailError } = await supabase.functions.invoke("send-email-resend", {
             body: {
               to: clientEmail,
               subject: emailSubject,
               html: emailHtml,
+              related_type: "invoice",
+              related_id: invoice.id,
+              user_id: client.id,
               ...(attachments.length > 0 ? { attachments } : {}),
             },
           });
 
-          if (!emailError) {
+          // send-email-resend retorna { success, error? } — confirmar de fato
+          const emailOk = !emailError && emailRes?.success === true;
+
+          if (emailOk) {
             result.email = true;
             console.log(`Email sent to ${clientEmail} for invoice #${invoice.invoice_number}`);
 
@@ -216,9 +225,33 @@ Deno.serve(async (req) => {
               email_sent_at: new Date().toISOString(),
               email_error_msg: null,
             }).eq("id", invoice.id);
+          } else {
+            const errMsg = emailError?.message || emailRes?.error || "Falha ao enviar email";
+            console.error(`[NOTIFY-DUE] Email failed for invoice #${invoice.invoice_number}: ${errMsg}`);
+            await supabase.from("invoices").update({
+              email_status: "erro",
+              email_error_msg: String(errMsg).slice(0, 500),
+            }).eq("id", invoice.id);
           }
+
+          await logInvoiceNotification(supabase, {
+            invoice_id: invoice.id,
+            notification_type: "payment_reminder",
+            channel: "email",
+            recipient: clientEmail,
+            success: emailOk,
+            error_message: emailOk ? null : (emailError?.message || emailRes?.error || null),
+          });
         } catch (error) {
           console.error("Error sending email:", error);
+          await logInvoiceNotification(supabase, {
+            invoice_id: invoice.id,
+            notification_type: "payment_reminder",
+            channel: "email",
+            recipient: clientEmail,
+            success: false,
+            error_message: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
@@ -279,8 +312,24 @@ Para evitar juros e multas, efetue o pagamento até a data de vencimento.`;
               user_id: client.id,
             });
           }
+          await logInvoiceNotification(supabase, {
+            invoice_id: invoice.id,
+            notification_type: "payment_reminder",
+            channel: "whatsapp",
+            recipient: client.whatsapp,
+            success: !whatsappError,
+            error_message: whatsappError?.message ?? null,
+          });
         } catch (error) {
           console.error("Error sending WhatsApp:", error);
+          await logInvoiceNotification(supabase, {
+            invoice_id: invoice.id,
+            notification_type: "payment_reminder",
+            channel: "whatsapp",
+            recipient: client.whatsapp,
+            success: false,
+            error_message: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
@@ -308,17 +357,7 @@ Para evitar juros e multas, efetue o pagamento até a data de vencimento.`;
         console.error("Error creating notifications:", error);
       }
 
-      // Log notification to prevent duplicates
-      if (result.email || result.whatsapp) {
-        const logs = [];
-        if (result.email) {
-          logs.push({ invoice_id: invoice.id, notification_type: "payment_reminder", channel: "email", recipient: client.financial_email || client.email });
-        }
-        if (result.whatsapp) {
-          logs.push({ invoice_id: invoice.id, notification_type: "payment_reminder", channel: "whatsapp", recipient: client.whatsapp });
-        }
-        await supabase.from("invoice_notification_logs").upsert(logs, { onConflict: "invoice_id,notification_type,channel" });
-      }
+      // Logs já gravados via logInvoiceNotification (sucesso e falha) por canal acima.
 
       results.push(result);
     }

@@ -237,6 +237,8 @@ Deno.serve(async (req) => {
               to: emailTo,
               subject: emailSubject,
               html: emailHtml,
+              related_type: "nfse",
+              related_id: nfse_history_id,
               ...(attachments.length > 0 ? { attachments } : {}),
             },
           });

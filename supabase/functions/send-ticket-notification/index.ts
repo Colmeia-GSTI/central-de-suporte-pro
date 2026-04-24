@@ -127,7 +127,14 @@ Deno.serve(async (req) => {
         }
 
         const { data: emailResult, error: emailError } = await supabase.functions.invoke("send-email-resend", {
-          body: { to: ticket.client.email, subject: emailSubject, html: emailHtml },
+          body: {
+            to: ticket.client.email,
+            subject: emailSubject,
+            html: emailHtml,
+            related_type: "ticket",
+            related_id: ticket.id,
+            user_id: ticket.client?.id,
+          },
         });
         results.email = emailError ? { error: emailError.message } : emailResult;
       } catch (e) {
