@@ -1,3 +1,5 @@
+// TODO(seção 7 — hardening): adicionar rate-limit / captcha no signup público.
+// Ver REFACTORING_ROADMAP.md → Seção 7. Sem isso, atacante pode criar N contas via API.
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";

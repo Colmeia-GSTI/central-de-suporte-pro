@@ -61,6 +61,13 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
   - Ferramentas criadas (1.2b): coluna gerada `clients.normalized_document`, RPCs admin-only `detect_duplicate_clients()` / `merge_clients()` / `delete_client_safely()`, UI completa (`DuplicatesBanner`, `MergeClientsDialog` com wizard 3-steps híbrido B+A, `DeleteClientButton` com pré-check), pré-check de CNPJ no `ClientForm`, lib pura `client-merge.ts` com 9 testes.
   - Aplicação (1.2c): AIRDUTO consolidado em `60ba285e...` (1 contrato/1 ticket/2 contatos preservados); VIZU consolidado em `c9bab9b7...` (2 contratos ativos + 1 contato migrado). 32 clientes restantes (era 34). Auditoria registrada em `audit_logs` (action=`MERGE`) e `client_history` (action=`merged`).
   - Prevenção ativa: índice único parcial `uq_clients_normalized_document` (`WHERE normalized_document <> ''`) impede recorrência. `ClientForm` trata erro Postgres `23505` com toast amigável.
+
+- ✅ **1.3 — Gestão de usuários e detecção de órfãos** (concluído 2026-04-25)
+  - Causa raiz: `handle_new_user` falhava silenciosamente (`RAISE WARNING` sem persistência) gerando órfãos passados; 5 edge functions de gestão (`create-user`, `create-client-user`, `delete-user`, `update-user-email`, `confirm-user-email`) operavam com permissões divergentes, sem rate-limit e sem audit padronizado; admin não tinha página dedicada para gerenciar usuários.
+  - Ferramentas criadas (1.3b): página `/settings/users` admin-only com 6 componentes modulares + hook `useUsers` SaaS-ready (`tenantId` opcional); helper compartilhado `_shared/auth-helpers.ts` (`requireRole`, `rateLimit`, `logAudit`, `jsonResponse`); edge function `detect-auth-anomalies` com cron diário 08:00 BRT + banner de invocação manual; trigger `audit_user_roles_trigger` em `user_roles`; refactor das 5 edge functions com permissões alinhadas + rate-limit 5/min + audit; `handle_new_user` agora persiste sucesso/falha em `application_logs`.
+  - Prevenção ativa: telemetria contínua via `application_logs` + cron de anomalias; RLS append-only em `audit_logs` (UPDATE/DELETE bloqueados); rate-limit em todas as edges sensíveis.
+  - Antecipação: trigger de audit em `user_roles` foi antecipado de 1.4. Outras tabelas sensíveis (`invoices`, `contracts`, `clients`, `bank_accounts`, `integration_settings`) ficam para 1.4 com função genérica reaproveitável.
+
 ### Seção 2 — Monitoramento e sync de devices
 
 - **Objetivo:** Estabilizar a sincronização de dispositivos monitorados (UniFi, Tactical RMM, CheckMK) e o pipeline de alertas.
