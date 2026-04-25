@@ -1,126 +1,105 @@
-# Plano: Reenvio manual de email de confirmação
+# Plano — QA Completo das Mudanças desta Etapa
 
-## Contexto
-O `auth-email-hook` está deployado mas silencioso (Send Email Hook não configurado no painel Supabase — exige ação manual do dono do projeto). Esta entrega cria um caminho independente para reenviar o email de confirmação via `send-email-resend`, limpa 2 usuários de teste órfãos e melhora a UX no Login/Register.
+## Escopo coberto
+1. **Seção 0.3** — Testes de integração (5 fluxos) + refactors de testabilidade
+2. **Item 1.1** — Reparo `/billing/delinquency`, `PageErrorBoundary`, `unwrapEmbed`
+3. **Itens prévios** — `useFeatureFlag`, `FeatureFlagsPage`, rota protegida
 
----
+## Fase 1 — Validação automatizada (sem browser)
 
-## Passo 1 — Limpeza de usuários órfãos (migration)
+Executar em sequência e reportar output bruto:
 
-Migração `cleanup_orphan_test_users` removendo (na ordem) `user_roles` → `profiles` → `auth.users` para os 2 emails de teste de março/2026:
-- `teste.final.fluxo@testlovable.com`
-- `teste.trigger.auto@testlovable.com`
+1. **TypeScript**: `bunx tsc --noEmit` — esperado 0 erros
+2. **Suite de integração**: `bunx vitest run src/test/integration` — esperado 18/18 passando
+   - `login.test.tsx` (3)
+   - `create-ticket.test.tsx` (3)
+   - `generate-invoices.test.ts` (3)
+   - `notify-due-invoices.test.ts` (3)
+   - `resend-confirmation.test.ts` (3)
+   - `delinquency-page.test.tsx` (3)
+3. **Suite completa**: `bunx vitest run` — capturar total (incluindo `useAuth.test.tsx`, `ProtectedRoute.test.tsx`, `example.test.ts`, `asaas-nfse_test.ts`, `banco-inter_test.ts`); reportar falhas pré-existentes sem corrigir
+4. **Coverage dos 5 fluxos-alvo**: `bunx vitest run --coverage src/test/integration` — esperado >70% médio nos arquivos:
+   - `src/pages/Login.tsx`
+   - `src/lib/ticket-payload.ts`
+   - `supabase/functions/generate-monthly-invoices/logic.ts`
+   - `supabase/functions/notify-due-invoices/logic.ts`
+   - `supabase/functions/resend-confirmation/logic.ts`
+5. **Build**: `bunx vite build` — esperado sucesso, sem warnings novos
+6. **Lint**: `bun run lint` — reportar mas não bloquear em warnings pré-existentes
 
-Bloco `DO $$ ... $$` com `RAISE NOTICE` reportando contagens removidas. Idempotente: se nenhum user existir, sai sem erro.
+## Fase 2 — QA de interface no preview (browser tools)
 
-> Nota: a deleção em `auth.users` em cascata limpa também `auth.identities` e `auth.sessions` (FKs nativas).
+Login com sessão atual do usuário no preview. Para cada cenário, screenshot + observação.
 
----
+### 2.1 Página `/billing/delinquency` (Item 1.1)
+- Navegar para `/billing/delinquency`
+- Verificar: página carrega sem crash, lista de inadimplentes renderiza, gráfico aparece, filtros funcionam
+- Verificar console: nenhum `TypeError`, sem warning de `unwrapEmbed` salvo se houver órfão real
+- Testar busca por nome de cliente
+- Testar checkbox de seleção e botão de notificação em lote (sem disparar — só validar UI habilitar/desabilitar)
 
-## Passo 2 — Edge Function `resend-confirmation`
+### 2.2 `PageErrorBoundary` (resiliência)
+- Verificar que `DelinquencyReportPage` está envolto pelo `PageErrorBoundary` no código
+- **Sem disparar crash real em produção**: validar apenas via teste unitário já existente (`delinquency-page.test.tsx`) que cobre os 3 shapes de embed
+- Reportar que o boundary loga em `application_logs` (módulo `ui`, ação `page_crash`) — citar query SQL para verificação posterior caso o usuário queira
 
-**Novo arquivo:** `supabase/functions/resend-confirmation/index.ts`
+### 2.3 `/settings/feature-flags` (etapa prévia)
+- Navegar para `/settings/feature-flags`
+- Confirmar proteção por role admin (se usuário logado for admin, página renderiza; senão redirect `/unauthorized`)
+- Verificar listagem de flags, toggle on/off, persistência (refresh da página mantém estado)
 
-Fluxo:
-1. Valida `{ email }` (regex + trim/lowercase).
-2. `supabase.auth.admin.listUsers()` → busca usuário pelo email.
-   - Não existe → `404 { error: "Email não cadastrado" }`.
-   - Já confirmado (`email_confirmed_at`) → `200 { already_confirmed: true, message: "Conta já ativada..." }`.
-3. **Rate limit**: conta linhas em `message_logs` com `user_id = user.id`, `related_type = 'user_signup'`, `status = 'sent'`, `sent_at >= now() - 1h`. Se ≥ 3 → `429 { error: "rate_limited" }`.
-4. `supabase.auth.admin.generateLink({ type: 'signup', email })` → captura `properties.action_link`.
-5. Monta HTML usando `getEmailSettings` + `wrapInEmailLayout` + `escapeHtml` do `_shared/email-helpers.ts` (reutiliza branding já existente — cores, logo, footer da `email_settings`).
-6. Invoca `send-email-resend` com:
-   - `subject: "Confirme seu cadastro - Colmeia"`
-   - `related_type: 'user_signup'`, `related_id: user.id`, `user_id: user.id` (para rastreio em `message_logs`).
-7. Retorna `{ success: true, message: "Email de confirmação reenviado" }`.
+### 2.4 Login (`src/pages/Login.tsx`)
+- Já testado por `login.test.tsx` em integração — não logar/deslogar manualmente para não quebrar a sessão atual
 
-CORS, timeout e validação seguem o mesmo padrão das outras functions. Sem subdiretórios. JWT verification: público (precisa funcionar antes do login).
+### 2.5 Criar ticket (`/tickets/new`)
+- Navegar para `/tickets/new`
+- Verificar form renderiza, dropdowns carregam (cliente, categoria, prioridade)
+- **Não submeter** — apenas validar que `buildTicketPayload` extraído continua produzindo payload via lógica do form
 
-**`supabase/config.toml`**: adicionar `[functions.resend-confirmation] verify_jwt = false`.
+## Fase 3 — Banco de dados (read-only)
 
-**Deploy:** `supabase--deploy_edge_functions(["resend-confirmation"])`.
+Queries de sanidade via `supabase--read_query`:
 
----
+1. **Logs de crash da boundary** (últimas 24h):
+   ```sql
+   select created_at, message, context->>'page' as page
+   from application_logs
+   where module='ui' and action='page_crash'
+   order by created_at desc limit 10;
+   ```
+2. **Feature flags ativas**:
+   ```sql
+   select key, enabled, description from feature_flags order by key;
+   ```
+3. **Sanidade de invoices com client embed** (confirma que dados batem com o que a página espera):
+   ```sql
+   select count(*) filter (where client_id is null) as orfas,
+          count(*) as total
+   from invoices where status='overdue';
+   ```
 
-## Passo 3 — `src/pages/Login.tsx`
+## Fase 4 — Relatório final
 
-Mudanças mínimas, reutilizando UI existente:
+Reporte estruturado contendo:
 
-- Novo estado: `pendingConfirmEmail: string | null` e `resending: boolean`.
-- Quando `error.message === "Email not confirmed"`:
-  - Toast com título "Confirme seu email" e descrição "Seu email ainda não foi confirmado."
-  - `setPendingConfirmEmail(emailToUse)` para revelar o botão.
-- Abaixo do formulário (dentro do `CardFooter`, antes do "Esqueci minha senha"), renderizar condicionalmente:
-  ```tsx
-  {pendingConfirmEmail && (
-    <Button
-      type="button"
-      variant="outline"
-      className="w-full"
-      disabled={resending}
-      onClick={handleResend}
-    >
-      {resending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-      Reenviar email de confirmação
-    </Button>
-  )}
-  ```
-- `handleResend`: chama `supabase.functions.invoke("resend-confirmation", { body: { email: pendingConfirmEmail } })`.
-  - Sucesso → toast verde "Email enviado. Verifique sua caixa de entrada e spam."
-  - Erro `rate_limited` (status 429 ou `data.error === 'rate_limited'`) → toast laranja `variant: "default"` "Aguarde alguns minutos antes de solicitar novamente."
-  - Erro genérico → toast destrutivo com a mensagem.
-- Limpa `pendingConfirmEmail` em sucesso.
+| Item | Resultado | Evidência |
+|---|---|---|
+| TS errors | 0 / N | output `tsc` |
+| Testes integração | 18/18 ou X/18 | output vitest |
+| Coverage 5 fluxos | X% | output coverage |
+| Build | OK / FAIL | output vite |
+| `/billing/delinquency` UI | OK / FAIL | screenshot |
+| `/settings/feature-flags` UI | OK / FAIL | screenshot |
+| `/tickets/new` UI | OK / FAIL | screenshot |
+| Logs de crash 24h | N registros | query result |
+| Bloqueios | lista | — |
 
-Sem novos componentes — apenas o `Button`/`Loader2` já importados.
+## Não fazer
+- Não corrigir nada encontrado — apenas reportar
+- Não submeter formulários reais (criar ticket, notificar inadimplente)
+- Não fazer logout / mudar de usuário
+- Não tocar em arquivos de produção
+- Não expandir escopo para outras páginas
 
----
-
-## Passo 4 — `src/pages/Register.tsx`
-
-Substituir o redirect imediato para `/login` por uma tela de confirmação inline:
-
-- Migrar de `toast` (sonner) → manter sonner (consistente com o arquivo).
-- Novo estado: `signedUpEmail: string | null` e `resending: boolean`.
-- Após `signUp` bem-sucedido: `setSignedUpEmail(email)` (não navega).
-- Renderiza condicionalmente `signedUpEmail ? <ConfirmationCard /> : <RegisterForm />` dentro do mesmo `<Card>`:
-  - Título: "Cadastro realizado com sucesso!"
-  - Descrição: "Enviamos um email de confirmação para **{email}**. Verifique sua caixa de entrada e clique no link para ativar sua conta."
-  - Botão primário: "Reenviar email" (chama `resend-confirmation`).
-  - Texto auxiliar: "Não recebeu? Verifique sua pasta de spam ou clique em Reenviar após alguns minutos."
-  - Link: "Ir para o login" (`/login`).
-
-Estados de toast (sucesso/rate-limit/erro) idênticos aos do Login. O componente é pequeno o suficiente para ficar inline (≤ 50 linhas), então não cria novo arquivo.
-
----
-
-## Passo 5 — Instruções para o usuário (resposta final)
-
-Bloco em PT-BR explicando como ativar o `Send Email Hook` no painel Supabase (URL com `silefpsayliwqtoskkdz`, método POST, sem secret), e que o botão "Reenviar email de confirmação" funciona como contingência enquanto o hook não está ligado.
-
----
-
-## Limpeza e validação final
-
-- `bunx tsc --noEmit` deve sair com código 0.
-- Sem imports órfãos em Login/Register.
-- `auth-email-hook` permanece deployado e intacto (continuará funcionando assim que o usuário ativar o hook no painel).
-- Reutilização total dos helpers existentes (`email-helpers.ts`, `useAuth`, componentes shadcn).
-
----
-
-## Arquivos tocados
-
-| Arquivo | Ação |
-|---|---|
-| `supabase/migrations/<timestamp>_cleanup_orphan_test_users.sql` | criar |
-| `supabase/functions/resend-confirmation/index.ts` | criar |
-| `supabase/config.toml` | adicionar bloco da função |
-| `src/pages/Login.tsx` | editar (botão reenvio condicional) |
-| `src/pages/Register.tsx` | editar (tela de confirmação inline) |
-
-## Detalhes técnicos
-
-- `message_logs` **não tem coluna** `notification_type` — usa `related_type='user_signup'` como filtro de rate limit (consistente com outras functions já refatoradas).
-- `auth.admin.generateLink` exige service role key (já disponível em `SUPABASE_SERVICE_ROLE_KEY`).
-- `verify_jwt = false` é necessário porque a função é chamada pré-login.
-- Email branding herda de `email_settings` + `company_settings` automaticamente (mesmo padrão do `send-welcome-email`).
+## Aprovação
+Aguardo OK para sair do plan mode e executar as 4 fases. Se preferir pular a Fase 2 (browser, mais cara), me avise — Fases 1+3+4 já dão cobertura forte via testes automatizados + DB.
