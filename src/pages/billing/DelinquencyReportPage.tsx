@@ -47,6 +47,8 @@ import { ptBR } from "date-fns/locale";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { unwrapEmbed } from "@/lib/supabase-helpers";
+import { PageErrorBoundary } from "@/components/common/PageErrorBoundary";
 import {
   PieChart,
   Pie,
@@ -92,7 +94,16 @@ const AGING_COLORS = {
   "60+": "hsl(var(--destructive))",
 };
 
-export default function DelinquencyReportPage() {
+type ClientRow = {
+  id: string;
+  name: string;
+  email: string | null;
+  financial_email: string | null;
+  whatsapp: string | null;
+  phone: string | null;
+};
+
+function DelinquencyReportPageInner() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [minDaysFilter, setMinDaysFilter] = useState<string>("all");
@@ -118,14 +129,18 @@ export default function DelinquencyReportPage() {
       const grouped: Record<string, DelinquentClient> = {};
 
       for (const inv of data || []) {
-        if (!inv.clients) continue;
-        
-        const clientId = inv.clients.id;
+        const client = unwrapEmbed<ClientRow>(inv.clients as ClientRow | ClientRow[] | null);
+        if (!client || !client.id) {
+          console.warn("[DelinquencyReport] invoice descartada — embed clients vazio:", inv.id);
+          continue;
+        }
+
+        const clientId = client.id;
         const daysOverdue = differenceInDays(today, new Date(inv.due_date));
 
         if (!grouped[clientId]) {
           grouped[clientId] = {
-            client: inv.clients,
+            client,
             invoices: [],
             totalOverdue: 0,
             maxDaysOverdue: 0,
@@ -630,5 +645,13 @@ export default function DelinquencyReportPage() {
         </Card>
       </div>
     </AppLayout>
+  );
+}
+
+export default function DelinquencyReportPage() {
+  return (
+    <PageErrorBoundary pageName="billing-delinquency">
+      <DelinquencyReportPageInner />
+    </PageErrorBoundary>
   );
 }

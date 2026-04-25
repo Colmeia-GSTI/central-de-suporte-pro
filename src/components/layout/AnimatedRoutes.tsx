@@ -53,7 +53,7 @@ const FeatureFlagsPage = lazyWithRetry(() => import("@/pages/settings/FeatureFla
 const ReportsPage = lazyWithRetry(() => import("@/pages/reports/ReportsPage"));
 const ClientPortalPage = lazyWithRetry(() => import("@/pages/client-portal/ClientPortalPage"));
 const ProfilePage = lazyWithRetry(() => import("@/pages/profile/ProfilePage"));
-const DelinquencyReportPage = lazyWithRetry(() => import("@/pages/financial/DelinquencyReportPage"));
+const DelinquencyReportPage = lazyWithRetry(() => import("@/pages/billing/DelinquencyReportPage"));
 const BillingPage = lazyWithRetry(() => import("@/pages/billing/BillingPage"));
 
 // Per-route Error Boundary — isolates crashes to a single page

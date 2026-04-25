@@ -43,10 +43,18 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 ### Seção 1 — Correções críticas com ferramentas admin
 
 - **Objetivo:** Corrigir bugs críticos que já têm ferramenta administrativa disponível para validação e rollback.
-- **Status:** ☐ pendente
-- **Início:** —
+- **Status:** ◐ em andamento
+- **Início:** 2026-04-25
 - **Conclusão:** —
-- _Detalhes serão adicionados quando a seção for iniciada._
+
+#### Itens
+
+- ✅ **1.1 — `/billing/delinquency` quebrada** (concluído 2026-04-25)
+  - Causa raiz: embed `clients(...)` do supabase-js retornado como ARRAY em runtime, código acessava como objeto → `TypeError`.
+  - Fix: `unwrapEmbed` (`src/lib/supabase-helpers.ts`) + tipagem `ClientRow` + guard descartando faturas órfãs.
+  - Ferramenta: `PageErrorBoundary` (`src/components/common/PageErrorBoundary.tsx`) loga crashes em `application_logs` e oferece UI de retry/voltar.
+  - Prevenção: 3 testes de regressão (`delinquency-page.test.tsx`) cobrindo embed array/objeto/null.
+  - Movido `src/pages/financial/DelinquencyReportPage.tsx → src/pages/billing/`. Pasta `financial/` removida.
 
 ### Seção 2 — Monitoramento e sync de devices
 
