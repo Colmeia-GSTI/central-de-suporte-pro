@@ -299,15 +299,20 @@ Deno.serve(async (req) => {
 
     console.log(`Client user created successfully: ${finalContactId}`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        userId,
-        contactId: finalContactId,
-        message: "Usuário criado com sucesso",
-      }),
-      { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    await logAudit(makeAdminClient(), {
+      table_name: "client_contacts",
+      record_id: finalContactId ?? null,
+      action: "CLIENT_USER_CREATED",
+      user_id: requestingUser.id,
+      new_data: { client_id: clientId, user_id: userId, username, role: userRole },
+    });
+
+    return jsonResponse({
+      success: true,
+      userId,
+      contactId: finalContactId,
+      message: "Usuário criado com sucesso",
+    }, 201);
   } catch (error) {
     console.error("Unexpected error:", error);
     return new Response(
