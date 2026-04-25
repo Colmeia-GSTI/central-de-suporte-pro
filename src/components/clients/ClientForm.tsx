@@ -434,6 +434,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                         placeholder="00.000.000/0000-00" 
                         {...field}
                         onChange={(e) => handleDocumentChange(e, field.onChange)}
+                        onBlur={() => { void checkDuplicateDocument(); }}
                       />
                     </FormControl>
                     <Button
@@ -450,6 +451,11 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                       <span className="ml-2 hidden sm:inline">Consultar</span>
                     </Button>
                   </div>
+                  {duplicateMatch && (
+                    <p className="text-xs text-warning mt-1" role="alert">
+                      Já existe cliente com este CNPJ: <strong>{duplicateMatch.name}</strong>
+                    </p>
+                  )}
                   <FormDescription>
                     Digite o CNPJ e clique em Consultar para preencher automaticamente
                   </FormDescription>
