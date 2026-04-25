@@ -13,12 +13,20 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/helpers/render";
 import { createSupabaseMock } from "@/test/mocks/supabase";
 
-// Mock the supabase singleton BEFORE importing the page.
-vi.mock("@/integrations/supabase/client", () => {
-  const { createSupabaseMock } = require("@/test/mocks/supabase");
-  const { client } = createSupabaseMock();
-  return { supabase: client };
+// Hoisted mock holder so the vi.mock factory can reach it.
+const mocks = vi.hoisted(() => {
+  return { fromImpl: vi.fn() };
 });
+
+// Mock the supabase singleton BEFORE importing the page.
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    from: mocks.fromImpl,
+    auth: {
+      getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
+    },
+  },
+}));
 
 // Mock useAuth so the page does not need a real session.
 vi.mock("@/hooks/useAuth", () => ({
@@ -39,8 +47,10 @@ vi.mock("recharts", async () => {
   };
 });
 
-import { supabase } from "@/integrations/supabase/client";
 import DelinquencyReportPage from "@/pages/billing/DelinquencyReportPage";
+
+// Remove unused symbol warning by referencing types
+type _UnusedClient = typeof sampleClient;
 
 const baseInvoice = {
   id: "inv-1",
@@ -62,10 +72,8 @@ const sampleClient = {
 };
 
 function configureInvoicesResponse(data: unknown) {
-  const mod = createSupabaseMock({ tables: { invoices: { data, error: null } } });
-  // Replace the from() implementation on the imported singleton.
-  (supabase.from as unknown as { mockImplementation: (impl: typeof mod.client.from) => void })
-    .mockImplementation(mod.client.from as never);
+  const { client } = createSupabaseMock({ tables: { invoices: { data, error: null } } });
+  mocks.fromImpl.mockImplementation(client.from as never);
 }
 
 describe("DelinquencyReportPage — embed shape resilience", () => {
