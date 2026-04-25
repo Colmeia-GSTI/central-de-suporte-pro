@@ -119,6 +119,10 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 #### Dívidas registradas
 - **Rate-limit / captcha no signup público (`Register.tsx`)** — registrado como TODO no topo do arquivo (item 1.3b). Hoje a rota `/register` não tem proteção contra criação automatizada de contas. Implementação não trivial sem captcha (hCaptcha/Turnstile); avaliar nesta seção.
 
+---
+
+## Backlog Fase 2 (SaaS) — não fazemos agora
+
 Itens reservados para uma futura fase de evolução do produto. Não entram no escopo deste roadmap.
 
 - Multi-tenancy real (tabela `tenants`, isolamento via RLS)
