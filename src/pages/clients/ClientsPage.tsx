@@ -30,6 +30,7 @@ import {
 import { Plus, Search, Building2, Edit, Trash2, Phone, Mail, MessageCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { ClientForm } from "@/components/clients/ClientForm";
+import { DuplicatesBanner } from "@/components/clients/DuplicatesBanner";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -204,6 +205,8 @@ export default function ClientsPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        <DuplicatesBanner />
 
         {/* Search */}
         <div className="flex items-center gap-4">

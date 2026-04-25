@@ -77,7 +77,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const [isValidatingWhatsApp, setIsValidatingWhatsApp] = useState(false);
   const [whatsAppStatus, setWhatsAppStatus] = useState<'idle' | 'valid' | 'invalid' | 'error'>('idle');
   const [whatsAppMessage, setWhatsAppMessage] = useState<string>("");
-  
+  const [duplicateMatch, setDuplicateMatch] = useState<{ id: string; name: string } | null>(null);
+
   const { isTechnicianOnly } = usePermissions();
 
   const form = useForm<ClientFormData>({
@@ -375,13 +376,41 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     },
   });
 
-  const onSubmit = (data: ClientFormData) => {
+  const onSubmit = async (data: ClientFormData) => {
+    // Guarda final: se há duplicata, exigir confirmação explícita
+    const dup = await checkDuplicateDocument();
+    if (dup && !window.confirm(`Já existe cliente com este CNPJ (${dup.name}). Deseja criar duplicata mesmo assim?`)) {
+      return;
+    }
     mutation.mutate(data);
   };
 
   const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>, onChange: (...event: any[]) => void) => {
     const formatted = formatCNPJ(e.target.value);
     onChange(formatted);
+    if (duplicateMatch) setDuplicateMatch(null);
+  };
+
+  const checkDuplicateDocument = async () => {
+    const raw = form.getValues("document") || "";
+    const normalized = raw.replace(/\D/g, "");
+    if (!normalized) {
+      setDuplicateMatch(null);
+      return null;
+    }
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name")
+      // @ts-expect-error coluna gerada disponível em runtime
+      .eq("normalized_document", normalized)
+      .neq("id", client?.id ?? "00000000-0000-0000-0000-000000000000")
+      .maybeSingle();
+    if (data) {
+      setDuplicateMatch(data as { id: string; name: string });
+      return data as { id: string; name: string };
+    }
+    setDuplicateMatch(null);
+    return null;
   };
 
   return (
@@ -410,6 +439,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                         placeholder="00.000.000/0000-00" 
                         {...field}
                         onChange={(e) => handleDocumentChange(e, field.onChange)}
+                        onBlur={() => { void checkDuplicateDocument(); }}
                       />
                     </FormControl>
                     <Button
@@ -426,6 +456,11 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                       <span className="ml-2 hidden sm:inline">Consultar</span>
                     </Button>
                   </div>
+                  {duplicateMatch && (
+                    <p className="text-xs text-warning mt-1" role="alert">
+                      Já existe cliente com este CNPJ: <strong>{duplicateMatch.name}</strong>
+                    </p>
+                  )}
                   <FormDescription>
                     Digite o CNPJ e clique em Consultar para preencher automaticamente
                   </FormDescription>

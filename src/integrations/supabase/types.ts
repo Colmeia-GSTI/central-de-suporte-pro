@@ -847,6 +847,7 @@ export type Database = {
           is_active: boolean
           name: string
           nickname: string | null
+          normalized_document: string | null
           notes: string | null
           phone: string | null
           state: string | null
@@ -872,6 +873,7 @@ export type Database = {
           is_active?: boolean
           name: string
           nickname?: string | null
+          normalized_document?: string | null
           notes?: string | null
           phone?: string | null
           state?: string | null
@@ -897,6 +899,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           nickname?: string | null
+          normalized_document?: string | null
           notes?: string | null
           phone?: string | null
           state?: string | null
@@ -6587,6 +6590,18 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      delete_client_safely: {
+        Args: { p_client_id: string; p_preview?: boolean }
+        Returns: Json
+      }
+      detect_duplicate_clients: {
+        Args: never
+        Returns: {
+          clients: Json
+          normalized_document: string
+          occurrences: number
+        }[]
+      }
       generate_signed_url: {
         Args: { p_bucket: string; p_expires_in?: number; p_path: string }
         Returns: string
@@ -6649,6 +6664,10 @@ export type Database = {
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
+      merge_clients: {
+        Args: { field_overrides?: Json; source_id: string; target_id: string }
+        Returns: Json
+      }
       try_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
       update_invoice_status: {
         Args: {
