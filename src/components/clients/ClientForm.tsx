@@ -77,7 +77,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const [isValidatingWhatsApp, setIsValidatingWhatsApp] = useState(false);
   const [whatsAppStatus, setWhatsAppStatus] = useState<'idle' | 'valid' | 'invalid' | 'error'>('idle');
   const [whatsAppMessage, setWhatsAppMessage] = useState<string>("");
-  
+  const [duplicateMatch, setDuplicateMatch] = useState<{ id: string; name: string } | null>(null);
+
   const { isTechnicianOnly } = usePermissions();
 
   const form = useForm<ClientFormData>({
@@ -382,6 +383,29 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>, onChange: (...event: any[]) => void) => {
     const formatted = formatCNPJ(e.target.value);
     onChange(formatted);
+    if (duplicateMatch) setDuplicateMatch(null);
+  };
+
+  const checkDuplicateDocument = async () => {
+    const raw = form.getValues("document") || "";
+    const normalized = raw.replace(/\D/g, "");
+    if (!normalized) {
+      setDuplicateMatch(null);
+      return null;
+    }
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name")
+      // @ts-expect-error coluna gerada disponível em runtime
+      .eq("normalized_document", normalized)
+      .neq("id", client?.id ?? "00000000-0000-0000-0000-000000000000")
+      .maybeSingle();
+    if (data) {
+      setDuplicateMatch(data as { id: string; name: string });
+      return data as { id: string; name: string };
+    }
+    setDuplicateMatch(null);
+    return null;
   };
 
   return (
