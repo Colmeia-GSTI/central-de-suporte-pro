@@ -1,163 +1,77 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { adminClient, corsHeaders, jsonResponse, logAudit, rateLimit, requireRole } from "../_shared/auth-helpers.ts";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const auth = await requireRole(req.headers.get("Authorization"), ["admin"]);
+    if (!auth.ok) {
+      return jsonResponse({ error: auth.error, required_roles: ["admin"] }, auth.status ?? 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Verify requesting user is admin
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user: requestingUser }, error: authError } = await userClient.auth.getUser();
-    if (authError || !requestingUser) {
-      return new Response(
-        JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    // Check admin role
-    const { data: adminRoles } = await adminClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", requestingUser.id)
-      .in("role", ["admin", "manager"]);
-
-    if (!adminRoles || adminRoles.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "Apenas administradores podem realizar esta ação" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Suportar action via body (POST) ou query string (GET legacy)
     let action = "list";
     let bodyUserId: string | undefined;
-
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
-      action = body?.action || "list";
+      action = body?.action ?? "list";
       bodyUserId = body?.user_id;
     } else {
       const url = new URL(req.url);
-      action = url.searchParams.get("action") || "list";
+      action = url.searchParams.get("action") ?? "list";
     }
 
+    const admin = adminClient();
+
     if (action === "list") {
-      // List users with their email confirmation status
-      const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers({
-        perPage: 500,
-      });
-
+      const { data: { users }, error: listError } = await admin.auth.admin.listUsers({ perPage: 500 });
       if (listError) {
-        console.error("[confirm-user-email] Error listing users:", listError.message);
-        throw listError;
+        console.error("[confirm-user-email] List error:", listError.message);
+        return jsonResponse({ error: "Erro ao listar usuários" }, 500);
       }
-
-      // Return map of user_id -> confirmed status
       const statusMap: Record<string, boolean> = {};
-      for (const user of users) {
-        statusMap[user.id] = !!user.email_confirmed_at;
-      }
-
-      return new Response(
-        JSON.stringify({ data: statusMap }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      for (const u of users) statusMap[u.id] = !!u.email_confirmed_at;
+      return jsonResponse({ data: statusMap });
     }
 
     if (action === "confirm") {
-      const userId = bodyUserId;
-
-      if (!userId || typeof userId !== "string") {
-        return new Response(
-          JSON.stringify({ error: "user_id é obrigatório" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (!bodyUserId || typeof bodyUserId !== "string") {
+        return jsonResponse({ error: "user_id é obrigatório" }, 400);
       }
 
-      // Confirm user email using admin API
-      const { data: userData, error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
-        email_confirm: true,
-      });
+      const rl = rateLimit(`confirm-user-email:${auth.userId}`, 5, 60_000);
+      if (!rl.allowed) {
+        return jsonResponse({ error: "rate_limited", retry_after_seconds: rl.retryAfter }, 429);
+      }
 
+      const { data: userData, error: updateError } = await admin.auth.admin.updateUserById(bodyUserId, { email_confirm: true });
       if (updateError) {
-        console.error("[confirm-user-email] Error confirming user:", updateError.message);
-        return new Response(
-          JSON.stringify({ error: "Erro ao ativar usuário" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.error("[confirm-user-email] Confirm error:", updateError.message);
+        return jsonResponse({ error: "Erro ao ativar usuário" }, 500);
       }
 
-      // Ensure profile exists (upsert) to prevent orphan auth users
       if (userData?.user) {
         const u = userData.user;
         const fullName = u.user_metadata?.full_name || u.email || "Usuário";
-        const { error: profileError } = await adminClient.from("profiles").upsert(
-          {
-            user_id: u.id,
-            full_name: fullName,
-            email: u.email,
-          },
-          { onConflict: "user_id" }
+        await admin.from("profiles").upsert(
+          { user_id: u.id, full_name: fullName, email: u.email },
+          { onConflict: "user_id" },
         );
-        if (profileError) {
-          console.error("[confirm-user-email] Failed to upsert profile:", profileError.message);
-        } else {
-          console.log(`[confirm-user-email] Profile ensured for user ${u.id}`);
-        }
       }
 
-      // Log the action
-      await adminClient.from("audit_logs").insert({
+      await logAudit(admin, {
         table_name: "auth.users",
-        record_id: userId,
+        record_id: bodyUserId,
         action: "EMAIL_CONFIRMED_BY_ADMIN",
-        user_id: requestingUser.id,
-        new_data: { confirmed_by: requestingUser.id, confirmed_at: new Date().toISOString() },
+        user_id: auth.userId!,
+        new_data: { confirmed_at: new Date().toISOString() },
       });
 
-      console.log(`[confirm-user-email] User ${userId} confirmed by admin ${requestingUser.id}`);
-
-      return new Response(
-        JSON.stringify({ success: true, message: "Usuário confirmado" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ success: true, message: "Usuário confirmado" });
     }
 
-    return new Response(
-      JSON.stringify({ error: "Ação inválida" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Ação inválida" }, 400);
   } catch (error) {
-    console.error("[confirm-user-email] Unexpected error:", error);
-    return new Response(
-      JSON.stringify({ error: "Erro interno do servidor" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[confirm-user-email] Unexpected:", error);
+    return jsonResponse({ error: "Erro interno do servidor" }, 500);
   }
 });

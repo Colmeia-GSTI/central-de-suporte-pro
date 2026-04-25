@@ -1,127 +1,61 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { adminClient, corsHeaders, jsonResponse, logAudit, rateLimit, requireRole } from "../_shared/auth-helpers.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+const STAFF_ROLES = ["admin", "manager", "technician", "financial"];
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const auth = await requireRole(req.headers.get("Authorization"), ["admin"]);
+    if (!auth.ok) {
+      return jsonResponse({ error: auth.error, required_roles: ["admin"] }, auth.status ?? 401);
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Verify caller is admin
-    const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user: caller }, error: authError } = await callerClient.auth.getUser();
-    if (authError || !caller) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const rl = rateLimit(`delete-user:${auth.userId}`, 5, 60_000);
+    if (!rl.allowed) {
+      return jsonResponse({ error: "rate_limited", retry_after_seconds: rl.retryAfter }, 429);
     }
 
-    // Check staff role (admin, manager, technician, financial)
-    const { data: roles } = await callerClient
+    const { user_id } = await req.json().catch(() => ({}));
+    if (!user_id || typeof user_id !== "string") {
+      return jsonResponse({ error: "user_id é obrigatório" }, 400);
+    }
+
+    if (user_id === auth.userId) {
+      return jsonResponse({ error: "Você não pode excluir sua própria conta" }, 400);
+    }
+
+    const admin = adminClient();
+    const { data: { user: targetUser } } = await admin.auth.admin.getUserById(user_id);
+    const { data: targetRoles } = await admin
       .from("user_roles")
       .select("role")
-      .eq("user_id", caller.id);
+      .eq("user_id", user_id);
 
-    const staffRoles = ["admin", "manager", "technician", "financial"];
-    const isStaff = roles?.some((r) => staffRoles.includes(r.role));
-
-    if (!isStaff) {
-      return new Response(JSON.stringify({ error: "Apenas membros da equipe podem excluir usuários" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const isAdmin = roles?.some((r) => r.role === "admin");
-
-    const { user_id } = await req.json();
-    if (!user_id || typeof user_id !== "string") {
-      return new Response(JSON.stringify({ error: "user_id é obrigatório" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Prevent self-deletion
-    if (user_id === caller.id) {
-      return new Response(JSON.stringify({ error: "Você não pode excluir sua própria conta" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Get user info before deletion for audit
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: { user: targetUser } } = await adminClient.auth.admin.getUserById(user_id);
-
-    // Non-admin staff can only delete client users (not other staff)
-    if (!isAdmin) {
-      const { data: targetRoles } = await adminClient
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user_id);
-
-      const targetIsStaff = targetRoles?.some((r) => staffRoles.includes(r.role));
-      if (targetIsStaff) {
-        return new Response(JSON.stringify({ error: "Apenas administradores podem excluir membros da equipe" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    // Delete user (cascades to profiles and user_roles)
-    const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
+    const { error: deleteError } = await admin.auth.admin.deleteUser(user_id);
     if (deleteError) {
-      throw deleteError;
+      console.error("[delete-user] Error:", deleteError.message);
+      return jsonResponse({ error: "Erro ao excluir usuário" }, 500);
     }
 
-    // Also clean up any client_contacts referencing this user
-    await adminClient
-      .from("client_contacts")
+    await admin.from("client_contacts")
       .update({ user_id: null, is_active: false })
       .eq("user_id", user_id);
 
-    // Audit log
-    await adminClient.from("audit_logs").insert({
+    await logAudit(admin, {
       table_name: "auth.users",
       record_id: user_id,
-      action: "DELETE_USER",
-      user_id: caller.id,
+      action: "USER_DELETED",
+      user_id: auth.userId!,
       old_data: {
         email: targetUser?.email,
-        deleted_at: new Date().toISOString(),
+        roles: (targetRoles ?? []).map((r) => r.role),
       },
     });
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ success: true });
   } catch (error) {
-    console.error("[delete-user] Error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Erro interno" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("[delete-user] Unexpected:", error);
+    return jsonResponse({ error: "Erro interno" }, 500);
   }
 });
