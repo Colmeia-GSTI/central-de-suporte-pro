@@ -367,10 +367,16 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       });
       onSuccess(clientId);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
+      const err = error as { code?: string; message?: string };
+      const isDuplicateCnpj =
+        err?.code === "23505" ||
+        (err?.message?.includes("uq_clients_normalized_document") ?? false);
       toast({
-        title: "Erro",
-        description: error.message,
+        title: isDuplicateCnpj ? "CNPJ já cadastrado" : "Erro",
+        description: isDuplicateCnpj
+          ? "Este CNPJ já está cadastrado em outro cliente."
+          : err?.message ?? "Erro desconhecido",
         variant: "destructive",
       });
     },
