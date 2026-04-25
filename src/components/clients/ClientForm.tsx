@@ -376,7 +376,12 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     },
   });
 
-  const onSubmit = (data: ClientFormData) => {
+  const onSubmit = async (data: ClientFormData) => {
+    // Guarda final: se há duplicata, exigir confirmação explícita
+    const dup = await checkDuplicateDocument();
+    if (dup && !window.confirm(`Já existe cliente com este CNPJ (${dup.name}). Deseja criar duplicata mesmo assim?`)) {
+      return;
+    }
     mutation.mutate(data);
   };
 
