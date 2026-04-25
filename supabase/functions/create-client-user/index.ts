@@ -22,55 +22,27 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Token de autorização não fornecido" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    const auth = await requireRole(req.headers.get("Authorization"), [
+      "admin",
+      "manager",
+      "technician",
+      "financial",
+    ]);
+    if (!auth.ok) {
+      return jsonResponse(
+        { error: auth.error, required_roles: ["admin", "manager", "technician", "financial"] },
+        auth.status ?? 401,
       );
     }
 
+    const rl = rateLimit(`create-client-user:${auth.userId}`, 5, 60_000);
+    if (!rl.allowed) {
+      return jsonResponse({ error: "rate_limited", retry_after_seconds: rl.retryAfter }, 429);
+    }
+
+    const requestingUser = { id: auth.userId! };
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    // Verificar se o usuário que está criando é staff
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user: requestingUser }, error: userError } = await userClient.auth.getUser();
-    if (userError || !requestingUser) {
-      console.error("Error getting requesting user:", userError);
-      return new Response(
-        JSON.stringify({ error: "Usuário não autenticado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Verificar se é staff (admin, manager, technician, financial)
-    const { data: roles, error: rolesError } = await userClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", requestingUser.id);
-
-    if (rolesError) {
-      console.error("Error fetching roles:", rolesError);
-      return new Response(
-        JSON.stringify({ error: "Erro ao verificar permissões" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const staffRoles = ["admin", "manager", "technician", "financial"];
-    const isStaff = roles?.some((r) => staffRoles.includes(r.role));
-
-    if (!isStaff) {
-      return new Response(
-        JSON.stringify({ error: "Sem permissão para criar usuários de cliente" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Schema validation
     const CreateClientUserSchema = z.object({
