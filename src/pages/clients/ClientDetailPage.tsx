@@ -29,6 +29,7 @@ import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
 import { ClientManagementReport } from "@/components/reports/ClientManagementReport";
 import { ClientNetworkTab } from "@/components/clients/ClientNetworkTab";
+import { DeleteClientButton } from "@/components/clients/DeleteClientButton";
 import { formatPhone } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
@@ -125,6 +126,9 @@ export default function ClientDetailPage() {
             {client.document && (
               <p className="text-muted-foreground text-sm mt-1">{client.document}</p>
             )}
+          </div>
+          <div className="shrink-0">
+            <DeleteClientButton clientId={client.id} clientName={client.name} />
           </div>
         </div>
 
