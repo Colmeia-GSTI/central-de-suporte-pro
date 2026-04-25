@@ -30,6 +30,7 @@ Este documento cataloga as ferramentas administrativas disponíveis no sistema. 
 ### Pré-check de CNPJ no formulário
 - **Onde:** `ClientForm.tsx` (criação e edição).
 - **Como:** ao perder o foco do campo CNPJ (`onBlur`), normaliza para apenas dígitos e busca em `clients` via `normalized_document`. Se encontrar outro cliente com o mesmo CNPJ, mostra alerta visual abaixo do input (não bloqueia o submit). No `onSubmit`, executa nova checagem como guarda final e abre `window.confirm` exigindo confirmação humana antes de criar duplicata legítima.
+- **Defesa final no banco:** caso o usuário tente driblar todos os pré-checks (ou em race condition), a UNIQUE constraint `uq_clients_normalized_document` rejeita o INSERT/UPDATE com erro Postgres `23505`. O formulário trata esse código específico e exibe toast amigável "CNPJ já cadastrado" em vez de mensagem técnica.
 
 ## Infraestrutura de banco
 
