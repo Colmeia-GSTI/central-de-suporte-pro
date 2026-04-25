@@ -34,7 +34,7 @@ Este documento cataloga as ferramentas administrativas disponíveis no sistema. 
 
 ## Infraestrutura de banco
 
-- **`clients.normalized_document`** — coluna gerada (`GENERATED ALWAYS AS regexp_replace(coalesce(document,''), '\D', '', 'g') STORED`). Indexada (não-única por enquanto). A constraint `UNIQUE` será adicionada no item **1.2c** do roadmap, após resolver as duplicatas legadas (AIRDUTO LTDA e VIZU EDITORA).
+- **`clients.normalized_document`** — coluna gerada (`GENERATED ALWAYS AS regexp_replace(coalesce(document,''), '\D', '', 'g') STORED`). Indexada com **UNIQUE parcial ativo** (`uq_clients_normalized_document WHERE normalized_document <> ''`) desde 2026-04-25 (item 1.2c concluído). Tentativas de cadastrar CNPJ duplicado retornam erro Postgres `23505`, tratado de forma amigável no `ClientForm`.
 - Todas as RPCs administrativas validam `has_role(auth.uid(), 'admin')` antes de executar.
 
 ---
