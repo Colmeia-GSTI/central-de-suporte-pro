@@ -56,6 +56,11 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
   - Prevenção: 3 testes de regressão (`delinquency-page.test.tsx`) cobrindo embed array/objeto/null.
   - Movido `src/pages/financial/DelinquencyReportPage.tsx → src/pages/billing/`. Pasta `financial/` removida.
 
+- ✅ **1.2 — Cliente duplicado AIRDUTO LTDA + VIZU EDITORA** (concluído 2026-04-25)
+  - Causa raiz: ausência de `UNIQUE` constraint / validação no campo `clients.document` permitiu cadastros repetidos do mesmo CNPJ (AIRDUTO em fev e abr/26; VIZU em fev e abr/26).
+  - Ferramentas criadas (1.2b): coluna gerada `clients.normalized_document`, RPCs admin-only `detect_duplicate_clients()` / `merge_clients()` / `delete_client_safely()`, UI completa (`DuplicatesBanner`, `MergeClientsDialog` com wizard 3-steps híbrido B+A, `DeleteClientButton` com pré-check), pré-check de CNPJ no `ClientForm`, lib pura `client-merge.ts` com 9 testes.
+  - Aplicação (1.2c): AIRDUTO consolidado em `60ba285e...` (1 contrato/1 ticket/2 contatos preservados); VIZU consolidado em `c9bab9b7...` (2 contratos ativos + 1 contato migrado). 32 clientes restantes (era 34). Auditoria registrada em `audit_logs` (action=`MERGE`) e `client_history` (action=`merged`).
+  - Prevenção ativa: índice único parcial `uq_clients_normalized_document` (`WHERE normalized_document <> ''`) impede recorrência. `ClientForm` trata erro Postgres `23505` com toast amigável.
 ### Seção 2 — Monitoramento e sync de devices
 
 - **Objetivo:** Estabilizar a sincronização de dispositivos monitorados (UniFi, Tactical RMM, CheckMK) e o pipeline de alertas.

@@ -30,10 +30,11 @@ Este documento cataloga as ferramentas administrativas disponíveis no sistema. 
 ### Pré-check de CNPJ no formulário
 - **Onde:** `ClientForm.tsx` (criação e edição).
 - **Como:** ao perder o foco do campo CNPJ (`onBlur`), normaliza para apenas dígitos e busca em `clients` via `normalized_document`. Se encontrar outro cliente com o mesmo CNPJ, mostra alerta visual abaixo do input (não bloqueia o submit). No `onSubmit`, executa nova checagem como guarda final e abre `window.confirm` exigindo confirmação humana antes de criar duplicata legítima.
+- **Defesa final no banco:** caso o usuário tente driblar todos os pré-checks (ou em race condition), a UNIQUE constraint `uq_clients_normalized_document` rejeita o INSERT/UPDATE com erro Postgres `23505`. O formulário trata esse código específico e exibe toast amigável "CNPJ já cadastrado" em vez de mensagem técnica.
 
 ## Infraestrutura de banco
 
-- **`clients.normalized_document`** — coluna gerada (`GENERATED ALWAYS AS regexp_replace(coalesce(document,''), '\D', '', 'g') STORED`). Indexada (não-única por enquanto). A constraint `UNIQUE` será adicionada no item **1.2c** do roadmap, após resolver as duplicatas legadas (AIRDUTO LTDA e VIZU EDITORA).
+- **`clients.normalized_document`** — coluna gerada (`GENERATED ALWAYS AS regexp_replace(coalesce(document,''), '\D', '', 'g') STORED`). Indexada com **UNIQUE parcial ativo** (`uq_clients_normalized_document WHERE normalized_document <> ''`) desde 2026-04-25 (item 1.2c concluído). Tentativas de cadastrar CNPJ duplicado retornam erro Postgres `23505`, tratado de forma amigável no `ClientForm`.
 - Todas as RPCs administrativas validam `has_role(auth.uid(), 'admin')` antes de executar.
 
 ---
