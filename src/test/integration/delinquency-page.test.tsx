@@ -49,9 +49,6 @@ vi.mock("recharts", async () => {
 
 import DelinquencyReportPage from "@/pages/billing/DelinquencyReportPage";
 
-// Remove unused symbol warning by referencing types
-type _UnusedClient = typeof sampleClient;
-
 const baseInvoice = {
   id: "inv-1",
   invoice_number: 100,
