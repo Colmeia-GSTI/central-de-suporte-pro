@@ -1,10 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { z } from "npm:zod@3.23.8";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { z } from "https://esm.sh/zod@3.23.8";
+import { corsHeaders, jsonResponse, logAudit, rateLimit, requireRole, adminClient as makeAdminClient } from "../_shared/auth-helpers.ts";
 
 interface CreateClientUserRequest {
   clientId: string;
