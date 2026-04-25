@@ -32,7 +32,8 @@ interface DuplicateGroup {
 }
 
 export function DuplicatesBanner() {
-  const { isAdmin } = usePermissions();
+  const { roles } = usePermissions();
+  const isAdmin = roles.includes("admin");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [mergeGroup, setMergeGroup] = useState<DuplicateGroup | null>(null);
 
