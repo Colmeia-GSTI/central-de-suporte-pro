@@ -6,6 +6,7 @@ import { PageTransition } from "./PageTransition";
 import { HoneycombLoader } from "@/components/ui/HoneycombLoader";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 // Only Login is eager (entry point) — Dashboard and TicketsPage are lazy for faster initial load
 import Login from "@/pages/Login";
@@ -119,6 +120,13 @@ function LazyPage({ children }: { children: ReactNode }) {
   );
 }
 
+// Guard que esconde a página de Gamificação quando feature flag está off
+function GamificationGuard() {
+  const enabled = useFeatureFlag("gamification_enabled");
+  if (!enabled) return <Navigate to="/" replace />;
+  return <GamificationPage />;
+}
+
 export function AnimatedRoutes() {
   return (
     <Routes>
@@ -149,7 +157,7 @@ export function AnimatedRoutes() {
       <Route path="/inventory" element={<ProtectedRoute requireStaff><LazyPage><InventoryPage /></LazyPage></ProtectedRoute>} />
       <Route path="/monitoring" element={<ProtectedRoute requireStaff><LazyPage><MonitoringPage /></LazyPage></ProtectedRoute>} />
       <Route path="/calendar" element={<ProtectedRoute requireStaff><LazyPage><CalendarPage /></LazyPage></ProtectedRoute>} />
-      <Route path="/gamification" element={<ProtectedRoute requireStaff><LazyPage><GamificationPage /></LazyPage></ProtectedRoute>} />
+      <Route path="/gamification" element={<ProtectedRoute requireStaff><LazyPage><GamificationGuard /></LazyPage></ProtectedRoute>} />
       <Route path="/knowledge" element={<ProtectedRoute requireStaff><LazyPage><KnowledgePage /></LazyPage></ProtectedRoute>} />
       <Route path="/knowledge/:slug" element={<ProtectedRoute requireStaff><LazyPage><KnowledgeArticlePage /></LazyPage></ProtectedRoute>} />
       
