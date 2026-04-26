@@ -19,6 +19,18 @@ Categorias usadas em cada entrada:
 ## [Não lançado]
 
 ### Adicionado
+- **Trilha de auditoria genérica (item 1.4)**: função `audit_changes()` (SECURITY DEFINER) reaproveitável + `sanitize_jsonb()` recursiva que redata chaves sensíveis (`password`, `secret`, `token`, `api_key` etc.). Triggers `audit_*_trigger` ativos em 6 tabelas sensíveis: `user_roles`, `invoices`, `contracts`, `clients`, `bank_accounts`, `integration_settings`.
+- **RPC `list_audit_logs_with_user`** (admin-only, paginação real): retorna logs enriquecidos com nome/email do autor + `total_count` agregado para paginação.
+- **Página `/settings/audit-logs`** (admin-only): listagem com filtros (tabela, ação, usuário, datas, busca), paginação 50/página e Sheet de detalhes com diff visual JSONB (added/removed/changed). 8 componentes modulares (`AuditLogsList`, `AuditLogRow`, `AuditLogFilters`, `AuditLogDetail`, `AuditLogDiff`) + hook `useAuditLogs` + lib pura `src/lib/audit-diff.ts`. Link discreto "Ver auditoria" no header da página `/settings/feature-flags`.
+- **3 testes de integração** (`src/test/integration/audit-logs.test.ts`): diff de JSONB, propagação de filtros + paginação no RPC, derivação de `total` a partir do `total_count`.
+
+### Modificado
+- Função legada `log_integration_settings_changes` removida (zero referências externas confirmado) e substituída pela trigger genérica.
+
+### Segurança
+- Trilha de auditoria agora cobre todas as tabelas sensíveis identificadas no roadmap, com sanitização automática de campos contendo segredos antes da gravação em `audit_logs`. Política `INSERT/SELECT` admin-only em `audit_logs` mantida append-only (UPDATE/DELETE bloqueados).
+
+### Adicionado
 - **Sistema de Feature Flags** (`feature_flags` + `useFeatureFlag` + `/settings/feature-flags`): infraestrutura para ligar/desligar funcionalidades em runtime sem redeploy. Suporta rollout gradual (FNV-1a determinístico), filtro por role e whitelist por user_id. Apenas admin gerencia. Documentação em `FEATURE_FLAGS.md`.
 - **Testes de integração dos 5 fluxos críticos** (`src/test/integration/`): rede de segurança com 15 testes (3 por fluxo: happy path, erro de input, erro de backend / edge case) cobrindo Login, criação de chamado, geração mensal de faturas, notificação de faturas a vencer e reenvio de confirmação. Stack: Vitest + jsdom + Testing Library + mock chainable do Supabase. Cobertura 77,77% statements / 60,78% branches nos arquivos-alvo. Suíte completa em ~7s, zero flakiness. Documentação em `TESTING.md`.
 - **Helper puro `buildTicketPayload`** (`src/lib/ticket-payload.ts`): lógica de montagem do payload de criação de chamado extraída de `TicketForm.tsx` para ser unit-testável (sem renderizar o formulário multi-step).
