@@ -169,6 +169,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Bug 5 — `CreateUserDialog` sem validação `zod`**: hoje permite enviar email vazio, sem `@` e senha < 8. Refatorar com `react-hook-form` + `zod` no padrão do projeto.
 - **Bug 12 — Skeleton da `UsersList` usa `<TableCell>` correto**: já corrigido na primeira passada (item 1.3b), entrada mantida só como referência caso reapareça.
 - **Bug 13 — Item "Reset senha (em breve)" no `UserActionsMenu`**: implementar (chamar `auth.admin.generateLink('recovery')` via edge) ou remover.
+- **Uso baixo de `ticket_categories` (Seção 4 — 2026-04-26)**: apenas 11% dos tickets têm `category_id` preenchido. Investigar se a UI não obriga a seleção (ou se obriga mas usuário pula) e decidir: tornar obrigatório no form, popular default automático ou remover o campo se não agrega valor.
 
 ### Seção 6 — Consolidação de código duplicado
 
