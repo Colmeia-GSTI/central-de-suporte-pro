@@ -26,13 +26,11 @@ export function ChangeRoleDialog({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      // Replace all roles with the chosen one — audit trigger logs delete+insert
-      const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", user.user_id);
-      if (delErr) throw delErr;
-      const { error: insErr } = await supabase
-        .from("user_roles")
-        .insert({ user_id: user.user_id, role: newRole });
-      if (insErr) throw insErr;
+      const { error } = await supabase.rpc("change_user_role" as never, {
+        target_user_id: user.user_id,
+        new_role: newRole,
+      } as never);
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Papel alterado");
@@ -54,7 +52,7 @@ export function ChangeRoleDialog({
               {ROLES.map((r) => <SelectItem key={r.v} value={r.v}>{r.l}</SelectItem>)}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">A alteração é registrada em auditoria.</p>
+          <p className="text-xs text-muted-foreground">A alteração é atômica e registrada em auditoria.</p>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>

@@ -6,9 +6,11 @@ export interface UseUsersFilters {
   /** Future SaaS multi-tenancy: scopes the query to a tenant. Currently unused (single-tenant). */
   tenantId?: string;
   role?: Enums<"app_role"> | "all";
-  status?: "all" | "confirmed" | "pending" | "orphan";
+  status?: "all" | "confirmed" | "pending" | "inactive";
   search?: string;
 }
+
+export type UserStatus = "confirmed" | "pending" | "inactive";
 
 export interface UserListRow {
   user_id: string;
@@ -18,70 +20,73 @@ export interface UserListRow {
   roles: Enums<"app_role">[];
   client_name: string | null;
   client_id: string | null;
+  email_confirmed_at: string | null;
+  banned_until: string | null;
+  last_sign_in_at: string | null;
+  status: UserStatus;
+}
+
+interface RawRow {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  roles: string[] | null;
+  client_id: string | null;
+  client_name: string | null;
+  email_confirmed_at: string | null;
+  banned_until: string | null;
+  last_sign_in_at: string | null;
 }
 
 const STALE_MS = 5 * 60 * 1000;
 
+function deriveStatus(row: RawRow): UserStatus {
+  if (row.banned_until && new Date(row.banned_until).getTime() > Date.now()) return "inactive";
+  if (!row.email_confirmed_at) return "pending";
+  return "confirmed";
+}
+
 export function useUsers(filters: UseUsersFilters = {}) {
-  const { tenantId, role = "all", search = "" } = filters;
+  const { tenantId, role = "all", status = "all", search = "" } = filters;
 
   return useQuery({
-    queryKey: ["users", tenantId ?? "default", role, search],
+    queryKey: ["users", tenantId ?? "default", role, status, search],
     staleTime: STALE_MS,
     queryFn: async (): Promise<UserListRow[]> => {
-      let q = supabase
-        .from("profiles")
-        .select("user_id, full_name, email, phone")
-        .order("full_name");
-      if (search.trim()) {
-        const s = search.trim();
-        q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%`);
-      }
-      const { data: profiles, error } = await q;
+      const { data, error } = await supabase.rpc("list_users_for_admin" as never);
       if (error) throw error;
 
-      const ids = (profiles ?? []).map((p) => p.user_id);
-      if (ids.length === 0) return [];
-
-      const [{ data: roles }, { data: contacts }] = await Promise.all([
-        supabase.from("user_roles").select("user_id, role").in("user_id", ids),
-        supabase
-          .from("client_contacts")
-          .select("user_id, client_id, clients(name)")
-          .in("user_id", ids)
-          .eq("is_active", true),
-      ]);
-
-      const rolesByUser = new Map<string, Enums<"app_role">[]>();
-      for (const r of roles ?? []) {
-        const arr = rolesByUser.get(r.user_id) ?? [];
-        arr.push(r.role as Enums<"app_role">);
-        rolesByUser.set(r.user_id, arr);
-      }
-
-      const clientByUser = new Map<string, { id: string; name: string | null }>();
-      for (const c of (contacts ?? []) as Array<{
-        user_id: string;
-        client_id: string;
-        clients: { name: string | null } | null;
-      }>) {
-        clientByUser.set(c.user_id, { id: c.client_id, name: c.clients?.name ?? null });
-      }
-
-      const rows: UserListRow[] = (profiles ?? []).map((p) => ({
-        user_id: p.user_id,
-        full_name: p.full_name,
-        email: p.email,
-        phone: p.phone,
-        roles: rolesByUser.get(p.user_id) ?? [],
-        client_id: clientByUser.get(p.user_id)?.id ?? null,
-        client_name: clientByUser.get(p.user_id)?.name ?? null,
+      const rows: UserListRow[] = ((data ?? []) as unknown as RawRow[]).map((r) => ({
+        user_id: r.user_id,
+        full_name: r.full_name,
+        email: r.email,
+        phone: r.phone,
+        roles: (r.roles ?? []) as Enums<"app_role">[],
+        client_id: r.client_id,
+        client_name: r.client_name,
+        email_confirmed_at: r.email_confirmed_at,
+        banned_until: r.banned_until,
+        last_sign_in_at: r.last_sign_in_at,
+        status: deriveStatus(r),
       }));
 
+      let filtered = rows;
       if (role !== "all") {
-        return rows.filter((r) => r.roles.includes(role as Enums<"app_role">));
+        filtered = filtered.filter((u) => u.roles.includes(role as Enums<"app_role">));
       }
-      return rows;
+      if (status !== "all") {
+        filtered = filtered.filter((u) => u.status === status);
+      }
+      if (search.trim()) {
+        const s = search.trim().toLowerCase();
+        filtered = filtered.filter(
+          (u) =>
+            (u.full_name ?? "").toLowerCase().includes(s) ||
+            (u.email ?? "").toLowerCase().includes(s),
+        );
+      }
+      return filtered;
     },
   });
 }

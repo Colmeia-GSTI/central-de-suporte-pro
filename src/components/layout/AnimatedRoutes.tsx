@@ -167,7 +167,7 @@ export function AnimatedRoutes() {
       <Route path="/settings" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LazyPage><SettingsPage /></LazyPage></ProtectedRoute>} />
       <Route path="/settings/certificates" element={<ProtectedRoute allowedRoles={["admin", "financial"]}><LazyPage><CertificateDashboardPage /></LazyPage></ProtectedRoute>} />
       <Route path="/settings/feature-flags" element={<ProtectedRoute allowedRoles={["admin"]}><LazyPage><FeatureFlagsPage /></LazyPage></ProtectedRoute>} />
-      <Route path="/settings/users" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LazyPage><UsersPage /></LazyPage></ProtectedRoute>} />
+      <Route path="/settings/users" element={<ProtectedRoute allowedRoles={["admin"]}><LazyPage><UsersPage /></LazyPage></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><LazyPage><ProfilePage /></LazyPage></ProtectedRoute>} />
       
       {/* 404 */}

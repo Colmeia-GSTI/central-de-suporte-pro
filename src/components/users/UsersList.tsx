@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { useUsers } from "@/hooks/useUsers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { UserRow } from "./UserRow";
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Enums } from "@/integrations/supabase/types";
 
@@ -53,16 +53,25 @@ export function UsersList() {
               <TableHead>Email</TableHead>
               <TableHead>Papéis</TableHead>
               <TableHead>Cliente</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}><td colSpan={5} className="p-3"><Skeleton className="h-8 w-full" /></td></TableRow>
+                  <TableRow key={i}>
+                    <TableCell colSpan={6} className="p-3"><Skeleton className="h-8 w-full" /></TableCell>
+                  </TableRow>
                 ))
               : users.length === 0
-                ? <TableRow><td colSpan={5} className="p-6 text-center text-muted-foreground">Nenhum usuário encontrado</td></TableRow>
+                ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-6 text-center text-muted-foreground">
+                        Nenhum usuário encontrado
+                      </TableCell>
+                    </TableRow>
+                  )
                 : users.slice(0, 50).map((u) => <UserRow key={u.user_id} user={u} />)}
           </TableBody>
         </Table>
