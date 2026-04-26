@@ -70,3 +70,31 @@ Todas aplicam: validação via `requireRole` (helper `_shared/auth-helpers.ts`),
 ---
 
 > Próximas seções deste catálogo serão adicionadas conforme novos itens do `REFACTORING_ROADMAP.md` forem implementados.
+
+## Auditoria
+
+### Página `/settings/audit-logs` (admin only)
+- Listagem paginada (50 por página) da trilha consolidada de alterações em tabelas sensíveis.
+- Filtros disponíveis: tabela, ação (INSERT/UPDATE/DELETE), intervalo de datas, busca por nome/email do autor.
+- Sheet de detalhes com **diff visual** JSONB destacando campos adicionados, removidos e alterados (lado a lado old/new).
+- Link discreto "Ver auditoria" no header de `/settings/feature-flags` para atalho admin.
+
+### Tabelas auditadas (item 1.4)
+- `user_roles` (já existia desde 1.3b, agora via função genérica)
+- `invoices`
+- `contracts`
+- `clients`
+- `bank_accounts`
+- `integration_settings`
+
+### Sanitização automática
+- A função `sanitize_jsonb()` é aplicada antes da gravação em `audit_logs` para a tabela `integration_settings` (e qualquer payload JSONB com chaves sensíveis).
+- Chaves redatadas com `[REDACTED]` (case-insensitive, recursivo): `password`, `senha`, `secret`, `token`, `api_key`, `apikey`, `client_secret`, `private_key`, `access_token`, `refresh_token`.
+
+### Infraestrutura
+- Função genérica `audit_changes()` (SECURITY DEFINER) — anexar como trigger em qualquer nova tabela sensível dispensa criar função custom.
+- RPC `list_audit_logs_with_user(p_tables, p_actions, p_user_id, p_search, p_date_from, p_date_to, p_limit, p_offset)` — admin-only, retorna `total_count` agregado para paginação real.
+- RLS de `audit_logs`: append-only (INSERT permitido por `audit_changes`, SELECT admin-only, UPDATE/DELETE bloqueados).
+
+### TODO operacional
+- **Política de retenção**: hoje a tabela `audit_logs` cresce indefinidamente. Definir TTL (sugestão 12 meses) + job `pg_cron` de purge e/ou export para storage frio. Registrado em `REFACTORING_ROADMAP.md` Seção 7.

@@ -66,7 +66,13 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
   - Causa raiz: `handle_new_user` falhava silenciosamente (`RAISE WARNING` sem persistência) gerando órfãos passados; 5 edge functions de gestão (`create-user`, `create-client-user`, `delete-user`, `update-user-email`, `confirm-user-email`) operavam com permissões divergentes, sem rate-limit e sem audit padronizado; admin não tinha página dedicada para gerenciar usuários.
   - Ferramentas criadas (1.3b): página `/settings/users` admin-only com 6 componentes modulares + hook `useUsers` SaaS-ready (`tenantId` opcional); helper compartilhado `_shared/auth-helpers.ts` (`requireRole`, `rateLimit`, `logAudit`, `jsonResponse`); edge function `detect-auth-anomalies` com cron diário 08:00 BRT + banner de invocação manual; trigger `audit_user_roles_trigger` em `user_roles`; refactor das 5 edge functions com permissões alinhadas + rate-limit 5/min + audit; `handle_new_user` agora persiste sucesso/falha em `application_logs`.
   - Prevenção ativa: telemetria contínua via `application_logs` + cron de anomalias; RLS append-only em `audit_logs` (UPDATE/DELETE bloqueados); rate-limit em todas as edges sensíveis.
-  - Antecipação: trigger de audit em `user_roles` foi antecipado de 1.4. Outras tabelas sensíveis (`invoices`, `contracts`, `clients`, `bank_accounts`, `integration_settings`) ficam para 1.4 com função genérica reaproveitável.
+  - Antecipação: trigger de audit em `user_roles` foi antecipado de 1.4. Outras tabelas sensíveis (`invoices`, `contracts`, `clients`, `bank_accounts`, `integration_settings`) foram cobertas em 1.4 com função genérica reaproveitável.
+
+- ✅ **1.4 — Trilha de auditoria genérica** (concluído 2026-04-26)
+  - Causa raiz: ausência de trilha consolidada para tabelas sensíveis impedia investigação forense pós-incidente; função específica `log_integration_settings_changes` não cobria as demais.
+  - Ferramentas criadas: função genérica `audit_changes()` (SECURITY DEFINER, gravando em `audit_logs`); função `sanitize_jsonb()` recursiva que redata chaves sensíveis (`password`, `secret`, `token`, `api_key`, etc.); 6 triggers ativos (`user_roles`, `invoices`, `contracts`, `clients`, `bank_accounts`, `integration_settings`); RPC `list_audit_logs_with_user` admin-only com paginação real e filtros (tabela, ação, usuário, busca, datas); página `/settings/audit-logs` admin-only com diff visual JSONB (added/removed/changed), filtros, paginação 50/página e Sheet de detalhes.
+  - Validação real: UPDATE controlado em `integration_settings.settings` confirmou redação de `[REDACTED]` em chaves aninhadas e topo. Função legada `log_integration_settings_changes` removida após verificação de zero referências externas.
+  - Prevenção ativa: novas tabelas sensíveis basta anexar `audit_changes()` via trigger — não precisa de função custom.
 
 ### Seção 2 — Monitoramento e sync de devices
 
@@ -131,6 +137,8 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Rate-limit / captcha no signup público (`Register.tsx`)** — registrado como TODO no topo do arquivo (item 1.3b). Hoje a rota `/register` não tem proteção contra criação automatizada de contas. Implementação não trivial sem captcha (hCaptcha/Turnstile); avaliar nesta seção.
 - **Bug 8 — Paginação real em `useUsers`** quando passar de 100 usuários (hoje há `slice(0, 50)` no client; antes disso, RPC `list_users_for_admin` retorna tudo).
 - **Bug 9 — Sanitizar filtro PostgREST** contra caracteres especiais (vírgula, parênteses) que quebram o parser do `or(ilike)`. Após migração para `list_users_for_admin` o filtro virou client-side, mas qualquer query futura usando `.or(...)` deve ter sanitização compartilhada em `src/lib/`.
+- **Política de retenção de `audit_logs`** (registrado em 1.4): definir TTL (sugestão 12 meses) + job `pg_cron` para purge automático e/ou export para storage frio antes do delete. Hoje a tabela cresce indefinidamente.
+- **Tabelas auditadas restantes** (registrado em 1.4): `email_settings`, `nfse_settings`, `feature_flags` ainda sem trigger de auditoria — anexar `audit_changes()` quando houver demanda operacional.
 
 #### Bugs descartados (over-engineering)
 - **Bug 11** (normalização de whitespace na confirmação do merge) — risco real desprezível.
