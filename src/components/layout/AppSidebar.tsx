@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTechnicianTicketCount } from "@/hooks/useTechnicianTicketCount";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { Module, AppRole } from "@/lib/permissions";
 import {
   Sidebar,
@@ -124,6 +125,7 @@ export function AppSidebar() {
   const { can } = usePermissions();
   const { data: ticketCount } = useTechnicianTicketCount();
   const { isMobile, setOpenMobile } = useSidebar();
+  const gamificationEnabled = useFeatureFlag("gamification_enabled");
 
   // Detect if user is a client: anyone without a staff role sees client menu
   const hasStaffRole = roles.some(role => ["admin", "manager", "technician", "financial"].includes(role));
@@ -132,6 +134,8 @@ export function AppSidebar() {
   // Filter menu items based on permissions
   const filterMenuItems = (items: MenuItemType[]): MenuItemType[] => {
     return items.filter(item => {
+      // Hide gamification when feature flag is off
+      if (item.path === "/gamification" && !gamificationEnabled) return false;
       // Check special routes first
       if (specialRoutes[item.path]) {
         return roles.some(role => specialRoutes[item.path].includes(role as AppRole));

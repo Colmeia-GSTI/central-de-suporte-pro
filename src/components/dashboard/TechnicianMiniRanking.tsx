@@ -8,12 +8,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Trophy, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 interface TechnicianMiniRankingProps {
   startDate: Date;
 }
 
 export function TechnicianMiniRanking({ startDate }: TechnicianMiniRankingProps) {
+  const gamificationEnabled = useFeatureFlag("gamification_enabled");
+
   const { data: ranking, isLoading } = useQuery({
     queryKey: ["technician-mini-ranking", startDate.toISOString()],
     queryFn: async () => {
@@ -24,7 +27,10 @@ export function TechnicianMiniRanking({ startDate }: TechnicianMiniRankingProps)
       return (data as { name: string; points: number }[] | null) || [];
     },
     staleTime: 1000 * 60 * 5,
+    enabled: gamificationEnabled,
   });
+
+  if (!gamificationEnabled) return null;
 
   const maxPoints = ranking?.[0]?.points || 1;
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { logger } from "@/lib/logger";
 import {
   Dialog,
@@ -41,6 +42,7 @@ export function TicketTransferDialog({
   currentDepartmentId,
   onSuccess,
 }: TicketTransferDialogProps) {
+  const departmentsEnabled = useFeatureFlag("departments_enabled");
   const [transferType, setTransferType] = useState<"technician" | "department">("technician");
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
@@ -106,7 +108,7 @@ export function TicketTransferDialog({
       if (error) throw error;
       return data;
     },
-    enabled: open,
+    enabled: open && departmentsEnabled,
   });
 
   const transferMutation = useMutation({
@@ -214,16 +216,18 @@ export function TicketTransferDialog({
 
         <div className="space-y-4">
           <Tabs value={transferType} onValueChange={(v) => setTransferType(v as typeof transferType)}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="technician" className="gap-2">
-                <User className="h-4 w-4" />
-                Técnico
-              </TabsTrigger>
-              <TabsTrigger value="department" className="gap-2">
-                <Building2 className="h-4 w-4" />
-                Departamento
-              </TabsTrigger>
-            </TabsList>
+            {departmentsEnabled && (
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="technician" className="gap-2">
+                  <User className="h-4 w-4" />
+                  Técnico
+                </TabsTrigger>
+                <TabsTrigger value="department" className="gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Departamento
+                </TabsTrigger>
+              </TabsList>
+            )}
 
             <TabsContent value="technician" className="mt-4">
               <div className="space-y-2">
@@ -250,31 +254,33 @@ export function TicketTransferDialog({
               </div>
             </TabsContent>
 
-            <TabsContent value="department" className="mt-4">
-              <div className="space-y-2">
-                <Label>Selecione o departamento</Label>
-                <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolha um departamento..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.length === 0 ? (
-                      <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                        Nenhum departamento cadastrado
-                      </div>
-                    ) : (
-                      departments
-                        .filter((d) => d.id !== currentDepartmentId)
-                        .map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id}>
-                            {dept.name}
-                          </SelectItem>
-                        ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </TabsContent>
+            {departmentsEnabled && (
+              <TabsContent value="department" className="mt-4">
+                <div className="space-y-2">
+                  <Label>Selecione o departamento</Label>
+                  <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha um departamento..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.length === 0 ? (
+                        <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                          Nenhum departamento cadastrado
+                        </div>
+                      ) : (
+                        departments
+                          .filter((d) => d.id !== currentDepartmentId)
+                          .map((dept) => (
+                            <SelectItem key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </SelectItem>
+                          ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+            )}
           </Tabs>
 
           <div className="space-y-2">

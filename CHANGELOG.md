@@ -18,6 +18,17 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Seção 4 — fechamento — 2026-04-26)
+- **Feature flags `departments_enabled` e `gamification_enabled`** (default `false`) para esconder UI dessas features até refatoração multi-tenant no remix SaaS futuro. Reaproveita o sistema `feature_flags` + `useFeatureFlag` da Seção 0.2.
+- **Arquivo `PRODUCT_IDEAS.md`** registrando ideias para o remix SaaS futuro: multi-tenancy, refator de Departments e Gamificação tenant-scoped, e Camada 3 do Financeiro (IGPM/IPCA, hora extra, comissão, SPED, multi-empresa, multi-moeda).
+
+### Modificado (Seção 4 — fechamento — 2026-04-26)
+- **UI de Departments escondida via `useFeatureFlag('departments_enabled')`**: aba "Departamentos" em `/settings` (`SettingsPage.tsx`) e tab "Departamento" no diálogo de transferência de chamado (`TicketTransferDialog.tsx`) só aparecem quando flag ligada. Código, tabelas, RPCs e edges mantidos intactos.
+- **UI de Gamificação escondida via `useFeatureFlag('gamification_enabled')`**: rota `/gamification` redireciona para `/` quando flag off (guard `GamificationGuard` em `AnimatedRoutes.tsx`); widget `TechnicianMiniRanking` no Dashboard retorna `null`; item "Gamificação" some do `AppSidebar`. Código, tabelas (`technician_points`, `technician_badges`, `badges`) e RPC `get_technician_ranking` mantidos intactos.
+- **Seção 4 do `REFACTORING_ROADMAP.md` fechada** com 8 blocos auditados (doc_*, Inventário, Banking, Gamificação, Monitoring, Tickets Avançados, Departments, Calendar), 0 drops, 2 flags off. Multi-tenant decidido NÃO fazer neste projeto — remix futuro.
+- **Seções 4.5 (CMDB — Documentação MSP de Clientes) e 4.6 (Financeiro MSP profissional) abertas** no roadmap com escopo detalhado em camadas. Dívidas adicionadas: investigação do uso de `ticket_categories` (Seção 5) — política de retenção de `audit_logs` já estava registrada na Seção 7.
+
+
 ### Corrigido (varredura E2E Seções 0+1 — 2026-04-26)
 - **Filtro de auditoria agora inclui `auth.users`**: 5 registros pré-existentes (criação/exclusão/confirmação/email de usuários) ficaram visíveis no filtro de tabela em `/settings/audit-logs`.
 - **Filtro "Até" inclui o dia inteiro**: era exclusivo de `00:00:00` da data selecionada; agora envia `T23:59:59.999Z` para capturar registros até o fim do dia.

@@ -106,13 +106,56 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 ### Seção 4 — Decisão sobre features abandonadas
 
 - **Objetivo:** Decidir manter, completar ou remover módulos parciais (ex.: doc_*, inventário com tabelas vazias).
+- **Status:** ✅ concluída
+- **Início:** 2026-04-26
+- **Conclusão:** 2026-04-26
+- **Resumo:** 8 blocos auditados (doc_*, Inventário, Banking, Gamificação, Monitoring, Tickets Avançados, Departments, Calendar). 0 drops realizados — código e schema preservados. 2 features escondidas via feature flag (`departments_enabled=false` e `gamification_enabled=false`) para refazer multi-tenant no remix SaaS futuro. 2 novas seções abertas: 4.5 (CMDB — documentação MSP de clientes) e 4.6 (Financeiro MSP profissional). Decisão: multi-tenant **NÃO** será feito neste projeto — será via remix futuro do Lovable (registrado em `PRODUCT_IDEAS.md`).
+
+#### Dívidas registradas
+- **FKs sem índice em tabelas hoje vazias** (registrado em 1.5): indexar APÓS decisão de manter/remover cada bloco. Tabelas afetadas: todas as `doc_*`, `monitoring_alerts.acknowledged_by`, `doc_alerts.acknowledged_by`, `department_members`, `departments.manager_id`, `calendar_events` (3 FKs), `maintenances` (3 FKs), `license_assets`, `software_licenses`, `bank_reconciliation`, `nfse_cancellation_log`, `contract_service_history`, `contract_additional_charges.applied_invoice_id`, `assets.responsible_contact`, `alert_escalation_settings.client_id`. Reavaliar após Seções 4.5 e 4.6 fecharem.
+
+### Seção 4.5 — Documentação MSP de Clientes (CMDB)
+
+- **Objetivo:** Transformar o módulo `doc_*` (hoje 23 tabelas, 21 vazias) em CMDB funcional que documente filiais, credenciais, links de internet, contatos e rotinas de cada cliente atendido.
 - **Status:** ☐ pendente
 - **Início:** —
 - **Conclusão:** —
-- _Detalhes serão adicionados quando a seção for iniciada._
 
-#### Dívidas registradas
-- **FKs sem índice em tabelas hoje vazias** (registrado em 1.5): indexar APÓS decisão de manter/remover cada bloco. Tabelas afetadas: todas as `doc_*`, `monitoring_alerts.acknowledged_by`, `doc_alerts.acknowledged_by`, `department_members`, `departments.manager_id`, `calendar_events` (3 FKs), `maintenances` (3 FKs), `license_assets`, `software_licenses`, `bank_reconciliation`, `nfse_cancellation_log`, `contract_service_history`, `contract_additional_charges.applied_invoice_id`, `assets.responsible_contact`, `alert_escalation_settings.client_id`. Indexar agora seria trabalho jogado fora se forem dropadas.
+#### Escopo (em ordem de execução)
+- **4.5.1 — Filiais (`client_branches`)**: tabela + UI mínima vinculando ativos/contatos/contratos a filiais do mesmo cliente.
+- **4.5.3 — Pipeline de coleta robusto + alertas**: garantir que TRMM/UniFi/CheckMK estão coletando 100% dos ativos esperados e que `monitoring_alerts` está populando (hoje 0 alertas com 8 devices ativos — pipeline suspeito).
+- **4.5.7 — Vínculo computador↔chamado**: campo de seleção de ativo no form de novo ticket; popular `tickets.asset_id` automaticamente quando cliente é selecionado.
+- **4.5.2 — UI manual mínima**: 5-6 tabelas críticas (`doc_credentials`, `doc_external_providers`, `doc_internet_links`, `doc_support_hours`, `doc_contacts`, `doc_routines`) com CRUD básico no painel do cliente.
+- **4.5.4 — Vault de credenciais (camada 2)**: mover `doc_credentials.password` para Supabase Vault; RPC `get_credential_password` admin-only com auditoria.
+- **4.5.5 — Views materializadas cruzando integrações (camada 2)**: consolidar dados de TRMM + UniFi + CheckMK + assets em view única por cliente.
+- **4.5.6 — Auditoria fina das tabelas restantes (camada 2)**: revisar as ~17 tabelas `doc_*` ainda vazias após camadas anteriores e dropar definitivamente as não usadas.
+
+### Seção 4.6 — Financeiro MSP profissional
+
+- **Objetivo:** Elevar o módulo financeiro (hoje focado em faturamento de contratos) para cobrir gestão de caixa, despesas e relatórios gerenciais que um MSP precisa para tomar decisão.
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+
+**BASE:**
+- **4.6.1 — Contas bancárias + saldo manual**: completar UI de `bank_accounts` (já existe na arquitetura) com lançamento manual de saldo inicial e ajustes.
+- **4.6.2 — Despesas + contas a pagar**: tabela `expenses` (categoria, fornecedor, vencimento, status), UI de lançamento e calendário de vencimentos.
+- **4.6.3 — Centros de custo funcionais**: vincular receitas (faturas) e despesas a centros de custo para análise de margem.
+
+**CAMADA 2:**
+- **4.6.4 — Importação extrato OFX/CSV + conciliação**: parser de extratos bancários e UI de match com `bank_reconciliation` (RPC `auto_reconcile_bank_entries` já existe).
+- **4.6.5 — Relatórios gerenciais**: DRE simplificado, MRR (Monthly Recurring Revenue), ARR (Annual Recurring Revenue), Aging de recebíveis, Forecast de caixa, Margem por cliente.
+
+**CAMADA 3 (ativar quando primeiro cliente SaaS pedir):**
+- Reajuste automático IGPM/IPCA em contratos
+- Faturamento de hora extra (quando técnico passa do contrato)
+- Comissão de vendedor
+- Integração SPED/contador
+- Multi-empresa, multi-moeda
+
+> Itens da Camada 3 também estão registrados em `PRODUCT_IDEAS.md` como referência para o remix SaaS futuro.
 
 ### Seção 5 — Limpeza de código morto
 
@@ -126,6 +169,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Bug 5 — `CreateUserDialog` sem validação `zod`**: hoje permite enviar email vazio, sem `@` e senha < 8. Refatorar com `react-hook-form` + `zod` no padrão do projeto.
 - **Bug 12 — Skeleton da `UsersList` usa `<TableCell>` correto**: já corrigido na primeira passada (item 1.3b), entrada mantida só como referência caso reapareça.
 - **Bug 13 — Item "Reset senha (em breve)" no `UserActionsMenu`**: implementar (chamar `auth.admin.generateLink('recovery')` via edge) ou remover.
+- **Uso baixo de `ticket_categories` (Seção 4 — 2026-04-26)**: apenas 11% dos tickets têm `category_id` preenchido. Investigar se a UI não obriga a seleção (ou se obriga mas usuário pula) e decidir: tornar obrigatório no form, popular default automático ou remover o campo se não agrega valor.
 
 ### Seção 6 — Consolidação de código duplicado
 
