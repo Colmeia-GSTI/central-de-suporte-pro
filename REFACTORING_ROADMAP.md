@@ -43,9 +43,10 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 ### Seção 1 — Correções críticas com ferramentas admin
 
 - **Objetivo:** Corrigir bugs críticos que já têm ferramenta administrativa disponível para validação e rollback.
-- **Status:** ◐ em andamento
+- **Status:** ✅ concluída
 - **Início:** 2026-04-25
-- **Conclusão:** —
+- **Conclusão:** 2026-04-26
+- **Resumo:** 5 itens entregues (1.1 a 1.5). Ferramentas admin criadas: `PageErrorBoundary` (captura de crashes por página), deduplicação de clientes (constraint única + RPCs `merge_clients`/`delete_client_safely` + UI wizard), gestão de usuários (`/settings/users` + `detect-auth-anomalies` + helpers `_shared/auth-helpers`), trilha de auditoria genérica (`audit_changes()` + `sanitize_jsonb()` + 6 triggers + `/settings/audit-logs`) e índices em FKs (Phase 1, 34 índices em tabelas com volume).
 
 #### Itens
 
@@ -74,6 +75,13 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
   - Validação real: UPDATE controlado em `integration_settings.settings` confirmou redação de `[REDACTED]` em chaves aninhadas e topo. Função legada `log_integration_settings_changes` removida após verificação de zero referências externas.
   - Prevenção ativa: novas tabelas sensíveis basta anexar `audit_changes()` via trigger — não precisa de função custom.
 
+- ✅ **1.5 — Índices em FKs críticas (Phase 1)** (concluído 2026-04-26)
+  - Causa raiz: ~75 foreign keys do schema `public` sem índice de suporte. Sem índice, FK degrada DELETE/UPDATE no pai (full scan na tabela filha) e penaliza JOINs frequentes.
+  - Migration `*_fk_indexes_phase1.sql`: 34 índices `CREATE INDEX IF NOT EXISTS idx_<table>_<column>` em tabelas com volume real ou core do sistema (audit_logs, ticket_history, client_history, contract_history, invoice_generation_log, invoice_items, invoices, financial_entries, contract_services, contracts, client_contacts, tickets, ticket_comments, ticket_pauses, doc_sync_log, monitored_devices, sla_configs, nfse_history, knowledge_articles, technician_points). `ANALYZE` em todas as tabelas alteradas para atualizar estatísticas do planner.
+  - Validação: `EXPLAIN ANALYZE` confirmou `Index Scan using idx_audit_logs_user_id` (filtro por user_id) e `Index Scan using idx_invoice_generation_log_contract_id` (filtro por contract_id). Query `tickets` LEFT JOIN `clients` ainda usa Seq Scan no top-level por volume baixo (18 linhas) — comportamento esperado do planner; índice `idx_tickets_client_id` será aproveitado quando volume crescer ou em filtros explícitos por cliente.
+  - Descartados (lookup tables, não vale o índice): `feature_flags.updated_by`, `role_permission_overrides.created_by`.
+  - Deferidos: ~30 FKs em tabelas hoje vazias (doc_*, calendar_events, maintenances, monitoring_alerts.acknowledged_by, license_assets, software_licenses, bank_reconciliation, etc.) — registrado como dívida na Seção 4.
+
 ### Seção 2 — Monitoramento e sync de devices
 
 - **Objetivo:** Estabilizar a sincronização de dispositivos monitorados (UniFi, Tactical RMM, CheckMK) e o pipeline de alertas.
@@ -100,6 +108,9 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Início:** —
 - **Conclusão:** —
 - _Detalhes serão adicionados quando a seção for iniciada._
+
+#### Dívidas registradas
+- **FKs sem índice em tabelas hoje vazias** (registrado em 1.5): indexar APÓS decisão de manter/remover cada bloco. Tabelas afetadas: todas as `doc_*`, `monitoring_alerts.acknowledged_by`, `doc_alerts.acknowledged_by`, `department_members`, `departments.manager_id`, `calendar_events` (3 FKs), `maintenances` (3 FKs), `license_assets`, `software_licenses`, `bank_reconciliation`, `nfse_cancellation_log`, `contract_service_history`, `contract_additional_charges.applied_invoice_id`, `assets.responsible_contact`, `alert_escalation_settings.client_id`. Indexar agora seria trabalho jogado fora se forem dropadas.
 
 ### Seção 5 — Limpeza de código morto
 

@@ -18,6 +18,9 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Performance
+- **Índices em FKs (item 1.5 — Phase 1)**: 34 índices adicionados em foreign keys de tabelas com volume real ou core do sistema (audit_logs, ticket_history, client_history, contract_history, invoice_generation_log, invoice_items, invoices, financial_entries, contract_services, contracts, client_contacts, tickets, ticket_comments, ticket_pauses, doc_sync_log, monitored_devices, sla_configs, nfse_history, knowledge_articles, technician_points). `EXPLAIN ANALYZE` confirmou shift para `Index Scan` em queries por `user_id` em `audit_logs` e `contract_id` em `invoice_generation_log`. Tabelas hoje vazias (doc_*, calendar_events, monitoring_*, etc.) deferidas para após a Seção 4 (decisão de manter/remover).
+
 ### Adicionado
 - **Trilha de auditoria genérica (item 1.4)**: função `audit_changes()` (SECURITY DEFINER) reaproveitável + `sanitize_jsonb()` recursiva que redata chaves sensíveis (`password`, `secret`, `token`, `api_key` etc.). Triggers `audit_*_trigger` ativos em 6 tabelas sensíveis: `user_roles`, `invoices`, `contracts`, `clients`, `bank_accounts`, `integration_settings`.
 - **RPC `list_audit_logs_with_user`** (admin-only, paginação real): retorna logs enriquecidos com nome/email do autor + `total_count` agregado para paginação.
