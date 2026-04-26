@@ -148,9 +148,14 @@ export default function FeatureFlagsPage() {
               Ative ou desative funcionalidades em runtime sem precisar de novo deploy.
             </p>
           </div>
-          <Button onClick={openNew} className="gap-2">
-            <Plus className="h-4 w-4" /> Nova flag
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <a href="/settings/audit-logs">Ver auditoria</a>
+            </Button>
+            <Button onClick={openNew} className="gap-2">
+              <Plus className="h-4 w-4" /> Nova flag
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
