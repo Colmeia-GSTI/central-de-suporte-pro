@@ -134,6 +134,8 @@ export function AppSidebar() {
   // Filter menu items based on permissions
   const filterMenuItems = (items: MenuItemType[]): MenuItemType[] => {
     return items.filter(item => {
+      // Hide gamification when feature flag is off
+      if (item.path === "/gamification" && !gamificationEnabled) return false;
       // Check special routes first
       if (specialRoutes[item.path]) {
         return roles.some(role => specialRoutes[item.path].includes(role as AppRole));
