@@ -6671,6 +6671,31 @@ export type Database = {
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
+      list_audit_logs_with_user: {
+        Args: {
+          p_actions?: string[]
+          p_date_from?: string
+          p_date_to?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_tables?: string[]
+          p_user_id?: string
+        }
+        Returns: {
+          action: string
+          created_at: string
+          id: string
+          new_data: Json
+          old_data: Json
+          record_id: string
+          table_name: string
+          total_count: number
+          user_email: string
+          user_id: string
+          user_name: string
+        }[]
+      }
       list_users_for_admin: {
         Args: never
         Returns: {
@@ -6691,6 +6716,7 @@ export type Database = {
         Args: { field_overrides?: Json; source_id: string; target_id: string }
         Returns: Json
       }
+      sanitize_jsonb: { Args: { input: Json }; Returns: Json }
       try_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
       update_invoice_status: {
         Args: {
