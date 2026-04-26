@@ -6584,6 +6584,13 @@ export type Database = {
           total: number
         }[]
       }
+      change_user_role: {
+        Args: {
+          new_role: Database["public"]["Enums"]["app_role"]
+          target_user_id: string
+        }
+        Returns: Json
+      }
       cleanup_old_application_logs: { Args: never; Returns: undefined }
       cleanup_old_monitoring_alerts: { Args: never; Returns: undefined }
       client_owns_record: {
@@ -6664,6 +6671,22 @@ export type Database = {
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
+      list_users_for_admin: {
+        Args: never
+        Returns: {
+          banned_until: string
+          client_id: string
+          client_name: string
+          created_at: string
+          email: string
+          email_confirmed_at: string
+          full_name: string
+          last_sign_in_at: string
+          phone: string
+          roles: string[]
+          user_id: string
+        }[]
+      }
       merge_clients: {
         Args: { field_overrides?: Json; source_id: string; target_id: string }
         Returns: Json

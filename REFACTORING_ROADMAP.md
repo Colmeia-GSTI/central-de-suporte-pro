@@ -84,6 +84,9 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Conclusão:** —
 - _Detalhes serão adicionados quando a seção for iniciada._
 
+#### Dívidas registradas
+- **Bug 17 — Link `/settings/users` no `AppSidebar`**: hoje a página é alcançada apenas digitando a URL. Adicionar item de menu para admin (vinculado à auditoria 1.3a/b).
+
 ### Seção 4 — Decisão sobre features abandonadas
 
 - **Objetivo:** Decidir manter, completar ou remover módulos parciais (ex.: doc_*, inventário com tabelas vazias).
@@ -100,6 +103,11 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Conclusão:** —
 - _Detalhes serão adicionados quando a seção for iniciada._
 
+#### Dívidas registradas
+- **Bug 5 — `CreateUserDialog` sem validação `zod`**: hoje permite enviar email vazio, sem `@` e senha < 8. Refatorar com `react-hook-form` + `zod` no padrão do projeto.
+- **Bug 12 — Skeleton da `UsersList` usa `<TableCell>` correto**: já corrigido na primeira passada (item 1.3b), entrada mantida só como referência caso reapareça.
+- **Bug 13 — Item "Reset senha (em breve)" no `UserActionsMenu`**: implementar (chamar `auth.admin.generateLink('recovery')` via edge) ou remover.
+
 ### Seção 6 — Consolidação de código duplicado
 
 - **Objetivo:** Eliminar duplicações (formatadores, validação HMAC, helpers de UI) movendo-as para `_shared/` ou `src/lib/`.
@@ -107,6 +115,9 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Início:** —
 - **Conclusão:** —
 - _Detalhes serão adicionados quando a seção for iniciada._
+
+#### Dívidas registradas
+- **Bug 10 — `MergeClientsDialog` para grupos > 2**: hoje há guard que bloqueia a UI nesse caso. Implementar mescla iterativa em pares (ou reescrever wizard para escolher 1 destino + N sources).
 
 ### Seção 7 — Hardening operacional
 
@@ -118,6 +129,12 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 
 #### Dívidas registradas
 - **Rate-limit / captcha no signup público (`Register.tsx`)** — registrado como TODO no topo do arquivo (item 1.3b). Hoje a rota `/register` não tem proteção contra criação automatizada de contas. Implementação não trivial sem captcha (hCaptcha/Turnstile); avaliar nesta seção.
+- **Bug 8 — Paginação real em `useUsers`** quando passar de 100 usuários (hoje há `slice(0, 50)` no client; antes disso, RPC `list_users_for_admin` retorna tudo).
+- **Bug 9 — Sanitizar filtro PostgREST** contra caracteres especiais (vírgula, parênteses) que quebram o parser do `or(ilike)`. Após migração para `list_users_for_admin` o filtro virou client-side, mas qualquer query futura usando `.or(...)` deve ter sanitização compartilhada em `src/lib/`.
+
+#### Bugs descartados (over-engineering)
+- **Bug 11** (normalização de whitespace na confirmação do merge) — risco real desprezível.
+- **Bug 16** (campo `phone` selecionado sem ser exibido) — custo desprezível.
 
 ---
 
