@@ -124,7 +124,16 @@ export function MergeClientsDialog({ open, onOpenChange, group }: MergeClientsDi
           </DialogDescription>
         </DialogHeader>
 
-        {step === 1 && (
+        {step === 1 && group.length > 2 && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Grupos com 3+ duplicatas não suportados nesta versão — mescle em pares.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {step === 1 && group.length <= 2 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {group.map((c) => (
               <Card
@@ -246,7 +255,7 @@ export function MergeClientsDialog({ open, onOpenChange, group }: MergeClientsDi
           {step < 3 && (
             <Button
               onClick={() => setStep(step + 1)}
-              disabled={(step === 1 && !targetId) || group.length < 2}
+              disabled={(step === 1 && !targetId) || group.length < 2 || group.length > 2}
             >
               Próximo <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
