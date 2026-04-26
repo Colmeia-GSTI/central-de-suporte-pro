@@ -227,15 +227,16 @@ describe("useAuth", () => {
       const { error } = await result.current.signUp("new@example.com", "password123", "New User");
 
       expect(error).toBeNull();
-      expect(mockSignUp).toHaveBeenCalledWith({
-        email: "new@example.com",
-        password: "password123",
-        options: {
-          data: {
-            full_name: "New User",
-          },
-        },
-      });
+      expect(mockSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: "new@example.com",
+          password: "password123",
+          options: expect.objectContaining({
+            data: { full_name: "New User" },
+            emailRedirectTo: expect.any(String),
+          }),
+        }),
+      );
     });
   });
 

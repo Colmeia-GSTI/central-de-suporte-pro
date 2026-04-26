@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
 export const AUDITED_TABLES = [
+  "auth.users",
   "user_roles",
   "invoices",
   "contracts",

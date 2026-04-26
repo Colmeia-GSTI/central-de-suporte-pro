@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +26,11 @@ export function AuditLogsList() {
   const [selected, setSelected] = useState<AuditLogRecord | null>(null);
 
   const debouncedSearch = useDebounce(filters.search, 500);
+
+  // Bug #5: ao trocar qualquer filtro, voltar para página 1 para evitar paginação inválida.
+  useEffect(() => {
+    setPage(1);
+  }, [filters.table, filters.action, debouncedSearch, filters.dateFrom, filters.dateTo]);
 
   const queryFilters = useMemo(
     () => ({

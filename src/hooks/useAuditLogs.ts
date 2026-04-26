@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface AuditLogFilters {
@@ -37,7 +37,8 @@ export function useAuditLogs(filters: AuditLogFilters) {
         p_user_id: filters.userId || undefined,
         p_search: filters.search?.trim() || undefined,
         p_date_from: filters.dateFrom || undefined,
-        p_date_to: filters.dateTo || undefined,
+        // Bug #2: incluir o dia inteiro de "Até" (era exclusivo de 00:00:00 daquele dia).
+        p_date_to: filters.dateTo ? `${filters.dateTo}T23:59:59.999Z` : undefined,
         p_limit: filters.pageSize,
         p_offset: offset,
       });
@@ -52,5 +53,6 @@ export function useAuditLogs(filters: AuditLogFilters) {
       return { rows, total };
     },
     staleTime: 30 * 1000,
+    placeholderData: keepPreviousData,
   });
 }

@@ -18,6 +18,18 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (varredura E2E Seções 0+1 — 2026-04-26)
+- **Filtro de auditoria agora inclui `auth.users`**: 5 registros pré-existentes (criação/exclusão/confirmação/email de usuários) ficaram visíveis no filtro de tabela em `/settings/audit-logs`.
+- **Filtro "Até" inclui o dia inteiro**: era exclusivo de `00:00:00` da data selecionada; agora envia `T23:59:59.999Z` para capturar registros até o fim do dia.
+- **Paginação de auditoria reseta para página 1 quando filtros mudam**: evita estado inválido (ex.: "Página 3 de 1") ao trocar tabela/ação/data/busca.
+- **`useAuth.test.tsx` alinhado com implementação atual de `signUp`**: assertion agora aceita `emailRedirectTo: window.location.origin` (necessário para confirmação de e-mail). Suíte volta a 100% verde.
+
+### Adicionado (varredura E2E Seções 0+1 — 2026-04-26)
+- **Tooltip + botão copiar UUID** em `record_id` de `AuditLogRow` e `AuditLogDetail`. Resolução para nome humano (ex.: "Cliente AIRDUTO LTDA") deferida para Seção 2/3.
+
+### Modificado (varredura E2E Seções 0+1 — 2026-04-26)
+- **Paginação de auditoria mantém dados anteriores durante refetch** (`placeholderData: keepPreviousData`): elimina flicker do skeleton ao trocar página/filtro.
+
 ### Performance
 - **Índices em FKs (item 1.5 — Phase 1)**: 34 índices adicionados em foreign keys de tabelas com volume real ou core do sistema (audit_logs, ticket_history, client_history, contract_history, invoice_generation_log, invoice_items, invoices, financial_entries, contract_services, contracts, client_contacts, tickets, ticket_comments, ticket_pauses, doc_sync_log, monitored_devices, sla_configs, nfse_history, knowledge_articles, technician_points). `EXPLAIN ANALYZE` confirmou shift para `Index Scan` em queries por `user_id` em `audit_logs` e `contract_id` em `invoice_generation_log`. Tabelas hoje vazias (doc_*, calendar_events, monitoring_*, etc.) deferidas para após a Seção 4 (decisão de manter/remover).
 
