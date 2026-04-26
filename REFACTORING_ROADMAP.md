@@ -43,9 +43,10 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 ### Seção 1 — Correções críticas com ferramentas admin
 
 - **Objetivo:** Corrigir bugs críticos que já têm ferramenta administrativa disponível para validação e rollback.
-- **Status:** ◐ em andamento
+- **Status:** ✅ concluída
 - **Início:** 2026-04-25
-- **Conclusão:** —
+- **Conclusão:** 2026-04-26
+- **Resumo:** 5 itens entregues (1.1 a 1.5). Ferramentas admin criadas: `PageErrorBoundary` (captura de crashes por página), deduplicação de clientes (constraint única + RPCs `merge_clients`/`delete_client_safely` + UI wizard), gestão de usuários (`/settings/users` + `detect-auth-anomalies` + helpers `_shared/auth-helpers`), trilha de auditoria genérica (`audit_changes()` + `sanitize_jsonb()` + 6 triggers + `/settings/audit-logs`) e índices em FKs (Phase 1, 34 índices em tabelas com volume).
 
 #### Itens
 
