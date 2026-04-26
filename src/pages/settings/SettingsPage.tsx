@@ -13,6 +13,7 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 // Lazy-loaded tab content
 const UsersTab = lazy(() => import("@/components/settings/UsersTab").then(m => ({ default: m.UsersTab })));
@@ -83,6 +84,7 @@ export default function SettingsPage() {
 
   const isAdmin = roles.includes("admin");
   const canManage = can("settings", "manage");
+  const departmentsEnabled = useFeatureFlag("departments_enabled");
 
   const defaultTab = canManage ? "users" : "categories";
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -91,6 +93,7 @@ export default function SettingsPage() {
   const filteredMenu = SETTINGS_MENU.filter((item) => {
     if (item.requiresAdmin && !isAdmin) return false;
     if (item.requiresManage && !canManage) return false;
+    if (item.id === "departments" && !departmentsEnabled) return false;
     return true;
   });
 
