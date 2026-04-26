@@ -100,6 +100,8 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 
 #### Dívidas registradas
 - **Bug 17 — Link `/settings/users` no `AppSidebar`**: hoje a página é alcançada apenas digitando a URL. Adicionar item de menu para admin (vinculado à auditoria 1.3a/b).
+- **Bug #3 (varredura 2026-04-26)**: `/settings/users` e `/settings/audit-logs` sem link no `AppSidebar` — incluir grupo "Administração" admin-only quando redesenhar o hub `/settings`.
+- **Bug #6 (varredura 2026-04-26)**: `record_id` em `audit_logs` exibido como UUID cru — criar RPC ou hook que resolve para nome do recurso (ex: "Cliente AIRDUTO LTDA" em vez de UUID). Fix mínimo já entregue (tooltip + botão copiar).
 
 ### Seção 4 — Decisão sobre features abandonadas
 
