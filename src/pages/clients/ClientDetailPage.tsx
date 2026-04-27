@@ -24,6 +24,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { ClientUsersList } from "@/components/clients/ClientUsersList";
+import { ClientBranchesList } from "@/components/clients/ClientBranchesList";
 import { ClientDocumentation } from "@/components/clients/ClientDocumentation";
 import { ClientAssetsList } from "@/components/clients/ClientAssetsList";
 import { ClientTechniciansList } from "@/components/clients/ClientTechniciansList";
@@ -134,10 +135,14 @@ export default function ClientDetailPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-flex">
+          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-flex">
             <TabsTrigger value="info" className="gap-2">
               <Building2 className="h-4 w-4" />
               <span className="hidden sm:inline">Informações</span>
+            </TabsTrigger>
+            <TabsTrigger value="branches" className="gap-2">
+              <MapPin className="h-4 w-4" />
+              <span className="hidden sm:inline">Filiais</span>
             </TabsTrigger>
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
@@ -262,6 +267,11 @@ export default function ClientDetailPage() {
                 </Card>
               )}
             </div>
+          </TabsContent>
+
+          {/* Branches Tab */}
+          <TabsContent value="branches">
+            <ClientBranchesList clientId={id!} />
           </TabsContent>
 
           {/* Users Tab */}
