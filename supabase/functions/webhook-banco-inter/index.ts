@@ -238,6 +238,16 @@ async function processPayload(
           if (auditError) {
             console.error("[WEBHOOK-BANCO-INTER] Erro ao criar audit_log:", auditError);
           }
+
+          // G3: Notify client about payment confirmation (boleto)
+          await notifyClientPaymentConfirmed(
+            supabase,
+            updatedInvoice.id,
+            updatedInvoice.client_id,
+            paidAmount as number,
+            updateData.paid_date as string,
+            "boleto"
+          );
         }
       }
     }
