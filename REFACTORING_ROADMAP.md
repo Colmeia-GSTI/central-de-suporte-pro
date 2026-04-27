@@ -124,7 +124,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 #### Escopo (em ordem de execução)
 - **4.5.1 — Filiais (`client_branches`)**: tabela + UI mínima vinculando ativos/contatos/contratos a filiais do mesmo cliente.
   - **PR #1 — Schema base + RLS + audit + Sede automática** ✅ 2026-04-27 — tabela criada, 6 policies (staff/client_master/client/admin), 3 índices (FK + UNIQUE parcial `is_main` + UNIQUE `(client_id, lower(name))`), triggers `audit_changes` e `update_updated_at_column`, 32 filiais "Sede" inseridas (1 por cliente). Sem `branch_id` em outras tabelas e sem UI ainda.
-  - **PR #2 — UI de gestão de filiais (admin/staff)**: ☐ pendente
+  - **PR #2 — UI de gestão de filiais (admin/staff)** ✅ 2026-04-27 — aba "Filiais" em `ClientDetailPage` (entre Informações e Usuários, `grid-cols-8`), componente `ClientBranchesList` + hook `useClientBranches`. CRUD completo com form (nome, switch Sede, CEP/cidade/UF, endereço, telefone, email, observações), badge de Sede com ícone Star, tratamento explícito de violações UNIQUE com toasts amigáveis, bloqueio defensivo de exclusão da Sede quando há outras filiais. `merge_clients` ajustada para migrar `client_branches` resolvendo conflitos de Sede e nome automaticamente. TS limpo, 32 branches preservadas, 6 policies do PR #1 intactas.
   - **PR #3 — `branch_id` em assets + monitored_devices + UI inventário**: ☐ pendente
   - **PR #4 — `branch_id` em doc_* (internet_links, external_providers, support_hours, routines)**: ☐ pendente
   - **PR #5 — `branch_id` em client_contacts + portal do cliente**: ☐ pendente
