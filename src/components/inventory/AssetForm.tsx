@@ -17,7 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { DocDeviceLinkDialog } from "@/components/clients/DocDeviceLinkDialog";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+
+const NONE_BRANCH = "__none__";
 
 const assetSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -32,6 +35,7 @@ const assetSchema = z.object({
   purchase_date: z.string().optional(),
   purchase_value: z.coerce.number().optional(),
   notes: z.string().optional(),
+  branch_id: z.string().uuid().nullable().optional(),
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
@@ -66,8 +70,12 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
       purchase_date: asset?.purchase_date || "",
       purchase_value: asset?.purchase_value || undefined,
       notes: asset?.notes || "",
+      branch_id: asset?.branch_id ?? null,
     },
   });
+
+  const watchedClientId = form.watch("client_id");
+  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(watchedClientId);
 
   const { clearDraft, wasRestored } = useFormPersistence({
     form,
@@ -104,6 +112,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
         purchase_date: data.purchase_date || null,
         purchase_value: data.purchase_value || null,
         notes: data.notes || null,
+        branch_id: data.branch_id || null,
       };
 
       if (asset) {
@@ -247,6 +256,34 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
                         <SelectItem key={client.id} value={client.id}>
                           {client.name}
                         </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="branch_id"
+              render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Filial</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(v === NONE_BRANCH ? null : v)}
+                    value={field.value ?? NONE_BRANCH}
+                    disabled={!watchedClientId || noBranches}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma filial (opcional)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                      {branchOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

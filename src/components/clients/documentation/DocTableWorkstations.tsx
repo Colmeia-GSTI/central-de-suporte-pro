@@ -16,7 +16,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Plus, Pencil, Trash2, Monitor, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
 import { useDocSync } from "@/hooks/useDocSync";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 import { display } from "@/lib/doc-utils";
+
+const NONE_BRANCH = "__none__";
 
 interface Props { clientId: string; }
 
@@ -47,6 +50,7 @@ interface DeviceRow {
   trmm_agent_id: string | null;
   data_source: string | null;
   last_seen: string | null;
+  branch_id: string | null;
   [key: string]: unknown;
 }
 
@@ -55,6 +59,7 @@ const EMPTY: Omit<DeviceRow, "id"> = {
   os: null, ip_local: null, status: "unknown", primary_user: null,
   physical_location: null, notes: null, cpu: null, ram: null, disks: null,
   mac_address: null, trmm_agent_id: null, data_source: "Manual", last_seen: null,
+  branch_id: null,
 };
 
 
@@ -64,6 +69,7 @@ export function DocTableWorkstations({ clientId }: Props) {
     filter: { column: "device_type", values: ["workstation", "server", "notebook"] },
   });
   const { syncingTrmm, trmmConfigured, syncTrmm } = useDocSync(clientId);
+  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DeviceRow | null>(null);
@@ -190,6 +196,20 @@ export function DocTableWorkstations({ clientId }: Props) {
             <TabsContent value="geral" className="space-y-4 mt-4">
               <div><Label>Nome / Hostname *</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>Tipo *</Label><Select value={form.device_type || ""} onValueChange={(v) => setForm({ ...form, device_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEVICE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
+              <div>
+                <Label>Filial</Label>
+                <Select
+                  value={form.branch_id ?? NONE_BRANCH}
+                  onValueChange={(v) => setForm({ ...form, branch_id: v === NONE_BRANCH ? null : v })}
+                  disabled={noBranches}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione uma filial (opcional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                    {branchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div><Label>Marca / Modelo</Label><Input value={form.brand_model || ""} onChange={(e) => setForm({ ...form, brand_model: e.target.value })} /></div>
               <div><Label>Número de série</Label><Input value={form.serial_number || ""} onChange={(e) => setForm({ ...form, serial_number: e.target.value })} /></div>
               <div><Label>Sistema operacional</Label><Input value={form.os || ""} onChange={(e) => setForm({ ...form, os: e.target.value })} /></div>

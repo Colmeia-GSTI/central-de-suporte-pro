@@ -37,7 +37,10 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DocDeviceLinkDialog } from "./DocDeviceLinkDialog";
 import { DocDeviceManualLinkDialog } from "./DocDeviceManualLinkDialog";
 import { useDocDeviceSync } from "@/hooks/useDocDeviceSync";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 import type { Tables } from "@/integrations/supabase/types";
+
+const NONE_BRANCH = "__none__";
 
 const assetSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -47,10 +50,11 @@ const assetSchema = z.object({
   model: z.string().optional(),
   location: z.string().optional(),
   status: z.enum(["active", "maintenance", "disposed", "loaned"]).default("active"),
+  branch_id: z.string().uuid().nullable().optional(),
 });
 
 type AssetFormData = z.infer<typeof assetSchema>;
-type Asset = Pick<Tables<"assets">, "id" | "client_id" | "name" | "asset_type" | "brand" | "model" | "serial_number" | "status" | "location" | "notes" | "purchase_date" | "purchase_value"> & { doc_device_id?: string | null };
+type Asset = Pick<Tables<"assets">, "id" | "client_id" | "name" | "asset_type" | "brand" | "model" | "serial_number" | "status" | "location" | "notes" | "purchase_date" | "purchase_value" | "branch_id"> & { doc_device_id?: string | null };
 type MonitoredDevice = Pick<Tables<"monitored_devices">, "id" | "name" | "hostname" | "ip_address" | "device_type" | "is_online" | "uptime_percent" | "last_seen_at" | "external_source" | "client_id">;
 
 interface DocDevice {
@@ -173,8 +177,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
       model: "",
       location: "",
       status: "active",
+      branch_id: null,
     },
   });
+
+  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(clientId);
 
   // Fetch assets
   const { data: assets = [], isLoading: isLoadingAssets } = useQuery({
@@ -182,7 +189,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assets")
-        .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes, purchase_date, purchase_value, doc_device_id")
+        .select("id, client_id, name, asset_type, brand, model, serial_number, status, location, notes, purchase_date, purchase_value, doc_device_id, branch_id")
         .eq("client_id", clientId)
         .order("name");
       if (error) throw error;
@@ -333,6 +340,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
         model: data.model || null,
         location: data.location || null,
         status: data.status,
+        branch_id: data.branch_id || null,
       };
 
       if (editingAsset) {
@@ -434,6 +442,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
       model: asset.model || "",
       location: asset.location || "",
       status: asset.status,
+      branch_id: asset.branch_id ?? null,
     });
     setIsFormOpen(true);
   };
@@ -575,6 +584,33 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                         <FormControl>
                           <Input placeholder="S/N" {...field} />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="branch_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Filial</FormLabel>
+                        <Select
+                          onValueChange={(v) => field.onChange(v === NONE_BRANCH ? null : v)}
+                          value={field.value ?? NONE_BRANCH}
+                          disabled={noBranches}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione (opcional)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                            {branchOptions.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}

@@ -13,7 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, Network, RefreshCw, Loader2 } from "lucide-react";
 import { useDocTableCrud } from "@/hooks/useDocTableCrud";
 import { useDocSync } from "@/hooks/useDocSync";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 import { display } from "@/lib/doc-utils";
+
+const NONE_BRANCH = "__none__";
 
 interface Props { clientId: string; }
 
@@ -52,6 +55,7 @@ interface DeviceRow {
   disks: string | null;
   ram: string | null;
   data_source: string | null;
+  branch_id: string | null;
   [key: string]: unknown;
 }
 
@@ -61,7 +65,7 @@ const EMPTY: Omit<DeviceRow, "id"> = {
   port_count: null, vlans: null, unifi_device_id: null, ssids: null,
   connected_clients: null, connection_type: null, consumable: null,
   usage: null, os: null, integrated_software: null, reading_type: null,
-  disks: null, ram: null, data_source: "Manual",
+  disks: null, ram: null, data_source: "Manual", branch_id: null,
 };
 
 
@@ -71,6 +75,7 @@ export function DocTableNetworkDevices({ clientId }: Props) {
     filter: { column: "device_type", values: ["switch", "access_point", "printer", "tv", "clock", "facial", "nas", "other"] },
   });
   const { syncingUnifi, unifiConfigured, syncUnifi } = useDocSync(clientId);
+  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DeviceRow | null>(null);
@@ -163,6 +168,20 @@ export function DocTableNetworkDevices({ clientId }: Props) {
           <div className="space-y-4 mt-4">
             <div><Label>Nome / Identificação *</Label><Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div><Label>Tipo *</Label><Select value={form.device_type || ""} onValueChange={(v) => setForm({ ...form, device_type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{DEVICE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
+            <div>
+              <Label>Filial</Label>
+              <Select
+                value={form.branch_id ?? NONE_BRANCH}
+                onValueChange={(v) => setForm({ ...form, branch_id: v === NONE_BRANCH ? null : v })}
+                disabled={noBranches}
+              >
+                <SelectTrigger><SelectValue placeholder="Selecione uma filial (opcional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                  {branchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label>Marca / Modelo</Label><Input value={form.brand_model || ""} onChange={(e) => setForm({ ...form, brand_model: e.target.value })} /></div>
             <div><Label>IP na rede</Label><Input value={form.ip_local || ""} onChange={(e) => setForm({ ...form, ip_local: e.target.value })} /></div>
             <div><Label>MAC address</Label><Input value={form.mac_address || ""} onChange={(e) => setForm({ ...form, mac_address: e.target.value })} /></div>
