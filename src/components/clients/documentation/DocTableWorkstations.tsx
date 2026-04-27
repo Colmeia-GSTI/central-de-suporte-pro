@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,7 +69,7 @@ export function DocTableWorkstations({ clientId }: Props) {
     filter: { column: "device_type", values: ["workstation", "server", "notebook"] },
   });
   const { syncingTrmm, trmmConfigured, syncTrmm } = useDocSync(clientId);
-  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(clientId);
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DeviceRow | null>(null);
@@ -78,6 +78,12 @@ export function DocTableWorkstations({ clientId }: Props) {
 
   const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setDrawerOpen(true); };
   const openEdit = (item: DeviceRow) => { setEditingItem(item); setForm({ ...EMPTY, ...item }); setDrawerOpen(true); };
+
+  useEffect(() => {
+    if (drawerOpen && !editingItem && mainBranchId) {
+      setForm((prev) => ({ ...prev, branch_id: prev.branch_id ?? mainBranchId }));
+    }
+  }, [drawerOpen, editingItem, mainBranchId]);
 
   const handleSave = async () => {
     const saveData = { ...form };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -75,7 +75,13 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
   });
 
   const watchedClientId = form.watch("client_id");
-  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(watchedClientId);
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(watchedClientId);
+
+  useEffect(() => {
+    if (!asset && mainBranchId && !form.getValues("branch_id")) {
+      form.setValue("branch_id", mainBranchId);
+    }
+  }, [mainBranchId, asset, form]);
 
   const { clearDraft, wasRestored } = useFormPersistence({
     form,
