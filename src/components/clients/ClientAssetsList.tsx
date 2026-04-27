@@ -590,6 +590,33 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
                   />
                   <FormField
                     control={form.control}
+                    name="branch_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Filial</FormLabel>
+                        <Select
+                          onValueChange={(v) => field.onChange(v === NONE_BRANCH ? null : v)}
+                          value={field.value ?? NONE_BRANCH}
+                          disabled={noBranches}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione (opcional)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                            {branchOptions.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name="location"
                     render={({ field }) => (
                       <FormItem>
