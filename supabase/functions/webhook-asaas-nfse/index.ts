@@ -225,6 +225,9 @@ async function notifyClientPaymentConfirmed(
       related_id: invoiceId,
     },
   });
+}
+
+// Background processing for invoice (NFS-e) webhooks
 async function processInvoiceWebhook(
   supabase: SupabaseClient,
   event: string,
