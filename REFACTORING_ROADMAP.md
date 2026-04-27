@@ -123,6 +123,11 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 
 #### Escopo (em ordem de execução)
 - **4.5.1 — Filiais (`client_branches`)**: tabela + UI mínima vinculando ativos/contatos/contratos a filiais do mesmo cliente.
+  - **PR #1 — Schema base + RLS + audit + Sede automática** ✅ 2026-04-27 — tabela criada, 6 policies (staff/client_master/client/admin), 3 índices (FK + UNIQUE parcial `is_main` + UNIQUE `(client_id, lower(name))`), triggers `audit_changes` e `update_updated_at_column`, 32 filiais "Sede" inseridas (1 por cliente). Sem `branch_id` em outras tabelas e sem UI ainda.
+  - **PR #2 — UI de gestão de filiais (admin/staff)**: ☐ pendente
+  - **PR #3 — `branch_id` em assets + monitored_devices + UI inventário**: ☐ pendente
+  - **PR #4 — `branch_id` em doc_* (internet_links, external_providers, support_hours, routines)**: ☐ pendente
+  - **PR #5 — `branch_id` em client_contacts + portal do cliente**: ☐ pendente
 - **4.5.3 — Pipeline de coleta robusto + alertas**: garantir que TRMM/UniFi/CheckMK estão coletando 100% dos ativos esperados e que `monitoring_alerts` está populando (hoje 0 alertas com 8 devices ativos — pipeline suspeito).
   - **4.5.3.1 — Bug do IP público RMM [item 5.A]**: confirmado que todos os 8 devices RMM mostram IP `200.218.233.10` (IP público da Colmeia, não dos clientes). Causa raiz: extração errada da API TRMM/UniFi (provavelmente caindo em `public_ip` em vez de `local_ips`). Correção: usar `local_ips[0]` com fallback `ipv4_addresses[0]`. Adicionar coluna `monitored_devices.ip_source` (`local`/`public`/`unknown`) para detecção contínua. Badge amarelo para IPs suspeitos. Botão "Forçar re-sync" por device + "Re-sync cliente inteiro" no detalhe do cliente. Esforço: ~1-2 dias.
 - **4.5.7 — Vínculo computador↔chamado**: campo de seleção de ativo no form de novo ticket; popular `tickets.asset_id` automaticamente quando cliente é selecionado.
