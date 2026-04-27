@@ -1553,6 +1553,7 @@ export type Database = {
       doc_access_policies: {
         Row: {
           affected_group: string | null
+          branch_id: string | null
           client_id: string
           configured_via: string | null
           created_at: string
@@ -1567,6 +1568,7 @@ export type Database = {
         }
         Insert: {
           affected_group?: string | null
+          branch_id?: string | null
           client_id: string
           configured_via?: string | null
           created_at?: string
@@ -1581,6 +1583,7 @@ export type Database = {
         }
         Update: {
           affected_group?: string | null
+          branch_id?: string | null
           client_id?: string
           configured_via?: string | null
           created_at?: string
@@ -1594,6 +1597,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_access_policies_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_access_policies_client_id_fkey"
             columns: ["client_id"]
@@ -2320,6 +2330,7 @@ export type Database = {
       doc_firewall_rules: {
         Row: {
           action: string | null
+          branch_id: string | null
           client_id: string
           context: string | null
           created_at: string
@@ -2337,6 +2348,7 @@ export type Database = {
         }
         Insert: {
           action?: string | null
+          branch_id?: string | null
           client_id: string
           context?: string | null
           created_at?: string
@@ -2354,6 +2366,7 @@ export type Database = {
         }
         Update: {
           action?: string | null
+          branch_id?: string | null
           client_id?: string
           context?: string | null
           created_at?: string
@@ -2370,6 +2383,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_firewall_rules_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_firewall_rules_client_id_fkey"
             columns: ["client_id"]
@@ -2390,6 +2410,7 @@ export type Database = {
         Row: {
           active_directory: string | null
           ad_location: string | null
+          branch_id: string | null
           client_id: string
           cloud_provider: string | null
           created_at: string
@@ -2411,6 +2432,7 @@ export type Database = {
         Insert: {
           active_directory?: string | null
           ad_location?: string | null
+          branch_id?: string | null
           client_id: string
           cloud_provider?: string | null
           created_at?: string
@@ -2432,6 +2454,7 @@ export type Database = {
         Update: {
           active_directory?: string | null
           ad_location?: string | null
+          branch_id?: string | null
           client_id?: string
           cloud_provider?: string | null
           created_at?: string
@@ -2451,6 +2474,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_infrastructure_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_infrastructure_client_id_fkey"
             columns: ["client_id"]
@@ -2477,6 +2507,7 @@ export type Database = {
       doc_internet_links: {
         Row: {
           alert_days: number | null
+          branch_id: string | null
           client_id: string
           contract_expiry: string | null
           created_at: string
@@ -2492,6 +2523,7 @@ export type Database = {
         }
         Insert: {
           alert_days?: number | null
+          branch_id?: string | null
           client_id: string
           contract_expiry?: string | null
           created_at?: string
@@ -2507,6 +2539,7 @@ export type Database = {
         }
         Update: {
           alert_days?: number | null
+          branch_id?: string | null
           client_id?: string
           contract_expiry?: string | null
           created_at?: string
@@ -2521,6 +2554,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_internet_links_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_internet_links_client_id_fkey"
             columns: ["client_id"]
@@ -2937,6 +2977,7 @@ export type Database = {
       }
       doc_vlans: {
         Row: {
+          branch_id: string | null
           client_id: string
           created_at: string
           data_source: string | null
@@ -2953,6 +2994,7 @@ export type Database = {
           vlan_id: number | null
         }
         Insert: {
+          branch_id?: string | null
           client_id: string
           created_at?: string
           data_source?: string | null
@@ -2969,6 +3011,7 @@ export type Database = {
           vlan_id?: number | null
         }
         Update: {
+          branch_id?: string | null
           client_id?: string
           created_at?: string
           data_source?: string | null
@@ -2985,6 +3028,13 @@ export type Database = {
           vlan_id?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_vlans_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_vlans_client_id_fkey"
             columns: ["client_id"]
@@ -3003,6 +3053,7 @@ export type Database = {
       }
       doc_vpn: {
         Row: {
+          branch_id: string | null
           client_id: string
           created_at: string
           data_source: string | null
@@ -3018,6 +3069,7 @@ export type Database = {
           vpn_type: string | null
         }
         Insert: {
+          branch_id?: string | null
           client_id: string
           created_at?: string
           data_source?: string | null
@@ -3033,6 +3085,7 @@ export type Database = {
           vpn_type?: string | null
         }
         Update: {
+          branch_id?: string | null
           client_id?: string
           created_at?: string
           data_source?: string | null
@@ -3048,6 +3101,13 @@ export type Database = {
           vpn_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_vpn_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_vpn_client_id_fkey"
             columns: ["client_id"]
