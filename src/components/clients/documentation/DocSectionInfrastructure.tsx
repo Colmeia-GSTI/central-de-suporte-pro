@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { Field } from "./shared/Field";
 import { display } from "@/lib/doc-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocSection } from "@/hooks/useDocSection";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 
 interface Props {
   clientId: string;
@@ -19,8 +20,11 @@ interface Props {
 const SERVER_TYPES = ["Local", "VPS", "Nuvem", "Híbrido", "Não tem"];
 const FILE_SERVER_OPTIONS = ["Local", "Nextcloud", "Synology", "Google Drive", "OneDrive", "Não tem"];
 const AD_OPTIONS = ["Sim", "Não"];
+const NONE_BRANCH = "__none__";
 
 interface InfraData {
+  id?: string;
+  branch_id: string | null;
   server_type: string | null;
   cloud_provider: string | null;
   file_server: string | null;
@@ -38,6 +42,7 @@ interface InfraData {
 }
 
 const EMPTY: InfraData = {
+  branch_id: null,
   server_type: null, cloud_provider: null, file_server: null,
   active_directory: null, ad_location: null, general_notes: null,
   unifi_console_model: null, unifi_console_ip: null, unifi_firmware: null, unifi_uptime: null,
@@ -46,6 +51,7 @@ const EMPTY: InfraData = {
 
 export function DocSectionInfrastructure({ clientId }: Props) {
   const { data, isLoading, save, isSaving } = useDocSection<InfraData>("doc_infrastructure", clientId);
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<InfraData>(EMPTY);
 
@@ -53,6 +59,15 @@ export function DocSectionInfrastructure({ clientId }: Props) {
     setForm({ ...EMPTY, ...data });
     setIsEditing(true);
   };
+
+  // Pré-seleciona Sede só na PRIMEIRA criação (data?.id ausente).
+  // Edição de registro existente (mesmo com branch_id NULL) preserva o valor.
+  // Não sobrescreve seleção manual já feita pelo usuário.
+  useEffect(() => {
+    if (isEditing && !data?.id && mainBranchId && !form.branch_id) {
+      setForm((prev) => ({ ...prev, branch_id: mainBranchId }));
+    }
+  }, [isEditing, data?.id, mainBranchId, form.branch_id]);
 
   const handleSave = async () => {
     try {
@@ -81,6 +96,10 @@ export function DocSectionInfrastructure({ clientId }: Props) {
 
         <SubTitle>Geral</SubTitle>
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Filial"
+            value={display(branchOptions.find((b) => b.value === d.branch_id)?.label ?? null)}
+          />
           <Field label="Tipo de servidor" value={display(d.server_type)} />
           {showCloudRead && <Field label="Provedor VPS / Nuvem" value={display(d.cloud_provider)} />}
           <Field label="Servidor de arquivos" value={display(d.file_server)} />
@@ -119,6 +138,24 @@ export function DocSectionInfrastructure({ clientId }: Props) {
     <div className="space-y-6">
       <SubTitle>Geral</SubTitle>
       <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label>Filial</Label>
+          <Select
+            value={form.branch_id ?? NONE_BRANCH}
+            onValueChange={(v) => setForm({ ...form, branch_id: v === NONE_BRANCH ? null : v })}
+            disabled={noBranches}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={noBranches ? "Nenhuma filial cadastrada" : "Selecione"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+              {branchOptions.map((b) => (
+                <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div>
           <Label>Tipo de servidor</Label>
           <Select value={form.server_type || ""} onValueChange={(v) => setForm({ ...form, server_type: v })}>

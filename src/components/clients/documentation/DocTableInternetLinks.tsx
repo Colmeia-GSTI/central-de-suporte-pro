@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,7 @@ interface Props { clientId: string; }
 const TYPES = ["Principal", "Redundante", "Backup", "4G"];
 const LINK_TYPES = ["Fibra", "Rádio", "ADSL", "4G", "Satélite"];
 const IP_TYPES = ["Fixo", "Dinâmico"];
+const NONE_BRANCH = "__none__";
 
 interface LinkRow {
   id: string;
@@ -35,29 +37,38 @@ interface LinkRow {
   contract_expiry: string | null;
   alert_days: number | null;
   notes: string | null;
+  branch_id: string | null;
   [key: string]: unknown;
 }
 
 const EMPTY: Omit<LinkRow, "id"> = {
   type: null, provider: null, link_type: null, plan_speed: null,
   public_ip: null, support_phone: null, contract_expiry: null,
-  alert_days: 30, notes: null,
+  alert_days: 30, notes: null, branch_id: null,
 };
 
 export function DocTableInternetLinks({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<LinkRow>({
     tableName: "doc_internet_links", clientId,
   });
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LinkRow | null>(null);
   const [form, setForm] = useState<Omit<LinkRow, "id">>(EMPTY);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Pré-seleciona Sede ao criar novo registro (não sobrescreve seleção manual nem edição)
+  useEffect(() => {
+    if (drawerOpen && !editingItem && mainBranchId && !form.branch_id) {
+      setForm((prev) => ({ ...prev, branch_id: mainBranchId }));
+    }
+  }, [drawerOpen, editingItem, mainBranchId, form.branch_id]);
+
   const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setDrawerOpen(true); };
   const openEdit = (item: LinkRow) => {
     setEditingItem(item);
-    setForm({ type: item.type, provider: item.provider, link_type: item.link_type, plan_speed: item.plan_speed, public_ip: item.public_ip, support_phone: item.support_phone, contract_expiry: item.contract_expiry, alert_days: item.alert_days ?? 30, notes: item.notes });
+    setForm({ type: item.type, provider: item.provider, link_type: item.link_type, plan_speed: item.plan_speed, public_ip: item.public_ip, support_phone: item.support_phone, contract_expiry: item.contract_expiry, alert_days: item.alert_days ?? 30, notes: item.notes, branch_id: item.branch_id ?? null });
     setDrawerOpen(true);
   };
 
@@ -150,6 +161,24 @@ export function DocTableInternetLinks({ clientId }: Props) {
             <div>
               <Label>Provedor *</Label>
               <Input value={form.provider || ""} onChange={(e) => setForm({ ...form, provider: e.target.value })} />
+            </div>
+            <div>
+              <Label>Filial</Label>
+              <Select
+                value={form.branch_id ?? NONE_BRANCH}
+                onValueChange={(v) => setForm({ ...form, branch_id: v === NONE_BRANCH ? null : v })}
+                disabled={noBranches}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={noBranches ? "Nenhuma filial cadastrada" : "Selecione"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                  {branchOptions.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Tipo de link</Label>
