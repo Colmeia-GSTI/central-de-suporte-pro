@@ -314,6 +314,16 @@ async function processPayload(
               source: "webhook_banco_inter",
             } as unknown as Record<string, unknown>,
           });
+
+          // G3: Notify client about payment confirmation (PIX)
+          await notifyClientPaymentConfirmed(
+            supabase,
+            fullInvoice.id,
+            fullInvoice.client_id,
+            pixAmount as number,
+            (payload.dataHoraSituacao || new Date().toISOString()) as string,
+            "PIX"
+          );
         }
       }
     }
