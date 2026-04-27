@@ -237,10 +237,11 @@ Deno.serve(async (req) => {
     // Push notification to staff
     if (!isInternal) {
       try {
+        // G5 fix: include client/client_master so customers also receive PWA push
         await supabase.functions.invoke("send-push-notification", {
           body: {
             type: "ticket",
-            role_filter: ["admin", "manager", "technician"],
+            role_filter: ["admin", "manager", "technician", "client", "client_master"],
             data: {
               title: `Chamado #${ticket.ticket_number}`,
               body: eventMessages[event_type],
