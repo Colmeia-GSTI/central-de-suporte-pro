@@ -450,6 +450,20 @@ async function processPaymentWebhook(
       "invoice",
       externalReference
     );
+
+    // G3 fix: notify client about payment confirmation (email)
+    try {
+      await notifyClientPaymentConfirmed(
+        supabase,
+        updatedInvoice.id,
+        updatedInvoice.client_id as string,
+        (payment.value as number) ?? updatedInvoice.amount,
+        paymentDate,
+        "boleto"
+      );
+    } catch (notifyErr) {
+      console.error("[WEBHOOK-ASAAS] Erro ao notificar cliente:", notifyErr);
+    }
       }
     } else if (newStatus === "vencida") {
       console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como vencida`);
