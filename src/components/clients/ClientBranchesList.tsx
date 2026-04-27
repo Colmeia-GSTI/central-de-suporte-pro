@@ -36,7 +36,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Edit, Trash2, MapPin, Phone, Mail, Star } from "lucide-react";
+import { Plus, Edit, Trash2, MapPin, Phone, Mail, Star, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -107,7 +107,58 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
     open: boolean;
     branch: ClientBranch | null;
   }>({ open: false, branch: null });
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
   const { toast } = useToast();
+
+  const lookupCep = async (rawCep: string) => {
+    const cep = (rawCep ?? "").replace(/\D/g, "");
+    if (cep.length !== 8) return;
+
+    const isCreating = editing === null;
+    const cepChanged =
+      !isCreating && cep !== (editing?.cep?.replace(/\D/g, "") ?? "");
+    const shouldOverwrite = isCreating || cepChanged;
+
+    setIsFetchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!res.ok) throw new Error("Erro na consulta de CEP");
+      const data = await res.json();
+      if (data.erro) {
+        toast({
+          title: "CEP não encontrado",
+          description: "Verifique o CEP digitado.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const currentAddress = form.getValues("address");
+      const currentCity = form.getValues("city");
+      const currentState = form.getValues("state");
+      const buildAddress = [data.logradouro, data.bairro]
+        .filter(Boolean)
+        .join(", ");
+
+      if (shouldOverwrite || !currentAddress) {
+        form.setValue("address", buildAddress);
+      }
+      if (shouldOverwrite || !currentCity) {
+        form.setValue("city", data.localidade ?? "");
+      }
+      if (shouldOverwrite || !currentState) {
+        form.setValue("state", data.uf ?? "");
+      }
+    } catch {
+      toast({
+        title: "Erro na consulta",
+        description: "Não foi possível consultar o CEP. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingCep(false);
+    }
+  };
   const { items, isLoading, create, update, remove, isMutating } =
     useClientBranches(clientId);
 
@@ -283,7 +334,12 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
                     name="cep"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>CEP</FormLabel>
+                        <FormLabel className="flex items-center gap-2">
+                          CEP
+                          {isFetchingCep && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                        </FormLabel>
                         <FormControl>
                           <Input
                             placeholder="00000-000"
@@ -291,6 +347,10 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
                             onChange={(e) =>
                               field.onChange(formatCEP(e.target.value))
                             }
+                            onBlur={() => {
+                              field.onBlur();
+                              lookupCep(field.value);
+                            }}
                           />
                         </FormControl>
                         <FormMessage />
