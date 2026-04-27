@@ -174,7 +174,18 @@ serve(async (req) => {
       clearTimeout(timeout);
 
       if (!agentsResponse.ok) {
-        throw new Error("Erro ao buscar agentes do Tactical RMM");
+        const bodyText = await agentsResponse.text().catch(() => "");
+        console.error(
+          `Tactical RMM sync agents failed: status=${agentsResponse.status} url=${settings.url}/agents/ body=${bodyText.slice(0, 500)}`
+        );
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Erro ao buscar agentes do Tactical RMM (HTTP ${agentsResponse.status}). Verifique URL e API Key em Operações → Mapeamentos.`,
+            status: agentsResponse.status,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const agents = await agentsResponse.json();
