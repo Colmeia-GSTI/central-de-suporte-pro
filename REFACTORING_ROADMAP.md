@@ -188,6 +188,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.8.3 — Renomear `client_notification_rules`**: hoje é mal-nomeado (são regras de staff observando clientes, não preferências do cliente). Renomear para `staff_client_watch_rules` ou similar.
 - **4.8.4 — Welcome email reimplementado**: chamada explícita de `create-client-user` para `send-welcome-email` (sem trigger DB + Vault). Templates editáveis no Hub.
 - **4.8.5 — Hub central de notificações**: painel admin que mostra todos os canais (e-mail, WA, Telegram, push), templates, preferências por cliente, logs unificados.
+- **4.8.6 — Avisos macro / broadcast [item 5.E / G11 da auditoria de notificações]**: admin envia comunicado para todos os clientes ou subset filtrado (ex: "manutenção programada na sexta", "novo recurso disponível"). Componentes: tabela `broadcast_messages` (mensagem, segmento, canais, agendamento, status), UI admin de composição com preview, edge `dispatch-broadcast` que dispara via canais configurados (e-mail/WA/push) respeitando preferências do cliente (4.8.1).
 
 ### Seção 4.9 — Configurações (Hub Settings)
 
