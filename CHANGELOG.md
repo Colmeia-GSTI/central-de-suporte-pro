@@ -18,6 +18,10 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Seção 4.5.1 — PR #4 — 2026-04-27)
+- **Coluna `branch_id` (FK nullable para `client_branches`, ON DELETE SET NULL) em 6 tabelas de CMDB de rede**: `doc_vlans`, `doc_vpn`, `doc_firewall_rules`, `doc_access_policies`, `doc_internet_links`, `doc_infrastructure`. Índice parcial `WHERE branch_id IS NOT NULL` em cada tabela. Sem backfill (tabelas vazias até hoje). RLS preservada (policies "Staff full access on doc_*" continuam válidas). Dropdown "Filial" adicionado nos 2 forms manuais que existem hoje (`DocTableInternetLinks`, `DocSectionInfrastructure`), com pré-seleção automática da Sede em criação via `useClientBranchOptions` (reutilizado do PR #3). Forms de VLANs, VPN, Firewall e Access Policies ainda não existem na UI — coluna fica disponível para a Seção 4.5.2 quando esses forms forem criados.
+
+
 ### Corrigido
 - **PR #3 (Seção 4.5.1) — Filiais nos forms de CMDB**: dropdown "Filial" às vezes aparecia vazio/disabled mesmo havendo filiais cadastradas. Causa raiz: `useClientBranches` rodava com `clientId=""` no primeiro mount e cacheava `[]`. Adicionado `enabled: !!clientId` no `useQuery` e proteção em `useClientBranchOptions` para tratar `clientId` ausente sem disparar query inválida.
 
