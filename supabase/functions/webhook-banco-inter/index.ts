@@ -39,6 +39,54 @@ interface InterWebhookPayload {
   urlPdf?: string;
 }
 
+// G3: Notify client when payment is confirmed (email)
+// deno-lint-ignore no-explicit-any
+async function notifyClientPaymentConfirmed(
+  supabase: any,
+  invoiceId: string,
+  clientId: string,
+  amount: number,
+  paymentDate: string,
+  method: string
+) {
+  try {
+    const { data: client } = await supabase
+      .from("clients")
+      .select("name, email")
+      .eq("id", clientId)
+      .maybeSingle();
+    if (!client?.email) {
+      console.log("[WEBHOOK-BANCO-INTER] Cliente sem e-mail, pulando notificação");
+      return;
+    }
+    const formattedAmount = Number(amount)?.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "0,00";
+    let formattedDate = paymentDate;
+    try { formattedDate = new Date(paymentDate).toLocaleDateString("pt-BR"); } catch { /* ignore */ }
+    const html = `
+      <h2 style="color: #16a34a;">✅ Pagamento Confirmado</h2>
+      <p>Olá <strong>${client.name}</strong>,</p>
+      <p>Confirmamos o recebimento do seu pagamento. Obrigado!</p>
+      <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 15px; margin: 15px 0;">
+        <p style="margin: 4px 0;"><strong>Valor:</strong> R$ ${formattedAmount}</p>
+        <p style="margin: 4px 0;"><strong>Data:</strong> ${formattedDate}</p>
+        <p style="margin: 4px 0;"><strong>Forma:</strong> ${method}</p>
+      </div>
+      <p>Em caso de dúvidas, entre em contato com nossa equipe.</p>
+    `;
+    await supabase.functions.invoke("send-email-resend", {
+      body: {
+        to: client.email,
+        subject: "Pagamento confirmado",
+        html,
+        related_type: "invoice",
+        related_id: invoiceId,
+      },
+    });
+  } catch (err) {
+    console.error("[WEBHOOK-BANCO-INTER] Erro ao notificar cliente:", err);
+  }
+}
+
 async function verifyWebhookAuth(req: Request, payload: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("WEBHOOK_SECRET_BANCO_INTER");
   
@@ -190,6 +238,16 @@ async function processPayload(
           if (auditError) {
             console.error("[WEBHOOK-BANCO-INTER] Erro ao criar audit_log:", auditError);
           }
+
+          // G3: Notify client about payment confirmation (boleto)
+          await notifyClientPaymentConfirmed(
+            supabase,
+            updatedInvoice.id,
+            updatedInvoice.client_id,
+            paidAmount as number,
+            updateData.paid_date as string,
+            "boleto"
+          );
         }
       }
     }
@@ -256,6 +314,16 @@ async function processPayload(
               source: "webhook_banco_inter",
             } as unknown as Record<string, unknown>,
           });
+
+          // G3: Notify client about payment confirmation (PIX)
+          await notifyClientPaymentConfirmed(
+            supabase,
+            fullInvoice.id,
+            fullInvoice.client_id,
+            pixAmount as number,
+            (payload.dataHoraSituacao || new Date().toISOString()) as string,
+            "PIX"
+          );
         }
       }
     }

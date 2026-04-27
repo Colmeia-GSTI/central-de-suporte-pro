@@ -157,6 +157,75 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 
 > Itens da Camada 3 também estão registrados em `PRODUCT_IDEAS.md` como referência para o remix SaaS futuro.
 
+### Seção 4.7 — Portal do Cliente (UX + paridade)
+
+- **Objetivo:** Elevar o portal do cliente (`/client-portal`) ao nível de paridade funcional com o painel admin (chamados, financeiro, ativos, CMDB).
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+- **4.7.1 — Aba "Faturas" funcional**: lista paginada com filtro por status, download do boleto/PDF NFS-e, link PIX, indicador de atraso. Hoje só existe esqueleto (`ClientPortalFinancialTab`).
+- **4.7.2 — Vínculo de ativos visível**: cliente vê seus dispositivos monitorados (status, último contato, alertas abertos) — depende da Seção 4.5 (CMDB).
+- **4.7.3 — Histórico de chamados com filtro/busca**: paginação, busca por título/número, agrupamento por status.
+- **4.7.4 — Avaliação pós-resolução completa**: garantir que o CTA de avaliação (G6) chegue por e-mail e portal e seja salvo em `ticket_evaluations`.
+- **4.7.5 — Mobile-first**: revisar densidade e fluxos do portal especificamente em viewport mobile (cliente abre chamado do celular).
+
+### Seção 4.8 — Notificações ao cliente final (Hub)
+
+- **Objetivo:** Resolver gaps da auditoria de notificações: preferências por cliente, cooldown anti-spam, padronização de templates, reimplementação do welcome email.
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+- **4.8.1 — Schema de preferências do cliente**: tabela `client_notification_preferences` (canais ativos, quiet hours, opt-out por tipo de evento). UI no portal do cliente.
+- **4.8.2 — Cooldown / dedupe em ticket notifications**: aplicar padrão das edges SLA/Invoice (cooldown por evento+ticket).
+- **4.8.3 — Renomear `client_notification_rules`**: hoje é mal-nomeado (são regras de staff observando clientes, não preferências do cliente). Renomear para `staff_client_watch_rules` ou similar.
+- **4.8.4 — Welcome email reimplementado**: chamada explícita de `create-client-user` para `send-welcome-email` (sem trigger DB + Vault). Templates editáveis no Hub.
+- **4.8.5 — Hub central de notificações**: painel admin que mostra todos os canais (e-mail, WA, Telegram, push), templates, preferências por cliente, logs unificados.
+
+### Seção 4.9 — Configurações (Hub Settings)
+
+- **Objetivo:** Reorganizar `/settings` em hub coerente, eliminar fragmentação atual, adicionar admin tools faltantes.
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+- **4.9.1 — Reagrupar abas**: 4 grupos lógicos (Empresa, Operação, Integrações, Administração). Usuários, Auditoria, Feature Flags entram em "Administração".
+- **4.9.2 — Editor de templates de e-mail visual**: hoje é texto puro em `email_templates`. WYSIWYG mínimo + preview.
+- **4.9.3 — Tela de integrações unificada**: status (conectado/erro/desconfigurado), última sincronização, última falha, botão "testar conexão" para Asaas, Inter, TRMM, UniFi, CheckMK, Resend, Evolution.
+- **4.9.4 — Branding**: logo, cores, favicon, footer de e-mail editáveis (consolidar `email_settings` + `company_settings`).
+
+### Seção 4.10 — Storage R2 + LGPD
+
+- **Objetivo:** Migrar storage pesado (PDFs NFS-e, XMLs, anexos de chamado) para Cloudflare R2 e adicionar fluxos básicos de LGPD.
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+- **4.10.1 — R2 como bucket secundário**: novos PDFs/XMLs vão para R2; existentes no Supabase Storage migram em background.
+- **4.10.2 — RPC `generate_signed_url`**: hoje é placeholder. Implementar real via R2 SDK ou Supabase Storage.
+- **4.10.3 — Política de retenção**: TTL configurável para anexos antigos de chamados (>2 anos move para frio).
+- **4.10.4 — LGPD básico**: RPC `export_client_data(client_id)` (admin-only) retorna ZIP com tudo do cliente; RPC `anonymize_client(client_id)` mantém histórico mas redata PII.
+
+### Seção 4.11 — Observabilidade interna
+
+- **Objetivo:** Garantir que falhas silenciosas (como o caso do welcome email descoberto durante o fechamento da Seção 4) sejam detectáveis automaticamente. Health-checks ativos, alertas de regressão, validação de pré-requisitos críticos (Vault, secrets, conectividade).
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+
+- **4.11.1 — Mapear funções DB que dependem de Vault + `pg_net.http_post`** (tarefa imediata): query inicial sobre `pg_proc` listando TODAS as funções que usam `vault.decrypted_secrets` + `net.http_post`. Para cada uma, validar se está funcional hoje (testar invocação manual + checar logs em `application_logs` / `net.http_request_queue`). Conhecidas hoje: `notify_on_monitoring_alert` (precisa validar). `trigger_send_welcome_email` foi removida na Seção 4 (G12).
+- **4.11.2 — Validação de Vault secrets (CRÍTICO — descoberto na Seção 4)**: criar check no health-check que valida se `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` estão populados em `vault.decrypted_secrets`. Se faltar, alertar admin via banner em `/settings` + e-mail. Padrão descoberto durante teste de welcome email: trigger DB pode usar `pg_net` + Vault para invocar edges, e secrets ausentes causam **falha silenciosa** (`RAISE WARNING` não persistido, request nunca enfileirado em `net.http_request_queue`).
+- **4.11.3 — Health-check page (`/settings/health`)**: dashboard interno mostrando status de cada integração, últimas falhas, alertas ativos, espaço em storage, jobs `pg_cron` rodando, fila `net.http_request_queue` parada.
+- **4.11.4 — Persistência de `RAISE WARNING`**: substituir todos os `RAISE WARNING` em funções `SECURITY DEFINER` por inserts em `application_logs` (padrão já adotado em `handle_new_user` na Seção 1.3). Buscar `RAISE WARNING` em todas as funções e padronizar.
+- **4.11.5 — Alertas de regressão de notificação**: contar diariamente quantos e-mails/WAs/pushes foram enviados; se cair acima de X% vs baseline (ex: -50% em 7 dias), alertar admin (sinal precoce de quebra silenciosa).
+
 ### Seção 5 — Limpeza de código morto
 
 - **Objetivo:** Remover componentes órfãos, edge functions sem uso, dependências não utilizadas e tabelas legadas.

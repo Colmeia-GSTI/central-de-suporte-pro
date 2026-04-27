@@ -466,9 +466,12 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
         queryClient.invalidateQueries({ queryKey: ["ticket-history", ticket.id] });
         onUpdate?.();
 
-        // Send notification
+        // Send notification — use 'resolved' when status transitions to resolved/closed
+        // so the email template surfaces the satisfaction CTA (G6 fix)
+        const notificationEvent: "resolved" | "updated" =
+          (typedNew === "resolved" || typedNew === "closed") ? "resolved" : "updated";
         supabase.functions.invoke("send-ticket-notification", {
-          body: { ticket_id: ticket.id, event_type: "updated" },
+          body: { ticket_id: ticket.id, event_type: notificationEvent },
         }).catch((err) => logger.error("Failed to send notification", "Tickets", { error: String(err) }));
 
       } catch (err) {
