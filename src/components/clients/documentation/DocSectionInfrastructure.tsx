@@ -96,6 +96,10 @@ export function DocSectionInfrastructure({ clientId }: Props) {
 
         <SubTitle>Geral</SubTitle>
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Filial"
+            value={display(branchOptions.find((b) => b.value === d.branch_id)?.label ?? null)}
+          />
           <Field label="Tipo de servidor" value={display(d.server_type)} />
           {showCloudRead && <Field label="Provedor VPS / Nuvem" value={display(d.cloud_provider)} />}
           <Field label="Servidor de arquivos" value={display(d.file_server)} />
