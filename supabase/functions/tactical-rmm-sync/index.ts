@@ -133,7 +133,18 @@ serve(async (req) => {
       clearTimeout(timeout);
 
       if (!response.ok) {
-        throw new Error("Erro ao buscar clientes do Tactical RMM");
+        const bodyText = await response.text().catch(() => "");
+        console.error(
+          `Tactical RMM list_clients failed: status=${response.status} url=${settings.url}/clients/ body=${bodyText.slice(0, 500)}`
+        );
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Erro ao buscar clientes do Tactical RMM (HTTP ${response.status}). Verifique URL e API Key em Operações → Mapeamentos.`,
+            status: response.status,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const clients = await response.json();
@@ -163,7 +174,18 @@ serve(async (req) => {
       clearTimeout(timeout);
 
       if (!agentsResponse.ok) {
-        throw new Error("Erro ao buscar agentes do Tactical RMM");
+        const bodyText = await agentsResponse.text().catch(() => "");
+        console.error(
+          `Tactical RMM sync agents failed: status=${agentsResponse.status} url=${settings.url}/agents/ body=${bodyText.slice(0, 500)}`
+        );
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Erro ao buscar agentes do Tactical RMM (HTTP ${agentsResponse.status}). Verifique URL e API Key em Operações → Mapeamentos.`,
+            status: agentsResponse.status,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const agents = await agentsResponse.json();
