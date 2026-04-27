@@ -24,6 +24,9 @@ Categorias usadas em cada entrada:
 
 ### Corrigido
 - **PR #3 (Seção 4.5.1) — Filiais nos forms de CMDB**: dropdown "Filial" às vezes aparecia vazio/disabled mesmo havendo filiais cadastradas. Causa raiz: `useClientBranches` rodava com `clientId=""` no primeiro mount e cacheava `[]`. Adicionado `enabled: !!clientId` no `useQuery` e proteção em `useClientBranchOptions` para tratar `clientId` ausente sem disparar query inválida.
+- **PR #4 hotfix — `DocSectionInfrastructure.tsx`**: alinhamento de 3 nomes de coluna que divergiam do schema real de `doc_infrastructure` (`general_notes` → `notes`, `gateway_wan_ip` → `gateway_ip_wan`, `gateway_lan_ip` → `gateway_ip_lan`). Bug pré-existente que bloqueava 100% dos saves de Infraestrutura com `PGRST204`. Detectado durante validação E2E manual do PR #4.
+- **PR #4 hotfix — Badge "Sede" em `ClientBranchesList`**: agora usa destaque amarelo preenchido (`bg-primary` Honey Gold + `Star` com `fill-current`) em vez de variant `secondary` discreto, tornando a Sede visualmente inconfundível na listagem.
+- **PR #4 hotfix — Cleanup de dados de teste em produção** do cliente VIZU (`c9bab9b7-…`): removidos 2 ativos, 1 filial não-Sede e 1 dispositivo de documentação criados durante validação E2E dos PRs #2-#4. Sede preservada via filtro `is_main = false`.
 
 ### Modificado
 - **UX dos forms de ativos/dispositivos (AssetForm, ClientAssetsList, DocTableWorkstations, DocTableNetworkDevices)**: ao **criar** novo registro, a Sede do cliente é pré-selecionada automaticamente no dropdown "Filial" quando existe (usuário pode trocar para outra filial ou "— Sem filial —" conscientemente). Em **edição**, o `branch_id` atual do registro é respeitado (mesmo quando `null`). Hook `useClientBranchOptions` agora expõe `mainBranchId`.
