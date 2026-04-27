@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { Field } from "./shared/Field";
 import { display } from "@/lib/doc-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocSection } from "@/hooks/useDocSection";
+import { useClientBranchOptions } from "@/hooks/useClientBranchOptions";
 
 interface Props {
   clientId: string;
