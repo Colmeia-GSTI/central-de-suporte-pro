@@ -24,6 +24,7 @@ interface Props { clientId: string; }
 const TYPES = ["Principal", "Redundante", "Backup", "4G"];
 const LINK_TYPES = ["Fibra", "Rádio", "ADSL", "4G", "Satélite"];
 const IP_TYPES = ["Fixo", "Dinâmico"];
+const NONE_BRANCH = "__none__";
 
 interface LinkRow {
   id: string;
@@ -36,13 +37,14 @@ interface LinkRow {
   contract_expiry: string | null;
   alert_days: number | null;
   notes: string | null;
+  branch_id: string | null;
   [key: string]: unknown;
 }
 
 const EMPTY: Omit<LinkRow, "id"> = {
   type: null, provider: null, link_type: null, plan_speed: null,
   public_ip: null, support_phone: null, contract_expiry: null,
-  alert_days: 30, notes: null,
+  alert_days: 30, notes: null, branch_id: null,
 };
 
 export function DocTableInternetLinks({ clientId }: Props) {
