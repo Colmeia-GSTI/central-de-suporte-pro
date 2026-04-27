@@ -266,6 +266,34 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
 
             <FormField
               control={form.control}
+              name="branch_id"
+              render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Filial</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(v === NONE_BRANCH ? null : v)}
+                    value={field.value ?? NONE_BRANCH}
+                    disabled={!watchedClientId || noBranches}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma filial (opcional)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                      {branchOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="brand"
               render={({ field }) => (
                 <FormItem>
