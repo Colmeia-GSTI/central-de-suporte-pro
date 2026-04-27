@@ -18,6 +18,18 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Removido (Seção 4 — Lote B G12 — 2026-04-27)
+- **`send-welcome-email` completo (edge function + trigger DB + função `trigger_send_welcome_email`)** — feature estava quebrada silenciosamente há meses (vault secrets não populados, `RAISE WARNING` engolido pelo `EXCEPTION` block, `net.http_post` nunca enfileirado). Validado por teste manual: INSERT em `clients` não gerou nenhuma entrada em `message_logs`/`application_logs`/`net.http_request_queue`. Será reimplementada na Seção 4.8 (Notificações) ou 4.9 (Hub Configuração) com chamada explícita do `create-client-user` (sem trigger DB + Vault). Achado registrado como dívida CRÍTICA em 4.11.2.
+
+### Corrigido (Seção 4 — Lote B — 2026-04-27)
+- **G3 — Notificação de pagamento confirmado ao cliente**: webhooks `webhook-asaas-nfse` e `webhook-banco-inter` agora disparam e-mail ao cliente quando confirmam pagamento (boleto/PIX). Helper inline `notifyClientPaymentConfirmed` reutilizado em ambos. Antes: webhooks atualizavam status no banco mas cliente nunca era notificado.
+- **G5 — Push notifications para clientes**: `send-ticket-notification` agora inclui `client` e `client_master` no `role_filter` da chamada para `send-push-notification`. Antes: clientes estavam explicitamente excluídos do push do PWA.
+- **G6 — `event_type: 'resolved'` em fechamento de chamado**: `TicketDetailsTab.tsx` agora envia `event_type: 'resolved'` (em vez de sempre `'updated'`) quando status transiciona para `resolved`/`closed`, fazendo o template de e-mail surfar o CTA de avaliação de satisfação.
+
+### Adicionado (Seção 4 — fechamento — 2026-04-27)
+- **Seções 4.7 a 4.11 abertas no `REFACTORING_ROADMAP.md`**: Portal do Cliente (UX + paridade), Notificações ao cliente final (Hub), Configurações (Hub Settings), Storage R2 + LGPD, Observabilidade interna. Cada seção com escopo detalhado em itens numerados.
+- **Dívida CRÍTICA 4.11.2 — Validação de Vault secrets**: descoberta durante teste do welcome email (G12). Health-check deve validar se `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` estão populados em `vault.decrypted_secrets`. Padrão de falha silenciosa pode estar quebrando outras funções DB que usam `pg_net.http_post` — mapeamento será feito em 4.11.1.
+
 ### Adicionado (Seção 4 — fechamento — 2026-04-26)
 - **Feature flags `departments_enabled` e `gamification_enabled`** (default `false`) para esconder UI dessas features até refatoração multi-tenant no remix SaaS futuro. Reaproveita o sistema `feature_flags` + `useFeatureFlag` da Seção 0.2.
 - **Arquivo `PRODUCT_IDEAS.md`** registrando ideias para o remix SaaS futuro: multi-tenancy, refator de Departments e Gamificação tenant-scoped, e Camada 3 do Financeiro (IGPM/IPCA, hora extra, comissão, SPED, multi-empresa, multi-moeda).
