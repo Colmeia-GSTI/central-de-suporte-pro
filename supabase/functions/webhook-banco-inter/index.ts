@@ -86,6 +86,8 @@ async function notifyClientPaymentConfirmed(
     console.error("[WEBHOOK-BANCO-INTER] Erro ao notificar cliente:", err);
   }
 }
+
+async function verifyWebhookAuth(req: Request, payload: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("WEBHOOK_SECRET_BANCO_INTER");
   
   if (!webhookSecret) {
