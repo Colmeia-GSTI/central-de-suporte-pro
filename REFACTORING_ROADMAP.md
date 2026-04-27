@@ -100,8 +100,8 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 
 #### Dívidas registradas
 - **Bug 17 — Link `/settings/users` no `AppSidebar`**: hoje a página é alcançada apenas digitando a URL. Adicionar item de menu para admin (vinculado à auditoria 1.3a/b).
-- **Bug #3 (varredura 2026-04-26)**: `/settings/users` e `/settings/audit-logs` sem link no `AppSidebar` — incluir grupo "Administração" admin-only quando redesenhar o hub `/settings`.
-- **Bug #6 (varredura 2026-04-26)**: `record_id` em `audit_logs` exibido como UUID cru — criar RPC ou hook que resolve para nome do recurso (ex: "Cliente AIRDUTO LTDA" em vez de UUID). Fix mínimo já entregue (tooltip + botão copiar).
+- **Bug #3 (varredura 2026-04-26) [item 5.H]**: `/settings/users` e `/settings/audit-logs` sem link no `AppSidebar` — incluir grupo "Administração" admin-only quando redesenhar o hub `/settings`. **Confirmado pendente.**
+- **Bug #6 (varredura 2026-04-26) [item 5.I]**: `record_id` em `audit_logs` exibido como UUID cru — criar RPC ou hook que resolve para nome do recurso (ex: "Cliente AIRDUTO LTDA" em vez de UUID) baseado em `table_name`. Fix mínimo já entregue (tooltip + botão copiar). **Resolução humana pendente.**
 
 ### Seção 4 — Decisão sobre features abandonadas
 
@@ -124,6 +124,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 #### Escopo (em ordem de execução)
 - **4.5.1 — Filiais (`client_branches`)**: tabela + UI mínima vinculando ativos/contatos/contratos a filiais do mesmo cliente.
 - **4.5.3 — Pipeline de coleta robusto + alertas**: garantir que TRMM/UniFi/CheckMK estão coletando 100% dos ativos esperados e que `monitoring_alerts` está populando (hoje 0 alertas com 8 devices ativos — pipeline suspeito).
+  - **4.5.3.1 — Bug do IP público RMM [item 5.A]**: confirmado que todos os 8 devices RMM mostram IP `200.218.233.10` (IP público da Colmeia, não dos clientes). Causa raiz: extração errada da API TRMM/UniFi (provavelmente caindo em `public_ip` em vez de `local_ips`). Correção: usar `local_ips[0]` com fallback `ipv4_addresses[0]`. Adicionar coluna `monitored_devices.ip_source` (`local`/`public`/`unknown`) para detecção contínua. Badge amarelo para IPs suspeitos. Botão "Forçar re-sync" por device + "Re-sync cliente inteiro" no detalhe do cliente. Esforço: ~1-2 dias.
 - **4.5.7 — Vínculo computador↔chamado**: campo de seleção de ativo no form de novo ticket; popular `tickets.asset_id` automaticamente quando cliente é selecionado.
 - **4.5.2 — UI manual mínima**: 5-6 tabelas críticas (`doc_credentials`, `doc_external_providers`, `doc_internet_links`, `doc_support_hours`, `doc_contacts`, `doc_routines`) com CRUD básico no painel do cliente.
 - **4.5.4 — Vault de credenciais (camada 2)**: mover `doc_credentials.password` para Supabase Vault; RPC `get_credential_password` admin-only com auditoria.
@@ -143,6 +144,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.6.1 — Contas bancárias + saldo manual**: completar UI de `bank_accounts` (já existe na arquitetura) com lançamento manual de saldo inicial e ajustes.
 - **4.6.2 — Despesas + contas a pagar**: tabela `expenses` (categoria, fornecedor, vencimento, status), UI de lançamento e calendário de vencimentos.
 - **4.6.3 — Centros de custo funcionais**: vincular receitas (faturas) e despesas a centros de custo para análise de margem.
+- **4.6.6 — Recibo de pagamento ao cliente [item 5.D / G17 da auditoria de notificações]**: após confirmação de pagamento (webhooks Asaas/Inter já implementados em Lote B G3), enviar e-mail/PDF "recibo" com número da fatura, valor pago, data e forma de pagamento. Esforço baixo (~0.5 dia) — reaproveita helper `notifyClientPaymentConfirmed` e template de e-mail novo.
 
 **CAMADA 2:**
 - **4.6.4 — Importação extrato OFX/CSV + conciliação**: parser de extratos bancários e UI de match com `bank_reconciliation` (RPC `auto_reconcile_bank_entries` já existe).
@@ -170,6 +172,8 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.7.3 — Histórico de chamados com filtro/busca**: paginação, busca por título/número, agrupamento por status.
 - **4.7.4 — Avaliação pós-resolução completa**: garantir que o CTA de avaliação (G6) chegue por e-mail e portal e seja salvo em `ticket_evaluations`.
 - **4.7.5 — Mobile-first**: revisar densidade e fluxos do portal especificamente em viewport mobile (cliente abre chamado do celular).
+- **4.7.6 — Anexos em chamados (cliente upload)**: cliente anexa fotos/prints ao abrir/comentar chamado. Validação MIME + 5MB. Bucket dedicado com RLS.
+  - **DEPENDÊNCIA EXTERNA [item 5.G]**: projeto **ALTAHU** (assistente IA via WhatsApp, conversa separada) consome esta funcionalidade. ALTAHU converte mensagens WhatsApp em chamados no portal e precisa anexar fotos/prints enviados pelo cliente. **Sistema de anexos é BLOQUEADOR para ALTAHU funcionar plenamente.**
 
 ### Seção 4.8 — Notificações ao cliente final (Hub)
 
@@ -184,6 +188,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.8.3 — Renomear `client_notification_rules`**: hoje é mal-nomeado (são regras de staff observando clientes, não preferências do cliente). Renomear para `staff_client_watch_rules` ou similar.
 - **4.8.4 — Welcome email reimplementado**: chamada explícita de `create-client-user` para `send-welcome-email` (sem trigger DB + Vault). Templates editáveis no Hub.
 - **4.8.5 — Hub central de notificações**: painel admin que mostra todos os canais (e-mail, WA, Telegram, push), templates, preferências por cliente, logs unificados.
+- **4.8.6 — Avisos macro / broadcast [item 5.E / G11 da auditoria de notificações]**: admin envia comunicado para todos os clientes ou subset filtrado (ex: "manutenção programada na sexta", "novo recurso disponível"). Componentes: tabela `broadcast_messages` (mensagem, segmento, canais, agendamento, status), UI admin de composição com preview, edge `dispatch-broadcast` que dispara via canais configurados (e-mail/WA/push) respeitando preferências do cliente (4.8.1).
 
 ### Seção 4.9 — Configurações (Hub Settings)
 
@@ -197,6 +202,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.9.2 — Editor de templates de e-mail visual**: hoje é texto puro em `email_templates`. WYSIWYG mínimo + preview.
 - **4.9.3 — Tela de integrações unificada**: status (conectado/erro/desconfigurado), última sincronização, última falha, botão "testar conexão" para Asaas, Inter, TRMM, UniFi, CheckMK, Resend, Evolution.
 - **4.9.4 — Branding**: logo, cores, favicon, footer de e-mail editáveis (consolidar `email_settings` + `company_settings`).
+- **4.9.5 — Edição real de e-mail no perfil [item 5.B]**: hoje `ProfilePage` mostra "email não pode ser alterado" mas existe edge `update-user-email`. Implementar fluxo correto: usuário digita novo e-mail → link de confirmação enviado para o **novo** endereço → troca efetiva só após clicar. Nova edge `confirm-email-change` (token de uso único). Bloquear se e-mail já em uso. Auditoria em `audit_logs`. Esforço: ~1-2 dias.
 
 ### Seção 4.10 — Storage R2 + LGPD
 
@@ -226,30 +232,111 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.11.4 — Persistência de `RAISE WARNING`**: substituir todos os `RAISE WARNING` em funções `SECURITY DEFINER` por inserts em `application_logs` (padrão já adotado em `handle_new_user` na Seção 1.3). Buscar `RAISE WARNING` em todas as funções e padronizar.
 - **4.11.5 — Alertas de regressão de notificação**: contar diariamente quantos e-mails/WAs/pushes foram enviados; se cair acima de X% vs baseline (ex: -50% em 7 dias), alertar admin (sinal precoce de quebra silenciosa).
 
-### Seção 5 — Limpeza de código morto
+### Seção 4.12 — Calendar + Google Calendar sync (decidido na Seção 4)
 
-- **Objetivo:** Remover componentes órfãos, edge functions sem uso, dependências não utilizadas e tabelas legadas.
+- **Objetivo:** Completar o módulo Calendar (`/calendar`) com sincronização bidirecional com Google Calendar para que técnicos vejam compromissos no celular nativamente. **[item 5.C]**
 - **Status:** ☐ pendente
 - **Início:** —
 - **Conclusão:** —
-- _Detalhes serão adicionados quando a seção for iniciada._
 
-#### Dívidas registradas
-- **Bug 5 — `CreateUserDialog` sem validação `zod`**: hoje permite enviar email vazio, sem `@` e senha < 8. Refatorar com `react-hook-form` + `zod` no padrão do projeto.
-- **Bug 12 — Skeleton da `UsersList` usa `<TableCell>` correto**: já corrigido na primeira passada (item 1.3b), entrada mantida só como referência caso reapareça.
-- **Bug 13 — Item "Reset senha (em breve)" no `UserActionsMenu`**: implementar (chamar `auth.admin.generateLink('recovery')` via edge) ou remover.
-- **Uso baixo de `ticket_categories` (Seção 4 — 2026-04-26)**: apenas 11% dos tickets têm `category_id` preenchido. Investigar se a UI não obriga a seleção (ou se obriga mas usuário pula) e decidir: tornar obrigatório no form, popular default automático ou remover o campo se não agrega valor.
+#### Caso de uso primário
+Secretária lança agenda do dia (visita técnica, reunião com cliente) → sync automático para Google Calendar do técnico → técnico vê notificação no celular sem precisar abrir o sistema.
+
+#### Escopo
+- **4.12.1 — OAuth flow completo Google**: edge `google-calendar` já existe parcialmente. Faltam: tela "Conectar minha conta Google" no `ProfilePage`, callback OAuth, tokens (access + refresh) armazenados em **Vault** (depende de 4.5.4 — vault de credenciais), refresh automático.
+- **4.12.2 — Sync bidirecional**: eventos criados no `/calendar` da Colmeia aparecem no Google Calendar do técnico atribuído; eventos criados no Google (que o técnico marcar como "Colmeia") refletem de volta. Mapeamento via `calendar_events.google_event_id`.
+- **4.12.3 — Conflict resolution**: política simples — última escrita ganha, com log em `application_logs` quando há conflito detectado.
+- **4.12.4 — Webhook Google push notifications**: assinar canal de mudanças (em vez de polling) para sync near-realtime.
+
+> Esforço estimado: 3-5 dias. Bloqueado por: Vault de credenciais (4.5.4) — sem isso, refresh tokens vão para `integration_settings.settings` JSONB (aceitável só para v1).
+
+### Seção 5 — Limpeza de código morto
+
+- **Objetivo:** Remover componentes órfãos, edge functions sem uso, dependências não utilizadas e tabelas legadas. Toda remoção é precedida por verificação `rg` de zero referências (excluindo self-refs) e, quando aplicável, query SQL confirmando 0 rows.
+- **Status:** ☐ pendente
+- **Início:** —
+- **Conclusão:** —
+
+#### Escopo
+
+**5.1 — Componentes órfãos (5 confirmados em auditoria de código)**
+ANTES de remover, validar com `rg -rn "<NomeComponente>" src/` que retorna zero não-self refs:
+- `src/components/billing/BillingBatchProcessing.tsx` (339 linhas)
+- `src/components/calendar/InvoiceDueBadge.tsx` (76 linhas)
+- `src/components/clients/ClientContactsList.tsx` (367 linhas)
+- `src/components/inventory/DeviceExpandableRow.tsx` (207 linhas)
+- `src/components/settings/CertificateUpload.tsx` (343 linhas)
+
+**5.2 — Hooks/utils órfãos**
+- `src/hooks/useSecureAction.ts` — validar refs e remover.
+- `src/lib/nfse-validation.ts` — validar primeiro se `asaas-nfse` ou outras edges importam antes de remover.
+
+**5.3 — Edge Functions legadas**
+- `send-notification` — confirmada morta na auditoria (DIFERENTE de `send-ticket-notification`). Remover se zero call sites.
+- `bootstrap-admin` — one-shot (criar primeiro admin). Decisão: marcar como deprecated com guard de execução única (checar se já existe admin) **OU** remover após confirmar via SQL que admin existe.
+- `sync-doc-devices` — depende da Seção 4.5 (CMDB). **Manter por enquanto** — não tocar até decisão da CMDB.
+
+**5.4 — Schema legado**
+- `DROP COLUMN ticket_history.old_status` — confirmar via SQL `SELECT count(*) FROM ticket_history WHERE old_status IS NOT NULL` antes (espera-se 100% NULL — substituída por `field_changes` JSONB na Seção 1.4).
+- **`invoice_notification_logs`: DECISÃO — MANTER** (resolvido em 2026-04-27, ver Parte 1 da consolidação 5/6/7). Tabela é ATIVAMENTE escrita por 4 edges em produção (`generate-monthly-invoices`, `notify-due-invoices`, `send-nfse-notification`, helper `_shared/notification-logger.ts`) e LIDA pelo painel `InvoiceNotificationHistory.tsx`. Hoje 0 rows porque pipeline ainda não disparou em prod, **não** porque é morta. Item de DROP que rondava em sessões anteriores fica oficialmente cancelado.
+
+**5.5 — Dívidas técnicas registradas em sessões anteriores**
+- **Bug 5 (1.3b)**: `CreateUserDialog` sem validação `zod` — hoje permite e-mail vazio, sem `@` e senha < 8.
+- **Bug 12 (1.3b)**: Skeleton da `UsersList` usa `<TableCell>` correto — já corrigido na primeira passada, entrada mantida só como referência.
+- **Bug 13 (1.3b)**: Item "Reset senha (em breve)" no `UserActionsMenu` — implementar (chamar `auth.admin.generateLink('recovery')` via edge) ou remover.
+- **3 arquivos `logic.ts` em edges** (`generate-monthly-invoices/logic.ts`, `notify-due-invoices/logic.ts`, `resend-confirmation/logic.ts`) — testes apontam para esses arquivos, mas produção (`index.ts`) não os importa. Decidir: integrar (refactor para tirar lógica do `index.ts` e reusar via import) **ou** remover os `logic.ts` e os testes que dependem deles.
+- **`UsersTab.tsx` (851 linhas)** — kept como wrapper na Seção 1.3, refactor pendente (split em sub-componentes).
+- **`ticket_categories` em só 11% dos tickets** — investigar UI que não obriga seleção; decidir: tornar obrigatório, popular default automático ou remover o campo.
+
+**5.6 — Áreas não auditadas (dívida de auditoria) [item 5.F]**
+- **`/tv-dashboard` (Dashboard de TV — admin/manager)** — nunca foi auditado. Pode ter bug ou código morto. Auditoria estrutural pendente.
+- **`/knowledge` e `/knowledge/:slug` (Base de Conhecimento)** — auditoria visual antiga só deu visão superficial. Auditoria estrutural (queries, RLS, performance, fluxos de criação/edição) pendente.
+- **Onboarding de cliente novo** — fluxo de cadastro de cliente: tem checklist? template? guia de primeiros passos? Auditoria pendente.
+- **Mobile/responsivo do admin panel** — apenas portal foi avaliado (4.7.5). Admin panel mobile (sidebar, tabelas densas, dialogs) pendente.
+
+**5.7 — Ferramenta preventiva**
+- `scripts/find-dead-code.ts` para detecção mensal de exports sem importadores (NÃO criar agora — só registrar como TODO).
+- Avaliar regra ESLint `no-unused-modules` (custosa em CI; medir antes de ligar).
 
 ### Seção 6 — Consolidação de código duplicado
 
-- **Objetivo:** Eliminar duplicações (formatadores, validação HMAC, helpers de UI) movendo-as para `_shared/` ou `src/lib/`.
+- **Objetivo:** Eliminar duplicações (formatadores, validação HMAC, helpers de UI, padrões de sync) movendo-as para `_shared/` (Edge Functions) ou `src/lib/` (frontend).
 - **Status:** ☐ pendente
 - **Início:** —
 - **Conclusão:** —
-- _Detalhes serão adicionados quando a seção for iniciada._
 
-#### Dívidas registradas
-- **Bug 10 — `MergeClientsDialog` para grupos > 2**: hoje há guard que bloqueia a UI nesse caso. Implementar mescla iterativa em pares (ou reescrever wizard para escolher 1 destino + N sources).
+#### Escopo
+
+**6.1 — Helpers de frontend duplicados**
+- `formatDate` reimplementado em 4+ lugares — unificar em `src/lib/utils.ts` com locale `ptBR` por default.
+- `formatCurrency` inline em `ClientManagementReport.tsx` — substituir por `src/lib/currency.ts` (já existe).
+
+**6.2 — `_shared/webhook-validator.ts`**
+Migrar validação HMAC dos 4 webhooks para helper único:
+- `supabase/functions/webhook-asaas-nfse/`
+- `supabase/functions/webhook-banco-inter/`
+- `supabase/functions/webhook-telegram-status/`
+- `supabase/functions/webhook-whatsapp-status/`
+
+**6.3 — `_shared/device-sync.ts`**
+Consolidar padrão de upsert/sync de devices que se repete em:
+- `supabase/functions/tactical-rmm-sync/`
+- `supabase/functions/unifi-sync/`
+- `supabase/functions/checkmk-sync/`
+Padrão comum: fetch list → normalizar payload → upsert em `monitored_devices` por `(external_source, external_id)` → log em `doc_sync_log`.
+
+**6.4 — Consolidar 3 menus de ação de fatura**
+Hoje existem 3 componentes próximos:
+- `InvoiceActionsPopover`
+- `InvoiceInlineActions`
+- `ContractInvoiceActionsMenu`
+→ avaliar consolidar em **1 componente configurável por contexto** (props `context: 'list' | 'inline' | 'contract'`).
+
+**6.5 — Bug 10 (1.3b) — `MergeClientsDialog` para grupos > 2**
+Hoje há guard que bloqueia UI quando o grupo de duplicatas tem 3+ clientes. Implementar mescla iterativa em pares OU reescrever wizard para escolher 1 destino + N sources.
+
+**6.6 — Expandir `_shared/`**
+`_shared/auth-helpers.ts` já criado na 1.3 — manter padrão de extração progressiva. Próximos candidatos: `pdf-helpers.ts` (geração de PDF de NFS-e/recibo), `signed-url.ts` (Storage).
 
 ### Seção 7 — Hardening operacional
 
@@ -257,14 +344,35 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **Status:** ☐ pendente
 - **Início:** —
 - **Conclusão:** —
-- _Detalhes serão adicionados quando a seção for iniciada._
 
-#### Dívidas registradas
-- **Rate-limit / captcha no signup público (`Register.tsx`)** — registrado como TODO no topo do arquivo (item 1.3b). Hoje a rota `/register` não tem proteção contra criação automatizada de contas. Implementação não trivial sem captcha (hCaptcha/Turnstile); avaliar nesta seção.
-- **Bug 8 — Paginação real em `useUsers`** quando passar de 100 usuários (hoje há `slice(0, 50)` no client; antes disso, RPC `list_users_for_admin` retorna tudo).
-- **Bug 9 — Sanitizar filtro PostgREST** contra caracteres especiais (vírgula, parênteses) que quebram o parser do `or(ilike)`. Após migração para `list_users_for_admin` o filtro virou client-side, mas qualquer query futura usando `.or(...)` deve ter sanitização compartilhada em `src/lib/`.
-- **Política de retenção de `audit_logs`** (registrado em 1.4): definir TTL (sugestão 12 meses) + job `pg_cron` para purge automático e/ou export para storage frio antes do delete. Hoje a tabela cresce indefinidamente.
-- **Tabelas auditadas restantes** (registrado em 1.4): `email_settings`, `nfse_settings`, `feature_flags` ainda sem trigger de auditoria — anexar `audit_changes()` quando houver demanda operacional.
+#### Escopo
+
+**7.1 — Auth Email Hook — AÇÃO MANUAL DO USUÁRIO**
+Ativar Send Email Hook no painel Supabase (Dashboard → Auth → Email Templates → Hook URL apontando para `auth-email-hook`). A edge `auth-email-hook` está deployada mas **silenciosa** porque o hook nunca foi ativado no painel. Documentar passo a passo em `AUTH_HOOK_SETUP.md` (criar quando a Seção 7 for executada — **não criar agora**, só registrado como TODO aqui).
+
+**7.2 — Página `/settings/system-health`**
+**MOVIDO PARA 4.11.3** (`/admin/health` ou `/settings/health`). Item permanece registrado aqui como referência cruzada para evitar duplicação de escopo.
+
+**7.3 — Rate limiting em endpoints públicos**
+Aplicar `_shared/rate-limit.ts` (a expandir a partir de `auth-helpers.ts`) em:
+- `forgot-password`
+- `reset-password`
+- `cnpj-lookup`
+- `Register.tsx` (signup público — TODO no topo do arquivo). Implementação não trivial sem captcha (hCaptcha/Turnstile); decidir abordagem nesta seção.
+
+**7.4 — Remover dependências não usadas (~25KB de bundle)**
+Confirmar zero refs com `rg` antes de remover de `package.json`:
+- `vaul`
+- `input-otp`
+- `embla-carousel-react`
+- `react-resizable-panels`
+
+**7.5 — Dívidas registradas**
+- **Bug 8 (1.3b)**: paginação real em `useUsers` quando passar de 100 usuários (hoje `slice(0, 50)` no client; RPC `list_users_for_admin` retorna tudo).
+- **Bug 9 (1.3b)**: sanitizar filtro PostgREST contra caracteres especiais (vírgula, parênteses) que quebram parser do `or(ilike)`. Após migração para `list_users_for_admin` o filtro virou client-side, mas qualquer query futura usando `.or(...)` precisa de sanitização compartilhada em `src/lib/`.
+- **Política de retenção de `audit_logs`** (de 1.4): definir TTL (sugestão 12 meses) + `pg_cron` para purge automático e/ou export para storage frio antes do delete. Hoje cresce indefinidamente.
+- **Tabelas auditadas restantes** (de 1.4): `email_settings`, `nfse_settings`, `feature_flags` sem trigger de auditoria — anexar `audit_changes()` quando houver demanda.
+- **`npm:zod@3.23.8` build error em `manual-payment` edge** (pré-existente) — investigar e fixar versão compatível com Deno deploy.
 
 #### Bugs descartados (over-engineering)
 - **Bug 11** (normalização de whitespace na confirmação do merge) — risco real desprezível.
