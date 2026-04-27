@@ -139,6 +139,24 @@ export function DocSectionInfrastructure({ clientId }: Props) {
       <SubTitle>Geral</SubTitle>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
+          <Label>Filial</Label>
+          <Select
+            value={form.branch_id ?? NONE_BRANCH}
+            onValueChange={(v) => setForm({ ...form, branch_id: v === NONE_BRANCH ? null : v })}
+            disabled={noBranches}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={noBranches ? "Nenhuma filial cadastrada" : "Selecione"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+              {branchOptions.map((b) => (
+                <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
           <Label>Tipo de servidor</Label>
           <Select value={form.server_type || ""} onValueChange={(v) => setForm({ ...form, server_type: v })}>
             <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
