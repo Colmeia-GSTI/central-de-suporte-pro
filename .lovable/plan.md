@@ -1,105 +1,66 @@
-# Plano — QA Completo das Mudanças desta Etapa
+# Plano — E2E manual PR #4 (branch_id em CMDB de rede)
 
-## Escopo coberto
-1. **Seção 0.3** — Testes de integração (5 fluxos) + refactors de testabilidade
-2. **Item 1.1** — Reparo `/billing/delinquency`, `PageErrorBoundary`, `unwrapEmbed`
-3. **Itens prévios** — `useFeatureFlag`, `FeatureFlagsPage`, rota protegida
+## Alvo
+Cliente **VIZU EDITORA** (`c9bab9b7-4d68-438e-aaea-459ae4fa7e85`) — tem 2 filiais:
+- `94c6fa79-...` **Sede** (is_main=true)
+- `4b345121-...` Teste Filial
 
-## Fase 1 — Validação automatizada (sem browser)
+## Componentes envolvidos
+- `DocTableInternetLinks.tsx` (Sheet de criar/editar Link de Internet)
+- `DocSectionInfrastructure.tsx` (Editor inline da seção Infraestrutura, campo "Geral")
 
-Executar em sequência e reportar output bruto:
+## Execução (browser tools no preview)
 
-1. **TypeScript**: `bunx tsc --noEmit` — esperado 0 erros
-2. **Suite de integração**: `bunx vitest run src/test/integration` — esperado 18/18 passando
-   - `login.test.tsx` (3)
-   - `create-ticket.test.tsx` (3)
-   - `generate-invoices.test.ts` (3)
-   - `notify-due-invoices.test.ts` (3)
-   - `resend-confirmation.test.ts` (3)
-   - `delinquency-page.test.tsx` (3)
-3. **Suite completa**: `bunx vitest run` — capturar total (incluindo `useAuth.test.tsx`, `ProtectedRoute.test.tsx`, `example.test.ts`, `asaas-nfse_test.ts`, `banco-inter_test.ts`); reportar falhas pré-existentes sem corrigir
-4. **Coverage dos 5 fluxos-alvo**: `bunx vitest run --coverage src/test/integration` — esperado >70% médio nos arquivos:
-   - `src/pages/Login.tsx`
-   - `src/lib/ticket-payload.ts`
-   - `supabase/functions/generate-monthly-invoices/logic.ts`
-   - `supabase/functions/notify-due-invoices/logic.ts`
-   - `supabase/functions/resend-confirmation/logic.ts`
-5. **Build**: `bunx vite build` — esperado sucesso, sem warnings novos
-6. **Lint**: `bun run lint` — reportar mas não bloquear em warnings pré-existentes
+### Cenário 1 — Internet Links (criação com Sede pré-selecionada)
+1. `navigate_to_sandbox` → `/clients/c9bab9b7-4d68-438e-aaea-459ae4fa7e85`
+2. Clicar aba **Documentação** → expandir **Links de Internet**
+3. Clicar **Novo / +**
+4. **Validar**: dropdown "Filial" visível, habilitado, com `Sede (Sede)` pré-selecionado
+5. Preencher: Provedor `Vivo Fibra E2E`, Tipo `Principal`
+6. Salvar → toast verde
+7. **SQL**: `select id, provider, branch_id from doc_internet_links where provider='Vivo Fibra E2E'` → confirmar `branch_id = 94c6fa79-...`
 
-## Fase 2 — QA de interface no preview (browser tools)
+### Cenário 2 — Infraestrutura (criação)
+1. Mesma página → seção **Infraestrutura**
+2. Clicar **Editar** (lápis)
+3. **Validar**: campo "Filial" no topo de "Geral" com `Sede` pré-selecionada
+4. Preencher Tipo de Servidor `Físico`
+5. Salvar → toast verde
+6. **SQL**: `select id, server_type, branch_id from doc_infrastructure where client_id='c9bab9b7-...'` → confirmar `branch_id = 94c6fa79-...`
 
-Login com sessão atual do usuário no preview. Para cada cenário, screenshot + observação.
+### Cenário 3 — Infraestrutura (edição preserva valor)
+1. Clicar **Editar** novamente
+2. **Validar**: dropdown carrega `Sede` (valor persistido); useEffect NÃO sobrescreve nada (guarda `!data?.id` impede)
+3. Fechar sem alterar
 
-### 2.1 Página `/billing/delinquency` (Item 1.1)
-- Navegar para `/billing/delinquency`
-- Verificar: página carrega sem crash, lista de inadimplentes renderiza, gráfico aparece, filtros funcionam
-- Verificar console: nenhum `TypeError`, sem warning de `unwrapEmbed` salvo se houver órfão real
-- Testar busca por nome de cliente
-- Testar checkbox de seleção e botão de notificação em lote (sem disparar — só validar UI habilitar/desabilitar)
+### Cenário 4 — Regressão NULL
+1. Clicar **Editar** → trocar dropdown para `— Sem filial —`
+2. Salvar
+3. **SQL**: confirmar `branch_id IS NULL`
+4. Reabrir **Editar**
+5. **Validar crítico**: dropdown mostra `— Sem filial —`, NÃO força Sede de novo (este é o bug que a guarda corrige)
 
-### 2.2 `PageErrorBoundary` (resiliência)
-- Verificar que `DelinquencyReportPage` está envolto pelo `PageErrorBoundary` no código
-- **Sem disparar crash real em produção**: validar apenas via teste unitário já existente (`delinquency-page.test.tsx`) que cobre os 3 shapes de embed
-- Reportar que o boundary loga em `application_logs` (módulo `ui`, ação `page_crash`) — citar query SQL para verificação posterior caso o usuário queira
+## Dados de teste a limpar no fim
+```sql
+delete from doc_internet_links where provider='Vivo Fibra E2E';
+-- doc_infrastructure: deixar como está ou resetar branch_id conforme preferência
+```
 
-### 2.3 `/settings/feature-flags` (etapa prévia)
-- Navegar para `/settings/feature-flags`
-- Confirmar proteção por role admin (se usuário logado for admin, página renderiza; senão redirect `/unauthorized`)
-- Verificar listagem de flags, toggle on/off, persistência (refresh da página mantém estado)
-
-### 2.4 Login (`src/pages/Login.tsx`)
-- Já testado por `login.test.tsx` em integração — não logar/deslogar manualmente para não quebrar a sessão atual
-
-### 2.5 Criar ticket (`/tickets/new`)
-- Navegar para `/tickets/new`
-- Verificar form renderiza, dropdowns carregam (cliente, categoria, prioridade)
-- **Não submeter** — apenas validar que `buildTicketPayload` extraído continua produzindo payload via lógica do form
-
-## Fase 3 — Banco de dados (read-only)
-
-Queries de sanidade via `supabase--read_query`:
-
-1. **Logs de crash da boundary** (últimas 24h):
-   ```sql
-   select created_at, message, context->>'page' as page
-   from application_logs
-   where module='ui' and action='page_crash'
-   order by created_at desc limit 10;
-   ```
-2. **Feature flags ativas**:
-   ```sql
-   select key, enabled, description from feature_flags order by key;
-   ```
-3. **Sanidade de invoices com client embed** (confirma que dados batem com o que a página espera):
-   ```sql
-   select count(*) filter (where client_id is null) as orfas,
-          count(*) as total
-   from invoices where status='overdue';
-   ```
-
-## Fase 4 — Relatório final
-
-Reporte estruturado contendo:
-
-| Item | Resultado | Evidência |
+## Critérios de sucesso
+| # | Validação | Pass se |
 |---|---|---|
-| TS errors | 0 / N | output `tsc` |
-| Testes integração | 18/18 ou X/18 | output vitest |
-| Coverage 5 fluxos | X% | output coverage |
-| Build | OK / FAIL | output vite |
-| `/billing/delinquency` UI | OK / FAIL | screenshot |
-| `/settings/feature-flags` UI | OK / FAIL | screenshot |
-| `/tickets/new` UI | OK / FAIL | screenshot |
-| Logs de crash 24h | N registros | query result |
-| Bloqueios | lista | — |
+| 1 | Dropdown Sede pré-selecionado em criação | branch_id salvo = Sede |
+| 2 | Idem em Infraestrutura nova | branch_id salvo = Sede |
+| 3 | Reabrir edição preserva valor | dropdown = Sede, sem mudança |
+| 4 | NULL persiste após edição | reabrir mostra "Sem filial", branch_id IS NULL |
 
-## Não fazer
-- Não corrigir nada encontrado — apenas reportar
-- Não submeter formulários reais (criar ticket, notificar inadimplente)
-- Não fazer logout / mudar de usuário
-- Não tocar em arquivos de produção
-- Não expandir escopo para outras páginas
+## O que NÃO fazer
+- Não logar/deslogar (usar sessão atual do preview)
+- Não tocar em filiais existentes
+- Não criar dados em outros clientes
+- Não rodar Try-to-Fix se algo falhar — reportar e aguardar instrução
 
-## Aprovação
-Aguardo OK para sair do plan mode e executar as 4 fases. Se preferir pular a Fase 2 (browser, mais cara), me avise — Fases 1+3+4 já dão cobertura forte via testes automatizados + DB.
+## Entregável
+Tabela de resultados (4 linhas) + screenshots dos pontos críticos (dropdown pré-selecionado, dropdown preservando NULL) + outputs SQL.
+
+Aguardo OK para executar.
