@@ -20,8 +20,11 @@ interface Props {
 const SERVER_TYPES = ["Local", "VPS", "Nuvem", "Híbrido", "Não tem"];
 const FILE_SERVER_OPTIONS = ["Local", "Nextcloud", "Synology", "Google Drive", "OneDrive", "Não tem"];
 const AD_OPTIONS = ["Sim", "Não"];
+const NONE_BRANCH = "__none__";
 
 interface InfraData {
+  id?: string;
+  branch_id: string | null;
   server_type: string | null;
   cloud_provider: string | null;
   file_server: string | null;
@@ -39,6 +42,7 @@ interface InfraData {
 }
 
 const EMPTY: InfraData = {
+  branch_id: null,
   server_type: null, cloud_provider: null, file_server: null,
   active_directory: null, ad_location: null, general_notes: null,
   unifi_console_model: null, unifi_console_ip: null, unifi_firmware: null, unifi_uptime: null,
