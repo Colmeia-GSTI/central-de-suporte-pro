@@ -144,6 +144,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.6.1 — Contas bancárias + saldo manual**: completar UI de `bank_accounts` (já existe na arquitetura) com lançamento manual de saldo inicial e ajustes.
 - **4.6.2 — Despesas + contas a pagar**: tabela `expenses` (categoria, fornecedor, vencimento, status), UI de lançamento e calendário de vencimentos.
 - **4.6.3 — Centros de custo funcionais**: vincular receitas (faturas) e despesas a centros de custo para análise de margem.
+- **4.6.6 — Recibo de pagamento ao cliente [item 5.D / G17 da auditoria de notificações]**: após confirmação de pagamento (webhooks Asaas/Inter já implementados em Lote B G3), enviar e-mail/PDF "recibo" com número da fatura, valor pago, data e forma de pagamento. Esforço baixo (~0.5 dia) — reaproveita helper `notifyClientPaymentConfirmed` e template de e-mail novo.
 
 **CAMADA 2:**
 - **4.6.4 — Importação extrato OFX/CSV + conciliação**: parser de extratos bancários e UI de match com `bank_reconciliation` (RPC `auto_reconcile_bank_entries` já existe).
