@@ -163,6 +163,24 @@ export function DocTableInternetLinks({ clientId }: Props) {
               <Input value={form.provider || ""} onChange={(e) => setForm({ ...form, provider: e.target.value })} />
             </div>
             <div>
+              <Label>Filial</Label>
+              <Select
+                value={form.branch_id ?? NONE_BRANCH}
+                onValueChange={(v) => setForm({ ...form, branch_id: v === NONE_BRANCH ? null : v })}
+                disabled={noBranches}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={noBranches ? "Nenhuma filial cadastrada" : "Selecione"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_BRANCH}>— Sem filial —</SelectItem>
+                  {branchOptions.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label>Tipo de link</Label>
               <Select value={form.link_type || ""} onValueChange={(v) => setForm({ ...form, link_type: v })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{LINK_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select>
             </div>
