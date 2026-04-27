@@ -51,16 +51,24 @@ export function DocTableInternetLinks({ clientId }: Props) {
   const { items, isLoading, create, update, remove, isMutating } = useDocTableCrud<LinkRow>({
     tableName: "doc_internet_links", clientId,
   });
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LinkRow | null>(null);
   const [form, setForm] = useState<Omit<LinkRow, "id">>(EMPTY);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Pré-seleciona Sede ao criar novo registro (não sobrescreve seleção manual nem edição)
+  useEffect(() => {
+    if (drawerOpen && !editingItem && mainBranchId && !form.branch_id) {
+      setForm((prev) => ({ ...prev, branch_id: mainBranchId }));
+    }
+  }, [drawerOpen, editingItem, mainBranchId, form.branch_id]);
+
   const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setDrawerOpen(true); };
   const openEdit = (item: LinkRow) => {
     setEditingItem(item);
-    setForm({ type: item.type, provider: item.provider, link_type: item.link_type, plan_speed: item.plan_speed, public_ip: item.public_ip, support_phone: item.support_phone, contract_expiry: item.contract_expiry, alert_days: item.alert_days ?? 30, notes: item.notes });
+    setForm({ type: item.type, provider: item.provider, link_type: item.link_type, plan_speed: item.plan_speed, public_ip: item.public_ip, support_phone: item.support_phone, contract_expiry: item.contract_expiry, alert_days: item.alert_days ?? 30, notes: item.notes, branch_id: item.branch_id ?? null });
     setDrawerOpen(true);
   };
 
