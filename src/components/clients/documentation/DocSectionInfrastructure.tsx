@@ -51,6 +51,7 @@ const EMPTY: InfraData = {
 
 export function DocSectionInfrastructure({ clientId }: Props) {
   const { data, isLoading, save, isSaving } = useDocSection<InfraData>("doc_infrastructure", clientId);
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(clientId);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<InfraData>(EMPTY);
 
@@ -58,6 +59,15 @@ export function DocSectionInfrastructure({ clientId }: Props) {
     setForm({ ...EMPTY, ...data });
     setIsEditing(true);
   };
+
+  // Pré-seleciona Sede só na PRIMEIRA criação (data?.id ausente).
+  // Edição de registro existente (mesmo com branch_id NULL) preserva o valor.
+  // Não sobrescreve seleção manual já feita pelo usuário.
+  useEffect(() => {
+    if (isEditing && !data?.id && mainBranchId && !form.branch_id) {
+      setForm((prev) => ({ ...prev, branch_id: mainBranchId }));
+    }
+  }, [isEditing, data?.id, mainBranchId, form.branch_id]);
 
   const handleSave = async () => {
     try {
