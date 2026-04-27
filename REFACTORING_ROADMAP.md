@@ -202,6 +202,7 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.9.2 — Editor de templates de e-mail visual**: hoje é texto puro em `email_templates`. WYSIWYG mínimo + preview.
 - **4.9.3 — Tela de integrações unificada**: status (conectado/erro/desconfigurado), última sincronização, última falha, botão "testar conexão" para Asaas, Inter, TRMM, UniFi, CheckMK, Resend, Evolution.
 - **4.9.4 — Branding**: logo, cores, favicon, footer de e-mail editáveis (consolidar `email_settings` + `company_settings`).
+- **4.9.5 — Edição real de e-mail no perfil [item 5.B]**: hoje `ProfilePage` mostra "email não pode ser alterado" mas existe edge `update-user-email`. Implementar fluxo correto: usuário digita novo e-mail → link de confirmação enviado para o **novo** endereço → troca efetiva só após clicar. Nova edge `confirm-email-change` (token de uso único). Bloquear se e-mail já em uso. Auditoria em `audit_logs`. Esforço: ~1-2 dias.
 
 ### Seção 4.10 — Storage R2 + LGPD
 
