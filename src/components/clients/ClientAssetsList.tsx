@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getErrorMessage } from "@/lib/utils";
@@ -181,7 +181,13 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     },
   });
 
-  const { options: branchOptions, isEmpty: noBranches } = useClientBranchOptions(clientId);
+  const { options: branchOptions, mainBranchId, isEmpty: noBranches } = useClientBranchOptions(clientId);
+
+  useEffect(() => {
+    if (isFormOpen && !editingAsset && mainBranchId && !form.getValues("branch_id")) {
+      form.setValue("branch_id", mainBranchId);
+    }
+  }, [isFormOpen, editingAsset, mainBranchId, form]);
 
   // Fetch assets
   const { data: assets = [], isLoading: isLoadingAssets } = useQuery({

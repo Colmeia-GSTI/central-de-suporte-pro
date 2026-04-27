@@ -51,6 +51,7 @@ export function useClientBranches(clientId: string) {
       if (error) throw error;
       return (data ?? []) as ClientBranch[];
     },
+    enabled: !!clientId,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey });

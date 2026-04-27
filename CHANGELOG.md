@@ -18,6 +18,12 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido
+- **PR #3 (Seção 4.5.1) — Filiais nos forms de CMDB**: dropdown "Filial" às vezes aparecia vazio/disabled mesmo havendo filiais cadastradas. Causa raiz: `useClientBranches` rodava com `clientId=""` no primeiro mount e cacheava `[]`. Adicionado `enabled: !!clientId` no `useQuery` e proteção em `useClientBranchOptions` para tratar `clientId` ausente sem disparar query inválida.
+
+### Modificado
+- **UX dos forms de ativos/dispositivos (AssetForm, ClientAssetsList, DocTableWorkstations, DocTableNetworkDevices)**: ao **criar** novo registro, a Sede do cliente é pré-selecionada automaticamente no dropdown "Filial" quando existe (usuário pode trocar para outra filial ou "— Sem filial —" conscientemente). Em **edição**, o `branch_id` atual do registro é respeitado (mesmo quando `null`). Hook `useClientBranchOptions` agora expõe `mainBranchId`.
+
 ### Adicionado (Seção 4.5.1 — PR #1 — 2026-04-27)
 - **Tabela `client_branches`** (filiais por cliente) com RLS, índices únicos parciais e trigger de auditoria. Cada cliente pode ter múltiplas filiais com nome único (case-insensitive) e exatamente uma marcada como principal (`is_main`). FK `client_id` com `ON DELETE CASCADE`. Campos: `name`, `is_main`, `address`, `city`, `state`, `cep`, `phone`, `email`, `notes`. Reaproveita helpers existentes `is_staff`, `has_role`, `client_owns_record`, `audit_changes`, `update_updated_at_column` — zero função nova. RLS: staff (admin/manager/technician/financial) gerencia tudo; `client_master` lê/cria/edita filiais do próprio cliente; `client` apenas lê; somente admin pode excluir. Backfill idempotente: 32 filiais "Sede" criadas automaticamente (1 por cliente existente), copiando `address/city/state/zip_code` do cadastro do cliente. Base da Seção 4.5.1 do roadmap CMDB. **Sem alteração em outras tabelas e sem UI nesta PR** (PRs #2-#5 seguem na sequência).
 
