@@ -139,6 +139,7 @@ export type Database = {
       assets: {
         Row: {
           asset_type: Database["public"]["Enums"]["asset_type"]
+          branch_id: string | null
           brand: string | null
           client_id: string
           created_at: string
@@ -158,6 +159,7 @@ export type Database = {
         }
         Insert: {
           asset_type: Database["public"]["Enums"]["asset_type"]
+          branch_id?: string | null
           brand?: string | null
           client_id: string
           created_at?: string
@@ -177,6 +179,7 @@ export type Database = {
         }
         Update: {
           asset_type?: Database["public"]["Enums"]["asset_type"]
+          branch_id?: string | null
           brand?: string | null
           client_id?: string
           created_at?: string
@@ -195,6 +198,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "assets_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "assets_client_id_fkey"
             columns: ["client_id"]
@@ -2023,6 +2033,7 @@ export type Database = {
       }
       doc_devices: {
         Row: {
+          branch_id: string | null
           brand_model: string | null
           client_id: string
           connected_clients: number | null
@@ -2057,6 +2068,7 @@ export type Database = {
           vlans: string | null
         }
         Insert: {
+          branch_id?: string | null
           brand_model?: string | null
           client_id: string
           connected_clients?: number | null
@@ -2091,6 +2103,7 @@ export type Database = {
           vlans?: string | null
         }
         Update: {
+          branch_id?: string | null
           brand_model?: string | null
           client_id?: string
           connected_clients?: number | null
@@ -2125,6 +2138,13 @@ export type Database = {
           vlans?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "doc_devices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "doc_devices_client_id_fkey"
             columns: ["client_id"]
@@ -4111,6 +4131,7 @@ export type Database = {
       monitored_devices: {
         Row: {
           asset_id: string | null
+          branch_id: string | null
           client_id: string
           created_at: string
           device_type: string | null
@@ -4133,6 +4154,7 @@ export type Database = {
         }
         Insert: {
           asset_id?: string | null
+          branch_id?: string | null
           client_id: string
           created_at?: string
           device_type?: string | null
@@ -4155,6 +4177,7 @@ export type Database = {
         }
         Update: {
           asset_id?: string | null
+          branch_id?: string | null
           client_id?: string
           created_at?: string
           device_type?: string | null
@@ -4181,6 +4204,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monitored_devices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "client_branches"
             referencedColumns: ["id"]
           },
           {
