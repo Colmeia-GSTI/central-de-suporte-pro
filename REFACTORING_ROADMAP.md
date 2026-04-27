@@ -172,6 +172,8 @@ Itens executados antes da formalização deste roadmap, mantidos aqui para rastr
 - **4.7.3 — Histórico de chamados com filtro/busca**: paginação, busca por título/número, agrupamento por status.
 - **4.7.4 — Avaliação pós-resolução completa**: garantir que o CTA de avaliação (G6) chegue por e-mail e portal e seja salvo em `ticket_evaluations`.
 - **4.7.5 — Mobile-first**: revisar densidade e fluxos do portal especificamente em viewport mobile (cliente abre chamado do celular).
+- **4.7.6 — Anexos em chamados (cliente upload)**: cliente anexa fotos/prints ao abrir/comentar chamado. Validação MIME + 5MB. Bucket dedicado com RLS.
+  - **DEPENDÊNCIA EXTERNA [item 5.G]**: projeto **ALTAHU** (assistente IA via WhatsApp, conversa separada) consome esta funcionalidade. ALTAHU converte mensagens WhatsApp em chamados no portal e precisa anexar fotos/prints enviados pelo cliente. **Sistema de anexos é BLOQUEADOR para ALTAHU funcionar plenamente.**
 
 ### Seção 4.8 — Notificações ao cliente final (Hub)
 
