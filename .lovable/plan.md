@@ -1,66 +1,84 @@
-# Plano — E2E manual PR #4 (branch_id em CMDB de rede)
+# Hotfix Consolidado — Encerramento Seção 4.5.1
 
-## Alvo
-Cliente **VIZU EDITORA** (`c9bab9b7-4d68-438e-aaea-459ae4fa7e85`) — tem 2 filiais:
-- `94c6fa79-...` **Sede** (is_main=true)
-- `4b345121-...` Teste Filial
+## Resumo da inspeção (Passo 0)
 
-## Componentes envolvidos
-- `DocTableInternetLinks.tsx` (Sheet de criar/editar Link de Internet)
-- `DocSectionInfrastructure.tsx` (Editor inline da seção Infraestrutura, campo "Geral")
+| Bug | Status | Ação |
+|---|---|---|
+| **B1** — Campos errados em `DocSectionInfrastructure.tsx` | Confirmado, 1 arquivo afetado | Renomear 7 ocorrências |
+| **B3** — `NONE_BRANCH = "none"` divergente | **JÁ CORRIGIDO** (todos os 6 arquivos usam `"__none__"`) | Pular — registrar no CHANGELOG mesmo assim? Não. Removo da entrada. |
+| **B2** — Badge "Sede" sem destaque | Já condicionado a `is_main`, falta destaque amarelo | Trocar variant/className |
+| **B7** — Dados de teste em VIZU | 4 registros identificados, Sede preservada | Migration de DELETE |
 
-## Execução (browser tools no preview)
+### Detalhe B7 — registros que serão deletados
+- `assets`: "Testes" (`d0dcc88c…`), "TestePR3" (`52f4800b…`)
+- `client_branches`: "Teste Filial" (`4b345121…`, is_main=**false** ✅)
+- `doc_devices`: "Testes" (`64fbdb8f…`)
+- Sede preservada: `94c6fa79…` (is_main=true, nome "Sede" — não casa com `%teste%`)
 
-### Cenário 1 — Internet Links (criação com Sede pré-selecionada)
-1. `navigate_to_sandbox` → `/clients/c9bab9b7-4d68-438e-aaea-459ae4fa7e85`
-2. Clicar aba **Documentação** → expandir **Links de Internet**
-3. Clicar **Novo / +**
-4. **Validar**: dropdown "Filial" visível, habilitado, com `Sede (Sede)` pré-selecionado
-5. Preencher: Provedor `Vivo Fibra E2E`, Tipo `Principal`
-6. Salvar → toast verde
-7. **SQL**: `select id, provider, branch_id from doc_internet_links where provider='Vivo Fibra E2E'` → confirmar `branch_id = 94c6fa79-...`
+---
 
-### Cenário 2 — Infraestrutura (criação)
-1. Mesma página → seção **Infraestrutura**
-2. Clicar **Editar** (lápis)
-3. **Validar**: campo "Filial" no topo de "Geral" com `Sede` pré-selecionada
-4. Preencher Tipo de Servidor `Físico`
-5. Salvar → toast verde
-6. **SQL**: `select id, server_type, branch_id from doc_infrastructure where client_id='c9bab9b7-...'` → confirmar `branch_id = 94c6fa79-...`
+## Mudanças
 
-### Cenário 3 — Infraestrutura (edição preserva valor)
-1. Clicar **Editar** novamente
-2. **Validar**: dropdown carrega `Sede` (valor persistido); useEffect NÃO sobrescreve nada (guarda `!data?.id` impede)
-3. Fechar sem alterar
+### 1) `src/components/clients/documentation/DocSectionInfrastructure.tsx` (B1)
+7 substituições — alinhar com schema real:
+- `general_notes` → `notes` (interface L33, EMPTY L47, read view L109/112, form L190)
+- `gateway_wan_ip` → `gateway_ip_wan` (interface L39, EMPTY L49, read view L128, form L223)
+- `gateway_lan_ip` → `gateway_ip_lan` (interface L40, EMPTY L49, read view L129, form L227)
 
-### Cenário 4 — Regressão NULL
-1. Clicar **Editar** → trocar dropdown para `— Sem filial —`
-2. Salvar
-3. **SQL**: confirmar `branch_id IS NULL`
-4. Reabrir **Editar**
-5. **Validar crítico**: dropdown mostra `— Sem filial —`, NÃO força Sede de novo (este é o bug que a guarda corrige)
+### 2) `src/components/clients/ClientBranchesList.tsx` (B2)
+Linha 511-514: trocar
+```tsx
+<Badge variant="secondary" className="gap-1 text-xs">
+  <Star className="h-3 w-3" />
+  Sede
+</Badge>
+```
+por destaque amarelo preenchido (alinhado ao token `--primary` do tema, que é `#F5B700` Honey Gold):
+```tsx
+<Badge className="gap-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 border-transparent">
+  <Star className="h-3 w-3 fill-current" />
+  Sede
+</Badge>
+```
+Mantém o `branch.is_main &&` que já filtra para mostrar só na Sede.
 
-## Dados de teste a limpar no fim
+### 3) Nova migration `cleanup_test_data_secao_451.sql`
 ```sql
-delete from doc_internet_links where provider='Vivo Fibra E2E';
--- doc_infrastructure: deixar como está ou resetar branch_id conforme preferência
+DELETE FROM public.doc_devices
+WHERE client_id = 'c9bab9b7-4d68-438e-aaea-459ae4fa7e85'
+  AND name ILIKE '%teste%';
+
+DELETE FROM public.assets
+WHERE client_id = 'c9bab9b7-4d68-438e-aaea-459ae4fa7e85'
+  AND name ILIKE '%teste%';
+
+DELETE FROM public.client_branches
+WHERE client_id = 'c9bab9b7-4d68-438e-aaea-459ae4fa7e85'
+  AND name ILIKE '%teste%'
+  AND is_main = false;
 ```
 
-## Critérios de sucesso
-| # | Validação | Pass se |
-|---|---|---|
-| 1 | Dropdown Sede pré-selecionado em criação | branch_id salvo = Sede |
-| 2 | Idem em Infraestrutura nova | branch_id salvo = Sede |
-| 3 | Reabrir edição preserva valor | dropdown = Sede, sem mudança |
-| 4 | NULL persiste após edição | reabrir mostra "Sem filial", branch_id IS NULL |
+### 4) `CHANGELOG.md` — sob entrada do PR #4, seção `### Corrigido`
+- Hotfix em `DocSectionInfrastructure.tsx`: alinhamento de 3 nomes de coluna que divergiam do schema (`general_notes`→`notes`, `gateway_wan_ip`→`gateway_ip_wan`, `gateway_lan_ip`→`gateway_ip_lan`). Bug pré-existente que bloqueava 100% dos saves de Infra.
+- Badge "Sede" em `ClientBranchesList` agora com destaque amarelo preenchido (Honey Gold + Star fill), antes usava variant secondary discreto.
+- Cleanup de dados de teste em produção do cliente VIZU (registros criados durante validação E2E dos PRs #2-#4).
 
-## O que NÃO fazer
-- Não logar/deslogar (usar sessão atual do preview)
-- Não tocar em filiais existentes
-- Não criar dados em outros clientes
-- Não rodar Try-to-Fix se algo falhar — reportar e aguardar instrução
+> **Nota**: B3 (NONE_BRANCH) **não entra no CHANGELOG** — verificação mostrou que já está padronizado em todos os 6 arquivos. Sem ação necessária.
 
-## Entregável
-Tabela de resultados (4 linhas) + screenshots dos pontos críticos (dropdown pré-selecionado, dropdown preservando NULL) + outputs SQL.
+### 5) `REFACTORING_ROADMAP.md`
+Marcar PR #4 da Seção 4.5.1 como ✅ COMPLETO (com hotfix). Sem nova entrada.
 
-Aguardo OK para executar.
+---
+
+## Validação
+1. `bunx tsc --noEmit` → 0 erros
+2. Counts pós-cleanup: `client_branches`=1 (só Sede), `assets`=0, `doc_devices`=0
+3. Diff dos 2 arquivos UI + caminho da migration
+
+---
+
+## Restrições respeitadas
+- Não toca em hooks, RLS, edge functions, schema (só DELETE em 3 tabelas existentes)
+- Não cria arquivos novos de documentação
+- Não renomeia variáveis fora do escopo
+- Sede preservada na migration via `is_main = false`

@@ -508,8 +508,8 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{branch.name}</span>
                       {branch.is_main && (
-                        <Badge variant="secondary" className="gap-1 text-xs">
-                          <Star className="h-3 w-3" />
+                        <Badge className="gap-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 border-transparent">
+                          <Star className="h-3 w-3 fill-current" />
                           Sede
                         </Badge>
                       )}

@@ -30,23 +30,23 @@ interface InfraData {
   file_server: string | null;
   active_directory: string | null;
   ad_location: string | null;
-  general_notes: string | null;
+  notes: string | null;
   unifi_console_model: string | null;
   unifi_console_ip: string | null;
   unifi_firmware: string | null;
   unifi_uptime: string | null;
   gateway_model: string | null;
-  gateway_wan_ip: string | null;
-  gateway_lan_ip: string | null;
+  gateway_ip_wan: string | null;
+  gateway_ip_lan: string | null;
   gateway_firmware: string | null;
 }
 
 const EMPTY: InfraData = {
   branch_id: null,
   server_type: null, cloud_provider: null, file_server: null,
-  active_directory: null, ad_location: null, general_notes: null,
+  active_directory: null, ad_location: null, notes: null,
   unifi_console_model: null, unifi_console_ip: null, unifi_firmware: null, unifi_uptime: null,
-  gateway_model: null, gateway_wan_ip: null, gateway_lan_ip: null, gateway_firmware: null,
+  gateway_model: null, gateway_ip_wan: null, gateway_ip_lan: null, gateway_firmware: null,
 };
 
 export function DocSectionInfrastructure({ clientId }: Props) {
@@ -106,10 +106,10 @@ export function DocSectionInfrastructure({ clientId }: Props) {
           <Field label="Active Directory" value={display(d.active_directory)} />
           {showAdRead && <Field label="Localização do AD" value={display(d.ad_location)} />}
         </div>
-        {d.general_notes && (
+        {d.notes && (
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">Observações gerais</p>
-            <p className="text-sm font-medium whitespace-pre-wrap">{d.general_notes}</p>
+            <p className="text-sm font-medium whitespace-pre-wrap">{d.notes}</p>
           </div>
         )}
 
@@ -125,8 +125,8 @@ export function DocSectionInfrastructure({ clientId }: Props) {
         <SubTitle>Rede — Gateway / Firewall</SubTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Modelo" value={display(d.gateway_model)} />
-          <Field label="IP WAN" value={display(d.gateway_wan_ip)} />
-          <Field label="IP LAN" value={display(d.gateway_lan_ip)} />
+          <Field label="IP WAN" value={display(d.gateway_ip_wan)} />
+          <Field label="IP LAN" value={display(d.gateway_ip_lan)} />
           <Field label="Firmware" value={display(d.gateway_firmware)} />
         </div>
         <InfoNote text="Dados complementares importados via UniFi API" />
@@ -187,7 +187,7 @@ export function DocSectionInfrastructure({ clientId }: Props) {
         </div>
         <div className="sm:col-span-2">
           <Label>Observações gerais</Label>
-          <Textarea value={form.general_notes || ""} onChange={(e) => setForm({ ...form, general_notes: e.target.value })} rows={3} />
+          <Textarea value={form.notes || ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} />
         </div>
       </div>
 
@@ -220,11 +220,11 @@ export function DocSectionInfrastructure({ clientId }: Props) {
         </div>
         <div>
           <Label>IP WAN</Label>
-          <Input value={form.gateway_wan_ip || ""} onChange={(e) => setForm({ ...form, gateway_wan_ip: e.target.value })} />
+          <Input value={form.gateway_ip_wan || ""} onChange={(e) => setForm({ ...form, gateway_ip_wan: e.target.value })} />
         </div>
         <div>
           <Label>IP LAN</Label>
-          <Input value={form.gateway_lan_ip || ""} onChange={(e) => setForm({ ...form, gateway_lan_ip: e.target.value })} />
+          <Input value={form.gateway_ip_lan || ""} onChange={(e) => setForm({ ...form, gateway_ip_lan: e.target.value })} />
         </div>
         <div>
           <Label>Firmware</Label>
