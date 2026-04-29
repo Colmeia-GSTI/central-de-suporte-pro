@@ -1,6 +1,7 @@
-import { Phone, MessageCircle, Mail, User } from "lucide-react";
+import { Phone, MessageCircle, Mail, User, Monitor, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface RequesterContact {
   id: string;
@@ -11,9 +12,19 @@ interface RequesterContact {
   role: string | null;
 }
 
+interface MonitoredDeviceRef {
+  id: string;
+  hostname: string | null;
+  name: string | null;
+  is_online: boolean | null;
+}
+
 interface RequesterContactCardProps {
   contact: RequesterContact | null;
   contactPhone?: string | null;
+  contactPhoneIsWhatsapp?: boolean | null;
+  monitoredDevice?: MonitoredDeviceRef | null;
+  deviceHostnameText?: string | null;
 }
 
 function formatPhoneForWhatsApp(phone: string): string {
