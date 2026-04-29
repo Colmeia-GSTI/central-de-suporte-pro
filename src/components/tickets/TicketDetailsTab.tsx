@@ -486,7 +486,13 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
   return (
     <div className="space-y-6">
       {/* Requester Contact Card */}
-      <RequesterContactCard contact={ticket.requester_contact || null} contactPhone={(ticket as Record<string, unknown>).contact_phone as string | null} />
+      <RequesterContactCard
+        contact={ticket.requester_contact || null}
+        contactPhone={(ticket as Record<string, unknown>).contact_phone as string | null}
+        contactPhoneIsWhatsapp={(ticket as Record<string, unknown>).contact_phone_is_whatsapp as boolean | null}
+        monitoredDevice={(ticket as Record<string, unknown>).monitored_device as { id: string; hostname: string | null; name: string | null; is_online: boolean | null } | null}
+        deviceHostnameText={(ticket as Record<string, unknown>).device_hostname_text as string | null}
+      />
       {/* Edit Toggle */}
       <div className="flex justify-end">
         {isEditing ? (

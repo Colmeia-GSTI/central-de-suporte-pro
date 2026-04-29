@@ -32,8 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { useClientMonitoredDevices } from "@/hooks/useClientMonitoredDevices";
 import {
   Plus,
+  Pencil,
+  Circle,
   Ticket,
   FileText,
   LogOut,
@@ -116,6 +120,9 @@ export default function ClientPortalPage() {
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [assetDescription, setAssetDescription] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [isWhatsapp, setIsWhatsapp] = useState(false);
+  const [monitoredDeviceId, setMonitoredDeviceId] = useState<string>(""); // "", "__none__", "__free__", or uuid
+  const [hostnameText, setHostnameText] = useState("");
 
   const isClient = roles.includes("client") || roles.includes("client_master");
   const isClientMaster = roles.includes("client_master");
@@ -256,6 +263,9 @@ export default function ClientPortalPage() {
     },
   });
 
+  // Fetch monitored devices for the client (used in dropdown)
+  const { items: monitoredDevices } = useClientMonitoredDevices(clientData?.id);
+
   // Create ticket mutation
   const createTicketMutation = useMutation({
     mutationFn: async (ticketData: {
@@ -263,9 +273,12 @@ export default function ClientPortalPage() {
       description: string;
       priority: Enums<"ticket_priority">;
       contact_phone: string;
+      contact_phone_is_whatsapp: boolean;
       category_id?: string;
       asset_id?: string | null;
       asset_description?: string | null;
+      monitored_device_id?: string | null;
+      device_hostname_text?: string | null;
     }) => {
       if (!clientData?.id) throw new Error("Cliente não encontrado");
 
@@ -274,9 +287,12 @@ export default function ClientPortalPage() {
         description: ticketData.description,
         priority: ticketData.priority,
         contact_phone: ticketData.contact_phone,
+        contact_phone_is_whatsapp: ticketData.contact_phone_is_whatsapp,
         category_id: ticketData.category_id || null,
         asset_id: ticketData.asset_id || null,
         asset_description: ticketData.asset_description || null,
+        monitored_device_id: ticketData.monitored_device_id ?? null,
+        device_hostname_text: ticketData.device_hostname_text ?? null,
         client_id: clientData.id,
         created_by: user?.id,
         requester_contact_id: clientData.contactId,
@@ -291,6 +307,9 @@ export default function ClientPortalPage() {
       setSelectedAssetId("");
       setAssetDescription("");
       setContactPhone("");
+      setIsWhatsapp(false);
+      setMonitoredDeviceId("");
+      setHostnameText("");
       toast({ title: "Chamado aberto com sucesso!" });
     },
     onError: () => {
@@ -350,14 +369,29 @@ export default function ClientPortalPage() {
       return;
     }
     const formData = new FormData(e.currentTarget);
+
+    // XOR device: ou monitored_device_id (uuid real do dropdown), ou device_hostname_text (texto livre), ou ambos null
+    const isUuidSelected =
+      monitoredDeviceId &&
+      monitoredDeviceId !== "__none__" &&
+      monitoredDeviceId !== "__free__";
+    const trimmedHostname = hostnameText.trim();
+    const useFreeText = monitoredDeviceId === "__free__" || (monitoredDevices.length === 0 && trimmedHostname.length > 0);
+
+    const monitored_device_id = isUuidSelected ? monitoredDeviceId : null;
+    const device_hostname_text = !isUuidSelected && useFreeText && trimmedHostname.length > 0 ? trimmedHostname : null;
+
     createTicketMutation.mutate({
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       priority: formData.get("priority") as Enums<"ticket_priority">,
       contact_phone: contactPhone.replace(/\D/g, ""),
+      contact_phone_is_whatsapp: isWhatsapp,
       category_id: formData.get("category_id") as string || undefined,
       asset_id: selectedAssetId && selectedAssetId !== "other" ? selectedAssetId : null,
       asset_description: selectedAssetId === "other" ? assetDescription : null,
+      monitored_device_id,
+      device_hostname_text,
     });
   };
 
@@ -588,6 +622,16 @@ export default function ClientPortalPage() {
                           maxLength={15}
                           inputMode="tel"
                         />
+                        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                          <Label htmlFor="is_whatsapp" className="text-sm font-normal cursor-pointer">
+                            Este número tem WhatsApp?
+                          </Label>
+                          <Switch
+                            id="is_whatsapp"
+                            checked={isWhatsapp}
+                            onCheckedChange={setIsWhatsapp}
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -661,6 +705,66 @@ export default function ClientPortalPage() {
                             value={assetDescription}
                             onChange={(e) => setAssetDescription(e.target.value)}
                           />
+                        )}
+                      </div>
+                      {/* Hostname / monitored device (optional) */}
+
+                      <div className="space-y-2">
+                        <Label>Computador / hostname (opcional)</Label>
+                        {monitoredDevices.length > 0 && monitoredDeviceId !== "__free__" ? (
+                          <Select
+                            value={monitoredDeviceId || "__none__"}
+                            onValueChange={(v) => {
+                              setMonitoredDeviceId(v);
+                              if (v !== "__free__") setHostnameText("");
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o computador" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">— Nenhuma máquina específica —</SelectItem>
+                              {monitoredDevices.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  <span className="flex items-center gap-2">
+                                    <Circle
+                                      className={`h-2 w-2 ${d.is_online ? "fill-green-500 text-green-500" : "fill-muted-foreground text-muted-foreground"}`}
+                                    />
+                                    {d.hostname || d.name || "(sem nome)"}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="__free__">
+                                <span className="flex items-center gap-2">
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  — Outra máquina (digitar) —
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <>
+                            <Input
+                              placeholder="Ex.: PC-RECEPCAO, NOTEBOOK-JOAO"
+                              value={hostnameText}
+                              onChange={(e) => setHostnameText(e.target.value)}
+                              maxLength={120}
+                            />
+                            {monitoredDevices.length > 0 && monitoredDeviceId === "__free__" && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  setMonitoredDeviceId("");
+                                  setHostnameText("");
+                                }}
+                              >
+                                ← Voltar para lista
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                       <div className="flex justify-end gap-2">

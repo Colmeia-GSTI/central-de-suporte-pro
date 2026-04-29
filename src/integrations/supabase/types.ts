@@ -5788,15 +5788,18 @@ export type Database = {
           category_id: string | null
           client_id: string | null
           closed_at: string | null
-          contact_phone: string | null
+          contact_phone: string
+          contact_phone_is_whatsapp: boolean
           contract_id: string | null
           created_at: string
           created_by: string | null
           department_id: string | null
           description: string | null
+          device_hostname_text: string | null
           first_response_at: string | null
           id: string
           is_internal: boolean | null
+          monitored_device_id: string | null
           origin: Database["public"]["Enums"]["ticket_origin"]
           priority: Database["public"]["Enums"]["ticket_priority"]
           requester_contact_id: string | null
@@ -5819,15 +5822,18 @@ export type Database = {
           category_id?: string | null
           client_id?: string | null
           closed_at?: string | null
-          contact_phone?: string | null
+          contact_phone?: string
+          contact_phone_is_whatsapp?: boolean
           contract_id?: string | null
           created_at?: string
           created_by?: string | null
           department_id?: string | null
           description?: string | null
+          device_hostname_text?: string | null
           first_response_at?: string | null
           id?: string
           is_internal?: boolean | null
+          monitored_device_id?: string | null
           origin?: Database["public"]["Enums"]["ticket_origin"]
           priority?: Database["public"]["Enums"]["ticket_priority"]
           requester_contact_id?: string | null
@@ -5850,15 +5856,18 @@ export type Database = {
           category_id?: string | null
           client_id?: string | null
           closed_at?: string | null
-          contact_phone?: string | null
+          contact_phone?: string
+          contact_phone_is_whatsapp?: boolean
           contract_id?: string | null
           created_at?: string
           created_by?: string | null
           department_id?: string | null
           description?: string | null
+          device_hostname_text?: string | null
           first_response_at?: string | null
           id?: string
           is_internal?: boolean | null
+          monitored_device_id?: string | null
           origin?: Database["public"]["Enums"]["ticket_origin"]
           priority?: Database["public"]["Enums"]["ticket_priority"]
           requester_contact_id?: string | null
@@ -5915,6 +5924,13 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_monitored_device_id_fkey"
+            columns: ["monitored_device_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_devices"
             referencedColumns: ["id"]
           },
           {
