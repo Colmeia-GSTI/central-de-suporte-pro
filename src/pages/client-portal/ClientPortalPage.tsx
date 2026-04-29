@@ -707,6 +707,65 @@ export default function ClientPortalPage() {
                           />
                         )}
                       </div>
+                      </div>
+                      {/* Hostname / monitored device (optional) */}
+                      <div className="space-y-2">
+                        <Label>Computador / hostname (opcional)</Label>
+                        {monitoredDevices.length > 0 && monitoredDeviceId !== "__free__" ? (
+                          <Select
+                            value={monitoredDeviceId || "__none__"}
+                            onValueChange={(v) => {
+                              setMonitoredDeviceId(v);
+                              if (v !== "__free__") setHostnameText("");
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o computador" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">— Nenhuma máquina específica —</SelectItem>
+                              {monitoredDevices.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  <span className="flex items-center gap-2">
+                                    <Circle
+                                      className={`h-2 w-2 ${d.is_online ? "fill-green-500 text-green-500" : "fill-muted-foreground text-muted-foreground"}`}
+                                    />
+                                    {d.hostname || d.name || "(sem nome)"}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="__free__">
+                                <span className="flex items-center gap-2">
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  — Outra máquina (digitar) —
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <>
+                            <Input
+                              placeholder="Ex.: PC-RECEPCAO, NOTEBOOK-JOAO"
+                              value={hostnameText}
+                              onChange={(e) => setHostnameText(e.target.value)}
+                              maxLength={120}
+                            />
+                            {monitoredDevices.length > 0 && monitoredDeviceId === "__free__" && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  setMonitoredDeviceId("");
+                                  setHostnameText("");
+                                }}
+                              >
+                                ← Voltar para lista
+                              </Button>
+                            )}
+                          </>
+                        )}
                       <div className="flex justify-end gap-2">
                         <Button type="button" variant="outline" onClick={() => setIsNewTicketOpen(false)}>
                           Cancelar
