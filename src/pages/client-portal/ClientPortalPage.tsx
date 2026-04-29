@@ -32,8 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { useClientMonitoredDevices } from "@/hooks/useClientMonitoredDevices";
 import {
   Plus,
+  Pencil,
+  Circle,
   Ticket,
   FileText,
   LogOut,
