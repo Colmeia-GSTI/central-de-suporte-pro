@@ -622,6 +622,16 @@ export default function ClientPortalPage() {
                           maxLength={15}
                           inputMode="tel"
                         />
+                        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                          <Label htmlFor="is_whatsapp" className="text-sm font-normal cursor-pointer">
+                            Este número tem WhatsApp?
+                          </Label>
+                          <Switch
+                            id="is_whatsapp"
+                            checked={isWhatsapp}
+                            onCheckedChange={setIsWhatsapp}
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
