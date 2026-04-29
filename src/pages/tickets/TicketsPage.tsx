@@ -262,7 +262,10 @@ export default function TicketsPage() {
           clients(id, name),
           ticket_categories(id, name),
           ticket_subcategories(id, name),
-          ticket_tag_assignments(ticket_tags(id, name, color))
+          ticket_tag_assignments(ticket_tags(id, name, color)),
+          monitored_device:monitored_devices!tickets_monitored_device_id_fkey(
+            id, hostname, name, is_online
+          )
         `)
         .eq("id", selectedTicketId!)
         .single();
