@@ -203,6 +203,9 @@ export default function TicketsPage() {
           ticket_tag_assignments(ticket_tags(id, name, color)),
           requester_contact:client_contacts!tickets_requester_contact_id_fkey(
             id, name, email, phone, whatsapp, role
+          ),
+          monitored_device:monitored_devices!tickets_monitored_device_id_fkey(
+            id, hostname, name, is_online
           )
         `, { count: "exact" })
         .order("created_at", { ascending: false })
