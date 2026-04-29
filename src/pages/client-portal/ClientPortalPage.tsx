@@ -120,6 +120,9 @@ export default function ClientPortalPage() {
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [assetDescription, setAssetDescription] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [isWhatsapp, setIsWhatsapp] = useState(false);
+  const [monitoredDeviceId, setMonitoredDeviceId] = useState<string>(""); // "", "__none__", "__free__", or uuid
+  const [hostnameText, setHostnameText] = useState("");
 
   const isClient = roles.includes("client") || roles.includes("client_master");
   const isClientMaster = roles.includes("client_master");
