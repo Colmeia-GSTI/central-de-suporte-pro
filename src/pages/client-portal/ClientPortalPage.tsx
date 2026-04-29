@@ -707,8 +707,8 @@ export default function ClientPortalPage() {
                           />
                         )}
                       </div>
-                      </div>
                       {/* Hostname / monitored device (optional) */}
+
                       <div className="space-y-2">
                         <Label>Computador / hostname (opcional)</Label>
                         {monitoredDevices.length > 0 && monitoredDeviceId !== "__free__" ? (
