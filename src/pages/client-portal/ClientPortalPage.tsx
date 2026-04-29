@@ -263,6 +263,9 @@ export default function ClientPortalPage() {
     },
   });
 
+  // Fetch monitored devices for the client (used in dropdown)
+  const { items: monitoredDevices } = useClientMonitoredDevices(clientData?.id);
+
   // Create ticket mutation
   const createTicketMutation = useMutation({
     mutationFn: async (ticketData: {
