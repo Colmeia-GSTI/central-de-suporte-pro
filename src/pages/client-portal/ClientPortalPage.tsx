@@ -369,14 +369,29 @@ export default function ClientPortalPage() {
       return;
     }
     const formData = new FormData(e.currentTarget);
+
+    // XOR device: ou monitored_device_id (uuid real do dropdown), ou device_hostname_text (texto livre), ou ambos null
+    const isUuidSelected =
+      monitoredDeviceId &&
+      monitoredDeviceId !== "__none__" &&
+      monitoredDeviceId !== "__free__";
+    const trimmedHostname = hostnameText.trim();
+    const useFreeText = monitoredDeviceId === "__free__" || (monitoredDevices.length === 0 && trimmedHostname.length > 0);
+
+    const monitored_device_id = isUuidSelected ? monitoredDeviceId : null;
+    const device_hostname_text = !isUuidSelected && useFreeText && trimmedHostname.length > 0 ? trimmedHostname : null;
+
     createTicketMutation.mutate({
       title: formData.get("title") as string,
       description: formData.get("description") as string,
       priority: formData.get("priority") as Enums<"ticket_priority">,
       contact_phone: contactPhone.replace(/\D/g, ""),
+      contact_phone_is_whatsapp: isWhatsapp,
       category_id: formData.get("category_id") as string || undefined,
       asset_id: selectedAssetId && selectedAssetId !== "other" ? selectedAssetId : null,
       asset_description: selectedAssetId === "other" ? assetDescription : null,
+      monitored_device_id,
+      device_hostname_text,
     });
   };
 
