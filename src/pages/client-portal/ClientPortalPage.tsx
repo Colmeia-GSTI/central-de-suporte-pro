@@ -273,9 +273,12 @@ export default function ClientPortalPage() {
       description: string;
       priority: Enums<"ticket_priority">;
       contact_phone: string;
+      contact_phone_is_whatsapp: boolean;
       category_id?: string;
       asset_id?: string | null;
       asset_description?: string | null;
+      monitored_device_id?: string | null;
+      device_hostname_text?: string | null;
     }) => {
       if (!clientData?.id) throw new Error("Cliente não encontrado");
 
@@ -284,9 +287,12 @@ export default function ClientPortalPage() {
         description: ticketData.description,
         priority: ticketData.priority,
         contact_phone: ticketData.contact_phone,
+        contact_phone_is_whatsapp: ticketData.contact_phone_is_whatsapp,
         category_id: ticketData.category_id || null,
         asset_id: ticketData.asset_id || null,
         asset_description: ticketData.asset_description || null,
+        monitored_device_id: ticketData.monitored_device_id ?? null,
+        device_hostname_text: ticketData.device_hostname_text ?? null,
         client_id: clientData.id,
         created_by: user?.id,
         requester_contact_id: clientData.contactId,
@@ -301,6 +307,9 @@ export default function ClientPortalPage() {
       setSelectedAssetId("");
       setAssetDescription("");
       setContactPhone("");
+      setIsWhatsapp(false);
+      setMonitoredDeviceId("");
+      setHostnameText("");
       toast({ title: "Chamado aberto com sucesso!" });
     },
     onError: () => {
