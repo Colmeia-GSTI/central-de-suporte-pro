@@ -80,8 +80,16 @@ export function RequesterContactCard({
         {contactPhone && (
           <div className="flex items-center gap-2 p-2 rounded-md bg-accent/50 border border-accent">
             <Phone className="h-4 w-4 text-primary shrink-0" />
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Telefone informado no chamado</p>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                Telefone informado no chamado
+                {contactPhoneIsWhatsapp && (
+                  <Badge variant="outline" className="h-4 px-1.5 text-[10px] gap-1 text-green-600 border-green-600">
+                    <MessageCircle className="h-2.5 w-2.5" />
+                    WhatsApp
+                  </Badge>
+                )}
+              </p>
               <div className="flex gap-2 mt-1">
                 <Button variant="outline" size="sm" className="gap-2 h-7" asChild>
                   <a href={`tel:${contactPhone}`}>
@@ -89,18 +97,49 @@ export function RequesterContactCard({
                     {formatPhoneForDisplay(contactPhone)}
                   </a>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 h-7 text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                  asChild
-                >
-                  <a href={`https://wa.me/55${contactPhone}`} target="_blank" rel="noopener noreferrer">
-                    <MessageCircle className="h-3 w-3" />
-                    WhatsApp
-                  </a>
-                </Button>
+                {contactPhoneIsWhatsapp && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 h-7 text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                    asChild
+                  >
+                    <a href={`https://wa.me/55${contactPhone}`} target="_blank" rel="noopener noreferrer">
+                      <MessageCircle className="h-3 w-3" />
+                      WhatsApp
+                    </a>
+                  </Button>
+                )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Related computer (monitored device or free-text hostname) */}
+        {(monitoredDevice || deviceHostnameText) && (
+          <div className="flex items-start gap-2 p-2 rounded-md bg-accent/50 border border-accent">
+            {monitoredDevice ? (
+              <Monitor className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            ) : (
+              <Pencil className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            )}
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground font-medium">Computador relacionado</p>
+              {monitoredDevice ? (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-sm font-medium truncate">
+                    {monitoredDevice.hostname || monitoredDevice.name || "(sem nome)"}
+                  </span>
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${monitoredDevice.is_online ? "bg-green-500" : "bg-muted-foreground"}`}
+                    title={monitoredDevice.is_online ? "Online" : "Offline"}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm font-medium italic" title="Hostname informado livremente pelo cliente">
+                  {deviceHostnameText}
+                </p>
+              )}
             </div>
           </div>
         )}
