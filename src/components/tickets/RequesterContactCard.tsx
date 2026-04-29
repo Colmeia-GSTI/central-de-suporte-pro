@@ -43,8 +43,14 @@ function formatPhoneForDisplay(phone: string): string {
   return phone;
 }
 
-export function RequesterContactCard({ contact, contactPhone }: RequesterContactCardProps) {
-  if (!contact && !contactPhone) {
+export function RequesterContactCard({
+  contact,
+  contactPhone,
+  contactPhoneIsWhatsapp,
+  monitoredDevice,
+  deviceHostnameText,
+}: RequesterContactCardProps) {
+  if (!contact && !contactPhone && !monitoredDevice && !deviceHostnameText) {
     return null;
   }
 
