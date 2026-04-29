@@ -766,6 +766,7 @@ export default function ClientPortalPage() {
                             )}
                           </>
                         )}
+                      </div>
                       <div className="flex justify-end gap-2">
                         <Button type="button" variant="outline" onClick={() => setIsNewTicketOpen(false)}>
                           Cancelar
