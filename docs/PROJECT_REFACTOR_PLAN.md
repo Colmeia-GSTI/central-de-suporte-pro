@@ -79,9 +79,9 @@ O projeto evoluiu por acumulação de features. Há **5 fontes de inchaço**:
 | PR | Escopo | Status |
 |---|---|:--:|
 | PR-A.5 | Migração Inter → Asaas | ✅ MERGED |
-| PR-CLEAN | Limpeza de lixo (shadcn/ui + componentes mortos + deps órfãs) | ⏳ aguardando merge |
-| **PR-CLEAN-2** | **Lock files + ícones PWA + pinning Bun (este PR)** | ⏳ EM CURSO |
-| PR-C | Cobrança bimestral/trimestral via Asaas Subscriptions | planejado |
+| PR-CLEAN | Limpeza de lixo (shadcn/ui + componentes mortos + deps órfãs) | ✅ MERGED |
+| PR-CLEAN-2 | Lock files + ícones PWA + pinning Bun | ✅ MERGED |
+| **PR-C** | **Cobrança bimestral/trimestral/semestral/anual (Estratégia B — cron local com pulo)** | ⏳ EM CURSO |
 | PR-D | Unificar fluxo de reenvio (4 lugares → 1) | planejado |
 | PR-E | Máquina de estado (FSM) da fatura | planejado |
 | PR-F | Régua de cobrança escalonada | planejado |

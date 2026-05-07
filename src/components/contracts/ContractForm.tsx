@@ -70,6 +70,7 @@ const contractSchema = z.object({
   days_before_due: z.coerce.number().min(1).max(30).default(5),
   billing_provider: z.enum(["asaas"]).default("asaas"),
   payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
+  billing_frequency: z.enum(["monthly", "bimonthly", "quarterly", "semiannual", "yearly"]).default("monthly"),
   generate_initial_invoice: z.boolean().default(false),
   first_payment_date: z.string().optional(),
   generate_payment: z.boolean().default(true),
@@ -162,6 +163,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       days_before_due: contractData?.days_before_due || 5,
       billing_provider: "asaas" as const,
       payment_preference: (contractData?.payment_preference as "boleto" | "pix" | "both") || "boleto",
+      billing_frequency: (contractData?.billing_frequency as "monthly" | "bimonthly" | "quarterly" | "semiannual" | "yearly") || "monthly",
       generate_initial_invoice: false,
       first_payment_date: "",
       generate_payment: true,
@@ -265,6 +267,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         days_before_due: data.days_before_due,
         billing_provider: data.billing_provider,
         payment_preference: data.payment_preference,
+        billing_frequency: data.billing_frequency,
         adjustment_date: data.adjustment_date || null,
         adjustment_index: data.adjustment_index,
         adjustment_percentage: data.adjustment_percentage || null,
@@ -783,6 +786,34 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="billing_frequency"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Periodicidade da Cobrança</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent modal={false}>
+                    <SelectItem value="monthly">Mensal</SelectItem>
+                    <SelectItem value="bimonthly">Bimestral (a cada 2 meses)</SelectItem>
+                    <SelectItem value="quarterly">Trimestral (a cada 3 meses)</SelectItem>
+                    <SelectItem value="semiannual">Semestral (a cada 6 meses)</SelectItem>
+                    <SelectItem value="yearly">Anual (a cada 12 meses)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  O cron de geração de faturas pula meses não-elegíveis. Mudar a periodicidade afeta apenas faturas futuras.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {/* Initial Invoice Generation - Only for new contracts */}
           {/* First Payment Date - always visible */}
