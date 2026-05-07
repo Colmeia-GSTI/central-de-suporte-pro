@@ -18,6 +18,14 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Modificado (PR-D — Unificar fluxo de reenvio/regenerar/polling — 2026-05-07)
+- **`useInvoiceActions` hook**: passa a expor `handleRegenerateBoleto` e `handleForcePolling` (extraídos das implementações duplicadas em `BillingErrorsPanel` e `InvoiceProcessingHistory`). Estados novos: `regeneratingBoleto`, `forcingPolling`. O hook centraliza agora 3 ações antes duplicadas: reenviar notificação, regenerar boleto, forçar polling.
+- **`BillingErrorsPanel.tsx`**: removidas 3 implementações próprias (`handleResendNotification`, `handleRegenerateBoleto`, `handleForcePolling`). Estados locais `resendingId` e `pollingId` deletados. Estado `reprocessingId` mantido (continua sendo usado por handlers específicos de NFSe que ficam fora do escopo deste PR — `handleClearFailedNfse`, retry de NFSe). onClicks adaptados: `handleResendNotification(inv.id, ["email"])` em vez de `(inv, "email")`. Loading visual usa `sendingNotification?.startsWith(inv.id)` para disable e `=== \`${inv.id}-email\`` para spinner por canal.
+- **`InvoiceProcessingHistory.tsx`**: removidas 3 implementações próprias com mesma estrutura. Estado local `actionLoading` mantido apenas para `handleReprocessNfse` (específico de NFSe, fora do escopo). Adicionado import do `useInvoiceActions`.
+- **Dead branch Inter removido**: as 2 cópias de `handleRegenerateBoleto` ainda tinham `if (provider === "asaas") asaas-nfse else banco-inter`. Após PR-A.5 todos contratos são Asaas, então o else nunca executava. Hook centralizado chama `asaas-nfse` direto.
+- **UX agora é consistente** entre as 3 telas: mesma mensagem, mesma validação prévia (`checkArtifactReadiness` quando `nfseInfo` + `invoiceData` disponíveis), mesmo tratamento de `data.blocked` do backend, mesmas mensagens específicas de `errorCode` (`WHATSAPP_INTEGRATION_DISABLED`, `CLIENT_NO_WHATSAPP`).
+- **Saldo:** -78 linhas líquidas, 0 lógica duplicada de reenvio/regenerar/polling, 1 fonte da verdade.
+
 ### Adicionado (PR-C — Cobrança bimestral/trimestral/semestral/anual — 2026-05-07)
 - **Estratégia B (cron local com pulo)**: a edge `generate-monthly-invoices` ganhou verificação de frequência. Para contratos com `billing_frequency != 'monthly'`, o cron busca a última invoice do contrato (excluindo `cancelled`/`voided`) e calcula meses entre a competência atual e a competência da última invoice. Se for menor que o intervalo da frequência, pula com `status='skipped'`. Se for maior ou igual, gera normalmente. Mapa de intervalos: `monthly=1`, `bimonthly=2`, `quarterly=3`, `semiannual=6`, `yearly=12`.
 - **Schema (migration `20260507204537_add_billing_frequency_to_contracts.sql`)**: nova coluna `contracts.billing_frequency text NOT NULL DEFAULT 'monthly'` com `CHECK` aceitando 5 valores. Snapshot de backup em `_billing_pr_c_backup_billing_frequency` (reversão trivial). Default preserva comportamento atual para os 31 contratos existentes.

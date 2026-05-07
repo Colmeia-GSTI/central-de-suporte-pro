@@ -81,8 +81,9 @@ O projeto evoluiu por acumulação de features. Há **5 fontes de inchaço**:
 | PR-A.5 | Migração Inter → Asaas | ✅ MERGED |
 | PR-CLEAN | Limpeza de lixo (shadcn/ui + componentes mortos + deps órfãs) | ✅ MERGED |
 | PR-CLEAN-2 | Lock files + ícones PWA + pinning Bun | ✅ MERGED |
-| **PR-C** | **Cobrança bimestral/trimestral/semestral/anual (Estratégia B — cron local com pulo)** | ⏳ EM CURSO |
-| PR-D | Unificar fluxo de reenvio (4 lugares → 1) | planejado |
+| PR-C | Cobrança bimestral/trimestral/semestral/anual (Estratégia B — cron local com pulo) | ✅ MERGED |
+| **PR-D** | **Unificar fluxo de reenvio/regenerar/polling (4 implementações → 1 hook)** | ⏳ EM CURSO |
+| PR-E | Máquina de estado (FSM) da fatura | planejado |
 | PR-E | Máquina de estado (FSM) da fatura | planejado |
 | PR-F | Régua de cobrança escalonada | planejado |
 | PR-G | Dashboard de saúde + alerta proativo | planejado |
