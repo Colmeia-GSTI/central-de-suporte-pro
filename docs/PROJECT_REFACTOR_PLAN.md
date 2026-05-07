@@ -79,8 +79,9 @@ O projeto evoluiu por acumulação de features. Há **5 fontes de inchaço**:
 | PR | Escopo | Status |
 |---|---|:--:|
 | PR-A.5 | Migração Inter → Asaas | ✅ MERGED |
-| **PR-CLEAN** | **Limpeza de lixo (este PR)** | ⏳ EM CURSO |
-| PR-C | Cobrança bimestral/trimestral via Asaas Subscriptions | ⏳ próximo |
+| PR-CLEAN | Limpeza de lixo (shadcn/ui + componentes mortos + deps órfãs) | ⏳ aguardando merge |
+| **PR-CLEAN-2** | **Lock files + ícones PWA + pinning Bun (este PR)** | ⏳ EM CURSO |
+| PR-C | Cobrança bimestral/trimestral via Asaas Subscriptions | planejado |
 | PR-D | Unificar fluxo de reenvio (4 lugares → 1) | planejado |
 | PR-E | Máquina de estado (FSM) da fatura | planejado |
 | PR-F | Régua de cobrança escalonada | planejado |
@@ -169,9 +170,76 @@ vaul                               (usado só pelo drawer.tsx)
 
 ---
 
-## 4. Backlog de limpeza para PRs futuros
+## 4. PR-CLEAN-2 — Lock files Bun + ícones PWA + pinning
 
-### 4.1 Quando PR-DECOM (Inter) rodar (~60-90 dias)
+### 4.1 Objetivo
+
+Resolver 2 fontes adicionais de bloat detectadas após PR-CLEAN:
+1. **4 lock files coexistindo no repo** (npm + pnpm + bun text + bun binary) → ~1 MB de ruído + risco de inconsistência entre dev local e Lovable Cloud
+2. **PWA icons fakeados** (4 PNGs com nome "144x144/192x192/384x384" mas resolução real 1024×1024) → ~3 MB desperdiçados, navegador baixando 864 KB para exibir ícone de 144 px
+
+### 4.2 Decisão: Bun como package manager oficial
+
+Confirmado pelo Lovable em 2026-05-07: **"O projeto usa bun (comandos como `bun add`, `bunx vitest`, `bunx tsc`)"**. Lovable Cloud detecta `bun.lockb` e usa Bun automaticamente.
+
+**Pinning explícito** adicionado em `package.json`:
+```json
+"packageManager": "bun@1.1.30"
+```
+
+### 4.3 Mudanças aplicadas
+
+**Lock files removidos (3 arquivos, ~1.0 MB):**
+- `package-lock.json` (469 KB) — npm, criado acidentalmente pelo PR-CLEAN
+- `pnpm-lock.yaml` (321 KB) — pnpm, vestígio histórico
+- `bun.lock` (254 KB) — bun em formato texto, redundante com `bun.lockb`
+
+**Lock file mantido:** `bun.lockb` (240 KB) — formato binário oficial do Bun.
+
+**Ícones PWA redimensionados** (5 arquivos, **3.0 MB → 446 KB = -88%**):
+
+| Arquivo | Antes (bytes) | Antes (resolução real) | Depois (bytes) | Depois (resolução real) |
+|---|--:|---|--:|---|
+| `icon-144x144.png` | 884 KB | ❌ 1024×1024 | 24 KB | ✅ 144×144 |
+| `icon-192x192.png` | 871 KB | ❌ 1024×1024 | 38 KB | ✅ 192×192 |
+| `icon-384x384.png` | 880 KB | ❌ 1024×1024 | 130 KB | ✅ 384×384 |
+| `apple-touch-icon.png` | 884 KB | ❌ 1024×1024 | 34 KB | ✅ 180×180 |
+| `icon-512x512.png` | 14 KB (JPEG fake) | ✅ 512×512 mas era JPEG renomeado | 220 KB | ✅ 512×512 PNG real |
+
+> **Nota:** `icon-512x512.png` AUMENTOU em bytes porque era JPEG renomeado `.png` (compressão lossy). Agora é PNG real (lossless, qualidade superior, 512×512). Ainda assim o **TOTAL da pasta caiu 88%**.
+
+Logo Colmeia (favo de mel branco em fundo gradient laranja/amarelo) **preservada** em todos os ícones — usei `icon-192x192.png` original (1024×1024) como source para todos os redimensionamentos via ImageMagick.
+
+### 4.4 Saldo
+
+| Métrica | Antes do PR-CLEAN-2 | Depois | Δ |
+|---|--:|--:|--:|
+| Repo total | 11 MB | ~7 MB | **-36%** |
+| Lock files | 4 (1.3 MB) | 1 (240 KB) | -3 arquivos, -1 MB |
+| `pwa-icons/` | 3.4 MB | 446 KB | **-87%** |
+| Dependências `package.json` | 89 (após PR-CLEAN) | 89 | mantido |
+| Pinning de package manager | implícito | explícito (`bun@1.1.30`) | ↑ clareza |
+
+### 4.5 Validação
+
+- ✅ `tsc --noEmit` — 0 erros
+- ✅ `vitest run` — 59/59 testes passando
+- ✅ Resoluções dos PNGs validadas via `identify` (ImageMagick)
+- ✅ Logo visualmente preservada em todos os tamanhos
+- ✅ JSON do `package.json` válido após edit
+
+### 4.6 Risco
+
+**Zero em produção.**
+- Lovable Cloud usa Bun (confirmado) → continuará detectando `bun.lockb` e instalando dependências normalmente
+- Ícones funcionam idêntico (manifest e Vite PWA plugin referenciam por path, não por bytes)
+- Qualidade visual dos ícones MELHOROU (antes navegador downsampleava 1024→144, agora cada ícone é exibido no tamanho que foi exportado)
+
+---
+
+## 5. Backlog de limpeza para PRs futuros
+
+### 5.1 Quando PR-DECOM (Inter) rodar (~60-90 dias)
 
 ```
 src/components/settings/integrations/BancoInterConfigForm.tsx  (769)
@@ -183,7 +251,7 @@ supabase/functions/webhook-banco-inter/index.ts                (392)
 
 **Ganho:** ~2.041 linhas + redução de superfície de ataque.
 
-### 4.2 Migrations duplicadas detectadas
+### 5.2 Migrations duplicadas detectadas
 
 ```
 20260205100000_*.sql ─┐
@@ -193,7 +261,7 @@ supabase/functions/webhook-banco-inter/index.ts                (392)
 
 Idempotente (`IF NOT EXISTS`), não quebra nada. Limpar em PR de schema cleanup futuro (não urgente).
 
-### 4.3 Componentes gigantes a quebrar (refator estrutural — PR-K)
+### 5.3 Componentes gigantes a quebrar (refator estrutural — PR-K)
 
 Já listados em `BILLING_AUDIT.md` para o módulo billing. Para outros módulos, candidatos:
 
@@ -203,13 +271,13 @@ Já listados em `BILLING_AUDIT.md` para o módulo billing. Para outros módulos,
 - `ClientAssetsList.tsx` (908) — quebrar
 - `unifi-sync/index.ts` (1.107) — extrair shared com `tactical-rmm-sync` e `checkmk-sync`
 
-### 4.4 Componentes UI shadcn que sobraram mas podem sair se substituídos
+### 5.4 Componentes UI shadcn que sobraram mas podem sair se substituídos
 
 `chart.tsx` (303) — usado por 2 dashboards. Se algum dia migrar para Recharts direto, pode sair com 1 dep (`recharts` continua usado, mas o wrapper sai).
 
 ---
 
-## 5. Como manter este documento vivo
+## 6. Como manter este documento vivo
 
 - Atualizar **seção 2.2** quando um PR mudar de status
 - Atualizar **seção 3.3** com métricas reais ao final do PR-CLEAN
@@ -219,7 +287,7 @@ Já listados em `BILLING_AUDIT.md` para o módulo billing. Para outros módulos,
 
 ---
 
-## 6. Comandos para auditoria contínua
+## 7. Comandos para auditoria contínua
 
 ```bash
 # Ver tamanho atual do repo
