@@ -18,6 +18,12 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (PR-C — Cobrança bimestral/trimestral/semestral/anual — 2026-05-07)
+- **Estratégia B (cron local com pulo)**: a edge `generate-monthly-invoices` ganhou verificação de frequência. Para contratos com `billing_frequency != 'monthly'`, o cron busca a última invoice do contrato (excluindo `cancelled`/`voided`) e calcula meses entre a competência atual e a competência da última invoice. Se for menor que o intervalo da frequência, pula com `status='skipped'`. Se for maior ou igual, gera normalmente. Mapa de intervalos: `monthly=1`, `bimonthly=2`, `quarterly=3`, `semiannual=6`, `yearly=12`.
+- **Schema (migration `20260507204537_add_billing_frequency_to_contracts.sql`)**: nova coluna `contracts.billing_frequency text NOT NULL DEFAULT 'monthly'` com `CHECK` aceitando 5 valores. Snapshot de backup em `_billing_pr_c_backup_billing_frequency` (reversão trivial). Default preserva comportamento atual para os 31 contratos existentes.
+- **`ContractForm.tsx`**: dropdown novo "Periodicidade da Cobrança" com 5 opções (Mensal / Bimestral / Trimestral / Semestral / Anual). Schema Zod e defaultValues atualizados. Payload do save passa a incluir `billing_frequency`.
+- **Decisão registrada**: optamos por NÃO usar Asaas Subscriptions (Estratégia A) neste momento. Razões: princípio "REUTILIZAR antes de criar novo" (cron já existia), risco menor (~50 LOC vs migração de 31 contratos para subscriptions), reversibilidade fácil. Estratégia A fica registrada como opção futura quando Colmeia virar SaaS multi-tenant.
+
 ### Modificado (PR-A.5 — Migração billing Inter → Asaas — 2026-05-07)
 - **DECISÃO ESTRATÉGICA**: migração completa do gateway de cobrança Banco Inter → Asaas. Asaas passa a ser o **único** provedor para boleto, PIX e NFS-e. Justificativa documentada em `docs/BILLING_AUDIT.md` (PROS/CONTRAS, custo incremental ~R$60-80/mês, decisão tomada após bug crônico do Inter rate limit + escopo OAuth `cob.write` desabilitado bloqueando 5 de 8 boletos do mês).
 - **Edge `generate-monthly-invoices`**: provider hard-coded para `'asaas'` (não lê mais `contract.billing_provider` para roteamento). Removido lookup `bancoInterSettings` (dead code). Comportamento preservado: loop boleto/pix quando `payment_preference='both'`, captura `lastPaymentType` e diferencia falha de boleto vs PIX no catch (mantém PR anterior).

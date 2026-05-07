@@ -22,6 +22,7 @@ interface Contract {
   nfse_descricao_customizada: string | null;
   nfse_service_code: string | null;
   first_billing_month: string | null;
+  billing_frequency: "monthly" | "bimonthly" | "quarterly" | "semiannual" | "yearly" | null;
   clients: {
     name: string;
     email: string | null;
@@ -151,6 +152,7 @@ Deno.serve(async (req) => {
         nfse_aliquota,
         nfse_iss_retido,
         first_billing_month,
+        billing_frequency,
         clients (
           name,
           email,
@@ -280,6 +282,55 @@ Deno.serve(async (req) => {
             duration_ms: Date.now() - contractStartTime,
           });
           continue;
+        }
+
+        // Frequency check (PR-C 2026-05-07): se contrato não é mensal,
+        // só gera se passou o intervalo desde a última invoice.
+        // Default 'monthly' preserva comportamento anterior.
+        const FREQUENCY_INTERVAL_MONTHS: Record<string, number> = {
+          monthly: 1,
+          bimonthly: 2,
+          quarterly: 3,
+          semiannual: 6,
+          yearly: 12,
+        };
+        const frequency = contract.billing_frequency ?? "monthly";
+        const intervalMonths = FREQUENCY_INTERVAL_MONTHS[frequency] ?? 1;
+
+        if (intervalMonths > 1) {
+          // Buscar última invoice deste contrato (qualquer mês)
+          const { data: lastInvoiceRows } = await supabase
+            .from("invoices")
+            .select("reference_month")
+            .eq("contract_id", contract.id)
+            .not("status", "in", '("cancelled","voided")')
+            .order("reference_month", { ascending: false })
+            .limit(1);
+
+          const lastReference = lastInvoiceRows?.[0]?.reference_month as string | undefined;
+
+          if (lastReference) {
+            // Calcular meses entre lastReference (YYYY-MM) e referenceMonth (YYYY-MM)
+            const [lastY, lastM] = lastReference.split("-").map(Number);
+            const [curY, curM] = referenceMonth.split("-").map(Number);
+            const monthsSince = (curY - lastY) * 12 + (curM - lastM);
+
+            if (monthsSince < intervalMonths) {
+              console.log(`[GEN-INVOICES] Pulando ${contract.name} (frequência ${frequency}): última fatura em ${lastReference}, faltam ${intervalMonths - monthsSince} mês(es) para a próxima`);
+              skipped++;
+              results.push({
+                contract_id: contract.id,
+                contract_name: contract.name,
+                status: "skipped",
+                invoice_id: null,
+                invoice_number: null,
+                error: null,
+                duration_ms: Date.now() - contractStartTime,
+              });
+              continue;
+            }
+          }
+          // Se nunca gerou (lastReference undefined), permite gerar agora
         }
 
         // Calculate due date based on billing_day

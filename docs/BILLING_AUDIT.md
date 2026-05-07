@@ -430,26 +430,22 @@ Substituído por PR-A.5 (Inter sai inteiro). Não faz sentido investir tempo har
 
 ---
 
-### ✏️ PR-C — Frequência de cobrança via Asaas Subscriptions (2-3 dias)
+### ✏️ PR-C — Frequência de cobrança via lógica de pulo (Estratégia B) ✅ CONCLUÍDO
 
-**Mudou:** vamos usar `POST /v3/subscriptions` do Asaas (cycle MONTHLY/BIMONTHLY/QUARTERLY/SEMIANNUALLY/YEARLY) em vez de implementar lógica própria de cron.
+**Decisão estratégica (2026-05-07):** após análise comparativa entre Estratégia A (Asaas Subscriptions nativas) e Estratégia B (cron local com pulo), optamos pela B. Razões: princípio do projeto de REUTILIZAR código existente; risco menor; reversibilidade fácil; mantém autoridade local sobre quando gerar; não bloqueia migração futura para Subscriptions.
 
-**Escopo:**
-- Schema: `contracts.billing_frequency enum('monthly','bimonthly','quarterly','semiannual','annual')` DEFAULT `'monthly'`
-- Schema: `contracts.asaas_subscription_id text` (referencia subscription Asaas)
-- Refator `generate-monthly-invoices`:
-  - Se `asaas_subscription_id` está populado: o Asaas gera as cobranças automaticamente, cron só sincroniza
-  - Se não populado: cron cria subscription com cycle correto e popula `asaas_subscription_id`
-- Webhook `webhook-asaas-nfse`: tratar `INVOICE_CREATED` (Asaas avisa que gerou nova fatura na subscription) → criar registro local em `invoices`
-- UI: `ContractForm` adiciona dropdown "Periodicidade"
-- Migration: backfill `billing_frequency='monthly'` para os 31 contratos existentes
+**Branch:** `feat/billing-frequency-pr-c`
 
-**Critério de pronto:**
-- Cliente com frequência trimestral só recebe cobrança a cada 3 meses
-- Cobrança gerada pelo Asaas (não pelo cron próprio)
-- TS 0 erros
+**Escopo realizado:**
+- Schema: `contracts.billing_frequency text NOT NULL DEFAULT 'monthly'` com `CHECK` aceitando `monthly`/`bimonthly`/`quarterly`/`semiannual`/`yearly`
+- Migration `20260507204537` com snapshot de backup em `_billing_pr_c_backup_billing_frequency`
+- Edge `generate-monthly-invoices`: lógica de pulo (~30 LOC) que busca última invoice do contrato e calcula meses entre referências. Se `monthsSince < intervalMonths`, pula com `status='skipped'`
+- UI `ContractForm.tsx`: dropdown "Periodicidade" com 5 opções; schema Zod, defaultValues e payload do save atualizados
+- TS 0 erros, vitest 59/59 ✅
 
-**Resolve gaps:** G1
+**Resolve gaps:** G1 (cobrança em frequências diferentes de mensal)
+
+**Estratégia A (Subscriptions Asaas) descartada por hora.** Registrada como opção futura quando Colmeia virar SaaS multi-tenant ou quiser delegar régua de cobrança ao Asaas.
 
 ---
 
