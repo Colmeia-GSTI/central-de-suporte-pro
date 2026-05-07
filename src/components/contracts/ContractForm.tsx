@@ -68,7 +68,7 @@ const contractSchema = z.object({
   internal_notes: z.string().optional(),
   billing_day: z.coerce.number().min(1).max(28).default(10),
   days_before_due: z.coerce.number().min(1).max(30).default(5),
-  billing_provider: z.enum(["banco_inter", "asaas"]).default("banco_inter"),
+  billing_provider: z.enum(["asaas"]).default("asaas"),
   payment_preference: z.enum(["boleto", "pix", "both"]).default("boleto"),
   generate_initial_invoice: z.boolean().default(false),
   first_payment_date: z.string().optional(),
@@ -160,7 +160,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       internal_notes: contractData?.internal_notes || "",
       billing_day: contractData?.billing_day || 10,
       days_before_due: contractData?.days_before_due || 5,
-      billing_provider: (contractData?.billing_provider as "banco_inter" | "asaas") || "banco_inter",
+      billing_provider: "asaas" as const,
       payment_preference: (contractData?.payment_preference as "boleto" | "pix" | "both") || "boleto",
       generate_initial_invoice: false,
       first_payment_date: "",
@@ -773,11 +773,10 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent modal={false}>
-                      <SelectItem value="banco_inter">Banco Inter</SelectItem>
                       <SelectItem value="asaas">Asaas</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormDescription>Provedor para boleto/PIX</FormDescription>
+                  <FormDescription>Provedor para boleto/PIX e NFS-e</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -873,7 +872,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
                             />
                           </FormControl>
                           <FormLabel className="cursor-pointer text-sm">
-                            Gerar boleto/PIX automaticamente ({form.watch("billing_provider") === "asaas" ? "Asaas" : "Banco Inter"})
+                            Gerar boleto/PIX automaticamente (Asaas)
                           </FormLabel>
                         </FormItem>
                       )}

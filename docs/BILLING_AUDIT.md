@@ -1,10 +1,17 @@
 # 📊 BILLING_AUDIT — Auditoria do Módulo Faturamento
 
-**Data:** 2026-05-07
+**Data:** 2026-05-07 (criado) | 2026-05-07 (decisão Asaas-only registrada)
 **Autor:** Claude (auditoria automática a partir do código real em `main`)
 **Escopo:** Módulo `billing` (faturamento, boletos, NFSe, notificações de cobrança, conciliação)
 **Base:** Commit atual de `main` pós-hotfix `fix/billing-pix-contamination`
 **Substitui:** Seção 4.6 (Financeiro MSP) do `COLMEIA_ROADMAP_MESTRE`
+
+> **🎯 DECISÃO ESTRATÉGICA REGISTRADA (2026-05-07):**
+> Migração completa para **Asaas como único provedor de cobrança** (boleto, PIX, NFSe).
+> Banco Inter desativado para novas faturas; boletos legados mantidos durante coexistência (~60-90 dias).
+> Custo incremental: ~R$60-80/mês (0,34% da receita anual).
+> Justificativa: bug crônico Inter (rate limit + escopo OAuth `cob.write` desabilitado), codebase Asaas ~80% pronto, resolve gap G1 (cobrança bimestral/trimestral) usando subscriptions nativas.
+> Implementação: PR-A.5 (em curso na branch `feat/billing-asaas-migration`).
 
 ---
 
@@ -386,211 +393,158 @@ Cron + manual via `BillingNfseTab` + edge `asaas-nfse` (action `emit` ou `emit_s
 
 ## 9. Plano de refator faseado
 
+> **REVISADO em 2026-05-07** após decisão de migrar para Asaas-only.
+> PRs marcados ❌ foram cancelados. PRs marcados ✏️ foram simplificados. PRs marcados 🆕 foram adicionados.
+
 Cada PR é independente, com critério de pronto explícito. Ordem otimizada para **não bloquear produção** (cada PR pode ser deployado isoladamente).
 
-### PR-B — Hardening edge `banco-inter` (1 dia) ✅ PRÓXIMO
+### 🆕 PR-A.5 — Migração Inter → Asaas (1 dia) ⏳ EM CURSO
+
+**Branch:** `feat/billing-asaas-migration`
 
 **Escopo:**
-- Implementar token cache OAuth (memória in-process, TTL 30min)
-- Retry com exponential backoff em HTTP 429 (3 tentativas, 1s/3s/9s)
-- Refatorar `action="test"` para fazer 1 OAuth única (escopo combinado), não 6 sequenciais
-- Tipar erros: `auth_failed | scope_missing | rate_limited | network_error | unknown`
-- Mensagens de erro claras por categoria
-- Notificar admin via email quando rate limit detectado em produção
+- Edge `generate-monthly-invoices`: forçar `provider='asaas'` (remover lookup Inter, dead code)
+- Edge `asaas-nfse`: corrigir bug `boleto_status='enviado'` → `'gerado'` ao criar (mentia sobre estado real)
+- `ContractForm.tsx`: remover opção "Banco Inter" do select (Asaas único)
+- Migration: snapshot de backup + UPDATE `contracts.billing_provider='asaas'` para os 31 contratos active
+- CHANGELOG + docs
+
+**Coexistência:**
+- Boletos Inter já emitidos (cobrança maio/2026) **continuam ativos** até serem pagos ou vencerem
+- `webhook-banco-inter` **mantém-se funcional** para receber `PAYMENT_CONFIRMED` dos legados
+- Edges `banco-inter` e `webhook-banco-inter` **NÃO removidas neste PR**
 
 **Critério de pronto:**
-- Botão "Testar Conexão" não bate rate limit em uso normal
-- Falhas transitórias 429 se auto-recuperam
-- Mensagem de erro reflete causa real
+- TS 0 erros
+- Próximas faturas geradas pelo cron usam Asaas
+- Migration aplicada com snapshot intacto para reversão
+- Boletos Inter legados continuam acessíveis para o cliente pagar
 
-**Resolve gaps:** G2, G3, G6
-**Reduz dívida:** D9, D10
+**Resolve gaps:** parcialmente G2/G3 (Inter sai de cena para novas faturas)
 
 ---
 
-### PR-C — Frequência de cobrança (2-3 dias)
+### ❌ PR-B — Hardening edge `banco-inter` — CANCELADO
+
+Substituído por PR-A.5 (Inter sai inteiro). Não faz sentido investir tempo hardening de algo que vai morrer.
+
+---
+
+### ✏️ PR-C — Frequência de cobrança via Asaas Subscriptions (2-3 dias)
+
+**Mudou:** vamos usar `POST /v3/subscriptions` do Asaas (cycle MONTHLY/BIMONTHLY/QUARTERLY/SEMIANNUALLY/YEARLY) em vez de implementar lógica própria de cron.
 
 **Escopo:**
 - Schema: `contracts.billing_frequency enum('monthly','bimonthly','quarterly','semiannual','annual')` DEFAULT `'monthly'`
-- Schema: `contracts.last_billed_at date` para controlar pulos
-- Refator `generate-monthly-invoices` → `generate-recurring-invoices`:
-  - Critério de geração: `EXTRACT(MONTH FROM age(now(), last_billed_at))` >= intervalo da frequência
-  - Atualizar `last_billed_at = now()` após gerar
+- Schema: `contracts.asaas_subscription_id text` (referencia subscription Asaas)
+- Refator `generate-monthly-invoices`:
+  - Se `asaas_subscription_id` está populado: o Asaas gera as cobranças automaticamente, cron só sincroniza
+  - Se não populado: cron cria subscription com cycle correto e popula `asaas_subscription_id`
+- Webhook `webhook-asaas-nfse`: tratar `INVOICE_CREATED` (Asaas avisa que gerou nova fatura na subscription) → criar registro local em `invoices`
 - UI: `ContractForm` adiciona dropdown "Periodicidade"
-- Migration: backfill `billing_frequency='monthly'` para os 31 contratos existentes; `last_billed_at` = última invoice gerada
-- Renomear cron `generate-invoices-daily` → mantém nome para evitar quebrar Lovable Cloud schedule
+- Migration: backfill `billing_frequency='monthly'` para os 31 contratos existentes
 
 **Critério de pronto:**
-- Cliente com frequência trimestral só gera fatura a cada 3 meses
-- Migrations idempotentes
+- Cliente com frequência trimestral só recebe cobrança a cada 3 meses
+- Cobrança gerada pelo Asaas (não pelo cron próprio)
 - TS 0 erros
 
 **Resolve gaps:** G1
 
 ---
 
-### PR-D — Unificar fluxo de reenvio (1 dia)
+### ✅ PR-D — Unificar fluxo de reenvio (1 dia) — MANTIDO
 
-**Escopo:**
-- Centralizar TODA lógica de reenvio em `useInvoiceActions.handleResendNotification`
-- Eliminar `handleResendNotification` próprio em `BillingErrorsPanel` e `InvoiceProcessingHistory`
-- Padronizar 1 popover/menu (`InvoiceActionsPopover`) usado em TODAS as 4 telas
-- Padronizar condições de visibilidade do botão em 1 helper `canResendInvoice(invoice, nfse)`
-- Mensagens de erro padronizadas
-
-**Critério de pronto:**
-- Operador encontra "Reenviar email/WhatsApp" no MESMO lugar (menu ⋮) em qualquer tela
-- Lógica em 1 hook (não 4)
-- TS 0 erros
-
-**Resolve gaps:** G5
-**Reduz dívida:** D3, D4, D5
+(Escopo idêntico ao planejado originalmente — agnóstico de provider.)
 
 ---
 
-### PR-E — Máquina de estado da fatura (FSM) (1-2 dias)
+### ✅ PR-E — Máquina de estado da fatura (FSM) (1-2 dias) — MANTIDO
 
-**Escopo:**
-- Definir FSM clara em `src/lib/billing-fsm.ts`:
-  ```
-  invoice.status × boleto_status × email_status × nfse_status
-   → derived state: 'aguardando_geracao' | 'aguardando_envio' | 'aguardando_pagamento'
-                  | 'pago' | 'em_atraso' | 'cancelada' | 'com_erro'
-  ```
-- View materializada `invoice_state` ou função `compute_invoice_state(invoice_id)` em SQL
-- UI usa `derivedState` em todos os lugares (não recalcula condições inline)
-- Helper `canResendInvoice`, `canRegenerateBoleto`, `canEmitNfse` baseados em FSM
-
-**Critério de pronto:**
-- Mesma fatura nunca aparece com decisão diferente em 2 telas
-- Adicionar nova ação = adicionar 1 transição na FSM, não 4 condições inline
-- TS 0 erros
-
-**Resolve gaps:** G10
-**Reduz dívida:** D1, D6
+(Mais simples agora — só 1 provider.)
 
 ---
 
-### PR-F — Régua de cobrança escalonada (2 dias)
+### ✅ PR-F — Régua de cobrança escalonada (2 dias) — MANTIDO
 
-**Escopo:**
-- Tabela `billing_collection_steps`:
-  ```
-  id, days_relative_due (-5, -2, 0, 1, 5, 10, 15, 30...)
-  channel ('email', 'whatsapp', 'both')
-  template text (com variáveis)
-  active boolean
-  ```
-- Cron `notify-due-invoices` lê tabela e dispara conforme step
-- UI Configurações → Régua de Cobrança permite editar
-- Default: 4 steps (D-5 email, D-2 email+wa, D+1 email+wa, D+5 email+wa)
-
-**Critério de pronto:**
-- Admin altera régua sem mexer em código
-- Cliente recebe N notificações conforme escala
-
-**Resolve gaps:** G8, G11
+**Bônus:** Asaas tem régua de cobrança nativa via WhatsApp (R$ 0,55/msg). Avaliar usar a régua deles em vez de implementar a nossa.
 
 ---
 
-### PR-G — Dashboard de saúde + alerta proativo (1 dia)
-
-**Escopo:**
-- View `/billing/health`: taxa de sucesso 7/30 dias, erros do dia, fila de retry, latência da última geração
-- Cron `notify-billing-health-daily`: se houve N+ falhas no dia, manda email para admin
-- Alerta crítico se `notify-due-invoices` não rodou (heartbeat)
-
-**Critério de pronto:**
-- Admin recebe email quando algo quebra
-- Métrica visível antes do cliente reclamar
-
-**Resolve gaps:** G4, G13
+### ✅ PR-G — Dashboard de saúde + alerta proativo (1 dia) — MANTIDO
 
 ---
 
-### PR-H — Limpar lixo + extrair `inter_codigo_solicitacao` (1 dia)
+### ❌ PR-H — Limpar lixo + extrair `inter_codigo_solicitacao` — CANCELADO
 
-**Escopo:**
-- Coluna nova: `invoices.inter_codigo_solicitacao text`
-- Migrar dados de `notes` (que começam com padrão Inter) para coluna nova
-- `banco-inter` passa a usar `inter_codigo_solicitacao`
-- `notes` vira somente "observação livre"
-- Centralizar strings de erro em `src/lib/billing-errors.ts`
-- Centralizar regras em `src/lib/billing-rules.ts`
-- Quebrar `BillingInvoicesTab` em sub-componentes
-- Quebrar `useInvoiceActions` em hooks especializados
-- Importar helpers `_shared/auth-helpers.ts` em todas edges billing
-
-**Critério de pronto:**
-- `notes` não tem mais codigoSolicitacao
-- TS 0 erros
-- Tamanho dos arquivos diminui ≥ 30%
-
-**Reduz dívida:** D1, D6, D8, D11, D12
+`inter_codigo_solicitacao` era específico do Inter. Sem Inter, não precisa. Demais limpezas (centralizar errors/rules) movidas para PR-K.
 
 ---
 
-### PR-I — `pix_status` dedicado + payment_errors estruturado (1 dia)
+### ✏️ PR-I — `payment_errors` estruturado (1 dia)
+
+**Mudou:** sem precisar de `pix_status` separado (Asaas tem status unificado). Foco só em estruturar histórico de erros.
 
 **Escopo:**
-- Coluna `invoices.pix_status` análoga a `boleto_status`
 - Coluna `invoices.payment_errors jsonb` para histórico de erros tipados
-- Edge `generate-recurring-invoices` (renomeada) grava erros estruturados
+- Edge `generate-monthly-invoices` grava erros estruturados
 - Painel de Erros mostra cada erro com tipo + timestamp
 
-**Critério de pronto:**
-- Operador vê histórico de tentativas + tipo de erro por fatura
-
-**Resolve gaps:** G7
-**Reduz dívida:** D11
+**Resolve gaps:** G7 (parcialmente, integrado com Asaas)
 
 ---
 
-### PR-J — Testes E2E billing (2 dias)
+### ✅ PR-J — Testes E2E billing (2 dias) — MANTIDO
+
+---
+
+### ✅ PR-K — Documentação consolidada + limpeza geral (1-2 dias)
+
+**Escopo expandido:**
+- Tudo do plano original
+- + Centralizar strings de erro em `src/lib/billing-errors.ts`
+- + Centralizar regras em `src/lib/billing-rules.ts`
+- + Quebrar `BillingInvoicesTab` em sub-componentes
+- + Quebrar `useInvoiceActions` em hooks especializados
+
+---
+
+### 🆕 PR-DECOM — Decommission Banco Inter (1h, daqui ~60-90 dias)
+
+**Pré-requisito:** todos os boletos Inter legados devem ter sido pagos ou cancelados. Validar via:
+
+```sql
+SELECT count(*) FROM invoices
+WHERE billing_provider = 'banco_inter'
+  AND status IN ('pending', 'overdue');
+-- Esperado: 0
+```
 
 **Escopo:**
-- 1 fluxo crítico por PR anterior
-- Mocks de Asaas/Inter
-- Suite roda no CI
-
-**Critério de pronto:**
-- 80%+ dos fluxos cobertos
-- Regressão é detectada antes do deploy
-
-**Reduz dívida:** D13
+- Arquivar (NÃO deletar) edges `banco-inter` e `webhook-banco-inter` em `supabase/functions/_deprecated/`
+- Remover secrets Inter do Lovable Cloud
+- Cancelar webhook configurado no portal Inter
+- Encerrar conta Inter (decisão do usuário)
 
 ---
 
-### PR-K — Documentação consolidada (1 dia)
-
-**Escopo:**
-- `docs/BILLING_AUDIT.md` (este arquivo) atualizado com estado pós-refator
-- `docs/BILLING_RULES.md`: regras de negócio explícitas
-- `docs/BILLING_FLOWS.md`: diagramas de sequência por fluxo
-- Arquivar `COLMEIA_ROADMAP_MESTRE`, `_ATUALIZADO`, `SNAPSHOT_ONBOARDING` em `docs/_archive/`
-- Atualizar `REFACTORING_ROADMAP.md` removendo Seção 4.6 (substituída)
-
-**Critério de pronto:**
-- Fonte da verdade única
-- Onboarding de qualquer dev ou IA leva < 30 min
-
----
-
-### Total estimado
+### Total estimado revisado
 
 ```
-PR-B  Hardening Inter           1 dia
-PR-C  Frequência de cobrança    2-3 dias
-PR-D  Unificar reenvio          1 dia
-PR-E  FSM da fatura             1-2 dias
-PR-F  Régua de cobrança         2 dias
-PR-G  Saúde + alertas           1 dia
-PR-H  Lixo + codigoSolicitacao  1 dia
-PR-I  pix_status + erros        1 dia
-PR-J  E2E                       2 dias
-PR-K  Docs                      1 dia
+PR-A.5  Migração Inter → Asaas        1 dia    (em curso)
+PR-B    Hardening Inter               ❌ CANCELADO
+PR-C    Frequência via Subscriptions  2-3 dias
+PR-D    Unificar reenvio              1 dia
+PR-E    FSM da fatura                 1-2 dias
+PR-F    Régua de cobrança             2 dias
+PR-G    Saúde + alertas               1 dia
+PR-H    Lixo + codigoSolicitacao      ❌ CANCELADO (movido p/ PR-K)
+PR-I    payment_errors                1 dia
+PR-J    E2E                           2 dias
+PR-K    Docs + limpeza geral          1-2 dias
+PR-DECOM Decommission Inter           1h (em ~60-90 dias)
 ─────────────────────────────────────────
-TOTAL                           13-15 dias
+TOTAL                                 12-15 dias úteis
 ```
 
 ---
