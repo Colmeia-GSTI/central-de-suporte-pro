@@ -391,22 +391,13 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         if (!invoiceError && invoice) {
           if (data.generate_payment) {
             try {
-              if (data.billing_provider === "asaas") {
-                await supabase.functions.invoke("asaas-nfse", {
-                  body: {
-                    action: "create_payment",
-                    invoice_id: invoice.id,
-                    billing_type: data.payment_preference === "pix" ? "PIX" : "BOLETO",
-                  },
-                });
-              } else {
-                await supabase.functions.invoke("banco-inter", {
-                  body: {
-                    invoice_id: invoice.id,
-                    payment_type: data.payment_preference === "pix" ? "pix" : "boleto",
-                  },
-                });
-              }
+              await supabase.functions.invoke("asaas-nfse", {
+                body: {
+                  action: "create_payment",
+                  invoice_id: invoice.id,
+                  billing_type: data.payment_preference === "pix" ? "PIX" : "BOLETO",
+                },
+              });
             } catch (paymentError) {
               console.error("[ContractForm] Erro ao gerar pagamento:", paymentError);
             }
@@ -760,27 +751,14 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="billing_provider"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provedor de Cobrança</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent modal={false}>
-                      <SelectItem value="asaas">Asaas</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>Provedor para boleto/PIX e NFS-e</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <FormItem>
+              <FormLabel>Provedor de Cobrança</FormLabel>
+              <div className="flex h-10 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
+                <span className="font-medium">Asaas</span>
+                <span className="text-xs text-muted-foreground">(único provedor ativo)</span>
+              </div>
+              <FormDescription>Boleto, PIX e NFS-e via Asaas</FormDescription>
+            </FormItem>
 
             <FormField
               control={form.control}
