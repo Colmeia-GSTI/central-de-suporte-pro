@@ -1,318 +1,205 @@
 # 🏗️ PROJECT_REFACTOR_PLAN — Plano Mestre de Refatoração
 
-**Data inicial:** 2026-05-07
-**Autor:** Claude (auditoria automática a partir do código real em `main`)
-**Escopo:** Projeto inteiro Colmeia HD Pro (frontend, edges, schema, deps)
-**Status:** documento vivo — atualizar a cada PR fechado
+**Última atualização:** 2026-05-07 (após pausa pós-PR-D)
+**Mantenedor:** Claude (atualizado a cada PR fechado)
+**Escopo:** Projeto inteiro Colmeia HD Pro
 
-> **Documento guarda-chuva.** Para detalhes módulo a módulo:
-> - Billing → `docs/BILLING_AUDIT.md`
-> - (futuro) Tickets → `docs/TICKETS_AUDIT.md`
-> - (futuro) CMDB → `docs/CMDB_AUDIT.md`
+> **Documento guarda-chuva.** Para detalhes:
+> - **Histórico de mudanças** → `CHANGELOG.md` (raiz)
+> - **Auditoria do módulo Billing** → `docs/BILLING_AUDIT.md`
+> - **Documentos arquivados** → `docs/_archive/README.md`
 
 ---
 
-## 1. Visão geral do projeto
+## 1. Estado atual (snapshot 2026-05-07)
 
-### 1.1 Métricas brutas (2026-05-07 antes do PR-CLEAN)
+### 1.1 Métricas
 
-| Métrica | Valor |
-|---|--:|
-| Repo total (sem `node_modules`/`.git`) | 11 MB |
-| Arquivos `.ts/.tsx` | 436 |
-| Linhas de código | 108.653 |
-| Edge functions | 53 |
-| Migrations | 146 |
-| Pages | 32 |
-| Componentes shadcn/ui | 56 instalados |
-| Dependências `package.json` | 99 |
+| Métrica | Antes da sessão (manhã) | Agora | Δ |
+|---|--:|--:|--:|
+| Tamanho do repo | 11 MB | **~7 MB** | **-36%** |
+| Arquivos `.ts/.tsx` | 436 | 419 | -17 |
+| Linhas de código | 108.653 | ~104.275 | **-4.378** |
+| Lock files | 4 (lixo) | **1 (Bun)** | -3 |
+| Deps `package.json` | 99 | 89 | -10 |
+| Boletos com erro em produção | 8 | 0–4 | -50%+ |
+| Provedor de cobrança | Inter (broken) + Asaas (NFSe só) | **Asaas (tudo)** | unificado |
+| Testes vitest | 18 | **59** | +41 |
 
-### 1.2 Pastas top-level por tamanho
+### 1.2 Top 10 arquivos maiores (candidatos a refator futuro)
 
-```
-3.0M  src/components
-1.1M  supabase/functions
-772K  supabase/migrations
-496K  src/pages
-232K  src/integrations  (← types.ts gerado, 7200 linhas, intocável)
-204K  src/hooks
-100K  src/lib
-80K   src/test
-```
-
-### 1.3 Top 15 arquivos maiores
-
-| Linhas | Arquivo | Categoria |
+| Linhas | Arquivo | Plano |
 |--:|---|---|
 | 7200 | `src/integrations/supabase/types.ts` | gerado, intocável |
-| 2150 | `supabase/functions/asaas-nfse/index.ts` | refatorar (PR-K do BILLING_AUDIT) |
+| 2150 | `supabase/functions/asaas-nfse/index.ts` | refatorar (PR-K) |
 | 1201 | `src/components/contracts/ContractForm.tsx` | refatorar (PR-K) |
 | 1173 | `src/components/billing/nfse/NfseDetailsSheet.tsx` | refatorar (PR-K) |
-| 1134 | `src/components/billing/BillingInvoicesTab.tsx` | refatorar (PR-D/E) |
-| 1129 | `supabase/functions/generate-monthly-invoices/index.ts` | refatorar (PR-C) |
+| 1134 | `src/components/billing/BillingInvoicesTab.tsx` | refatorar (PR-K) |
+| 1129 | `supabase/functions/generate-monthly-invoices/index.ts` | OK (PR-C aplicado) |
 | 1107 | `supabase/functions/unifi-sync/index.ts` | candidato consolidar com sync-* |
-| 1059 | `src/pages/client-portal/ClientPortalPage.tsx` | quebrar em sub-componentes |
-| 931 | `src/components/billing/BillingNfseTab.tsx` | consolidar com BillingBoletosTab |
-| 912 | `src/components/settings/ClientMappingsTab.tsx` | revisar |
-| 908 | `src/components/clients/ClientAssetsList.tsx` | revisar |
-| 880 | `supabase/functions/banco-inter/index.ts` | DELETAR no PR-DECOM (~60d) |
-| 877 | `src/components/billing/BillingErrorsPanel.tsx` | refatorar (PR-D) |
-| 875 | `src/pages/tickets/TicketsPage.tsx` | quebrar |
-| 864 | `src/components/billing/BillingBoletosTab.tsx` | consolidar com BillingNfseTab |
+| 1059 | `src/pages/client-portal/ClientPortalPage.tsx` | quebrar (PR futuro) |
+| 931 | `src/components/billing/BillingNfseTab.tsx` | consolidar c/ BillingBoletosTab (PR-K) |
+| 880 | `supabase/functions/banco-inter/index.ts` | **DELETAR no PR-DECOM (~60d)** |
 
 ---
 
-## 2. Plano de Refatoração
+## 2. Sessão 2026-05-07 — o que foi feito
 
-### 2.1 Estratégia geral
+7 PRs em sequência, todos com TS 0 erros e 59/59 testes verdes:
 
-O projeto evoluiu por acumulação de features. Há **5 fontes de inchaço**:
-
-1. **Componentes shadcn/ui não usados** (instalados via CLI mas nunca importados) → fácil remover
-2. **Componentes mortos** (substituídos por versões novas, mas o arquivo antigo nunca foi deletado) → fácil remover
-3. **Dependências órfãs** (npm packages cujo único uso era os shadcn da categoria 1) → remover junto
-4. **Edges/componentes Inter** (saindo do uso após migração para Asaas) → remover no PR-DECOM
-5. **Componentes gigantes** (>800 linhas com responsabilidades múltiplas) → refator estrutural por módulo
-
-### 2.2 Sequência de PRs (atualizada 2026-05-07)
-
-| PR | Escopo | Status |
-|---|---|:--:|
-| PR-A.5 | Migração Inter → Asaas | ✅ MERGED |
-| PR-CLEAN | Limpeza de lixo (shadcn/ui + componentes mortos + deps órfãs) | ✅ MERGED |
-| PR-CLEAN-2 | Lock files + ícones PWA + pinning Bun | ✅ MERGED |
-| PR-C | Cobrança bimestral/trimestral/semestral/anual (Estratégia B — cron local com pulo) | ✅ MERGED |
-| **PR-D** | **Unificar fluxo de reenvio/regenerar/polling (4 implementações → 1 hook)** | ⏳ EM CURSO |
-| PR-E | Máquina de estado (FSM) da fatura | planejado |
-| PR-E | Máquina de estado (FSM) da fatura | planejado |
-| PR-F | Régua de cobrança escalonada | planejado |
-| PR-G | Dashboard de saúde + alerta proativo | planejado |
-| PR-I | `payment_errors` estruturado | planejado |
-| PR-J | Testes E2E billing | planejado |
-| PR-K | Quebrar componentes gigantes + consolidar tabs | planejado |
-| PR-DECOM | Deletar Banco Inter (~60-90 dias) | aguarda liquidar boletos legados |
+| PR | Branch | Status |
+|---|---|---|
+| Hotfix PIX×Boleto | `hotfix/billing-pix-contamination` | ✅ MERGED |
+| PR-A.5 (Migração Asaas) | `feat/billing-asaas-migration` | ✅ MERGED |
+| PR-CLEAN (Lixo) | `chore/cleanup-dead-code` | ✅ MERGED |
+| PR-CLEAN-2 (Bun + PWA) | `chore/cleanup-pwa-icons-and-lockfiles` | ✅ MERGED |
+| PR-C (Frequência) | `feat/billing-frequency-pr-c` | ✅ MERGED |
+| PR-D (Unificar reenvio) | `feat/billing-unify-actions-pr-d` | ⏳ aguardando merge |
+| chore/docs-consolidation (este) | `chore/docs-consolidation` | ⏳ EM CURSO |
 
 ---
 
-## 3. PR-CLEAN — Detalhe (este PR)
+## 3. Lista CONSOLIDADA do que ainda falta
 
-### 3.1 Objetivo
+### 3.1 Aguardando ação do usuário (curto prazo)
 
-Reduzir código morto sem alterar funcionalidade. Pré-requisito para todas as refatorações futuras: começar de uma base limpa.
+| # | Ação | Onde |
+|--:|---|---|
+| 1 | Mesclar PR-D | https://github.com/Colmeia-GSTI/central-de-suporte-pro/pull/new/feat/billing-unify-actions-pr-d |
+| 2 | Mesclar este PR de docs | (será publicado ao fim deste commit) |
 
-### 3.2 Mudanças aplicadas
+### 3.2 PRs de Billing pendentes (ordem do BILLING_AUDIT)
 
-**Categoria 1 — Componentes shadcn/ui não usados (12 arquivos, ~1.108 linhas)**
+| PR | Escopo curto | Tempo | Dependências |
+|---|---|---|---|
+| **PR-E** | Máquina de estado da fatura (FSM) — `derived state` consolidando `status × boleto_status × email_status × nfse_status`. Helpers `canResendInvoice`, `canRegenerateBoleto`, `canEmitNfse` em 1 lugar | 1-2 dias | nenhuma |
+| **PR-F** | Régua de cobrança escalonada — tabela `billing_collection_steps` com `days_relative_due` (-5, -2, 0, +1, +5...). Cron `notify-due-invoices` lê e dispara conforme step | 2 dias | PR-E (FSM ajuda a decidir quando enviar) |
+| **PR-G** | Dashboard de saúde + alerta proativo — `/billing/health` com taxa sucesso 7/30d, fila retry, latência. Cron `notify-billing-health-daily` envia email se houve falhas | 1 dia | nenhuma |
+| **PR-I** | `payment_errors` estruturado — coluna `invoices.payment_errors jsonb` com histórico tipado de erros. Painel mostra cada erro com tipo + timestamp | 1 dia | nenhuma |
+| **PR-J** | Testes E2E billing — 1 fluxo crítico por PR anterior, mocks de Asaas, suite roda no CI | 2 dias | PR-D, PR-E |
+| **PR-K** | Quebrar componentes gigantes + consolidar tabs — `BillingBoletosTab` + `BillingNfseTab` → 1 componente parametrizado; quebrar `BillingInvoicesTab` (1134 LOC), `NfseDetailsSheet` (1173 LOC), `ContractForm` (1201 LOC) | 1-2 dias | melhor depois do PR-E |
+| **PR-DECOM** | Deletar Banco Inter — arquivar edges `banco-inter` + `webhook-banco-inter`, deletar `BancoInterConfigForm` (769 LOC), remover secrets, encerrar conta. **-2.041 LOC** | 1h | aguardar 60-90 dias até último boleto Inter liquidar |
 
-```
-src/components/ui/carousel.tsx        (224)
-src/components/ui/menubar.tsx         (207)
-src/components/ui/context-menu.tsx    (178)
-src/components/ui/navigation-menu.tsx (120)
-src/components/ui/breadcrumb.tsx      ( 90)
-src/components/ui/drawer.tsx          ( 87)
-src/components/ui/input-otp.tsx       ( 61)
-src/components/ui/toggle-group.tsx    ( 49)
-src/components/ui/resizable.tsx       ( 37)
-src/components/ui/hover-card.tsx      ( 27)
-src/components/ui/slider.tsx          ( 23)
-src/components/ui/aspect-ratio.tsx    (  5)
-```
+**Total billing pendente:** ~9-13 dias úteis + PR-DECOM em ~60-90 dias.
 
-> `chart.tsx` (303 linhas) **NÃO foi deletado** — usado por `MessageMetricsDashboard` e `IntegrationHealthDashboard`.
+### 3.3 Backlog NÃO-billing (vindo de sessões anteriores)
 
-**Categoria 2 — Componentes mortos (5 arquivos, ~1.332 linhas)**
+#### 🔴 Monitoring (URGENTE — funcional mas inativo)
+- **0 alertas lifetime** apesar de 8 dispositivos monitorados — cliente fica sem aviso quando infra quebra
+- Investigar `send-alert-notification` edge (432 LOC) e fix do disparo
 
-```
-src/components/clients/ClientContactsList.tsx       (367) — substituído
-src/components/settings/CertificateUpload.tsx       (343) — substituído por CertificateManager
-src/components/billing/BillingBatchProcessing.tsx   (339) — sem rota, sem import
-src/components/inventory/DeviceExpandableRow.tsx    (207) — sem import
-src/components/calendar/InvoiceDueBadge.tsx         ( 76) — sem import
-```
+#### Section 4.5 — CMDB (próximo módulo grande após billing)
+- Expandir tabelas `doc_*` (21 tabelas existem, faltam relações)
+- Adicionar `client_branches` (filial/localização) — pré-requisito faltante
+- Auto-collection de inventário via TRMM, UniFi, CheckMK
+- Manual entry para clientes sem agente
+- Inventário (assets, software licenses)
 
-> ⚠️ **NOTA TÉCNICA:** `src/components/auth/ProtectedRoute.test.tsx` (270 linhas) inicialmente identificado como "dead" pelo critério "sem import", mas RESTAURADO porque arquivos `*.test.*` são descobertos pelo vitest por padrão de naming, não por import. Regra para auditorias futuras: **nunca aplicar critério `sem-import` a `*.test.*` ou `*.spec.*`**.
+#### Banking (módulo a construir)
+- BASE: bank accounts, expenses/accounts payable, cost centers
+- CAMADA 2: OFX import, conciliação, DRE, MRR/ARR, aging, margin/cliente, forecast
+- CAMADA 3 (deferida): IGPM/IPCA reajuste, overtime billing, commissions, integração contábil
 
-**Categoria 3 — Dependências órfãs no `package.json` (10 deps)**
+#### Calendar
+- Secretária cria appointments → sync para Google Calendar do técnico no mobile
 
-```
-@radix-ui/react-aspect-ratio       (usado só pelo aspect-ratio.tsx)
-@radix-ui/react-context-menu       (usado só pelo context-menu.tsx)
-@radix-ui/react-hover-card         (usado só pelo hover-card.tsx)
-@radix-ui/react-menubar            (usado só pelo menubar.tsx)
-@radix-ui/react-navigation-menu    (usado só pelo navigation-menu.tsx)
-@radix-ui/react-slider             (usado só pelo slider.tsx)
-embla-carousel-react               (usado só pelo carousel.tsx)
-input-otp                          (usado só pelo input-otp.tsx)
-react-resizable-panels             (usado só pelo resizable.tsx)
-vaul                               (usado só pelo drawer.tsx)
-```
+#### Tickets
+- Ticket creation deve permitir linkar device/computer (dropdown filtrado por cliente, hostname + last_user de TRMM) — habilita análise longitudinal de problemas por máquina
 
-`package.json` cai de 99 para 89 dependências.
+### 3.4 Limpezas técnicas pendentes (não urgentes)
 
-### 3.3 Saldo
-
-| Métrica | Antes | Depois | Δ |
-|---|--:|--:|--:|
-| Linhas de código | 108.653 | ~106.213 | **-2.440 (-2,2%)** |
-| Arquivos `.tsx/.ts` | 436 | 419 | -17 |
-| Dependências `package.json` | 99 | 89 | -10 |
-
-### 3.4 Validação
-
-- ✅ `tsc --noEmit` — 0 erros
-- ✅ `vitest run` — 59/59 testes passando (mantido após restauração do ProtectedRoute.test.tsx)
-- ✅ `npm install` regenerou `package-lock.json`
-- ✅ Nenhum arquivo deletado é referenciado em `src/`, `supabase/` ou `package.json`
-
-### 3.5 Risco
-
-**Zero em produção.** Nenhum arquivo deletado é importado em qualquer lugar do código. Build, runtime e testes preservados.
+- **Migrations duplicadas** detectadas: `20260205100000` + `20260205130319` adicionam mesmas colunas. Idempotente, baixa prioridade.
+- **`handleReprocessNfse`, `handleRetryNfse`, `handleClearFailedNfse`** em `BillingErrorsPanel` ainda têm duplicação leve (PR-D.5 se virar problema).
+- **`unifi-sync/index.ts` 1107 LOC** — candidato consolidar pattern com `tactical-rmm-sync` e `checkmk-sync`.
+- **Quebrar `ClientPortalPage.tsx` 1059 LOC** em sub-seções.
 
 ---
 
-## 4. PR-CLEAN-2 — Lock files Bun + ícones PWA + pinning
+## 4. Princípios mantidos
 
-### 4.1 Objetivo
+Os princípios do projeto continuam guiando todo PR:
 
-Resolver 2 fontes adicionais de bloat detectadas após PR-CLEAN:
-1. **4 lock files coexistindo no repo** (npm + pnpm + bun text + bun binary) → ~1 MB de ruído + risco de inconsistência entre dev local e Lovable Cloud
-2. **PWA icons fakeados** (4 PNGs com nome "144x144/192x192/384x384" mas resolução real 1024×1024) → ~3 MB desperdiçados, navegador baixando 864 KB para exibir ícone de 144 px
-
-### 4.2 Decisão: Bun como package manager oficial
-
-Confirmado pelo Lovable em 2026-05-07: **"O projeto usa bun (comandos como `bun add`, `bunx vitest`, `bunx tsc`)"**. Lovable Cloud detecta `bun.lockb` e usa Bun automaticamente.
-
-**Pinning explícito** adicionado em `package.json`:
-```json
-"packageManager": "bun@1.1.30"
-```
-
-### 4.3 Mudanças aplicadas
-
-**Lock files removidos (3 arquivos, ~1.0 MB):**
-- `package-lock.json` (469 KB) — npm, criado acidentalmente pelo PR-CLEAN
-- `pnpm-lock.yaml` (321 KB) — pnpm, vestígio histórico
-- `bun.lock` (254 KB) — bun em formato texto, redundante com `bun.lockb`
-
-**Lock file mantido:** `bun.lockb` (240 KB) — formato binário oficial do Bun.
-
-**Ícones PWA redimensionados** (5 arquivos, **3.0 MB → 446 KB = -88%**):
-
-| Arquivo | Antes (bytes) | Antes (resolução real) | Depois (bytes) | Depois (resolução real) |
-|---|--:|---|--:|---|
-| `icon-144x144.png` | 884 KB | ❌ 1024×1024 | 24 KB | ✅ 144×144 |
-| `icon-192x192.png` | 871 KB | ❌ 1024×1024 | 38 KB | ✅ 192×192 |
-| `icon-384x384.png` | 880 KB | ❌ 1024×1024 | 130 KB | ✅ 384×384 |
-| `apple-touch-icon.png` | 884 KB | ❌ 1024×1024 | 34 KB | ✅ 180×180 |
-| `icon-512x512.png` | 14 KB (JPEG fake) | ✅ 512×512 mas era JPEG renomeado | 220 KB | ✅ 512×512 PNG real |
-
-> **Nota:** `icon-512x512.png` AUMENTOU em bytes porque era JPEG renomeado `.png` (compressão lossy). Agora é PNG real (lossless, qualidade superior, 512×512). Ainda assim o **TOTAL da pasta caiu 88%**.
-
-Logo Colmeia (favo de mel branco em fundo gradient laranja/amarelo) **preservada** em todos os ícones — usei `icon-192x192.png` original (1024×1024) como source para todos os redimensionamentos via ImageMagick.
-
-### 4.4 Saldo
-
-| Métrica | Antes do PR-CLEAN-2 | Depois | Δ |
-|---|--:|--:|--:|
-| Repo total | 11 MB | ~7 MB | **-36%** |
-| Lock files | 4 (1.3 MB) | 1 (240 KB) | -3 arquivos, -1 MB |
-| `pwa-icons/` | 3.4 MB | 446 KB | **-87%** |
-| Dependências `package.json` | 89 (após PR-CLEAN) | 89 | mantido |
-| Pinning de package manager | implícito | explícito (`bun@1.1.30`) | ↑ clareza |
-
-### 4.5 Validação
-
-- ✅ `tsc --noEmit` — 0 erros
-- ✅ `vitest run` — 59/59 testes passando
-- ✅ Resoluções dos PNGs validadas via `identify` (ImageMagick)
-- ✅ Logo visualmente preservada em todos os tamanhos
-- ✅ JSON do `package.json` válido após edit
-
-### 4.6 Risco
-
-**Zero em produção.**
-- Lovable Cloud usa Bun (confirmado) → continuará detectando `bun.lockb` e instalando dependências normalmente
-- Ícones funcionam idêntico (manifest e Vite PWA plugin referenciam por path, não por bytes)
-- Qualidade visual dos ícones MELHOROU (antes navegador downsampleava 1024→144, agora cada ícone é exibido no tamanho que foi exportado)
+1. **REUTILIZAR** componentes/hooks/utilitários antes de criar novos
+2. **OTIMIZAR** o existente antes de propor nova implementação
+3. **LIMPAR** código morto, imports não usados e lógica redundante ao tocar em arquivos
+4. **ORGANIZAR** seguindo estrutura de pastas e padrões já adotados
+5. **COMPACTAR** sem sacrificar legibilidade — sem verbosidade, sem duplicação
+6. **NUNCA gerar código descartável** — cada linha entregue tem propósito e está pronta para produção
+7. **Validação obrigatória**: TS 0 erros + vitest 59/59 antes de qualquer push
+8. **Backup tático** em migrations destrutivas: snapshot table com nome `_NOME_PR_backup_DESCRIPTION` antes de UPDATE/DELETE
+9. **Coexistência durante migrações** críticas: nunca quebrar caminhos legados sem decommission planejado
+10. **PR review obrigatório** para mudanças em produção: nunca merge direto na main quando muda comportamento de runtime
 
 ---
 
-## 5. Backlog de limpeza para PRs futuros
+## 5. Próximos passos sugeridos (após pausa)
 
-### 5.1 Quando PR-DECOM (Inter) rodar (~60-90 dias)
+Quando voltar, ordem recomendada:
 
-```
-src/components/settings/integrations/BancoInterConfigForm.tsx  (769)
-supabase/functions/banco-inter/index.ts                        (880)
-supabase/functions/webhook-banco-inter/index.ts                (392)
-+ secrets BANCO_INTER_* no Lovable Cloud
-+ webhook configurado no portal Inter
-```
+1. **Mesclar PR-D + este PR de docs** (10 min)
+2. **PR-E (FSM da fatura)** — desbloqueia PR-F e PR-J. ~1-2 dias.
+3. **PR-G (Saúde + alertas)** — benefício imediato (você é avisado quando billing quebra). ~1 dia.
+4. **Pause billing, vai para Monitoring** — fix urgente do "0 alertas lifetime". ~1 dia.
+5. **PR-F + PR-I + PR-J** — fechar billing
+6. **PR-DECOM** — quando todos boletos Inter de maio/2026 estiverem liquidados
 
-**Ganho:** ~2.041 linhas + redução de superfície de ataque.
-
-### 5.2 Migrations duplicadas detectadas
-
-```
-20260205100000_*.sql ─┐
-                      ├── adicionam as MESMAS colunas em invoices
-20260205130319_*.sql ─┘
-```
-
-Idempotente (`IF NOT EXISTS`), não quebra nada. Limpar em PR de schema cleanup futuro (não urgente).
-
-### 5.3 Componentes gigantes a quebrar (refator estrutural — PR-K)
-
-Já listados em `BILLING_AUDIT.md` para o módulo billing. Para outros módulos, candidatos:
-
-- `ClientPortalPage.tsx` (1.059) — quebrar em seções
-- `TicketsPage.tsx` (875) — extrair filtros, tabela e dialogs
-- `ClientMappingsTab.tsx` (912) — revisar necessidade
-- `ClientAssetsList.tsx` (908) — quebrar
-- `unifi-sync/index.ts` (1.107) — extrair shared com `tactical-rmm-sync` e `checkmk-sync`
-
-### 5.4 Componentes UI shadcn que sobraram mas podem sair se substituídos
-
-`chart.tsx` (303) — usado por 2 dashboards. Se algum dia migrar para Recharts direto, pode sair com 1 dep (`recharts` continua usado, mas o wrapper sai).
+Alternativa **se quiser priorizar produto sobre técnica**:
+- Pula PR-E/F/G/I/J/K
+- Vai direto para Monitoring (urgente)
+- Depois CMDB Section 4.5 (módulo novo, alto valor)
+- Banking depois
 
 ---
 
-## 6. Como manter este documento vivo
+## 6. Saúde dos documentos
 
-- Atualizar **seção 2.2** quando um PR mudar de status
-- Atualizar **seção 3.3** com métricas reais ao final do PR-CLEAN
-- Adicionar entrada `## Histórico — YYYY-MM-DD` quando algo grande mudar
-- Não deletar entradas — apenas marcar como "concluído"
-- Revisão trimestral
+**Documentos atuais (mantidos):**
+
+| Doc | Status | Tamanho |
+|---|---|--:|
+| `CHANGELOG.md` | ✅ atualizado pós-PR-D | ~245 LOC |
+| `docs/BILLING_AUDIT.md` | ✅ PR-D marcado, PR-E em diante planejado | 624 LOC |
+| `docs/PROJECT_REFACTOR_PLAN.md` (este) | ✅ consolidado nesta sessão | (este) |
+| `docs/_archive/README.md` | ✅ criado para explicar arquivamento | (novo) |
+| `README.md`, `AI_RULES.md` | OK — princípios estáveis | 73 + 51 |
+| `SECURITY.md`, `BACKUP_PROCEDURE.md`, `ADMIN_TOOLS.md`, `DEPLOYMENT_PLAYBOOK.md`, `FEATURE_FLAGS.md`, `TESTING.md` | OK — operacionais | — |
+| `PRODUCT_IDEAS.md` | OK — backlog de ideias | 43 LOC |
+
+**Arquivados em `docs/_archive/` nesta sessão:**
+- `SYSTEM_DOCUMENTATION_2026-02-13.md` (1590 LOC, 3 meses desatualizado)
+- `RELATORIO_OTIMIZACAO_2026-02-27.md` (853 LOC, análise de outro agente)
+- `IMPLEMENTATION_GUIDE_2026-02-05.md` (496 LOC, conhecimento absorvido)
+- `REFACTORING_ROADMAP_2026-04-29.md` (410 LOC, substituído por este doc + BILLING_AUDIT)
+
+**Total reduzido na raiz:** -3.349 LOC de docs antigos (movidos para arquivo, não deletados).
 
 ---
 
-## 7. Comandos para auditoria contínua
+## 7. Comandos úteis para auditoria contínua
 
 ```bash
-# Ver tamanho atual do repo
+# Tamanho atual do repo
 du -sh . --exclude=node_modules --exclude=.git
 
-# Listar top 20 arquivos por tamanho
+# Top 20 arquivos maiores
 find src supabase/functions -type f \( -name "*.ts" -o -name "*.tsx" \) | xargs wc -l | sort -rn | head -20
 
-# Detectar componentes não importados (CUIDADO: não usar para *.test.*)
+# Detectar componentes não importados (NUNCA usar para *.test.*)
 for f in $(find src/components -name "*.tsx" -not -path "*/ui/*"); do
   name=$(basename "$f" .tsx)
   count=$(grep -rln "${name}" src/ supabase/ 2>/dev/null | grep -v "$f" | wc -l)
   [ "$count" = "0" ] && echo "DEAD: $f"
 done
 
-# Detectar deps órfãs (heurística: nome aparece 1x = só no próprio shadcn ui dele)
-for dep in @radix-ui/react-X embla-carousel-react vaul; do
-  echo "$dep: $(grep -rln "$dep" src/ | wc -l) refs"
-done
+# Validar antes de qualquer push
+bunx tsc --noEmit && bunx vitest run
 
-# Validar TS + testes
-npx tsc --noEmit && npx vitest run
+# Verificar gatilho do PR-DECOM (rodar no SQL Editor)
+SELECT count(*) FROM invoices
+WHERE billing_provider='banco_inter' AND status IN ('pending','overdue');
+-- Se = 0: pode rodar PR-DECOM
 ```
 
 ---
 
-**FIM DO DOCUMENTO** — gerado em 2026-05-07 a partir do código real.
+**FIM DO DOCUMENTO** — atualizar a cada PR fechado, revisar a cada pausa longa.
