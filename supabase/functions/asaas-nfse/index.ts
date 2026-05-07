@@ -1971,9 +1971,12 @@ Deno.serve(async (req) => {
 
         if (paymentType === "BOLETO" || paymentType === "UNDEFINED") {
           // Campos obrigatórios para boleto (conforme contrato de dados padronizado)
+          // boleto_status='gerado' (não 'enviado'): boleto foi criado no Asaas mas
+          // o email com o boleto ainda não foi confirmado pelo Resend. O fluxo de
+          // notificação (notify-due-invoices ou resend-payment-notification) é quem
+          // marca como 'enviado' + seta boleto_sent_at após confirmação do envio.
           updateData.payment_method = "boleto";
-          updateData.boleto_status = "enviado";
-          updateData.boleto_sent_at = new Date().toISOString();
+          updateData.boleto_status = "gerado";
 
           // Buscar identificationField via endpoint separado (conforme docs.asaas.com)
           // POST /payments retorna bankSlipUrl mas NÃO retorna identificationField diretamente

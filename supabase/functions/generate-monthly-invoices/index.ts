@@ -245,20 +245,13 @@ Deno.serve(async (req) => {
     const results: ContractResult[] = [];
     const errors: ExecutionError[] = [];
 
-    // Check if billing providers are configured
-    const { data: bancoInterSettings } = await supabase
-      .from("integration_settings")
-      .select("is_active")
-      .eq("integration_type", "banco_inter")
-      .single();
-
+    // Check if billing provider is configured (Asaas only após migração 2026-05-07)
     const { data: asaasSettings } = await supabase
       .from("integration_settings")
       .select("is_active")
       .eq("integration_type", "asaas")
       .single();
 
-    const bancoInterActive = bancoInterSettings?.is_active || false;
     const asaasActive = asaasSettings?.is_active || false;
 
     for (const contract of contracts as unknown as Contract[]) {
@@ -563,9 +556,12 @@ Deno.serve(async (req) => {
           status: "success",
         });
 
-        // Auto-generate payment based on billing_provider
-        const provider = contract.billing_provider || "banco_inter";
-        const providerActive = provider === "asaas" ? asaasActive : bancoInterActive;
+        // Auto-generate payment - SEMPRE via Asaas (migração 2026-05-07)
+        // Banco Inter desativado: não usar mais. Boletos Inter legados continuam
+        // ativos até liquidarem (webhook-banco-inter mantém-se funcional para receber
+        // PAYMENT_CONFIRMED dos boletos já emitidos antes desta migração).
+        const provider = "asaas" as const;
+        const providerActive = asaasActive;
 
         if (providerActive && contract.payment_preference) {
           const paymentTypes = contract.payment_preference === "both"
