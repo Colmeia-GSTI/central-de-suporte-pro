@@ -449,9 +449,25 @@ Substituído por PR-A.5 (Inter sai inteiro). Não faz sentido investir tempo har
 
 ---
 
-### ✅ PR-D — Unificar fluxo de reenvio (1 dia) — MANTIDO
+### ✅ PR-D — Unificar fluxo de reenvio/regenerar/polling ✅ CONCLUÍDO
 
-(Escopo idêntico ao planejado originalmente — agnóstico de provider.)
+**Branch:** `feat/billing-unify-actions-pr-d`
+
+**Diagnóstico:** Auditoria revelou que `handleResendNotification` tinha 4 implementações (1 no hook + 3 duplicadas), `handleRegenerateBoleto` tinha 2 cópias idênticas (e ainda com dead branch Inter), e `handleForcePolling` 2 cópias.
+
+**Refator:**
+- `useInvoiceActions` ganha `handleRegenerateBoleto` + `handleForcePolling` (extraídos)
+- `BillingErrorsPanel` e `InvoiceProcessingHistory` passam a usar tudo via hook
+- Dead branch Inter removido das 2 cópias de regenerar boleto
+- Estados locais redundantes (`resendingId`, `pollingId` em ErrorsPanel; parte do `actionLoading` em ProcessingHistory) eliminados
+
+**Resultado:** UX consistente nas 3 telas, validação prévia (`checkArtifactReadiness`) agora aplicada universalmente, tratamento de `data.blocked` e `errorCode` específicos ganho de graça.
+
+**Saldo:** -78 linhas, TS 0 erros, vitest 59/59.
+
+**Resolve gaps:** G5 | **Reduz dívida:** D3, D4, D5
+
+**Fora do escopo (registrado para PR futuro):** `handleReprocessNfse` (específico NFSe), `handleRetryNfse`, `handleClearFailedNfse` no ErrorsPanel — também tem duplicação mas em menor grau, podem ir num PR-D.5 se virar problema.
 
 ---
 

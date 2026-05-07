@@ -436,16 +436,63 @@ export function useInvoiceActions() {
     }
   };
 
+  // PR-D (2026-05-07): handlers extraídos de BillingErrorsPanel + InvoiceProcessingHistory
+  // que mantinham implementações próprias e divergentes. Centralizar aqui resolve UX
+  // inconsistente, dead branch Inter (sempre Asaas após PR-A.5) e chamadas duplicadas.
+
+  const [regeneratingBoleto, setRegeneratingBoleto] = useState<string | null>(null);
+  const [forcingPolling, setForcingPolling] = useState<string | null>(null);
+
+  const handleRegenerateBoleto = async (invoiceId: string) => {
+    setRegeneratingBoleto(invoiceId);
+    try {
+      const { error } = await supabase.functions.invoke("asaas-nfse", {
+        body: { action: "create_payment", invoice_id: invoiceId, billing_type: "BOLETO" },
+      });
+      if (error) throw error;
+      toast.success("Boleto reenviado para geração");
+      invalidateAll();
+    } catch (e: unknown) {
+      toast.error("Erro ao regenerar boleto", { description: getErrorMessage(e) });
+    } finally {
+      setRegeneratingBoleto(null);
+    }
+  };
+
+  const handleForcePolling = async (invoiceId?: string) => {
+    // invoiceId é apenas marcador visual de loading no item específico;
+    // a edge poll-services consulta todos os boletos pendentes em uma chamada.
+    setForcingPolling(invoiceId ?? "global");
+    try {
+      const { data, error } = await supabase.functions.invoke("poll-services", {
+        body: { services: ["boleto"] },
+      });
+      if (error) throw error;
+      toast.success("Polling executado", {
+        description: `${data?.processed ?? 0} consultados, ${data?.updated ?? 0} atualizados`,
+      });
+      invalidateAll();
+    } catch (e: unknown) {
+      toast.error("Erro no polling", { description: getErrorMessage(e) });
+    } finally {
+      setForcingPolling(null);
+    }
+  };
+
   return {
     generatingPayment,
     processingComplete,
     sendingNotification,
     checkingPayment,
+    regeneratingBoleto,
+    forcingPolling,
     isProcessing,
     markAsPaidMutation,
     cancelInvoiceMutation,
     handleGeneratePayment,
     handleResendNotification,
+    handleRegenerateBoleto,
+    handleForcePolling,
     handleEmitComplete,
     handleCheckPaymentStatus,
     checkArtifactReadiness,

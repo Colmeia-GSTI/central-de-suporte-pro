@@ -93,11 +93,17 @@ type ErrorNfse = {
 
 export function BillingErrorsPanel() {
   const queryClient = useQueryClient();
-  const { cancelInvoiceMutation } = useInvoiceActions();
+  const {
+    cancelInvoiceMutation,
+    sendingNotification,
+    forcingPolling,
+    regeneratingBoleto,
+    handleResendNotification,
+    handleRegenerateBoleto,
+    handleForcePolling,
+  } = useInvoiceActions();
   const [tab, setTab] = useState<"boletos" | "nfse" | "notifications">("boletos");
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
-  const [pollingId, setPollingId] = useState<string | null>(null);
-  const [resendingId, setResendingId] = useState<string | null>(null);
   const [editingServiceCode, setEditingServiceCode] = useState<string | null>(null);
   const [linkNfse, setLinkNfse] = useState<NfseWithRelations | null>(null);
   // Sanitation dialog state
@@ -158,42 +164,6 @@ export function BillingErrorsPanel() {
     queryClient.invalidateQueries({ queryKey: ["billing-errors-emails"] });
     queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
     queryClient.invalidateQueries({ queryKey: ["invoices"] });
-  };
-
-  const handleRegenerateBoleto = async (invoice: ErrorInvoice) => {
-    setReprocessingId(invoice.id);
-    try {
-      const provider = invoice.billing_provider || "banco_inter";
-      const fnName = provider === "asaas" ? "asaas-nfse" : "banco-inter";
-      const body = provider === "asaas"
-        ? { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" }
-        : { invoice_id: invoice.id, payment_type: "boleto" };
-      
-      const { error } = await supabase.functions.invoke(fnName, { body });
-      if (error) throw error;
-      toast.success("Boleto reenviado para geração");
-      invalidateAll();
-    } catch (e: unknown) {
-      toast.error("Erro ao regenerar boleto", { description: getErrorMessage(e) });
-    } finally {
-      setReprocessingId(null);
-    }
-  };
-
-  const handleForcePolling = async (invoiceId: string) => {
-    setPollingId(invoiceId);
-    try {
-      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["boleto"] } });
-      if (error) throw error;
-      toast.success("Polling executado", {
-        description: `${data.processed || 0} consultados, ${data.updated || 0} atualizados`,
-      });
-      invalidateAll();
-    } catch (e: unknown) {
-      toast.error("Erro no polling", { description: getErrorMessage(e) });
-    } finally {
-      setPollingId(null);
-    }
   };
 
   const isE0014Message = (message: string) =>
@@ -390,22 +360,6 @@ export function BillingErrorsPanel() {
     }
   };
 
-  const handleResendNotification = async (invoice: ErrorInvoice, channel: "email" | "whatsapp") => {
-    setResendingId(invoice.id);
-    try {
-      const { error } = await supabase.functions.invoke("resend-payment-notification", {
-        body: { invoice_id: invoice.id, channels: [channel] },
-      });
-      if (error) throw error;
-      toast.success(`Notificação reenviada via ${channel === "email" ? "E-mail" : "WhatsApp"}`);
-      invalidateAll();
-    } catch (e: unknown) {
-      toast.error("Erro ao reenviar", { description: getErrorMessage(e) });
-    } finally {
-      setResendingId(null);
-    }
-  };
-
   const isE0014 = (msg: string | null) => msg?.includes("E0014") || msg?.includes("duplicada") || msg?.includes("DPS_DUPLICADA");
 
 
@@ -543,10 +497,10 @@ export function BillingErrorsPanel() {
                               variant="outline"
                               size="sm"
                               className="h-7 text-xs"
-                              disabled={reprocessingId === inv.id}
-                              onClick={() => handleRegenerateBoleto(inv)}
+                              disabled={regeneratingBoleto === inv.id}
+                              onClick={() => handleRegenerateBoleto(inv.id)}
                             >
-                              {reprocessingId === inv.id ? (
+                              {regeneratingBoleto === inv.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
                                 <RotateCcw className="h-3 w-3 mr-1" />
@@ -558,10 +512,10 @@ export function BillingErrorsPanel() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-7 text-xs"
-                                disabled={pollingId === inv.id}
+                                disabled={forcingPolling === inv.id}
                                 onClick={() => handleForcePolling(inv.id)}
                               >
-                                {pollingId === inv.id ? (
+                                {forcingPolling === inv.id ? (
                                   <Loader2 className="h-3 w-3 animate-spin" />
                                 ) : (
                                   <Search className="h-3 w-3 mr-1" />
@@ -765,10 +719,10 @@ export function BillingErrorsPanel() {
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs"
-                            disabled={resendingId === inv.id}
-                            onClick={() => handleResendNotification(inv, "email")}
+                            disabled={!!sendingNotification?.startsWith(inv.id)}
+                            onClick={() => handleResendNotification(inv.id, ["email"])}
                           >
-                            {resendingId === inv.id ? (
+                            {sendingNotification === `${inv.id}-email` ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <Mail className="h-3 w-3 mr-1" />
@@ -779,10 +733,14 @@ export function BillingErrorsPanel() {
                             variant="ghost"
                             size="sm"
                             className="h-7 text-xs"
-                            disabled={resendingId === inv.id}
-                            onClick={() => handleResendNotification(inv, "whatsapp")}
+                            disabled={!!sendingNotification?.startsWith(inv.id)}
+                            onClick={() => handleResendNotification(inv.id, ["whatsapp"])}
                           >
-                            <Send className="h-3 w-3 mr-1" />
+                            {sendingNotification === `${inv.id}-whatsapp` ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Send className="h-3 w-3 mr-1" />
+                            )}
                             WhatsApp
                           </Button>
                         </div>

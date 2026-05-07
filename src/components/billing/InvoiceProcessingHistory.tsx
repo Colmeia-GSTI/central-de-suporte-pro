@@ -27,6 +27,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { getErrorMessage } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Tables, Enums } from "@/integrations/supabase/types";
@@ -182,6 +183,14 @@ export function InvoiceProcessingHistory({
   invoice,
 }: InvoiceProcessingHistoryProps) {
   const queryClient = useQueryClient();
+  const {
+    sendingNotification,
+    forcingPolling,
+    regeneratingBoleto,
+    handleResendNotification,
+    handleRegenerateBoleto,
+    handleForcePolling,
+  } = useInvoiceActions();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   if (!invoice) return null;
@@ -189,26 +198,8 @@ export function InvoiceProcessingHistory({
   const steps = buildProcessingSteps(invoice);
   const processingAttempts = invoice.processing_attempts || 0;
 
-  const handleRegenerateBoleto = async () => {
-    setActionLoading("boleto");
-    try {
-      const provider = (invoice as any).billing_provider || "banco_inter";
-      const fnName = provider === "asaas" ? "asaas-nfse" : "banco-inter";
-      const body = provider === "asaas"
-        ? { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" }
-        : { invoice_id: invoice.id, payment_type: "boleto" };
-      const { error } = await supabase.functions.invoke(fnName, { body });
-      if (error) throw error;
-      toast.success("Boleto reenviado para geração");
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-    } catch (e: unknown) {
-      toast.error("Erro ao regenerar boleto", { description: getErrorMessage(e) });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
+  // handleReprocessNfse permanece local (específico de NFSe, não está no hook).
+  // handleRegenerateBoleto, handleResendNotification, handleForcePolling vêm do hook (PR-D).
   const handleReprocessNfse = async () => {
     setActionLoading("nfse");
     try {
@@ -232,39 +223,6 @@ export function InvoiceProcessingHistory({
     }
   };
 
-  const handleResendNotification = async () => {
-    setActionLoading("email");
-    try {
-      const { error } = await supabase.functions.invoke("resend-payment-notification", {
-        body: { invoice_id: invoice.id, channels: ["email"] },
-      });
-      if (error) throw error;
-      toast.success("Notificação reenviada");
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-    } catch (e: unknown) {
-      toast.error("Erro ao reenviar", { description: getErrorMessage(e) });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleForcePolling = async () => {
-    setActionLoading("polling");
-    try {
-      const { data, error } = await supabase.functions.invoke("poll-services", { body: { services: ["boleto"] } });
-      if (error) throw error;
-      toast.success("Polling executado", {
-        description: `${data.updated || 0} atualizado(s)`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-    } catch (e: unknown) {
-      toast.error("Erro no polling", { description: getErrorMessage(e) });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const getStepAction = (step: ProcessingStep) => {
     if (step.status !== "error" && !(step.type === "boleto" && step.status === "pending" && !invoice.boleto_barcode && !invoice.boleto_url)) return null;
 
@@ -276,10 +234,10 @@ export function InvoiceProcessingHistory({
               variant="outline"
               size="sm"
               className="h-7 text-xs mt-2"
-              disabled={actionLoading === "boleto"}
-              onClick={handleRegenerateBoleto}
+              disabled={regeneratingBoleto === invoice.id}
+              onClick={() => handleRegenerateBoleto(invoice.id)}
             >
-              {actionLoading === "boleto" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCcw className="h-3 w-3 mr-1" />}
+              {regeneratingBoleto === invoice.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCcw className="h-3 w-3 mr-1" />}
               Regenerar Boleto
             </Button>
           );
@@ -290,10 +248,10 @@ export function InvoiceProcessingHistory({
               variant="outline"
               size="sm"
               className="h-7 text-xs mt-2"
-              disabled={actionLoading === "polling"}
-              onClick={handleForcePolling}
+              disabled={forcingPolling === invoice.id}
+              onClick={() => handleForcePolling(invoice.id)}
             >
-              {actionLoading === "polling" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              {forcingPolling === invoice.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
               Forçar Polling
             </Button>
           );
@@ -318,10 +276,10 @@ export function InvoiceProcessingHistory({
             variant="outline"
             size="sm"
             className="h-7 text-xs mt-2"
-            disabled={actionLoading === "email"}
-            onClick={handleResendNotification}
+            disabled={!!sendingNotification?.startsWith(invoice.id)}
+            onClick={() => handleResendNotification(invoice.id, ["email"])}
           >
-            {actionLoading === "email" ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+            {sendingNotification === `${invoice.id}-email` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
             Reenviar Notificação
           </Button>
         );
