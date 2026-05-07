@@ -568,12 +568,14 @@ Deno.serve(async (req) => {
         const providerActive = provider === "asaas" ? asaasActive : bancoInterActive;
 
         if (providerActive && contract.payment_preference) {
-          try {
-            const paymentTypes = contract.payment_preference === "both" 
-              ? ["boleto", "pix"] 
-              : [contract.payment_preference];
+          const paymentTypes = contract.payment_preference === "both"
+            ? ["boleto", "pix"]
+            : [contract.payment_preference];
+          let lastPaymentType: string | null = null;
 
+          try {
             for (const paymentType of paymentTypes) {
+              lastPaymentType = paymentType;
               console.log(`[GEN-INVOICES] Gerando ${paymentType} via ${provider} para fatura #${newInvoice.invoice_number}`);
 
               const invokeResult = provider === "asaas"
@@ -616,16 +618,37 @@ Deno.serve(async (req) => {
 
             console.log(`[GEN-INVOICES] Pagamento gerado para fatura #${newInvoice.invoice_number} (status definido pelo provedor)`);
           } catch (paymentError) {
-            console.error(`[GEN-INVOICES] Erro ao gerar pagamento para ${contract.name}:`, paymentError);
+            const errMsg = paymentError instanceof Error ? paymentError.message : "Erro ao gerar pagamento";
+            console.error(`[GEN-INVOICES] Erro ao gerar ${lastPaymentType ?? "pagamento"} para ${contract.name}:`, paymentError);
 
-            // Record payment error in invoice status
-            await supabase
-              .from("invoices")
-              .update({
-                boleto_status: "erro",
-                boleto_error_msg: paymentError instanceof Error ? paymentError.message : "Erro ao gerar pagamento",
-              })
-              .eq("id", newInvoice.id);
+            if (lastPaymentType === "boleto" || lastPaymentType === null) {
+              // Falha ao gerar boleto (ou catch antes do loop iniciar): marcar campo correto
+              await supabase
+                .from("invoices")
+                .update({
+                  boleto_status: "erro",
+                  boleto_error_msg: errMsg,
+                })
+                .eq("id", newInvoice.id);
+            } else if (lastPaymentType === "pix") {
+              // Falha de PIX: NÃO tocar em boleto_status (boleto da iter anterior pode estar OK).
+              // Registrar em application_logs (sem alterar schema, sem sobrescrever notes do Inter).
+              await supabase.from("application_logs").insert({
+                module: "billing",
+                level: "error",
+                message: `Falha ao gerar PIX para fatura #${newInvoice.invoice_number}`,
+                context: {
+                  invoice_id: newInvoice.id,
+                  invoice_number: newInvoice.invoice_number,
+                  contract_id: contract.id,
+                  contract_name: contract.name,
+                  payment_type: "pix",
+                  error_message: errMsg,
+                  execution_id: executionId,
+                },
+              });
+              console.warn(`[GEN-INVOICES] PIX falhou para fatura #${newInvoice.invoice_number}, boleto preservado: ${errMsg}`);
+            }
           }
         }
 

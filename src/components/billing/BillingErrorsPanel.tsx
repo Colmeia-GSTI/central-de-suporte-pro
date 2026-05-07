@@ -167,7 +167,7 @@ export function BillingErrorsPanel() {
       const fnName = provider === "asaas" ? "asaas-nfse" : "banco-inter";
       const body = provider === "asaas"
         ? { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" }
-        : { action: "generate", invoice_id: invoice.id };
+        : { invoice_id: invoice.id, payment_type: "boleto" };
       
       const { error } = await supabase.functions.invoke(fnName, { body });
       if (error) throw error;
