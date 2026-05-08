@@ -18,6 +18,23 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fase 3.C.2 — Redirects de URLs antigas + ocultação de tabs deprecated — 2026-05-08)
+Segunda parte da consolidação de tabs. Tabs Boletos / A Receber / Erros **somem do menu** mas URLs antigas continuam funcionando via redirect automático (compat layer). Não remove código ainda — Fase 3.C.3 fará a remoção real.
+
+- **`BillingPage.tsx`** — adicionado `useEffect` de redirect que detecta tabs deprecated na URL e troca para `?tab=invoices` com filtros aplicados:
+  - `?tab=boletos` → `?tab=invoices&pm=boleto`
+  - `?tab=receivable` → `?tab=invoices&status=pending`
+  - `?tab=errors` → `?tab=invoices&status=with_errors`
+  - Usa `setSearchParams(..., { replace: true })` — não polui histórico do navegador
+- **`BILLING_TABS`** — 3 tabs marcadas com `deprecated: true` (receivable, boletos, errors). No `.map()` que renderiza o menu, `if ("deprecated" in tab && tab.deprecated) return null` — não aparecem mais como aba clicável. O componente da tab e a query continuam disponíveis (TabsContent ainda existe), só não há gatilho visual.
+- **`TabsList`** — grid ajustado de `md:grid-cols-11` para `md:grid-cols-8` (3 tabs ocultas).
+- **`BillingInvoicesTab.tsx`** — inicialização de filtros via URL params:
+  - `searchParams.get("status")` → `statusFilter` inicial
+  - `searchParams.get("pm")` → `paymentMethodFilter` inicial (validação contra valores aceitos)
+  - **Comportamento:** clicar em link salvo `?tab=invoices&pm=boleto&status=overdue` abre Faturas com filtros já aplicados, sem clicks adicionais.
+- **Resultado UX**: usuário que tinha link salvo para "Boletos" continua chegando lá (na nova versão unificada). Usuário novo vê BillingPage com 8 tabs em vez de 11.
+- **Saldo**: +49 LOC (compat layer). Remoção real só na Fase 3.C.3.
+
 ### Adicionado (Fase 3.C.1 — Estender BillingInvoicesTab para absorver A Receber + Erros + Boletos — 2026-05-08)
 Primeira parte da consolidação de tabs. Adiciona à BillingInvoicesTab as features que hoje estão em tabs separadas (`AccountsReceivableTab`, `BillingBoletosTab`, `BillingErrorsPanel`). Tabs antigas **continuam funcionando** — serão removidas só nas Fases 3.C.2 (redirects) e 3.C.3 (remoção).
 
