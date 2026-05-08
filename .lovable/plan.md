@@ -1,84 +1,68 @@
-# Hotfix Consolidado — Encerramento Seção 4.5.1
+# Plano: Diagnóstico E2E do Faturamento e correção dos erros recentes
 
-## Resumo da inspeção (Passo 0)
+## Contexto
+A página `/billing` está quebrada com o erro de runtime:
+`ReferenceError: InvoiceTableRow is not defined` em `BillingInvoicesTab.tsx:684`.
 
-| Bug | Status | Ação |
-|---|---|---|
-| **B1** — Campos errados em `DocSectionInfrastructure.tsx` | Confirmado, 1 arquivo afetado | Renomear 7 ocorrências |
-| **B3** — `NONE_BRANCH = "none"` divergente | **JÁ CORRIGIDO** (todos os 6 arquivos usam `"__none__"`) | Pular — registrar no CHANGELOG mesmo assim? Não. Removo da entrada. |
-| **B2** — Badge "Sede" sem destaque | Já condicionado a `is_main`, falta destaque amarelo | Trocar variant/className |
-| **B7** — Dados de teste em VIZU | 4 registros identificados, Sede preservada | Migration de DELETE |
+O componente `src/components/billing/InvoiceTableRow.tsx` existe, mas **não está importado** no `BillingInvoicesTab.tsx` — provavelmente uma refatoração de hoje extraiu a linha da tabela para um arquivo separado e esqueceu o import.
 
-### Detalhe B7 — registros que serão deletados
-- `assets`: "Testes" (`d0dcc88c…`), "TestePR3" (`52f4800b…`)
-- `client_branches`: "Teste Filial" (`4b345121…`, is_main=**false** ✅)
-- `doc_devices`: "Testes" (`64fbdb8f…`)
-- Sede preservada: `94c6fa79…` (is_main=true, nome "Sede" — não casa com `%teste%`)
+Esse erro impede qualquer teste posterior do fluxo, então é correção #1.
 
----
+## Estratégia em 3 fases
 
-## Mudanças
+### Fase 1 — Hotfix imediato (desbloqueia a tela)
+1. Adicionar `import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";` em `BillingInvoicesTab.tsx`.
+2. Validar que `InvoiceTableRow` exporta named export (caso seja default, ajustar import).
+3. Verificar visualmente em `/billing` (preview) que a tabela renderiza sem erro.
 
-### 1) `src/components/clients/documentation/DocSectionInfrastructure.tsx` (B1)
-7 substituições — alinhar com schema real:
-- `general_notes` → `notes` (interface L33, EMPTY L47, read view L109/112, form L190)
-- `gateway_wan_ip` → `gateway_ip_wan` (interface L39, EMPTY L49, read view L128, form L223)
-- `gateway_lan_ip` → `gateway_ip_lan` (interface L40, EMPTY L49, read view L129, form L227)
+### Fase 2 — Auditoria do que foi alterado hoje
+Listar e revisar arquivos do faturamento modificados nas últimas ~24h:
+- `src/components/billing/*` (em especial: `BillingInvoicesTab`, `InvoiceTableRow`, `InvoiceActionsPopover`, `InvoiceInlineActions`, `BillingErrorsPanel`, `NfseAvulsaDialog`)
+- `src/hooks/useInvoices.ts`, `useInvoiceActions.ts`, `useBillingCounters.ts`
+- `src/lib/edgeFunctionError.ts` (criado nesta sessão)
+- `supabase/functions/generate-monthly-invoices/index.ts` (hotfix Bortolini/Capasemu da sessão anterior — verificar se foi aplicado)
 
-### 2) `src/components/clients/ClientBranchesList.tsx` (B2)
-Linha 511-514: trocar
-```tsx
-<Badge variant="secondary" className="gap-1 text-xs">
-  <Star className="h-3 w-3" />
-  Sede
-</Badge>
-```
-por destaque amarelo preenchido (alinhado ao token `--primary` do tema, que é `#F5B700` Honey Gold):
-```tsx
-<Badge className="gap-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 border-transparent">
-  <Star className="h-3 w-3 fill-current" />
-  Sede
-</Badge>
-```
-Mantém o `branch.is_main &&` que já filtra para mostrar só na Sede.
+Para cada arquivo: checar imports faltando/quebrados, props incompatíveis, refs a símbolos removidos. Ferramenta: `rg` + leitura cirúrgica.
 
-### 3) Nova migration `cleanup_test_data_secao_451.sql`
-```sql
-DELETE FROM public.doc_devices
-WHERE client_id = 'c9bab9b7-4d68-438e-aaea-459ae4fa7e85'
-  AND name ILIKE '%teste%';
+### Fase 3 — Teste E2E do fluxo (manual via browser tools + queries SQL)
+Rodar cada cenário no preview, capturar console + network + estado no banco:
 
-DELETE FROM public.assets
-WHERE client_id = 'c9bab9b7-4d68-438e-aaea-459ae4fa7e85'
-  AND name ILIKE '%teste%';
+1. **Listagem de Faturas** (`/billing` tab Faturas)
+   - Carregamento inicial, filtros (status, período, payment_method), busca textual, paginação.
+2. **Filtro "Com erros"** (redirect deprecado `?tab=errors`)
+   - Confirmar que invoices Bortolini/Capasemu aparecem corretamente classificadas.
+3. **Criar fatura nova** (`?action=new`) — InvoiceForm submit.
+4. **Ações por linha** (InvoiceInlineActions + Popover):
+   - Baixar boleto / copiar código de barras / abrir PIX
+   - Emitir NFS-e (EmitNfseDialog)
+   - Reenviar notificação, registrar pagamento manual, 2ª via, renegociar, cancelar NFS-e
+5. **NFS-e tab** — listagem, retry de erros, histórico.
+6. **Conciliação bancária** — abrir tab, render sem erro.
+7. **Saúde / Contas / Serviços / Códigos Tributários** — abrir cada tab, render sem erro.
+8. **Counters** (`useBillingCounters`) — badges batem com queries diretas no banco.
+9. **Edge Functions críticas** — chamar via `supabase--curl_edge_functions`:
+   - `generate-monthly-invoices` (dry-run se houver flag)
+   - `generate-invoice-payments`
+   - `batch-collection-notification`
+   - `manual-payment`, `generate-second-copy`, `renegotiate-invoice`
+   - Verificar logs de cada uma após chamada.
+10. **Estado dos boletos Bortolini + Capasemu** — confirmar via SQL que o hotfix da sessão anterior foi aplicado (boleto_status correto, sem erro residual).
 
-DELETE FROM public.client_branches
-WHERE client_id = 'c9bab9b7-4d68-438e-aaea-459ae4fa7e85'
-  AND name ILIKE '%teste%'
-  AND is_main = false;
-```
+### Entregáveis
+- Relatório E2E: cenário → resultado (✅/❌) → causa raiz se falhar → correção aplicada.
+- Lista consolidada de bugs encontrados, categorizados por severidade.
+- Correções aplicadas em commits atômicos.
+- Atualização do `CHANGELOG.md`.
 
-### 4) `CHANGELOG.md` — sob entrada do PR #4, seção `### Corrigido`
-- Hotfix em `DocSectionInfrastructure.tsx`: alinhamento de 3 nomes de coluna que divergiam do schema (`general_notes`→`notes`, `gateway_wan_ip`→`gateway_ip_wan`, `gateway_lan_ip`→`gateway_ip_lan`). Bug pré-existente que bloqueava 100% dos saves de Infra.
-- Badge "Sede" em `ClientBranchesList` agora com destaque amarelo preenchido (Honey Gold + Star fill), antes usava variant secondary discreto.
-- Cleanup de dados de teste em produção do cliente VIZU (registros criados durante validação E2E dos PRs #2-#4).
+## Detalhes técnicos
+- Não vou rodar `npm run build`/`tsc` manualmente (harness faz automaticamente).
+- Para testes que mutam dados (criar fatura, registrar pagamento), confirmar com você antes ou usar dados de teste descartáveis.
+- Edge functions com webhook (Asaas, Banco Inter) **não** serão disparadas — apenas inspeção de código e logs históricos.
+- Vou usar `supabase--read_query` para validar invariantes no banco (ex: nenhuma invoice com `boleto_status='erro'` e `boleto_url` preenchido simultaneamente).
 
-> **Nota**: B3 (NONE_BRANCH) **não entra no CHANGELOG** — verificação mostrou que já está padronizado em todos os 6 arquivos. Sem ação necessária.
+## Riscos
+- Algumas ações (registrar pagamento, cancelar NFS-e) são destrutivas — vou pular ou pedir confirmação explícita.
+- O hotfix de `generate-monthly-invoices` da sessão anterior pode não ter sido aplicado; se não foi, vou propor reaplicar antes do E2E.
 
-### 5) `REFACTORING_ROADMAP.md`
-Marcar PR #4 da Seção 4.5.1 como ✅ COMPLETO (com hotfix). Sem nova entrada.
-
----
-
-## Validação
-1. `bunx tsc --noEmit` → 0 erros
-2. Counts pós-cleanup: `client_branches`=1 (só Sede), `assets`=0, `doc_devices`=0
-3. Diff dos 2 arquivos UI + caminho da migration
-
----
-
-## Restrições respeitadas
-- Não toca em hooks, RLS, edge functions, schema (só DELETE em 3 tabelas existentes)
-- Não cria arquivos novos de documentação
-- Não renomeia variáveis fora do escopo
-- Sede preservada na migration via `is_main = false`
+## Pergunta antes de começar
+Posso executar ações **não destrutivas** no preview (abrir tabs, listar, baixar PDFs) sem pedir confirmação a cada passo? Para qualquer ação destrutiva (criar/editar/deletar registros, disparar emissões reais de NFS-e ou notificações) eu paro e pergunto.

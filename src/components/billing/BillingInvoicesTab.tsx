@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useInvoices, type InvoiceWithClient, type InvoiceStatusFilter } from "@/hooks/useInvoices";
+import { useInvoices, type InvoiceWithClient, type InvoiceStatusFilter as InvoiceStatusFilterType } from "@/hooks/useInvoices";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
+import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
 import { InvoiceStatusFilter } from "@/components/billing/InvoiceStatusFilter";
 import { InvoiceTotalsBar } from "@/components/billing/InvoiceTotalsBar";
@@ -177,7 +178,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   } = useInvoiceActions();
 
   const { data: invoices = [], isLoading, isFetching } = useInvoices({
-    status: statusFilter as InvoiceStatusFilter,
+    status: statusFilter as InvoiceStatusFilterType,
     dateRange: { from: fromISO, to: toISO },
     paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
     fields: "full",
@@ -362,7 +363,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
           />
         </div>
 
-        <InvoiceStatusFilter value={statusFilter as InvoiceStatusFilter} onChange={(v) => setStatusFilter(v)} />
+        <InvoiceStatusFilter value={statusFilter as InvoiceStatusFilterType} onChange={(v) => setStatusFilter(v)} />
 
         <Select value={paymentMethodFilter} onValueChange={(v) => setPaymentMethodFilter(v as typeof paymentMethodFilter)}>
           <SelectTrigger className="w-36 h-9 text-sm">

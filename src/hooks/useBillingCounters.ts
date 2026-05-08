@@ -28,10 +28,12 @@ export function useBillingCounters() {
           .not("notes", "is", null)
           .is("boleto_barcode", null),
 
+        // NFS-e pendentes vivem em invoices.nfse_status (enum: pendente|gerada|erro)
         supabase
-          .from("nfse_history")
+          .from("invoices")
           .select("id", { count: "exact", head: true })
-          .in("status", ["pendente", "processando"]),
+          .eq("nfse_status", "pendente"),
+
 
         // Boleto errors
         supabase
@@ -39,11 +41,11 @@ export function useBillingCounters() {
           .select("id", { count: "exact", head: true })
           .eq("boleto_status", "erro"),
 
-        // NFS-e errors
+        // NFS-e errors (rastreados em invoices.nfse_status='erro')
         supabase
-          .from("nfse_history")
+          .from("invoices")
           .select("id", { count: "exact", head: true })
-          .in("status", ["erro", "rejeitada"]),
+          .eq("nfse_status", "erro"),
 
         // Email errors
         supabase
