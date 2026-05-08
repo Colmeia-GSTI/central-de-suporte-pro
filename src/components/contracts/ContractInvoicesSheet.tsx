@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useInvoices } from "@/hooks/useInvoices";
 import { format, parseISO, getYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
@@ -65,20 +64,13 @@ export function ContractInvoicesSheet({
   onOpenChange,
   contract,
 }: ContractInvoicesSheetProps) {
-  const { data: invoices = [], isLoading } = useQuery({
-    queryKey: ["contract-invoices", contract.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, invoice_number, reference_month, due_date, amount, status, paid_date")
-        .eq("contract_id", contract.id)
-        .order("due_date", { ascending: false });
-      if (error) throw error;
-      return data as Invoice[];
-    },
+  const { data: invoicesRaw = [], isLoading } = useInvoices({
+    contractId: contract.id,
+    fields: "summary",
+    limit: 500,
     enabled: open,
-    staleTime: 60_000,
   });
+  const invoices = invoicesRaw as unknown as Invoice[];
 
   // Agrupar por ano baseado no due_date
   const groupedByYear = useMemo(() => {
