@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useInvoices, type InvoiceWithClient, type InvoiceStatusFilter } from "@/hooks/useInvoices";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,12 +60,6 @@ import {
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 import { formatDate } from "@/lib/date";
-
-type InvoiceWithClient = Tables<"invoices"> & {
-  clients: { name: string } | null;
-  contract_id: string | null;
-  billing_provider: string | null;
-};
 
 type NfseByInvoice = Record<string, { id: string; status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null; asaas_invoice_id?: string | null }>;
 
@@ -168,27 +163,10 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
     handleCheckPaymentStatus,
   } = useInvoiceActions();
 
-  const { data: invoices = [], isLoading, isFetching } = useQuery({
-    queryKey: ["invoices", statusFilter, fromISO, toISO],
-    queryFn: async () => {
-      let query = supabase
-        .from("invoices")
-        .select("*, clients(name), contract_id, billing_provider")
-        .gte("due_date", fromISO)
-        .lte("due_date", toISO)
-        .order("due_date", { ascending: false })
-        .limit(500);
-
-      if (statusFilter === "with_errors") {
-        query = query.or("boleto_status.eq.erro,nfse_status.eq.erro,email_status.eq.erro");
-      } else if (statusFilter !== "all") {
-        query = query.eq("status", statusFilter as Enums<"invoice_status">);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as InvoiceWithClient[];
-    },
+  const { data: invoices = [], isLoading, isFetching } = useInvoices({
+    status: statusFilter as InvoiceStatusFilter,
+    dateRange: { from: fromISO, to: toISO },
+    fields: "full",
   });
 
   const filteredInvoices = useMemo(() => {

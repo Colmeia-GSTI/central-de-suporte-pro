@@ -18,6 +18,30 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fase 2 — Hooks Centralizados — 2026-05-08)
+Segunda fase do plano de refatoração. Estabelece UMA fonte de verdade para queries de invoices. Resolve dor #2.4 do FINANCIAL_DEEP_AUDIT (race conditions, cache desincronizado).
+
+- **`src/hooks/useInvoices.ts` (novo, ~170 LOC)** — hook flexível com filtros parametrizados:
+  - `useInvoices(filters)` — lista invoices com filtros: `status`, `dateRange`, `paymentMethod`, `withErrors`, `contractId`, `clientId`, `limit`, `fields`, `enabled`
+  - `useInvoice(id)` — busca 1 invoice por ID
+  - `useInvalidateInvoices()` — invalidação centralizada (também invalida `billing-counters`)
+  - **3 fields presets**: `summary` (campos comuns), `full` (todos + relations), `errors` (campos de subprocesso para BillingErrorsPanel)
+  - **queryKey determinístico**: mesmos filtros → mesma chave → cache compartilhado entre componentes (resolve race condition do Phase 0)
+  - Tipos exportados: `Invoice`, `InvoiceWithClient`, `InvoiceWithErrors`, `InvoiceStatusFilter`
+- **3 componentes migrados** (princípio: extrair só quando substitui ≥2 cópias, então outros migram gradualmente):
+  - `BillingInvoicesTab.tsx` — query principal substituída. Tipo local `InvoiceWithClient` removido (vem do hook). Imports `useQuery`, `supabase`, `Tables`, `Enums` ajustados.
+  - `BillingBoletosTab.tsx` — query principal substituída por `useInvoices({ paymentMethod: "boleto", limit: 100, fields: "summary" })`. 5 invalidações `["boletos-dashboard"]` migradas para prefixo `["invoices"]` (cache compartilhado com BillingInvoicesTab).
+  - `ContractInvoicesSheet.tsx` — query substituída por `useInvoices({ contractId, fields: "summary", enabled: open })`. Imports `useQuery`, `supabase` removidos (não há mais uso direto).
+- **Não migrados (intencionalmente)**:
+  - `BillingErrorsPanel` (3 queries com filtros compostos `or()` muito específicos)
+  - `AgingReportWidget` (subset de campos único)
+  - `ClientPortalFinancialTab` (campos de parcelamento + `.neq("status", "cancelled")` específico)
+  - `useInvoiceActions` / `useBillingCounters` (já são hooks)
+  - `FinancialDashboard` (4 queries de count/sum com grouping específico)
+  - `ContractForm` / `ContractHistorySheet` / `InvoiceForm` / `NfseAvulsaDialog` (mutations ou casos específicos)
+  - **Princípio aplicado**: forçar migração desses casos seria criar abstrações inchadas. Eles permanecem com queries diretas e migram quando alguém tocar (oportunidade real de extração).
+- **Saldo**: ~50 LOC removidas dos 3 componentes migrados, +170 LOC reusáveis em hooks/. Cache agora compartilhado entre 3 telas críticas — uma mutation em qualquer uma reflete nas outras.
+
 ### Adicionado (Fase 1 — Helpers + Status Badges Unificados — 2026-05-08)
 Primeira fase do plano de refatoração definido em `docs/FINANCIAL_DEEP_AUDIT.md`. Risco zero (puramente visual). Estabelece o padrão que Fases 2-3 vão reusar.
 

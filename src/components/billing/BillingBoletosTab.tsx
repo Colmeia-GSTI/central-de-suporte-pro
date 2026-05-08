@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useInvoices } from "@/hooks/useInvoices";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -207,20 +208,13 @@ export function BillingBoletosTab() {
     }
   };
 
-  const { data: invoices = [], isLoading } = useQuery({
-    queryKey: ["boletos-dashboard"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, invoice_number, amount, due_date, status, boleto_barcode, boleto_url, notes, clients(name)")
-        .eq("payment_method", "boleto")
-        .order("due_date", { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      return data as BoletoInvoice[];
-    },
+  const { data: invoicesRaw = [], isLoading } = useInvoices({
+    paymentMethod: "boleto",
+    limit: 100,
+    fields: "summary",
   });
+  // Cast para o tipo local BoletoInvoice (subset compatível)
+  const invoices = invoicesRaw as unknown as BoletoInvoice[];
 
 
   const copyToClipboard = (text: string, label: string) => {
@@ -237,7 +231,7 @@ export function BillingBoletosTab() {
       toast.success("Polling executado", {
         description: `${data.processed || 0} consultados, ${data.updated || 0} atualizados`,
       });
-      queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
     } catch (error: unknown) {
       toast.error("Erro no polling", { description: getErrorMessage(error) });
@@ -265,7 +259,7 @@ export function BillingBoletosTab() {
       toast.success("Boleto cancelado", {
         description: `Fatura #${cancelDialog.invoice.invoice_number} cancelada com sucesso`,
       });
-      queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       setCancelDialog({ open: false, invoice: null, isLoading: false });
     } catch (error: unknown) {
@@ -340,7 +334,7 @@ export function BillingBoletosTab() {
       toast.success("Fatura excluída", {
         description: `Fatura #${deleteDialog.invoice.invoice_number} removida com sucesso`,
       });
-      queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       setDeleteDialog({ open: false, invoice: null, isLoading: false });
     } catch (error: unknown) {
@@ -385,7 +379,7 @@ export function BillingBoletosTab() {
       });
     }
 
-    queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["invoices"] });
     queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
     setSelectedBoletos(new Set());
     setBatchActionDialog({ open: false, action: null, isLoading: false });
@@ -405,7 +399,7 @@ export function BillingBoletosTab() {
       toast.success("Faturas excluídas", {
         description: `${selectedBoletos.size} fatura(s) removida(s) com sucesso`,
       });
-      queryClient.invalidateQueries({ queryKey: ["boletos-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
       setSelectedBoletos(new Set());
       setBatchActionDialog({ open: false, action: null, isLoading: false });
