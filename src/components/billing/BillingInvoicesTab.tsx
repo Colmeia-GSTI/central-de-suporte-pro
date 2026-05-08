@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
+import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
 import { InvoiceStatusFilter } from "@/components/billing/InvoiceStatusFilter";
 import { InvoiceTotalsBar } from "@/components/billing/InvoiceTotalsBar";
