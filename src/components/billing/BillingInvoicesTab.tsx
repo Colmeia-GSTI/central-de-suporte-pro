@@ -22,6 +22,7 @@ import {
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
+import { InvoiceStatusFilter } from "@/components/billing/InvoiceStatusFilter";
 import {
   Search, Plus, DollarSign, AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -345,27 +346,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
           />
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40 h-9 text-sm">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="paid">Pago</SelectItem>
-            <SelectItem value="overdue">Vencido</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
-            <SelectItem value="renegotiated">Renegociado</SelectItem>
-            <SelectItem value="lost">Perdido</SelectItem>
-            <SelectItem value="with_errors">⚠ Com Erros</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {statusFilter !== "all" && (
-          <Button variant="ghost" size="sm" onClick={() => setStatusFilter("all")} className="h-9 px-2 text-muted-foreground">
-            <X className="h-4 w-4 mr-1" /> Limpar
-          </Button>
-        )}
+        <InvoiceStatusFilter value={statusFilter as InvoiceStatusFilter} onChange={(v) => setStatusFilter(v)} />
 
         <div className="ml-auto flex items-center gap-2">
           <Button
