@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useInvoices, type InvoiceWithClient, type InvoiceStatusFilter } from "@/hooks/useInvoices";
+import { useInvoices, type InvoiceWithClient, type InvoiceStatusFilter as InvoiceStatusFilterType } from "@/hooks/useInvoices";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
