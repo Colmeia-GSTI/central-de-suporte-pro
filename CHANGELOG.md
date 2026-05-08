@@ -18,6 +18,30 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Removido (Fase 3.C.3 — Remoção efetiva das tabs deprecated — 2026-05-08)
+**Finale da consolidação de tabs.** Após 3.C.1 (estender Faturas com features) e 3.C.2 (compat redirects + ocultar do menu), agora removo de fato os 3 componentes deprecated. **-2.031 LOC líquidas.**
+
+**Arquivos removidos:**
+- `src/components/billing/BillingBoletosTab.tsx` (857 LOC) — funcionalidades absorvidas pelo filtro `payment_method=boleto` em Faturas
+- `src/components/billing/AccountsReceivableTab.tsx` (312 LOC) — funcionalidades absorvidas pelo `<InvoiceTotalsBar>` + filtro `status=pending` em Faturas
+- `src/components/billing/BillingErrorsPanel.tsx` (834 LOC) — funcionalidades absorvidas pelo filtro `with_errors` (estendido na 3.C.1) em Faturas
+
+**Mudanças em `BillingPage.tsx`:**
+- Removidos imports dos 3 componentes
+- Removidos 3 `<TabsContent value="...">`
+- `BILLING_TABS` reduzido de 11 → **8 entradas** (remoção de receivable, boletos, errors)
+- `getTabBadge` simplificado: badge da tab "Faturas" agora consolida `overdueInvoices + errorCount` (substitui badge separado de "Erros"). Badge separado de "Boletos" (processingBoletos) removido — informação não crítica para operação diária
+- Removidos imports de icons não usados (`Barcode`, `AlertTriangle`, `DollarSign`)
+- Removido check `if ("deprecated" in tab && tab.deprecated)` no `.map()` — não há mais tabs deprecated
+- **Redirect mantido** — `?tab=boletos|receivable|errors` continua redirecionando para `?tab=invoices&...` (compat com links salvos antigos)
+
+**Resultado da Fase 3 completa (3.A → 3.B → 3.C.1 → 3.C.2 → 3.C.3):**
+- BillingPage: 11 → **8 tabs** (-27% de tabs)
+- LOC removidas: **-2.031** (apenas 3.C.3)
+- LOC reusáveis criadas (Fases 3.A, 3.B, 3.C.1): +375 (`<InvoiceStatusFilter>`, `<InvoiceTableRow>`, `<InvoiceTotalsBar>`)
+- Saldo da Fase 3 inteira: **~-1.700 LOC líquidas** com features unificadas
+- 1 só tela de cobranças: filtros de status (com 'Com Erros' avançado) + payment_method (Boleto/PIX/Transferência) + período + busca + totalizadores Em Aberto/Atrasado/Pago
+
 ### Adicionado (Fase 3.C.2 — Redirects de URLs antigas + ocultação de tabs deprecated — 2026-05-08)
 Segunda parte da consolidação de tabs. Tabs Boletos / A Receber / Erros **somem do menu** mas URLs antigas continuam funcionando via redirect automático (compat layer). Não remove código ainda — Fase 3.C.3 fará a remoção real.
 
