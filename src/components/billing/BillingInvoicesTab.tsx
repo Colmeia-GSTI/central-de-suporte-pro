@@ -23,6 +23,7 @@ import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopove
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
 import { InvoiceStatusFilter } from "@/components/billing/InvoiceStatusFilter";
+import { InvoiceTotalsBar } from "@/components/billing/InvoiceTotalsBar";
 import {
   Search, Plus, DollarSign, AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -102,6 +103,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   const [, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "boleto" | "pix" | "transferencia">("all");
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
   const [dateRange, setDateRange] = useState(() => getDateRangeForPreset("month"));
   const [currentPage, setCurrentPage] = useState(1);
@@ -167,6 +169,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   const { data: invoices = [], isLoading, isFetching } = useInvoices({
     status: statusFilter as InvoiceStatusFilter,
     dateRange: { from: fromISO, to: toISO },
+    paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
     fields: "full",
   });
 
@@ -334,6 +337,9 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      {/* Totalizadores: Em Aberto / Atrasado / Pago do período filtrado */}
+      <InvoiceTotalsBar invoices={invoices} />
+
       {/* Header Row: Search + Filters + New Invoice */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -347,6 +353,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
         </div>
 
         <InvoiceStatusFilter value={statusFilter as InvoiceStatusFilter} onChange={(v) => setStatusFilter(v)} />
+
+        <Select value={paymentMethodFilter} onValueChange={(v) => setPaymentMethodFilter(v as typeof paymentMethodFilter)}>
+          <SelectTrigger className="w-36 h-9 text-sm">
+            <SelectValue placeholder="Pagamento" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos métodos</SelectItem>
+            <SelectItem value="boleto">Boleto</SelectItem>
+            <SelectItem value="pix">PIX</SelectItem>
+            <SelectItem value="transferencia">Transferência</SelectItem>
+          </SelectContent>
+        </Select>
 
         <div className="ml-auto flex items-center gap-2">
           <Button
