@@ -18,6 +18,14 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fase 3.A — Componentes Reusáveis para Tabs de Cobrança — 2026-05-08)
+Primeira parte da Fase 3 (Consolidação de Tabs). Cria componentes reusáveis sem mudar comportamento. Próximos PRs (3.B, 3.C) usarão esses building blocks para colapsar tabs Faturas + Boletos + A Receber em uma só.
+
+- **`src/components/billing/InvoiceStatusFilter.tsx` (novo, ~70 LOC)** — filtro Select reusável com 8 opções (Todos, Pendente, Pago, Vencido, Cancelado, Renegociado, Perdido, ⚠ Com Erros). Inclui botão "Limpar" automático quando value !== "all". Props: `value`, `onChange`, `showClearButton`, `className`. Tipo `StatusFilterValue` vem do hook `useInvoices` (consistência).
+- **`src/components/billing/InvoiceTableRow.tsx` (novo, ~110 LOC)** — linha de tabela reusável encapsulando o padrão "cliente + número + datas + valor + status badge". Aceita slots para checkbox de seleção, inline actions e popover de ações. Reusa `InvoiceStatusBadge`, `formatDate`, `formatCurrencyBRL` (Fase 1). Filosofia "pragmática" — não tenta ser super-genérico, foca nos 80% dos casos.
+- **`BillingInvoicesTab.tsx`** — 19 LOC de Select inline + botão Limpar substituídas por `<InvoiceStatusFilter />`. UX idêntico, código mais limpo.
+- **Princípio aplicado:** este PR cria a base. Migrações reais (BillingBoletosTab usar InvoiceTableRow, consolidação de tabs) ficam para PRs separados (3.B, 3.C) onde o ganho de UX/LOC será visível.
+
 ### Adicionado (Fase 2 — Hooks Centralizados — 2026-05-08)
 Segunda fase do plano de refatoração. Estabelece UMA fonte de verdade para queries de invoices. Resolve dor #2.4 do FINANCIAL_DEEP_AUDIT (race conditions, cache desincronizado).
 
