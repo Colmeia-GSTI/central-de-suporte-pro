@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { NfseServiceCodeCombobox, type NfseServiceCode } from "./NfseServiceCodeCombobox";
 import { NfseTributacaoSection, type TributacaoData } from "./NfseTributacaoSection";
 import { calcularRetencoes } from "@/lib/nfse-retencoes";
+import { throwIfEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 type ClientOption = { id: string; name: string; document: string | null };
 
@@ -223,12 +224,41 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
           valor_liquido: retencoes.valorLiquido,
         },
       });
-      if (error) throw error;
+      throwIfEdgeFunctionError({ data, error });
       if (!data?.success) throw new Error(data?.error || "Falha ao emitir NFS-e");
-      return { invoiceCreated: gerarFatura };
+
+      // PR-FIX-2 (2026-05-07): se gerou fatura, também criar boleto/PIX no Asaas.
+      // Antes: apenas registrava invoice no banco SEM forma de pagamento → bug oculto
+      // (cliente nunca recebia boleto/link de pagamento). Agora gera boleto por padrão.
+      let paymentResult: { boleto_url?: string | null } = {};
+      if (gerarFatura && invoiceId) {
+        const paymentResponse = await supabase.functions.invoke("asaas-nfse", {
+          body: {
+            action: "create_payment",
+            invoice_id: invoiceId,
+            billing_type: "BOLETO",
+          },
+        });
+        // Não throw em caso de erro: NFSe já foi emitida com sucesso.
+        // Apenas avisar via toast separado e logar para o usuário poder regenerar.
+        const paymentError = paymentResponse.error || paymentResponse.data?.error;
+        if (paymentError) {
+          console.error("[NfseAvulsaDialog] NFS-e emitida mas boleto falhou:", paymentError);
+          toast.warning("Boleto não gerado", {
+            description: "NFS-e emitida com sucesso, mas o boleto falhou. Use 'Regenerar Boleto' na fatura para tentar de novo.",
+          });
+        } else {
+          paymentResult.boleto_url = paymentResponse.data?.boleto_url ?? null;
+        }
+      }
+
+      return { invoiceCreated: gerarFatura, boletoCreated: !!paymentResult.boleto_url };
     },
     onSuccess: (result) => {
-      toast.success(result.invoiceCreated ? "NFS-e e fatura geradas com sucesso" : "NFS-e avulsa gerada com sucesso", {
+      const message = result.invoiceCreated
+        ? (result.boletoCreated ? "NFS-e, fatura e boleto gerados com sucesso" : "NFS-e e fatura geradas com sucesso")
+        : "NFS-e avulsa gerada com sucesso";
+      toast.success(message, {
         description: "Provedor: Asaas",
       });
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
