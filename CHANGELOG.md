@@ -18,6 +18,11 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (PR-UX-Combobox — Busca em dropdown de cliente — 2026-05-07)
+- **Novo componente reusável `src/components/clients/ClientSearchCombobox.tsx`** (143 LOC) — combobox com input de busca para selecionar cliente. Substitui `<Select>` tradicional quando a lista é grande (>10 clientes). Filtro client-side, case-insensitive, busca **substring** (não só prefixo) em **nome + documento + apelido**. Pontuação do CNPJ é normalizada (busca "42527" encontra "42.527.401/0001-44").
+- **`NfseAvulsaDialog.tsx`** migrado para usar o novo combobox. Antes o usuário precisava fazer scroll na lista de 50+ clientes para achar o desejado; agora digita "INS" e a lista filtra para clientes contendo essa substring (resolve o caso real do "COMERCIAL INSUMEDI" que estava enterrado no scroll).
+- **Reuso futuro**: o componente é genérico e pode substituir Selects de cliente em qualquer outro dialog (CRUD de invoice manual, contracts, etc.) — basta importar e passar `clients` + `value` + `onChange`.
+
 ### Adicionado (PR-E — Máquina de Estado da Fatura (FSM) — 2026-05-07)
 - **Novo módulo `src/lib/billing-fsm.ts`** centraliza a lógica de "qual o estado atual da fatura?" e "qual ação é permitida?" em UM único lugar. Antes, cada componente (BillingInvoicesTab, BillingErrorsPanel, InvoiceActionsPopover, InvoiceProcessingHistory) calculava decisões inline com regras divergentes — resultado: mesma fatura aparecia com botões/disabled diferentes em telas diferentes.
 - **Tipo `InvoiceDerivedState`** com 8 estados consolidados: `aguardando_geracao`, `aguardando_envio`, `aguardando_pagamento`, `pago`, `em_atraso`, `cancelada`, `renegociada`, `com_erro`. Cada um agrupa o cruzamento de `invoice.status × boleto_status × email_status × nfse_status`.
