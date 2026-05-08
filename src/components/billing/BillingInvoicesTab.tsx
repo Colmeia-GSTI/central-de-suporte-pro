@@ -100,10 +100,20 @@ interface BillingInvoicesTabProps {
 
 export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingInvoicesTabProps = {}) {
   const isMobile = useIsMobile();
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Inicialização via URL params — suporta deep-link de tabs deprecated:
+  //   ?tab=invoices&status=overdue   (vindo de A Receber)
+  //   ?tab=invoices&pm=boleto         (vindo de Boletos)
+  //   ?tab=invoices&status=with_errors (vindo de Erros)
+  const initialStatus = searchParams.get("status") || "all";
+  const initialPm = searchParams.get("pm") || "all";
+
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "boleto" | "pix" | "transferencia">("all");
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "boleto" | "pix" | "transferencia">(
+    (["boleto", "pix", "transferencia"].includes(initialPm) ? initialPm : "all") as "all" | "boleto" | "pix" | "transferencia"
+  );
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
   const [dateRange, setDateRange] = useState(() => getDateRangeForPreset("month"));
   const [currentPage, setCurrentPage] = useState(1);

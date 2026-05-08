@@ -44,12 +44,16 @@ function TabBadge({ count, variant }: TabBadgeProps) {
   );
 }
 
+// Tabs marcadas como `deprecated: true` foram unificadas com "Faturas" na Fase 3.C
+// e não aparecem mais no menu. URLs antigas (?tab=boletos, ?tab=receivable,
+// ?tab=errors) continuam funcionando via redirect automático em BillingPage.tsx.
+// Removidas efetivamente na Fase 3.C.3 (após 1-2 semanas de uso).
 const BILLING_TABS = [
   { id: "invoices", label: "Faturas", icon: Receipt },
-  { id: "receivable", label: "A Receber", icon: DollarSign },
-  { id: "boletos", label: "Boletos", icon: Barcode },
+  { id: "receivable", label: "A Receber", icon: DollarSign, deprecated: true },
+  { id: "boletos", label: "Boletos", icon: Barcode, deprecated: true },
   { id: "nfse", label: "NFS-e", icon: FileText },
-  { id: "errors", label: "Erros", icon: AlertTriangle },
+  { id: "errors", label: "Erros", icon: AlertTriangle, deprecated: true },
   { id: "reconciliation", label: "Conciliação", icon: ArrowRightLeft },
   { id: "fiscal", label: "Fiscal", icon: Scale },
   { id: "health", label: "Saúde", icon: Activity },
@@ -79,6 +83,29 @@ export default function BillingPage() {
   
   const canManage = can("financial", "edit");
   const canManageServices = can("services", "edit");
+
+  // Redirect de tabs deprecated → invoices com filtros aplicados.
+  // Implementado na Fase 3.C.2 como compat layer. Tabs antigas continuam
+  // existindo (3.C.3 vai removê-las efetivamente), mas qualquer link salvo
+  // ou clique vai para a tab unificada com os filtros corretos.
+  // Mapping:
+  //   ?tab=boletos     → ?tab=invoices&pm=boleto
+  //   ?tab=receivable  → ?tab=invoices&status=pending
+  //   ?tab=errors      → ?tab=invoices&status=with_errors
+  useEffect(() => {
+    const DEPRECATED_TAB_REDIRECTS: Record<string, { status?: string; pm?: string }> = {
+      boletos: { pm: "boleto" },
+      receivable: { status: "pending" },
+      errors: { status: "with_errors" },
+    };
+    const redirect = DEPRECATED_TAB_REDIRECTS[rawTab];
+    if (redirect) {
+      searchParams.delete("tab"); // tab default = invoices
+      if (redirect.status) searchParams.set("status", redirect.status);
+      if (redirect.pm) searchParams.set("pm", redirect.pm);
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [rawTab, searchParams, setSearchParams]);
 
   const currentTab = (() => {
     if ((rawTab === "services" || rawTab === "tax-codes") && !canManageServices) {
@@ -146,8 +173,13 @@ export default function BillingPage() {
         </div>
 
         <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-3 md:space-y-6">
-          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-11 md:w-auto">
+          <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-8 md:w-auto">
             {BILLING_TABS.map((tab) => {
+              // Tabs deprecated foram unificadas com Faturas — não aparecem
+              // no menu, mas URLs antigas continuam funcionando via redirect.
+              if ("deprecated" in tab && tab.deprecated) {
+                return null;
+              }
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {
                 return null;
               }
