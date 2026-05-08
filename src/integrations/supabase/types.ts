@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      _billing_hotfix_backup_pix_contamination: {
+        Row: {
+          backup_id: string
+          record_id: string
+          snapshot: Json
+          table_name: string
+          taken_at: string
+        }
+        Insert: {
+          backup_id?: string
+          record_id: string
+          snapshot: Json
+          table_name: string
+          taken_at?: string
+        }
+        Update: {
+          backup_id?: string
+          record_id?: string
+          snapshot?: Json
+          table_name?: string
+          taken_at?: string
+        }
+        Relationships: []
+      }
+      _billing_migration_backup_inter_to_asaas: {
+        Row: {
+          backup_id: string
+          record_id: string
+          snapshot: Json
+          table_name: string
+          taken_at: string
+        }
+        Insert: {
+          backup_id?: string
+          record_id: string
+          snapshot: Json
+          table_name: string
+          taken_at?: string
+        }
+        Update: {
+          backup_id?: string
+          record_id?: string
+          snapshot?: Json
+          table_name?: string
+          taken_at?: string
+        }
+        Relationships: []
+      }
       alert_escalation_settings: {
         Row: {
           client_id: string | null
@@ -1350,6 +1398,7 @@ export type Database = {
           adjustment_percentage: number | null
           auto_renew: boolean
           billing_day: number | null
+          billing_frequency: string
           billing_provider: string | null
           client_id: string
           created_at: string
@@ -1382,6 +1431,7 @@ export type Database = {
           adjustment_percentage?: number | null
           auto_renew?: boolean
           billing_day?: number | null
+          billing_frequency?: string
           billing_provider?: string | null
           client_id: string
           created_at?: string
@@ -1414,6 +1464,7 @@ export type Database = {
           adjustment_percentage?: number | null
           auto_renew?: boolean
           billing_day?: number | null
+          billing_frequency?: string
           billing_provider?: string | null
           client_id?: string
           created_at?: string
