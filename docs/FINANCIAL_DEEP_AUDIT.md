@@ -392,27 +392,129 @@ notifications_sent (NOVA — 1:N — emails/WhatsApps enviados):
 
 **Risco:** MÉDIO (mudança de UX visível)
 
-### **Fase 4 — Régua de Cobrança + Saúde (3-4 dias)** 💰 reduz inadimplência
+### **Fase 4 — Cobrança Operacional Completa (5-7 dias)** 💰 reduz inadimplência + comprova entrega
 
-**Objetivo:** régua configurável de cobrança + dashboard de saúde do billing. Resolve gaps G8, G11, G4, G13 do BILLING_AUDIT.
+**Objetivo:** régua de cobrança + dashboard de saúde + **email com anexos + tracking de abertura + reenvio manual com mensagem personalizada**. Resolve gaps G8, G11, G4, G13 do BILLING_AUDIT + novos requisitos operacionais.
+
+#### 4.1 — Régua de Cobrança Configurável
+
+- Nova tabela `billing_collection_steps` (PR-F do BILLING_AUDIT) com colunas: `id`, `days_relative_due` (-5, -2, 0, +1, +5...), `channel` (email/whatsapp), `template_key`, `enabled`, `order`
+- Cron `notify-due-invoices` itera essa tabela em vez de hardcoded
+- Admin altera régua na UI sem mexer em código
+
+#### 4.2 — Dashboard de Saúde
+
+- Tab **"Saúde"** (já tem placeholder em `BillingPage`) com:
+  - Taxa de sucesso 7/30 dias (boleto, NFSe, email)
+  - Fila de retry com botão "executar agora"
+  - Latência da última geração do cron
+  - Inadimplência consolidada (reusa view existente)
+- Cron `notify-billing-health-daily` envia email para admin se taxa de erro > X%
+
+#### 4.3 — Email Automático com Anexos (NFSe + Boleto) ⭐ NOVO
+
+**Estado atual:** anexos JÁ existem em `resend-payment-notification` (linhas 250-256, anexa boleto + NFSe PDFs em base64). Mas o cron `notify-due-invoices` envia **só link**, não anexa.
 
 **Entregáveis:**
-- Nova tabela `billing_collection_steps` (PR-F do BILLING_AUDIT)
-- Cron `notify-due-invoices` lê tabela em vez de hardcoded
-- Tab **"Saúde"** (já existe placeholder) com:
-  - Taxa de sucesso 7/30 dias
-  - Fila de retry
-  - Latência da última geração
-  - Inadimplência (chama view existente)
-- Cron `notify-billing-health-daily` envia email para admin se houver falhas
-- Coluna `payment_errors jsonb` em invoices (PR-I do BILLING_AUDIT) — histórico tipado de erros
+- **Decisão de provider de email**: usar **Lovable Custom Emails (nativo do Lovable Cloud)** em vez de Resend direto. Razão: provedor já embutido na plataforma (Lovable cuida de DNS/SPF/DKIM/DMARC), 50.000 emails/mês incluídos no plano pago, rate limit 100/hora suficiente.
+- **Migrar `send-email-resend`** para `send-email-lovable` (ou refatorar a edge atual para chamar API do Lovable Cloud em vez de Resend). Mantém mesma interface (subject, html, attachments) — UPSTREAM mudou, contrato com restante do código preservado.
+- **Modificar cron `notify-due-invoices`** para usar mesmo padrão de attachments do `resend-payment-notification`:
+  - Buscar `nfse_history.pdf_url` da invoice
+  - Buscar boleto PDF (Asaas API: `bankSlipUrl` do payment)
+  - Anexar ambos no email enviado via `send-email-lovable`
+- Quando NFSe não foi emitida ainda: enviar só boleto + log de aviso
+- Quando boleto não foi gerado ainda: pular envio + log warn (não cobrar sem boleto)
+- Template HTML do email referenciando os anexos + pixel tracking embed
 
-**Critério de pronto:**
-- Admin altera régua sem mexer em código
-- Email automático quando billing quebra
-- TS 0 erros, vitest 100/100
+**Critério:** todos os emails de cobrança automática (régua) saem com NFSe + boleto anexos via Lovable Custom Emails. Cliente recebe tudo no mesmo email.
 
-**Risco:** BAIXO (features novas, não tocam fluxo crítico)
+#### 4.4 — Reenvio Manual com Mensagem Personalizada ⭐ NOVO
+
+**Entregáveis:**
+- Botão "Enviar cobrança" na linha de cada invoice (substitui múltiplos botões "reenviar email", "regerar boleto", etc.)
+- Dialog `SendInvoiceDialog`:
+  - Preview dos anexos que serão enviados (NFSe + boleto, com ícone)
+  - Campo de **mensagem personalizada** (opcional, default vem do template)
+  - Toggle "Atualizar boleto antes de enviar?" (regera boleto via Asaas se vencido)
+  - Botão "Enviar agora" → chama `send-email-lovable` com `{ custom_message: "...", regenerate_boleto: true/false }`
+- Reuso de `<ClientSearchCombobox>` se houver caso de envio para outro cliente (ex: cobrança avulsa)
+- FSM `canResendNotification` já valida se pode enviar (PR-E)
+
+**Critério:** operador clica 1 botão, escreve mensagem personalizada se quiser, e o cliente recebe email com NFSe + boleto + texto custom.
+
+#### 4.5 — Confirmação de Recebimento (Tracking custom) ⭐ NOVO
+
+**Importante:** Lovable Custom Emails **não expõe webhooks de eventos** como Resend faz. Para detectar abertura precisamos de **tracking custom via pixel + link wrapper** (técnica padrão de email marketing pré-webhooks).
+
+**Entregáveis técnicos:**
+
+- **Nova tabela `email_events`** (sem dependência de webhook externo):
+  ```sql
+  CREATE TABLE public.email_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
+    tracking_token TEXT NOT NULL UNIQUE,  -- token único por envio (UUID)
+    event_type TEXT NOT NULL,             -- sent, opened, clicked, bounced (manual)
+    recipient_email TEXT NOT NULL,
+    user_agent TEXT,                      -- captado no momento da abertura
+    ip_address TEXT,                      -- captado no momento da abertura (LGPD: anonimizar)
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    raw_payload JSONB,                    -- contexto extra
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX ON email_events (invoice_id, event_type);
+  CREATE INDEX ON email_events (tracking_token);
+  ```
+
+- **Edge function `track-email-open`** (nova, ~80 LOC) — pixel tracking:
+  - Endpoint: `GET /functions/v1/track-email-open?t=<tracking_token>`
+  - Retorna 1x1 PNG transparente (24 bytes hardcoded)
+  - Antes do retorno: registra evento `opened` em `email_events` (apenas se ainda não houver registro com mesmo token)
+  - Captura User-Agent e IP (anonimizado: hash dos últimos octetos)
+  - Header `Cache-Control: no-store` para evitar pixel cacheado em servidores do cliente
+
+- **Edge function `track-email-click`** (nova, ~60 LOC) — link wrapper:
+  - Endpoint: `GET /functions/v1/track-email-click?t=<tracking_token>&url=<encoded_url>`
+  - Registra evento `clicked` em `email_events`
+  - Faz redirect 302 para `url` original
+
+- **Modificar `send-email-lovable`** para:
+  - Gerar `tracking_token` UUID por envio
+  - Inserir registro `event_type='sent'` em `email_events` ao despachar
+  - Embed pixel no HTML do email: `<img src="https://<supabase>/functions/v1/track-email-open?t=<token>" width="1" height="1" style="display:none" />`
+  - Wrap todos os links do email: `https://<supabase>/functions/v1/track-email-click?t=<token>&url=<encoded>`
+
+- **UI: Status de entrega visual** em qualquer linha de invoice:
+  - View `invoice_email_latest_event` (joinada com `email_events`)
+  - Badge `<EmailDeliveryBadge>`:
+    - 📧 **Enviado** (event=sent, sem outros)
+    - 👁️ **Aberto pelo cliente** (qualquer event=opened) ← **principal foco do pedido**
+    - 🖱️ **Clicou no boleto/anexo** (event=clicked, mais forte que opened)
+    - ⚠️ **Devolvido** (event=bounced) — **inferido por fallback**: se tentar enviar de novo e Lovable retornar erro de email inválido, marcamos manualmente como bounced
+  - Tooltip: timestamp do último event + email destinatário
+  - Modal "Histórico de comunicação" → timeline completa de envios e eventos
+
+- **Reuso na FSM**: novo helper `getEmailDeliveryState(invoice)` que olha em `email_events` e retorna o estado mais "alto" (clicked > opened > sent > none). Não substitui `email_processing_status` (que é envio); é complementar.
+
+**Limitações conhecidas (vs Resend webhooks):**
+- ❌ **Não detecta "delivered" sem abertura** — pixel só dispara se cliente carregar imagens
+- ❌ **Clientes corporativos com bloqueio de imagens externas** (Outlook empresarial) não disparam o pixel
+- ✅ **Detecta clique mesmo sem imagem** (link wrapper sempre dispara)
+- ✅ **Cliente pessoal (Gmail, iPhone Mail, Outlook web) — taxa de detecção de abertura > 80%**
+
+**Critério:** operador vê na lista de cobranças se o cliente abriu o email **ou** clicou no link/boleto. Em caso de tentativa de envio que falhe (email inválido), marcamos `bounced` e geramos alerta proativo.
+
+**Métricas-alvo Fase 4:**
+- 100% dos emails automáticos com NFSe + boleto anexos via Lovable Custom Emails
+- Taxa de abertura visível por cliente (>80% dos clientes pessoais)
+- Falhas de envio geram alerta proativo
+
+**Pré-requisitos:**
+- Plano Lovable pago (Custom Emails só em paid plans — provavelmente já é o caso da Colmeia)
+- Domínio próprio configurado no Lovable Cloud (DNS gerenciado pelo Lovable)
+- Subdomínio dedicado para envio (ex: `notificacoes.colmeiagsti.com.br`) — recomendação Lovable
+
+**Risco:** BAIXO. Tracking é "best effort" — se pixel não disparar, email continua entregue normalmente. Lovable Custom Emails é nativo da plataforma, sem chave externa para gerenciar.
 
 ### **Fase 5 — Schema Sane (5-7 dias)** 🏗️ refator estrutural — fazer por último
 
@@ -454,7 +556,7 @@ notifications_sent (NOVA — 1:N — emails/WhatsApps enviados):
 | 🟡 3 | **Fase 1** — Helpers + status badges unificados | 1-2 dias | Z | refator |
 | 🟡 4 | **Fase 2** — Hooks centralizados | 2-3 dias | B | refator |
 | 🟢 5 | **Fase 3** — Consolidação de tabs (UX win grande) | 3-4 dias | M | refator |
-| 🟢 6 | **Fase 4** — Régua de cobrança + Saúde (PR-F + PR-G + PR-I) | 3-4 dias | B | feature |
+| 🟢 6 | **Fase 4** — Cobrança operacional completa (régua + saúde + email com anexos + tracking + reenvio) | 5-7 dias | B | feature |
 | 🔵 7 | **PR-J** — Testes E2E billing | 2 dias | B | qualidade |
 | 🔵 8 | **Fase 5** — Schema sane (quebrar tabela-deus) | 5-7 dias | A | refator |
 | 🔵 9 | **PR-DECOM** — Deletar Banco Inter (~60-90d) | 1h | Z | limpeza |

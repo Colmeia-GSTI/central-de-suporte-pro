@@ -98,18 +98,30 @@ Resolve dor: BillingPage tem 11 abas, "Faturas"/"Boletos"/"A Receber" sobrepõem
 
 ---
 
-### 🟢 Fase 4 — Régua de Cobrança + Dashboard Saúde (3-4 dias) — **risco BAIXO**
+### 🟢 Fase 4 — Cobrança Operacional Completa (5-7 dias) — **risco BAIXO**
 
-Resolve gaps G4, G8, G11, G13 do BILLING_AUDIT. Funcionalidades novas, não tocam fluxo crítico.
+Resolve gaps G4, G8, G11, G13 do BILLING_AUDIT + 3 requisitos novos (2026-05-08): email com anexos, reenvio manual com mensagem personalizada, tracking de abertura.
 
-**Entregáveis:**
-- Tabela `billing_collection_steps` (PR-F do BILLING_AUDIT)
-- Cron `notify-due-invoices` lê tabela em vez de hardcoded
-- Tab "Saúde" funcional (taxa sucesso 7/30d, fila retry, latência)
-- Cron `notify-billing-health-daily` envia email se falhas
-- Coluna `payment_errors jsonb` (PR-I) — histórico tipado de erros
+**🔑 DECISÃO DE PROVIDER (2026-05-08):** Migrar de Resend para **Lovable Custom Emails (nativo do Lovable Cloud)**. Razões:
+- Já embutido na plataforma — Lovable cuida de DNS/SPF/DKIM/DMARC
+- 50.000 emails/mês incluídos no plano pago
+- Sem chave externa para gerenciar
+- Implica: tracking via **pixel + link wrapper custom** (Lovable Custom Emails não tem webhooks nativos)
 
-**Critério de pronto:** Admin altera régua sem mexer em código. Email automático quando billing quebra.
+**5 sub-fases:**
+1. **Régua de cobrança configurável** (`billing_collection_steps` + cron lê tabela)
+2. **Dashboard de saúde** (`/billing/health` ativa + cron `notify-billing-health-daily`)
+3. **Email automático com anexos via Lovable Custom Emails** (NFSe + boleto em todo email do cron — anexos JÁ existem em `resend-payment-notification`, basta migrar para Lovable email + ativar no cron)
+4. **Reenvio manual com mensagem personalizada** (Dialog rich + botão atualizar boleto antes)
+5. **Tracking de abertura via pixel + link wrapper** (nova tabela `email_events` + edges `track-email-open` e `track-email-click` + UI com badges 📧 Enviado / 👁️ Aberto / 🖱️ Clicou / ⚠️ Bounced)
+
+**Critério de pronto:**
+- 100% dos emails automáticos com NFSe + boleto anexos via Lovable Custom Emails
+- Operador vê se cliente abriu email (>80% taxa de detecção em clientes pessoais)
+- Falhas de envio (email inválido) geram alerta proativo
+- Admin altera régua sem mexer em código
+
+Detalhes completos em `docs/FINANCIAL_DEEP_AUDIT.md` seção 5 (Fase 4).
 
 ---
 
