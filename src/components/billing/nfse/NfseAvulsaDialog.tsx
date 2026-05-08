@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClientSearchCombobox } from "@/components/clients/ClientSearchCombobox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -352,19 +352,12 @@ export function NfseAvulsaDialog(props: { open: boolean; onOpenChange: (open: bo
           {/* Cliente */}
           <div className="space-y-1.5">
             <Label className="text-sm">Cliente *</Label>
-            <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder={clientsLoading ? "Carregando..." : "Selecione o cliente"} />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                    {c.document && <span className="text-muted-foreground ml-1 text-xs">({c.document})</span>}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClientSearchCombobox
+              clients={clients}
+              value={clientId}
+              onChange={setClientId}
+              loading={clientsLoading}
+            />
 
             {/* Alerta de dados incompletos do cliente */}
             {clientMissingFields && (
