@@ -39,11 +39,11 @@ export function useBillingCounters() {
           .select("id", { count: "exact", head: true })
           .eq("boleto_status", "erro"),
 
-        // NFS-e errors
+        // NFS-e errors (nfse_history.status é text livre; só 'erro' é usado para falhas)
         supabase
           .from("nfse_history")
           .select("id", { count: "exact", head: true })
-          .in("status", ["erro", "rejeitada"]),
+          .eq("status", "erro"),
 
         // Email errors
         supabase
