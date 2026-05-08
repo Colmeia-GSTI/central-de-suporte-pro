@@ -23,6 +23,7 @@ interface Contract {
   nfse_service_code: string | null;
   first_billing_month: string | null;
   billing_frequency: "monthly" | "bimonthly" | "quarterly" | "semiannual" | "yearly" | null;
+  end_date: string | null;
   clients: {
     name: string;
     email: string | null;
@@ -153,6 +154,7 @@ Deno.serve(async (req) => {
         nfse_iss_retido,
         first_billing_month,
         billing_frequency,
+        end_date,
         clients (
           name,
           email,
@@ -282,6 +284,45 @@ Deno.serve(async (req) => {
             duration_ms: Date.now() - contractStartTime,
           });
           continue;
+        }
+
+        // End date guard (2026-05-07): protege contra contratos active com end_date
+        // no passado (cenário: alguém esqueceu de mudar status para 'expired'/'cancelled').
+        // Hoje todos os 31 contratos têm end_date NULL — esta guarda é preventiva.
+        if (contract.end_date) {
+          const endDate = new Date(contract.end_date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // comparar só por dia
+          if (endDate < today) {
+            console.log(`[GEN-INVOICES] Pulando ${contract.name}: end_date ${contract.end_date} no passado (status active mas vencido)`);
+            await logToDatabase(
+              supabase,
+              "warn",
+              "Billing",
+              "generate-monthly-invoices",
+              `Contrato ${contract.name} tem status='active' mas end_date no passado — pulado`,
+              {
+                contract_id: contract.id,
+                contract_name: contract.name,
+                end_date: contract.end_date,
+                action_required: "Mudar status para 'cancelled'/'expired' em /contracts ou estender end_date",
+              },
+              null,
+              executionId,
+              0
+            );
+            skipped++;
+            results.push({
+              contract_id: contract.id,
+              contract_name: contract.name,
+              status: "skipped",
+              invoice_id: null,
+              invoice_number: null,
+              error: null,
+              duration_ms: Date.now() - contractStartTime,
+            });
+            continue;
+          }
         }
 
         // Frequency check (PR-C 2026-05-07): se contrato não é mensal,
