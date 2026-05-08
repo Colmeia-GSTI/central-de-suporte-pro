@@ -18,6 +18,14 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fase 3.B — Migração da tabela desktop do BillingInvoicesTab — 2026-05-08)
+Segunda parte da Fase 3. Aplica o `<InvoiceTableRow>` criado na Fase 3.A na tabela principal (desktop) do BillingInvoicesTab — primeira validação real do componente em uso.
+
+- **`BillingInvoicesTab.tsx`** — substituição de 9 `<TableCell>` inline (cliente + issued_date + due_date + status + paid_date + amount + checkbox) por `<InvoiceTableRow>` com slots `inlineActions` (`<InvoiceInlineActions>`) e `actions` (`<InvoiceActionsPopover>`). Toda lógica de ações preservada via props (onBoletoClick, onNfseClick, onCancelBoleto com edge `banco-inter`, etc.).
+- **Saldo:** -25 LOC líquidas no arquivo (45 removidas, 10 adicionadas). Markup mais legível, lógica de ações intacta.
+- **Por que esse caminho em vez de migrar BillingBoletosTab:** auditoria mostrou que BillingBoletosTab tem 2 tabelas com estrutura muito específica (status hardcoded "Processando", coluna "Código de Barras" não-padrão). Forçar `<InvoiceTableRow>` lá criaria abstração inchada. BillingBoletosTab será **substituída** na Fase 3.C (consolidação Faturas + Boletos + A Receber → 1 tab), não migrada.
+- **Próximo passo (Fase 3.C):** consolidação efetiva de tabs. BillingPage 11 → 7 abas. Tab "Cobranças" unificada substitui Faturas + Boletos + A Receber. Tab "Erros" vira chip de filtro. Saldo estimado: **-2.000 LOC líquidas**.
+
 ### Adicionado (Fase 3.A — Componentes Reusáveis para Tabs de Cobrança — 2026-05-08)
 Primeira parte da Fase 3 (Consolidação de Tabs). Cria componentes reusáveis sem mudar comportamento. Próximos PRs (3.B, 3.C) usarão esses building blocks para colapsar tabs Faturas + Boletos + A Receber em uma só.
 
