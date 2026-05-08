@@ -2,20 +2,17 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Receipt, Barcode, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, AlertTriangle, Landmark, DollarSign } from "lucide-react";
+import { Receipt, FileText, Wrench, Calculator, ArrowRightLeft, Scale, Activity, Landmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBillingCounters } from "@/hooks/useBillingCounters";
 import { BillingInvoicesTab } from "@/components/billing/BillingInvoicesTab";
-import { BillingBoletosTab } from "@/components/billing/BillingBoletosTab";
 import { BillingNfseTab } from "@/components/billing/BillingNfseTab";
 import { BillingServicesTab } from "@/components/billing/BillingServicesTab";
 import { BillingTaxCodesTab } from "@/components/billing/BillingTaxCodesTab";
 import { BankReconciliationTab } from "@/components/billing/BankReconciliationTab";
 import { FiscalReportTab } from "@/components/billing/FiscalReportTab";
 import { IntegrationHealthDashboard } from "@/components/billing/IntegrationHealthDashboard";
-import { BillingErrorsPanel } from "@/components/billing/BillingErrorsPanel";
 import { BillingBankAccountsTab } from "@/components/billing/BillingBankAccountsTab";
-import { AccountsReceivableTab } from "@/components/billing/AccountsReceivableTab";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface TabBadgeProps {
@@ -44,16 +41,12 @@ function TabBadge({ count, variant }: TabBadgeProps) {
   );
 }
 
-// Tabs marcadas como `deprecated: true` foram unificadas com "Faturas" na Fase 3.C
-// e não aparecem mais no menu. URLs antigas (?tab=boletos, ?tab=receivable,
-// ?tab=errors) continuam funcionando via redirect automático em BillingPage.tsx.
-// Removidas efetivamente na Fase 3.C.3 (após 1-2 semanas de uso).
+// Tabs Boletos / A Receber / Erros foram removidas na Fase 3.C.3 — funcionalidades
+// consolidadas em "Faturas" via filtros. URLs antigas (?tab=boletos|receivable|errors)
+// continuam funcionando via redirect em useEffect abaixo.
 const BILLING_TABS = [
   { id: "invoices", label: "Faturas", icon: Receipt },
-  { id: "receivable", label: "A Receber", icon: DollarSign, deprecated: true },
-  { id: "boletos", label: "Boletos", icon: Barcode, deprecated: true },
   { id: "nfse", label: "NFS-e", icon: FileText },
-  { id: "errors", label: "Erros", icon: AlertTriangle, deprecated: true },
   { id: "reconciliation", label: "Conciliação", icon: ArrowRightLeft },
   { id: "fiscal", label: "Fiscal", icon: Scale },
   { id: "health", label: "Saúde", icon: Activity },
@@ -142,20 +135,16 @@ export default function BillingPage() {
 
     switch (tabId) {
       case "invoices":
-        return counters.overdueInvoices > 0 ? (
-          <TabBadge count={counters.overdueInvoices} variant="danger" />
-        ) : null;
-      case "boletos":
-        return counters.processingBoletos > 0 ? (
-          <TabBadge count={counters.processingBoletos} variant="warning" />
-        ) : null;
+        // Soma vencidas + com erros — coisas que precisam atenção do operador.
+        // Antes da Fase 3.C, errors era tab separada com badge próprio.
+        // Agora é filtro within Faturas, então o badge consolidado mostra ambos.
+        {
+          const total = counters.overdueInvoices + counters.errorCount;
+          return total > 0 ? <TabBadge count={total} variant="danger" /> : null;
+        }
       case "nfse":
         return counters.pendingNfse > 0 ? (
           <TabBadge count={counters.pendingNfse} variant="info" />
-        ) : null;
-      case "errors":
-        return counters.errorCount > 0 ? (
-          <TabBadge count={counters.errorCount} variant="danger" />
         ) : null;
       default:
         return null;
@@ -175,11 +164,6 @@ export default function BillingPage() {
         <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-3 md:space-y-6">
           <TabsList className="flex w-full overflow-x-auto no-scrollbar md:inline-grid md:grid-cols-8 md:w-auto">
             {BILLING_TABS.map((tab) => {
-              // Tabs deprecated foram unificadas com Faturas — não aparecem
-              // no menu, mas URLs antigas continuam funcionando via redirect.
-              if ("deprecated" in tab && tab.deprecated) {
-                return null;
-              }
               if ((tab.id === "services" || tab.id === "tax-codes") && !canManageServices) {
                 return null;
               }
@@ -207,20 +191,8 @@ export default function BillingPage() {
             />
           </TabsContent>
 
-          <TabsContent value="receivable" className="mt-6">
-            <AccountsReceivableTab />
-          </TabsContent>
-
-          <TabsContent value="boletos" className="mt-6">
-            <BillingBoletosTab />
-          </TabsContent>
-
           <TabsContent value="nfse" className="mt-6">
             <BillingNfseTab />
-          </TabsContent>
-
-          <TabsContent value="errors" className="mt-6">
-            <BillingErrorsPanel />
           </TabsContent>
 
           <TabsContent value="reconciliation" className="mt-6">
