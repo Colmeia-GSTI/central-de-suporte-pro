@@ -157,8 +157,13 @@ export function useInvoices(filters: UseInvoicesFilters = {}) {
 
       // Filtro por status — mutuamente exclusivo com withErrors
       if (withErrors || status === "with_errors") {
+        // Inclui:
+        //   1. Erro explícito em qualquer subprocesso (boleto/nfse/email)
+        //   2. Deveria ter boleto mas não tem (payment_method=boleto + status pending/overdue
+        //      + tem provider configurado + boleto_barcode null)
+        // Lógica preserva o filtro complexo que existia em BillingErrorsPanel
         query = query.or(
-          "boleto_status.eq.erro,nfse_status.eq.erro,email_status.eq.erro"
+          "boleto_status.eq.erro,nfse_status.eq.erro,email_status.eq.erro,and(payment_method.eq.boleto,boleto_barcode.is.null,status.in.(pending,overdue),billing_provider.not.is.null)"
         );
       } else if (status !== "all") {
         query = query.eq("status", status as Enums<"invoice_status">);

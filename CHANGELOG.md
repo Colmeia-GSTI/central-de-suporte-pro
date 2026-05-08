@@ -18,6 +18,21 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fase 3.C.1 — Estender BillingInvoicesTab para absorver A Receber + Erros + Boletos — 2026-05-08)
+Primeira parte da consolidação de tabs. Adiciona à BillingInvoicesTab as features que hoje estão em tabs separadas (`AccountsReceivableTab`, `BillingBoletosTab`, `BillingErrorsPanel`). Tabs antigas **continuam funcionando** — serão removidas só nas Fases 3.C.2 (redirects) e 3.C.3 (remoção).
+
+- **`src/components/billing/InvoiceTotalsBar.tsx` (novo, ~85 LOC)** — barra de totalizadores reusável (Em Aberto / Atrasado / Pago) calculada via `useMemo` a partir das invoices já carregadas. Aceita prop `showPaid` para esconder card de pago em contextos onde não relevante. Substitui o trio de cards inline em `AccountsReceivableTab`.
+- **`useInvoices.ts`** — filtro `with_errors` estendido para incluir caso "deveria ter boleto mas não tem":
+  - **Antes:** apenas `boleto_status=erro OR nfse_status=erro OR email_status=erro`
+  - **Depois:** acima + `(payment_method=boleto AND boleto_barcode IS NULL AND status IN (pending,overdue) AND billing_provider IS NOT NULL)`
+  - Preserva lógica complexa que existia no `BillingErrorsPanel` (linha 122 da query antiga). Permite remover BillingErrorsPanel sem perder casos detectados.
+- **`BillingInvoicesTab.tsx`** — adicionado:
+  - `<InvoiceTotalsBar invoices={invoices} />` no topo (cobertura de "A Receber")
+  - Novo state `paymentMethodFilter` ("all" | "boleto" | "pix" | "transferencia") + Select ao lado do filtro de status
+  - Hook `useInvoices` agora recebe `paymentMethod` (filtra no backend)
+- **Resultado:** BillingInvoicesTab agora cobre **3 dos 4 casos** que serão consolidados (Faturas + A Receber + Boletos + Erros). O 4º caso (Boletos com agrupamento processando/prontos) continua só em BillingBoletosTab por enquanto — usuário acessa por chip `payment_method=boleto`.
+- **Saldo:** +24 LOC em arquivos modificados, +85 LOC em componente novo. Migração real (-LOC) só na Fase 3.C.3 quando as tabs antigas forem removidas.
+
 ### Adicionado (Fase 3.B — Migração da tabela desktop do BillingInvoicesTab — 2026-05-08)
 Segunda parte da Fase 3. Aplica o `<InvoiceTableRow>` criado na Fase 3.A na tabela principal (desktop) do BillingInvoicesTab — primeira validação real do componente em uso.
 
