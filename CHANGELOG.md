@@ -18,6 +18,35 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fase 1 — Helpers + Status Badges Unificados — 2026-05-08)
+Primeira fase do plano de refatoração definido em `docs/FINANCIAL_DEEP_AUDIT.md`. Risco zero (puramente visual). Estabelece o padrão que Fases 2-3 vão reusar.
+
+- **`src/lib/date.ts` (novo, 130 LOC)** — helper centralizado para formatação de datas:
+  - `formatDate(value, variant)` com 7 variants: `short` (08/05/2026), `short-time` (08/05/2026 14:30), `long` (08/05/2026 às 14:30), `with-seconds`, `month-year` (mai/2026), `time-only` (14:30), `iso-date` (2026-05-08)
+  - `formatRelative(value)` — distância relativa em pt-BR ("há 3 dias")
+  - `isPastDate(value)` — comparação com hora zerada
+  - **Timezone-safe**: strings `YYYY-MM-DD` são normalizadas com `T12:00:00` para evitar shift de dia em fusos negativos (problema clássico de `new Date("2026-05-08")` em BRT virar 07/05 21:00)
+  - Aceita `Date | string | null | undefined` sem quebrar (retorna fallback configurável)
+- **`src/lib/date.test.ts` (novo, 110 LOC)** — 19 testes cobrindo todas as variants, normalização de timezone, fallbacks. **Testes totais: 100 → 119 (+19).**
+- **`src/components/billing/StatusBadges.tsx` (novo, 200 LOC)** — 5 componentes Badge unificados para o módulo financeiro:
+  - `<InvoiceStatusBadge>` — invoice_status (pending, paid, overdue, cancelled, lost, renegotiated)
+  - `<ContractStatusBadge>` — contract_status (active, expired, cancelled, pending, suspended)
+  - `<BoletoStatusBadge>` — boleto_processing_status (pendente, gerado, enviado, erro)
+  - `<NfseStatusBadge>` — nfse_processing_status (pendente, gerada, erro)
+  - `<EmailStatusBadge>` — email_processing_status (pendente, enviado, erro)
+- **`BillingInvoicesTab.tsx`** — removido mapeamento local `statusLabels`/`statusColors` (inline 17 LOC). Substituídos 2 usos de `<Badge>` inline por `<InvoiceStatusBadge>`.
+- **`ContractsPage.tsx`** — removido mapeamento local `statusLabels`/`statusColors` (inline 16 LOC). Substituído 1 uso de `<Badge>` por `<ContractStatusBadge>`.
+- **13 arquivos migrados de `format(new Date(...))` para `formatDate()`**:
+  - `BillingBoletosTab` (3 ocorrências), `BillingErrorsPanel`, `ReconciliationMatchDialog`, `BankReconciliationTab`, `AccountsReceivableTab`, `SecondCopyDialog`, `FiscalReportTab`
+  - `EconomicIndicesWidget` (variant `month-year`)
+  - `IntegrationHealthDashboard` (variant `time-only`)
+  - `InvoiceProcessingHistory` (variant `long`)
+  - `InvoiceNotificationHistory` (variant `short-time`)
+  - `NfseEventLogsDialog` (variant `with-seconds`)
+  - `BillingInvoicesTab` — 5 ocorrências, incluindo pattern especial `(() => { const [y,m,d] = X.split('-')... })()` que era usado pra contornar timezone shift (agora desnecessário, helper já trata)
+- **Imports limpos**: 11 arquivos tiveram `format` e/ou `ptBR` removidos do import de `date-fns` quando não havia mais uso.
+- **Resultado**: mesmo dado renderizado de forma idêntica em qualquer tela. Saldo: ~33 LOC removidas (mapeamentos inline) + ~30 LOC de simplificação de date format = -63 LOC frontend, +330 LOC reusáveis em `lib/`.
+
 ### Adicionado (PR-PROTECTION — Proteção contra contratos vencidos — 2026-05-07)
 - **Bloqueio + log no cron `generate-monthly-invoices`**: contratos com `status='active'` MAS `end_date < hoje` agora são pulados automaticamente com `status='skipped'` e log `warn` em `application_logs` apontando o contrato e a ação necessária ("mudar status para cancelled/expired ou estender end_date"). Antes o cron NÃO filtrava por end_date — qualquer contrato active gerava cobrança mesmo se já tinha "vencido". Hoje (07/05) os 31 contratos têm `end_date IS NULL` (zero risco), proteção é preventiva.
 - **Badge "Vencido" em `ContractsPage.tsx`**: quando contrato é `status='active'` mas `end_date < hoje`, aparece badge vermelho ao lado do status com tooltip explicando que a cobrança foi pulada e como resolver. UX transparente — usuário não fica adivinhando por que tal contrato deixou de cobrar.

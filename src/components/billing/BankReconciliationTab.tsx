@@ -42,14 +42,13 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "sonner";
 import { AgingReportWidget } from "./AgingReportWidget";
 import { EconomicIndicesWidget } from "./EconomicIndicesWidget";
 import { ReconciliationMatchDialog } from "./ReconciliationMatchDialog";
 import { BankAccountSelector } from "./BankAccountSelector";
+import { formatDate } from "@/lib/date";
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   pending: { label: "Pendente", icon: <Clock className="h-3 w-3" />, className: "bg-status-warning/20 text-status-warning border-status-warning/30" },
@@ -307,7 +306,7 @@ export function BankReconciliationTab() {
                   return (
                     <TableRow key={entry.id}>
                       <TableCell className="text-sm">
-                        {format(new Date(entry.bank_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {formatDate(entry.bank_date)}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate text-sm">
                         {entry.bank_description}

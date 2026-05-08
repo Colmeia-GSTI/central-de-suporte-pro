@@ -29,6 +29,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCurrency } from "@/lib/currency";
 import { FiscalReportExport } from "./FiscalReportExport";
+import { formatDate } from "@/lib/date";
 
 export function FiscalReportTab() {
   const now = new Date();
@@ -216,7 +217,7 @@ export function FiscalReportTab() {
                     </TableCell>
                     <TableCell>
                       {nfse.data_emissao
-                        ? format(new Date(nfse.data_emissao), "dd/MM/yyyy", { locale: ptBR })
+                        ? formatDate(nfse.data_emissao)
                         : "—"}
                     </TableCell>
                     <TableCell>{(nfse.clients as any)?.name || "—"}</TableCell>

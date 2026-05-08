@@ -38,14 +38,13 @@ import {
   Trash2,
   MoreHorizontal,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { formatDate } from "@/lib/date";
 
 type BoletoInvoice = {
   id: string;
@@ -648,7 +647,7 @@ export function BillingBoletosTab() {
                     <TableCell>{invoice.clients?.name || "-"}</TableCell>
                     <TableCell>{formatCurrency(invoice.amount)}</TableCell>
                     <TableCell>
-                      {format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                      {formatDate(invoice.due_date)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="border-status-warning text-status-warning">
@@ -730,7 +729,7 @@ export function BillingBoletosTab() {
                     <TableCell>{invoice.clients?.name || "-"}</TableCell>
                     <TableCell>{formatCurrency(invoice.amount)}</TableCell>
                     <TableCell>
-                      {format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                      {formatDate(invoice.due_date)}
                     </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-2 py-1 rounded">
@@ -804,7 +803,7 @@ export function BillingBoletosTab() {
                     <TableCell>{invoice.clients?.name || "-"}</TableCell>
                     <TableCell>{formatCurrency(invoice.amount)}</TableCell>
                     <TableCell>
-                      {format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                      {formatDate(invoice.due_date)}
                     </TableCell>
                     <TableCell>
                       <Badge className="bg-status-success text-white">

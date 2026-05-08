@@ -23,10 +23,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Search, Link2, Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
+import { formatDate } from "@/lib/date";
 
 interface ReconciliationMatchDialogProps {
   open: boolean;
@@ -182,7 +181,7 @@ export function ReconciliationMatchDialog({
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {format(new Date(inv.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {formatDate(inv.due_date)}
                       </TableCell>
                       <TableCell>
                         <Button

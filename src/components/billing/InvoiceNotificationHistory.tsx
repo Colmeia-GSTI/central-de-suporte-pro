@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Inbox } from "lucide-react";
+import { formatDate } from "@/lib/date";
 
 interface Props {
   invoiceId: string | null;
@@ -68,7 +67,7 @@ export function InvoiceNotificationHistory({ invoiceId, open, onOpenChange }: Pr
                 {data.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap text-xs">
-                      {log.sent_at ? format(new Date(log.sent_at), "dd/MM/yy HH:mm", { locale: ptBR }) : "—"}
+                      {log.sent_at ? formatDate(log.sent_at, "short-time") : "—"}
                     </TableCell>
                     <TableCell><Badge variant="outline">{log.channel}</Badge></TableCell>
                     <TableCell className="text-xs">{TYPE_LABEL[log.notification_type] ?? log.notification_type}</TableCell>
