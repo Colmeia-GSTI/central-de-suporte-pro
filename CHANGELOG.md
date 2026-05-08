@@ -18,6 +18,14 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (Hotfix — Remover totalizador duplicado em BillingInvoicesTab — 2026-05-08)
+**Reportado pelo usuário em produção:** após a Fase 3.C.1, a tab Faturas mostrava **2 totalizadores idênticos** com os mesmos valores ("Em Aberto / Atrasado / Pago" no topo + "A Receber / Vencido / Recebido" abaixo dos filtros). Erro meu: ao adicionar `<InvoiceTotalsBar>` na 3.C.1 não percebi que já existia um Summary Chips inline pré-existente. Violei o próprio princípio "REUTILIZAR antes de criar".
+
+- **Removido** `src/components/billing/InvoiceTotalsBar.tsx` (85 LOC) — componente foi usado apenas em 1 lugar (BillingInvoicesTab) e duplicava info já existente. Não atende critério "≥2 cópias".
+- **Removido** import e uso do `<InvoiceTotalsBar>` em `BillingInvoicesTab.tsx` (3 linhas).
+- **Mantido** "Summary Chips" inline pré-existente (linhas 489-503) com layout compacto integrado aos filtros — usa `totalPending`/`totalOverdue`/`totalPaid` calculados localmente. Esses chips já existiam antes da Fase 3 e estavam funcionando corretamente.
+- **Lição registrada:** auditar o componente-alvo COMPLETO antes de adicionar funcionalidade nova. Em caso de novo somatório/totalizador, primeiro verificar se já existe um.
+
 ### Removido (Fase 3.C.3 — Remoção efetiva das tabs deprecated — 2026-05-08)
 **Finale da consolidação de tabs.** Após 3.C.1 (estender Faturas com features) e 3.C.2 (compat redirects + ocultar do menu), agora removo de fato os 3 componentes deprecated. **-2.031 LOC líquidas.**
 
