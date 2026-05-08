@@ -18,6 +18,18 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (PR-FIX — Mensagem de erro genérica em ManualPaymentDialog — 2026-05-07)
+- **Bug observado:** Usuário tentou baixa manual em 2 faturas (EMB #137 e VIZU #129) e recebeu "erro de Edge Function" sem detalhe. Investigação revelou que ambas faturas haviam sido marcadas como `status='paid'` MOMENTOS ANTES via webhook do Asaas (race condition: webhook chega enquanto usuário tem dialog aberto).
+- **Causa raiz:** Edge `manual-payment` corretamente retorna HTTP 400 com `{ error: "Fatura já está paga" }`, mas o Supabase JS SDK descarta o body do response em HTTP non-2xx, popula `response.error` com `FunctionsHttpError` genérico ("Edge Function returned a non-2xx status code") e a mensagem útil fica enterrada em `error.context.body`. Frontend lança o error genérico, usuário vê mensagem opaca.
+- **Fix arquitetural:** novo helper `src/lib/edgeFunctionError.ts` com 2 funções:
+  - `extractEdgeFunctionError(response)`: extrai mensagem real verificando 3 caminhos: `response.data.error` (caminho feliz), `response.error.context.body` parseado (HTTP non-2xx), `response.error.message` (fallback). Reusável para qualquer edge.
+  - `throwIfEdgeFunctionError(response)`: helper que faz `throw` automático se houver erro extraído.
+- **`ManualPaymentDialog.tsx`** refatorado:
+  - Substituído `if (error) throw error; if (data?.error) throw new Error(data.error)` (que perdia mensagem) por `throwIfEdgeFunctionError(response)`.
+  - `onError` ganhou tratamento específico: se mensagem contém "já está paga" → `toast.info` (não erro) com explicação da race condition + invalida cache + fecha dialog. Se "cancelada" → mesmo padrão. Outros erros mantêm `toast.error`.
+- **Resultado:** quando webhook chegar enquanto usuário tem dialog aberto, em vez de "Erro de Edge Function", aparece toast informativo "Fatura já foi paga — A confirmação chegou enquanto você preenchia o formulário..." e a tela atualiza automaticamente para refletir o estado real.
+- **Reuso futuro:** outras dialogs/handlers que invocam edges podem adotar `throwIfEdgeFunctionError` para mensagens claras (registrado como melhoria contínua).
+
 ### Modificado (PR-D — Unificar fluxo de reenvio/regenerar/polling — 2026-05-07)
 - **`useInvoiceActions` hook**: passa a expor `handleRegenerateBoleto` e `handleForcePolling` (extraídos das implementações duplicadas em `BillingErrorsPanel` e `InvoiceProcessingHistory`). Estados novos: `regeneratingBoleto`, `forcingPolling`. O hook centraliza agora 3 ações antes duplicadas: reenviar notificação, regenerar boleto, forçar polling.
 - **`BillingErrorsPanel.tsx`**: removidas 3 implementações próprias (`handleResendNotification`, `handleRegenerateBoleto`, `handleForcePolling`). Estados locais `resendingId` e `pollingId` deletados. Estado `reprocessingId` mantido (continua sendo usado por handlers específicos de NFSe que ficam fora do escopo deste PR — `handleClearFailedNfse`, retry de NFSe). onClicks adaptados: `handleResendNotification(inv.id, ["email"])` em vez de `(inv, "email")`. Loading visual usa `sendingNotification?.startsWith(inv.id)` para disable e `=== \`${inv.id}-email\`` para spinner por canal.

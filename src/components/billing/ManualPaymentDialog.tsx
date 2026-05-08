@@ -24,6 +24,7 @@ import {
 import { Loader2, HandCoins } from "lucide-react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { throwIfEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 interface ManualPaymentDialogProps {
   open: boolean;
@@ -76,7 +77,7 @@ export function ManualPaymentDialog({ open, onOpenChange, invoice }: ManualPayme
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Não autenticado");
 
-      const { data, error } = await supabase.functions.invoke("manual-payment", {
+      const response = await supabase.functions.invoke("manual-payment", {
         body: {
           invoice_id: invoice!.id,
           paid_amount: parseFloat(paidAmount),
@@ -88,9 +89,9 @@ export function ManualPaymentDialog({ open, onOpenChange, invoice }: ManualPayme
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      // Extrai mensagem real da edge (mesmo em HTTP non-2xx, onde o SDK descarta o body)
+      throwIfEdgeFunctionError(response);
+      return response.data;
     },
     onSuccess: (data) => {
       toast.success("Pagamento registrado!", { description: data.message });
@@ -99,7 +100,32 @@ export function ManualPaymentDialog({ open, onOpenChange, invoice }: ManualPayme
       onOpenChange(false);
     },
     onError: (error) => {
-      toast.error("Erro ao registrar pagamento", { description: getErrorMessage(error) });
+      const message = getErrorMessage(error);
+
+      // Race condition comum: webhook do Asaas marca como paga enquanto o usuário
+      // tem o dialog aberto. Quando ele clica salvar, edge bloqueia (corretamente).
+      // Tratar como info (não erro) + invalidar cache + fechar dialog para refletir estado real.
+      if (message.toLowerCase().includes("já está paga")) {
+        toast.info("Fatura já foi paga", {
+          description: "A confirmação chegou enquanto você preenchia o formulário (provavelmente via webhook). Atualizando a tela...",
+        });
+        queryClient.invalidateQueries({ queryKey: ["invoices"] });
+        queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+        onOpenChange(false);
+        return;
+      }
+
+      // Mesmo padrão para fatura cancelada (não é erro real, é estado mudado)
+      if (message.toLowerCase().includes("cancelada")) {
+        toast.info("Fatura cancelada", {
+          description: "Esta fatura foi cancelada e não pode mais receber pagamento.",
+        });
+        queryClient.invalidateQueries({ queryKey: ["invoices"] });
+        onOpenChange(false);
+        return;
+      }
+
+      toast.error("Erro ao registrar pagamento", { description: message });
     },
   });
 
