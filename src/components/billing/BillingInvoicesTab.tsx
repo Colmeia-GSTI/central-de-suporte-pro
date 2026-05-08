@@ -653,37 +653,12 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                   paginatedInvoices.map((invoice) => {
                     const nfseInfo = nfseByInvoice[invoice.id];
                     return (
-                      <TableRow key={invoice.id} className="border-b hover:bg-muted/30 py-1">
-                        <TableCell className="px-2 py-2">
-                          <Checkbox
-                            checked={selectedInvoices.has(invoice.id)}
-                            onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
-                          />
-                        </TableCell>
-                        <TableCell className="py-2">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium text-sm">{invoice.clients?.name || "Sem cliente"}</span>
-                            <span className="text-xs text-muted-foreground">{invoice.invoice_number}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-2 text-xs">
-                          {invoice.issued_date ? formatDate(invoice.issued_date) : "-"}
-                        </TableCell>
-                        <TableCell className="py-2 text-xs">
-                          {invoice.due_date ? formatDate(invoice.due_date) : "-"}
-                        </TableCell>
-                        <TableCell className="py-2">
-                          <div className="flex items-center gap-1">
-                            <InvoiceStatusBadge status={invoice.status} />
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-2 text-xs">
-                          {invoice.paid_date ? formatDate(invoice.paid_date) : "-"}
-                        </TableCell>
-                        <TableCell className="py-2 text-right text-sm font-medium">
-                          {formatCurrency(invoice.amount)}
-                        </TableCell>
-                        <TableCell className="py-2">
+                      <InvoiceTableRow
+                        key={invoice.id}
+                        invoice={invoice}
+                        selected={selectedInvoices.has(invoice.id)}
+                        onSelectionChange={toggleInvoiceSelection}
+                        inlineActions={
                           <InvoiceInlineActions
                             invoice={invoice}
                             nfseInfo={nfseInfo}
@@ -719,8 +694,8 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             onManualPayment={() => setManualPaymentInvoice(invoice)}
                             onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                           />
-                        </TableCell>
-                        <TableCell className="py-2 w-10">
+                        }
+                        actions={
                           <InvoiceActionsPopover
                             invoice={invoice}
                             nfseInfo={nfseInfo}
@@ -761,8 +736,8 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                           />
-                        </TableCell>
-                      </TableRow>
+                        }
+                      />
                     );
                   })
                 )}
