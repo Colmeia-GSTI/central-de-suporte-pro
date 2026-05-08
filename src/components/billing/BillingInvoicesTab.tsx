@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
+import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
 import {
   Search, Plus, DollarSign, AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -57,6 +58,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { formatDate } from "@/lib/date";
 
 type InvoiceWithClient = Tables<"invoices"> & {
   clients: { name: string } | null;
@@ -65,24 +67,6 @@ type InvoiceWithClient = Tables<"invoices"> & {
 };
 
 type NfseByInvoice = Record<string, { id: string; status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null; asaas_invoice_id?: string | null }>;
-
-const statusLabels: Record<Enums<"invoice_status">, string> = {
-  pending: "PENDENTE",
-  paid: "PAGO",
-  overdue: "VENCIDO",
-  cancelled: "CANCELADO",
-  renegotiated: "RENEGOCIADO",
-  lost: "PERDIDO",
-};
-
-const statusColors: Record<Enums<"invoice_status">, string> = {
-  pending: "bg-status-warning/20 text-status-warning border-status-warning/40",
-  paid: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
-  overdue: "bg-destructive/20 text-destructive border-destructive/40",
-  cancelled: "bg-muted text-muted-foreground border-border",
-  renegotiated: "bg-blue-500/20 text-blue-400 border-blue-500/40",
-  lost: "bg-gray-500/20 text-gray-400 border-gray-500/40",
-};
 
 const ITEMS_PER_PAGE = 15;
 
@@ -566,9 +550,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                       {invoice.clients?.name || "Sem cliente"}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
-                        {statusLabels[invoice.status]}
-                      </Badge>
+                      <InvoiceStatusBadge status={invoice.status} />
                       <InvoiceActionsPopover
                         invoice={invoice}
                         nfseInfo={nfseInfo}
@@ -598,11 +580,11 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">
-                      Venc: {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                      Venc: {invoice.due_date ? formatDate(invoice.due_date) : "-"}
                     </span>
                     {invoice.paid_date && (
                       <span className="text-xs text-emerald-400">
-                        Pago: {(() => { const [y,m,d] = invoice.paid_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })()}
+                        Pago: {formatDate(invoice.paid_date)}
                       </span>
                     )}
                     <InvoiceInlineActions
@@ -726,20 +708,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                           </div>
                         </TableCell>
                         <TableCell className="py-2 text-xs">
-                          {invoice.issued_date ? (() => { const [y,m,d] = invoice.issued_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                          {invoice.issued_date ? formatDate(invoice.issued_date) : "-"}
                         </TableCell>
                         <TableCell className="py-2 text-xs">
-                          {invoice.due_date ? (() => { const [y,m,d] = invoice.due_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                          {invoice.due_date ? formatDate(invoice.due_date) : "-"}
                         </TableCell>
                         <TableCell className="py-2">
                           <div className="flex items-center gap-1">
-                            <Badge variant="outline" className={`text-xs ${statusColors[invoice.status]}`}>
-                              {statusLabels[invoice.status]}
-                            </Badge>
+                            <InvoiceStatusBadge status={invoice.status} />
                           </div>
                         </TableCell>
                         <TableCell className="py-2 text-xs">
-                          {invoice.paid_date ? (() => { const [y,m,d] = invoice.paid_date.split("-").map(Number); return format(new Date(y, m-1, d), "dd/MM/yyyy", { locale: ptBR }); })() : "-"}
+                          {invoice.paid_date ? formatDate(invoice.paid_date) : "-"}
                         </TableCell>
                         <TableCell className="py-2 text-right text-sm font-medium">
                           {formatCurrency(invoice.amount)}

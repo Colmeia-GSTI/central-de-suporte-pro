@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import {
   AlertTriangle,
   ArrowRight,
@@ -30,6 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate } from "@/lib/date";
 
 interface NfseEventLog {
   id: string;
@@ -122,7 +121,7 @@ function EventLogItem({ log }: { log: NfseEventLog }) {
   const errorCode = log.details?.code as string || log.details?.error_code as string;
   const knownError = errorCode ? ERROR_MESSAGES[errorCode] : null;
   
-  const formattedTime = format(new Date(log.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR });
+  const formattedTime = formatDate(log.created_at, "with-seconds");
 
   return (
     <div className="relative pl-6 pb-4 last:pb-0">

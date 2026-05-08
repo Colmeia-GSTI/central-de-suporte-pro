@@ -2,8 +2,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/currency";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { Search, DollarSign, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +31,7 @@ import {
 } from "@/components/ui/pagination";
 import { ExportButton } from "@/components/export/ExportButton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate } from "@/lib/date";
 
 const PAGE_SIZE = 15;
 
@@ -119,7 +118,7 @@ export function AccountsReceivableTab() {
 
   const formatDate = (d: string | null) => {
     if (!d) return "—";
-    return format(new Date(d), "dd/MM/yyyy", { locale: ptBR });
+    return formatDate(d);
   };
 
   const renderBadge = (status: string | null) => {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ContractAdditionalChargeDialog } from "@/components/contracts/ContractAdditionalChargeDialog";
+import { ContractStatusBadge } from "@/components/billing/StatusBadges";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -56,22 +57,6 @@ interface InvoiceSummary {
   pending_count: number;
   total_invoiced: number;
 }
-
-const statusLabels: Record<Enums<"contract_status">, string> = {
-  active: "Ativo",
-  expired: "Expirado",
-  cancelled: "Cancelado",
-  pending: "Pendente",
-  suspended: "Suspenso",
-};
-
-const statusColors: Record<Enums<"contract_status">, string> = {
-  active: "bg-status-success text-white",
-  expired: "bg-status-danger text-white",
-  cancelled: "bg-muted text-muted-foreground",
-  pending: "bg-status-warning text-white",
-  suspended: "bg-amber-500 text-white",
-};
 
 const supportModelLabels: Record<Enums<"support_model">, string> = {
   ticket: "Por Ticket",
@@ -508,9 +493,7 @@ export default function ContractsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge className={statusColors[contract.status]}>
-                            {statusLabels[contract.status]}
-                          </Badge>
+                          <ContractStatusBadge status={contract.status} />
                           {contract.status === "active" && contract.end_date && new Date(contract.end_date) < new Date(new Date().setHours(0, 0, 0, 0)) && (
                             <TooltipProvider>
                               <Tooltip>

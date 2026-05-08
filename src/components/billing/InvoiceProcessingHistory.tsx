@@ -23,14 +23,13 @@ import {
   Send,
   Loader2,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { getErrorMessage } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { formatDate } from "@/lib/date";
 
 type InvoiceWithDetails = Tables<"invoices"> & {
   clients?: { name: string } | null;
@@ -360,7 +359,7 @@ export function InvoiceProcessingHistory({
 
                       {step.timestamp && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(step.timestamp), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                          {formatDate(step.timestamp, "long")}
                         </p>
                       )}
 

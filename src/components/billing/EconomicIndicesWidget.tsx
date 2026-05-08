@@ -7,8 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Loader2, TrendingUp, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatDate } from "@/lib/date";
 
 interface EconomicIndex {
   id: string;
@@ -110,7 +109,7 @@ export function EconomicIndicesWidget() {
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="font-mono text-xs">{idx.index_type}</Badge>
                     <span className="text-xs text-muted-foreground">
-                      {format(new Date(idx.reference_date + "T12:00:00"), "MMM/yyyy", { locale: ptBR })}
+                      {formatDate(idx.reference_date, "month-year")}
                     </span>
                   </div>
                   {idx.accumulated_12m !== null && (

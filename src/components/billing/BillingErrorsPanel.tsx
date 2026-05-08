@@ -48,14 +48,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
 import { NfseServiceCodeCombobox } from "@/components/billing/nfse/NfseServiceCodeCombobox";
 import { NfseLinkExternalDialog } from "@/components/billing/nfse/NfseLinkExternalDialog";
 import type { NfseWithRelations } from "@/components/billing/nfse/NfseDetailsSheet";
+import { formatDate } from "@/lib/date";
 
 type ErrorInvoice = {
   id: string;
@@ -706,7 +705,7 @@ export function BillingErrorsPanel() {
                       <TableCell>{inv.clients?.name || "—"}</TableCell>
                       <TableCell>{formatCurrency(inv.amount)}</TableCell>
                       <TableCell>
-                        {format(new Date(inv.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {formatDate(inv.due_date)}
                       </TableCell>
                       <TableCell className="max-w-[200px]">
                         <span className="text-xs text-destructive truncate block">

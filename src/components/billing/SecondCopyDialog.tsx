@@ -12,10 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, ExternalLink, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/currency";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { formatDate } from "@/lib/date";
 
 interface SecondCopyDialogProps {
   open: boolean;
@@ -122,7 +121,7 @@ export function SecondCopyDialog({ open, onOpenChange, invoice, onSuccess }: Sec
             )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Vencimento Original</span>
-              <span>{format(new Date(invoice.due_date), "dd/MM/yyyy", { locale: ptBR })}</span>
+              <span>{formatDate(invoice.due_date)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Valor Original</span>

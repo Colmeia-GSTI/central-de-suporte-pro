@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Clock, Activity, TrendingDown, ShieldCheck, ShieldAlert, Ticket, RefreshCw, Loader2, RotateCcw, FileSearch } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { format, differenceInHours } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { differenceInHours } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
+import { formatDate } from "@/lib/date";
 
 export function IntegrationHealthDashboard() {
   const navigate = useNavigate();
@@ -191,7 +191,7 @@ export function IntegrationHealthDashboard() {
   }
 
   const chartData = (stats?.failures_by_hour || []).map(item => ({
-    hour: format(new Date(item.hour), "HH:mm", { locale: ptBR }),
+    hour: formatDate(item.hour, "time-only"),
     falhas: item.count,
   }));
 
