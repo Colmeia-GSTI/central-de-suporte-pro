@@ -24,7 +24,6 @@ import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions"
 import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
 import { InvoiceStatusFilter } from "@/components/billing/InvoiceStatusFilter";
-import { InvoiceTotalsBar } from "@/components/billing/InvoiceTotalsBar";
 import {
   Search, Plus, DollarSign, AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -348,9 +347,6 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* Totalizadores: Em Aberto / Atrasado / Pago do período filtrado */}
-      <InvoiceTotalsBar invoices={invoices} />
-
       {/* Header Row: Search + Filters + New Invoice */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
