@@ -507,9 +507,26 @@ export default function ContractsPage() {
                         </button>
                       </TableCell>
                       <TableCell>
-                        <Badge className={statusColors[contract.status]}>
-                          {statusLabels[contract.status]}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge className={statusColors[contract.status]}>
+                            {statusLabels[contract.status]}
+                          </Badge>
+                          {contract.status === "active" && contract.end_date && new Date(contract.end_date) < new Date(new Date().setHours(0, 0, 0, 0)) && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-xs font-normal text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Vencido
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Contrato com status 'active' mas end_date {format(new Date(contract.end_date), "dd/MM/yyyy", { locale: ptBR })} já passou. Cobrança automática foi PULADA pelo cron. Mude o status para "cancelled" ou estenda o end_date.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>

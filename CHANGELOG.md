@@ -18,6 +18,11 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (PR-PROTECTION — Proteção contra contratos vencidos — 2026-05-07)
+- **Bloqueio + log no cron `generate-monthly-invoices`**: contratos com `status='active'` MAS `end_date < hoje` agora são pulados automaticamente com `status='skipped'` e log `warn` em `application_logs` apontando o contrato e a ação necessária ("mudar status para cancelled/expired ou estender end_date"). Antes o cron NÃO filtrava por end_date — qualquer contrato active gerava cobrança mesmo se já tinha "vencido". Hoje (07/05) os 31 contratos têm `end_date IS NULL` (zero risco), proteção é preventiva.
+- **Badge "Vencido" em `ContractsPage.tsx`**: quando contrato é `status='active'` mas `end_date < hoje`, aparece badge vermelho ao lado do status com tooltip explicando que a cobrança foi pulada e como resolver. UX transparente — usuário não fica adivinhando por que tal contrato deixou de cobrar.
+- **`end_date` adicionado à interface `Contract`** e ao SELECT do cron (estava sendo carregado do banco mas não era usado para validação).
+
 ### Adicionado (PR-UX-Combobox — Busca em dropdown de cliente — 2026-05-07)
 - **Novo componente reusável `src/components/clients/ClientSearchCombobox.tsx`** (143 LOC) — combobox com input de busca para selecionar cliente. Substitui `<Select>` tradicional quando a lista é grande (>10 clientes). Filtro client-side, case-insensitive, busca **substring** (não só prefixo) em **nome + documento + apelido**. Pontuação do CNPJ é normalizada (busca "42527" encontra "42.527.401/0001-44").
 - **`NfseAvulsaDialog.tsx`** migrado para usar o novo combobox. Antes o usuário precisava fazer scroll na lista de 50+ clientes para achar o desejado; agora digita "INS" e a lista filtra para clientes contendo essa substring (resolve o caso real do "COMERCIAL INSUMEDI" que estava enterrado no scroll).
