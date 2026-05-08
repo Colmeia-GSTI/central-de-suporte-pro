@@ -471,9 +471,24 @@ Substituído por PR-A.5 (Inter sai inteiro). Não faz sentido investir tempo har
 
 ---
 
-### ✅ PR-E — Máquina de estado da fatura (FSM) (1-2 dias) — MANTIDO
+### ✅ PR-E — Máquina de estado da fatura (FSM) ✅ CONCLUÍDO
 
-(Mais simples agora — só 1 provider.)
+**Branch:** `feat/billing-fsm-pr-e`
+
+**Implementado:**
+- `src/lib/billing-fsm.ts` (193 LOC) — FSM central com:
+  - `InvoiceDerivedState` (8 estados consolidados)
+  - `computeInvoiceDerivedState(invoice)` — algoritmo com prioridade explícita
+  - 7 helpers de permissão (`canMarkAsPaid`, `canResendNotification`, `canRegenerateBoleto`, `canEmitNfse`, `canCancelInvoice`, `canCancelBoleto`, `canForcePolling`) retornando `{ allowed, reason? }`
+  - `getDerivedStateDisplay(state)` — metadados (label, variant, toneClass)
+- `src/lib/billing-fsm.test.ts` (210 LOC) — **41 testes** cobrindo todos estados + helpers + prioridades
+- `InvoiceActionsPopover.tsx` refatorado para usar FSM (demonstração do padrão)
+
+**Resultado:** Total de testes do projeto: 59 → **100 testes** (+41).
+
+**Migração futura sem urgência:** demais componentes (`BillingErrorsPanel`, `BillingInvoicesTab`, `InvoiceProcessingHistory`) podem migrar gradualmente. A FSM é aditiva — não quebra nada existente.
+
+**Resolve gaps:** G10 | **Reduz dívida:** D1, D6
 
 ---
 

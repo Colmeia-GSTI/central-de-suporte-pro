@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { canCancelBoleto, canMarkAsPaid } from "@/lib/billing-fsm";
 import {
   Barcode, QrCode, MoreHorizontal, Loader2, FileText, Mail, MessageCircle,
   Send, Zap, XCircle, Building2, HandCoins, Ban, CheckCircle2, Clock, Trash2,
@@ -79,8 +80,11 @@ export function InvoiceActionsPopover({
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
   const hasPaymentMethod = !!invoice.boleto_url || !!invoice.pix_code;
   const hasBoleto = !!invoice.boleto_url;
-  const canCancelBoleto = hasBoleto && invoice.status !== "paid";
   const hasAuthorizedNfse = nfseInfo?.status === "autorizada";
+
+  // PR-E (2026-05-07): permissões via FSM central — antes calculadas inline
+  const cancelBoletoPerm = canCancelBoleto(invoice);
+  const markPaidPerm = canMarkAsPaid(invoice);
 
   const isLoading = generatingPayment?.startsWith(invoice.id);
 
@@ -182,8 +186,8 @@ export function InvoiceActionsPopover({
           </DropdownMenuItem>
         )}
 
-        {/* Baixa Manual / Marcar como Pago */}
-        {isPendingOrOverdue && (
+        {/* Baixa Manual / Marcar como Pago — guard via FSM (cobre paid/cancelled/lost/renegotiated) */}
+        {markPaidPerm.allowed && (
           <>
             <DropdownMenuItem onClick={onManualPayment}>
               <HandCoins className="mr-2 h-4 w-4" />
@@ -266,17 +270,15 @@ export function InvoiceActionsPopover({
         {/* Cancel Actions */}
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={canCancelBoleto ? onCancelBoleto : undefined}
-          disabled={!canCancelBoleto}
-          className={canCancelBoleto ? "text-destructive focus:text-destructive" : ""}
+          onClick={cancelBoletoPerm.allowed ? onCancelBoleto : undefined}
+          disabled={!cancelBoletoPerm.allowed}
+          className={cancelBoletoPerm.allowed ? "text-destructive focus:text-destructive" : ""}
         >
           <Ban className="mr-2 h-4 w-4" />
           <div className="flex flex-col items-start">
             <span>Cancelar Boleto</span>
-            {!canCancelBoleto && (
-              <span className="text-xs text-muted-foreground">
-                {!hasBoleto ? "Nenhum boleto gerado" : "Boleto de fatura paga não pode ser cancelado"}
-              </span>
+            {!cancelBoletoPerm.allowed && cancelBoletoPerm.reason && (
+              <span className="text-xs text-muted-foreground">{cancelBoletoPerm.reason}</span>
             )}
           </div>
         </DropdownMenuItem>

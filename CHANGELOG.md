@@ -18,6 +18,16 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (PR-E — Máquina de Estado da Fatura (FSM) — 2026-05-07)
+- **Novo módulo `src/lib/billing-fsm.ts`** centraliza a lógica de "qual o estado atual da fatura?" e "qual ação é permitida?" em UM único lugar. Antes, cada componente (BillingInvoicesTab, BillingErrorsPanel, InvoiceActionsPopover, InvoiceProcessingHistory) calculava decisões inline com regras divergentes — resultado: mesma fatura aparecia com botões/disabled diferentes em telas diferentes.
+- **Tipo `InvoiceDerivedState`** com 8 estados consolidados: `aguardando_geracao`, `aguardando_envio`, `aguardando_pagamento`, `pago`, `em_atraso`, `cancelada`, `renegociada`, `com_erro`. Cada um agrupa o cruzamento de `invoice.status × boleto_status × email_status × nfse_status`.
+- **`computeInvoiceDerivedState(invoice)`** retorna o estado derivado seguindo prioridade clara (paid → cancelled → renegotiated → erro → overdue → aguardando_geracao → aguardando_envio → aguardando_pagamento). Erros têm prioridade sobre overdue (uma fatura vencida com boleto erro mostra "com_erro", não "em_atraso").
+- **7 helpers de permissão** (`canMarkAsPaid`, `canResendNotification`, `canRegenerateBoleto`, `canEmitNfse`, `canCancelInvoice`, `canCancelBoleto`, `canForcePolling`) retornam `{ allowed: boolean, reason?: string }`. UI usa `allowed` para enable/disable do botão e `reason` como tooltip explicativo (UX consistente).
+- **`getDerivedStateDisplay(state)`** retorna `{ label, variant, toneClass }` para badges/tags consistentes em qualquer tela.
+- **41 testes novos** em `src/lib/billing-fsm.test.ts` cobrindo todos os estados e helpers, incluindo prioridades de transição (paid sobre erro, erro sobre overdue, etc). Total do projeto sobe de 59 → **100 testes**.
+- **Refatoração demonstrativa em `InvoiceActionsPopover.tsx`**: substituído cálculo inline `canCancelBoleto = hasBoleto && invoice.status !== "paid"` por `cancelBoletoPerm = canCancelBoleto(invoice)` (mais completo, cobre também `lost`/`cancelled`). Substituído guard `isPendingOrOverdue` por `markPaidPerm.allowed` (cobre 5 estados de bloqueio em vez de 2). Tooltips agora mostram a `reason` exata da FSM.
+- **Migração gradual**: outros componentes (`BillingErrorsPanel`, `BillingInvoicesTab`, `InvoiceProcessingHistory`) podem migrar progressivamente. A FSM é aditiva — não quebra nada existente. PRs futuros podem incluir migração + remoção de cálculos inline conforme tocam nos arquivos.
+
 ### Adicionado/Corrigido (PR-FIX-2 — Clientes sem cobrança + bug oculto cobrança avulsa — 2026-05-07)
 - **Bug observado:** Cliente COMERCIAL INSUMEDI LTDA cadastrado em 18/abr não aparecia na listagem de cobrança e não conseguia gerar cobrança. Investigação revelou que o cliente NÃO tinha contrato cadastrado nem invoices históricas. Sistema funcionando como projetado, mas SEM AVISO ao usuário sobre clientes "órfãos".
 - **Bug oculto descoberto na investigação**: `NfseAvulsaDialog` quando `gerarFatura=true` criava invoice no banco (`contract_id=NULL`) + emitia NFSe via `emit_standalone`, MAS NUNCA chamava `create_payment` para gerar boleto/PIX. Resultado: cliente recebia NFSe mas SEM forma de pagar (invoice "fantasma"). Provavelmente nunca pego porque cobrança avulsa é fluxo pouco usado.
