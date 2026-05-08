@@ -178,7 +178,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   } = useInvoiceActions();
 
   const { data: invoices = [], isLoading, isFetching } = useInvoices({
-    status: statusFilter as InvoiceStatusFilter,
+    status: statusFilter as InvoiceStatusFilterType,
     dateRange: { from: fromISO, to: toISO },
     paymentMethod: paymentMethodFilter === "all" ? undefined : paymentMethodFilter,
     fields: "full",
@@ -363,7 +363,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
           />
         </div>
 
-        <InvoiceStatusFilter value={statusFilter as InvoiceStatusFilter} onChange={(v) => setStatusFilter(v)} />
+        <InvoiceStatusFilter value={statusFilter as InvoiceStatusFilterType} onChange={(v) => setStatusFilter(v)} />
 
         <Select value={paymentMethodFilter} onValueChange={(v) => setPaymentMethodFilter(v as typeof paymentMethodFilter)}>
           <SelectTrigger className="w-36 h-9 text-sm">
