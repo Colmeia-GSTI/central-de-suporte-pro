@@ -6,6 +6,10 @@
 **Base:** Commit atual de `main` pós-hotfix `fix/billing-pix-contamination`
 **Substitui:** Seção 4.6 (Financeiro MSP) do `COLMEIA_ROADMAP_MESTRE`
 
+> **📍 ATUALIZAÇÃO 2026-05-08:** este documento detalha PRs A-K específicos do billing.
+> Para a **visão consolidada do módulo financeiro inteiro** (cobrança + contratos + NFSe + clientes)
+> com plano em 5 fases e comparação de mercado, ver **`docs/FINANCIAL_DEEP_AUDIT.md`**.
+
 > **🎯 DECISÃO ESTRATÉGICA REGISTRADA (2026-05-07):**
 > Migração completa para **Asaas como único provedor de cobrança** (boleto, PIX, NFSe).
 > Banco Inter desativado para novas faturas; boletos legados mantidos durante coexistência (~60-90 dias).
