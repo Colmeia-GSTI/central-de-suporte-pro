@@ -18,6 +18,28 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (Hotfix — Fonte incorreta dos totalizadores em BillingInvoicesTab — 2026-05-08)
+**Reportado pelo usuário em produção:** valores dos totalizadores "A Receber / Vencido / Recebido" estavam errados (não batiam com a realidade visível na lista).
+
+**Causa raiz:** a query `globalSummary` usava o enum `invoices.status` literal (`pending`/`overdue`/`paid`), enquanto o `AccountsReceivableTab` antigo (deletado na Fase 3.C.3) usava a view **`accounts_receivable`** com campo derivado `ar_status` calculado dinamicamente baseado em `due_date < hoje`. Diferença crítica:
+- View: status calculado em **tempo real** (atrasado se `due_date < hoje` independente do enum)
+- Enum direto: depende do cron rodar pra mudar `pending` → `overdue`
+
+Resultado: invoices que **deveriam estar como atrasadas** apareciam em "A Receber" porque o enum no banco estava desatualizado.
+
+**3 bugs adicionais corrigidos no mesmo PR:**
+
+1. **queryKey sem dependência de período** — `queryKey: ["invoices-global-summary"]` não incluía `fromISO`/`toISO`. Quando o usuário trocava o filtro de período (Mês Atual → 30 dias → 90 dias), a query não refazia. Agora: `["invoices-global-summary", fromISO, toISO]`.
+2. **Soma sem cast Number()** — `(rows).reduce((s, r) => s + r.amount, 0)`. PostgreSQL retorna campos `numeric` como **string** em JSON. `0 + "100"` retorna `"0100"` (concatenação de string), não 100. Agora: `Number(r.amount || 0)`.
+3. **Fonte equivocada** — usava `invoices` direto em vez da view `accounts_receivable` que tem a regra de negócio embutida (compara `due_date` com `hoje`).
+
+**Equivalências documentadas no código:**
+- `ar_status='em_aberto'` = `pending` E `due_date >= hoje` → "A Receber"
+- `ar_status='atrasado'` = `pending` E `due_date < hoje`, OU `status='overdue'` → "Vencido"
+- `ar_status='pago'` = `status='paid'` → "Recebido"
+
+**Lição registrada:** quando uma view/RPC já existe no banco para encapsular uma regra de negócio, **usar essa view** em vez de tentar reproduzir a regra em queries direta. A view é a fonte de verdade.
+
 ### Corrigido (Hotfix — Remover totalizador duplicado em BillingInvoicesTab — 2026-05-08)
 **Reportado pelo usuário em produção:** após a Fase 3.C.1, a tab Faturas mostrava **2 totalizadores idênticos** com os mesmos valores ("Em Aberto / Atrasado / Pago" no topo + "A Receber / Vencido / Recebido" abaixo dos filtros). Erro meu: ao adicionar `<InvoiceTotalsBar>` na 3.C.1 não percebi que já existia um Summary Chips inline pré-existente. Violei o próprio princípio "REUTILIZAR antes de criar".
 

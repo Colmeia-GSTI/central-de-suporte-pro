@@ -223,28 +223,46 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
 
   // Global counters: all open invoices regardless of date filter
   const { data: globalSummary } = useQuery({
-    queryKey: ["invoices-global-summary"],
+    // queryKey inclui fromISO/toISO — quando o usuário troca o período, a query
+    // recalcula 'paid' dentro do novo intervalo (em_aberto e atrasado são
+    // globais, mas mantemos a chave consistente).
+    queryKey: ["invoices-global-summary", fromISO, toISO],
     queryFn: async () => {
-      const [pendingRes, overdueRes, paidRes] = await Promise.all([
+      // FONTE: view accounts_receivable que tem o campo derivado `ar_status`
+      // calculado dinamicamente baseado em due_date < hoje. Isso evita o
+      // problema do enum invoices.status estar desatualizado (depende do cron
+      // mudar pending → overdue, que pode não ter rodado).
+      //
+      // Equivalência:
+      //   ar_status='em_aberto' = pending E due_date >= hoje  (aparece como "A Receber")
+      //   ar_status='atrasado'  = pending E due_date < hoje, OU status='overdue' (aparece como "Vencido")
+      //   ar_status='pago'      = status='paid' (aparece como "Recebido")
+      const [emAbertoRes, atrasadoRes, pagoRes] = await Promise.all([
         supabase
-          .from("invoices")
+          .from("accounts_receivable")
           .select("amount")
-          .eq("status", "pending"),
+          .eq("ar_status", "em_aberto"),
         supabase
-          .from("invoices")
+          .from("accounts_receivable")
           .select("amount")
-          .eq("status", "overdue"),
+          .eq("ar_status", "atrasado"),
         supabase
-          .from("invoices")
-          .select("amount")
-          .eq("status", "paid")
+          .from("accounts_receivable")
+          .select("amount, paid_date")
+          .eq("ar_status", "pago")
           .gte("paid_date", fromISO)
           .lte("paid_date", toISO),
       ]);
+
+      // Cast Number() obrigatório: amount vem como string do PostgreSQL
+      // (tipo numeric/decimal) e `0 + "100"` retornaria "0100" (string).
+      const sum = (rows: { amount: number | string }[] | null) =>
+        (rows ?? []).reduce((acc, r) => acc + Number(r.amount || 0), 0);
+
       return {
-        pending: (pendingRes.data || []).reduce((s, r) => s + r.amount, 0),
-        overdue: (overdueRes.data || []).reduce((s, r) => s + r.amount, 0),
-        paid: (paidRes.data || []).reduce((s, r) => s + r.amount, 0),
+        pending: sum(emAbertoRes.data),
+        overdue: sum(atrasadoRes.data),
+        paid: sum(pagoRes.data),
       };
     },
     staleTime: 60000,
