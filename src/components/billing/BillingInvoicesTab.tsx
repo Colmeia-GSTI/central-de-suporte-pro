@@ -228,41 +228,56 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
     // globais, mas mantemos a chave consistente).
     queryKey: ["invoices-global-summary", fromISO, toISO],
     queryFn: async () => {
-      // FONTE: view accounts_receivable que tem o campo derivado `ar_status`
-      // calculado dinamicamente baseado em due_date < hoje. Isso evita o
-      // problema do enum invoices.status estar desatualizado (depende do cron
-      // mudar pending → overdue, que pode não ter rodado).
+      // FONTE: view accounts_receivable que faz alias do enum invoices.status:
+      //   ar_status='em_aberto'    = invoices.status='pending'      → "A Receber"
+      //   ar_status='atrasado'     = invoices.status='overdue'      → "Vencido"
+      //   ar_status='pago'         = invoices.status='paid'         → "Recebido"
       //
-      // Equivalência:
-      //   ar_status='em_aberto' = pending E due_date >= hoje  (aparece como "A Receber")
-      //   ar_status='atrasado'  = pending E due_date < hoje, OU status='overdue' (aparece como "Vencido")
-      //   ar_status='pago'      = status='paid' (aparece como "Recebido")
+      // ATENÇÃO: a view NÃO reclassifica baseado em due_date — depende do cron
+      // mover pending → overdue. O campo `is_overdue` da view (não usado aqui)
+      // é o que tem o cálculo dinâmico de atraso.
       const [emAbertoRes, atrasadoRes, pagoRes] = await Promise.all([
+        // Em Aberto: somar `amount` (valor a receber, nominal)
         supabase
           .from("accounts_receivable")
           .select("amount")
           .eq("ar_status", "em_aberto"),
+        // Vencido: somar `amount` (valor a receber, nominal)
         supabase
           .from("accounts_receivable")
           .select("amount")
           .eq("ar_status", "atrasado"),
+        // Recebido: SOMAR `paid_amount` (valor efetivamente recebido), NÃO `amount`.
+        // Se uma fatura tem amount=1000 mas paid_amount=500 (pagamento parcial),
+        // entrou só 500 no caixa. Bug reportado pelo usuário em produção: aparecia
+        // R$ 9.021 quando o real recebido era menor.
+        // Filtro por paid_date dentro do período selecionado (Mês Atual / 30 dias / etc.).
         supabase
           .from("accounts_receivable")
-          .select("amount, paid_date")
+          .select("amount, paid_amount, paid_date")
           .eq("ar_status", "pago")
           .gte("paid_date", fromISO)
           .lte("paid_date", toISO),
       ]);
 
-      // Cast Number() obrigatório: amount vem como string do PostgreSQL
+      // Cast Number() obrigatório: amount/paid_amount vêm como string do PostgreSQL
       // (tipo numeric/decimal) e `0 + "100"` retornaria "0100" (string).
-      const sum = (rows: { amount: number | string }[] | null) =>
+      const sumAmount = (rows: { amount: number | string }[] | null) =>
         (rows ?? []).reduce((acc, r) => acc + Number(r.amount || 0), 0);
+      // Para "Recebido", soma paid_amount. Fallback para amount se paid_amount
+      // estiver null (caso edge: invoice marcada paid sem paid_amount registrado).
+      const sumPaidAmount = (
+        rows: { amount: number | string; paid_amount: number | string | null }[] | null
+      ) =>
+        (rows ?? []).reduce(
+          (acc, r) => acc + Number(r.paid_amount ?? r.amount ?? 0),
+          0
+        );
 
       return {
-        pending: sum(emAbertoRes.data),
-        overdue: sum(atrasadoRes.data),
-        paid: sum(pagoRes.data),
+        pending: sumAmount(emAbertoRes.data),
+        overdue: sumAmount(atrasadoRes.data),
+        paid: sumPaidAmount(pagoRes.data),
       };
     },
     staleTime: 60000,

@@ -18,6 +18,21 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (Hotfix — Card "Recebido" somava amount em vez de paid_amount — 2026-05-08)
+**Reportado pelo usuário em produção:** mesmo após o hotfix anterior (PR #31), o card "Recebido" mostrava valor incorreto (R$ 9.021,68 quando o real era menor).
+
+**Causa raiz:** a query somava `r.amount` (valor da fatura) em vez de `r.paid_amount` (valor efetivamente recebido). Quando uma fatura tinha pagamento parcial — `amount=R$ 1.000` mas `paid_amount=R$ 500` — entrou só R$ 500 no caixa, mas o card mostrava R$ 1.000.
+
+**Correção:**
+- `select("amount, paid_amount, paid_date")` para invoices pagas (era só `amount, paid_date`)
+- Função `sumPaidAmount(rows)` específica para o card "Recebido" — soma `paid_amount`
+- Fallback `paid_amount ?? amount ?? 0` para casos edge (invoice marcada `paid` sem `paid_amount` registrado)
+- Mantido `sumAmount(rows)` para "A Receber" e "Vencido" (valores nominais a receber, não efetivos)
+
+**Comentário corrigido:** o hotfix anterior afirmava que a view `accounts_receivable` "calcula `ar_status` dinamicamente baseado em `due_date < hoje`" — **errado**. A view faz apenas alias do enum `invoices.status` (`pending` → `em_aberto`, `overdue` → `atrasado`, `paid` → `pago`). O campo dinâmico (não usado aqui) chama-se `is_overdue`. Comentários atualizados para refletir a realidade da view.
+
+**Lição registrada:** ao tocar em totalizadores financeiros, **sempre validar com SQL no banco real** os valores antes de assumir que a fonte está correta. Diferença `amount` vs `paid_amount` é semântica crítica (faturado vs recebido).
+
 ### Corrigido (Hotfix — Fonte incorreta dos totalizadores em BillingInvoicesTab — 2026-05-08)
 **Reportado pelo usuário em produção:** valores dos totalizadores "A Receber / Vencido / Recebido" estavam errados (não batiam com a realidade visível na lista).
 
