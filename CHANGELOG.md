@@ -18,6 +18,16 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado/Corrigido (PR-FIX-2 — Clientes sem cobrança + bug oculto cobrança avulsa — 2026-05-07)
+- **Bug observado:** Cliente COMERCIAL INSUMEDI LTDA cadastrado em 18/abr não aparecia na listagem de cobrança e não conseguia gerar cobrança. Investigação revelou que o cliente NÃO tinha contrato cadastrado nem invoices históricas. Sistema funcionando como projetado, mas SEM AVISO ao usuário sobre clientes "órfãos".
+- **Bug oculto descoberto na investigação**: `NfseAvulsaDialog` quando `gerarFatura=true` criava invoice no banco (`contract_id=NULL`) + emitia NFSe via `emit_standalone`, MAS NUNCA chamava `create_payment` para gerar boleto/PIX. Resultado: cliente recebia NFSe mas SEM forma de pagar (invoice "fantasma"). Provavelmente nunca pego porque cobrança avulsa é fluxo pouco usado.
+- **Correção 1 — `NfseAvulsaDialog.tsx`**: após emitir NFSe e criar invoice, chamar `asaas-nfse:create_payment` com `billing_type: "BOLETO"` para gerar boleto real. Falha do boleto NÃO faz throw (NFSe já foi emitida com sucesso) — apenas avisa via `toast.warning` orientando uso de "Regenerar Boleto" na fatura. Mensagem de sucesso atualizada para diferenciar 3 cenários: só NFSe / NFSe+fatura / NFSe+fatura+boleto.
+- **Correção 2 — `ClientsPage.tsx`**: nova query paralela `clients-with-active-billing` que faz 2 SELECTs paralelos (`contracts WHERE status='active'` + `invoices WHERE created_at >= now()-90d`), monta `Set<client_id>` com lookup O(1), cache de 1 min. Identifica clientes ativos SEM contrato E SEM invoice nos últimos 90 dias.
+- **Badge "Sem cobrança"**: aparece ao lado do nome do cliente na listagem (com tooltip explicativo) quando o cliente é ativo mas não tem contrato nem invoice recente. Cor amber para chamar atenção sem alarmar.
+- **Toggle "Sem cobrança"** ao lado do search: filtra a listagem para mostrar apenas clientes problemáticos. Mostra contagem ao lado do botão. Empty state específico ("Nenhum cliente sem cobrança ativa") quando filtro ativo.
+- **Footer**: contagem ajustada para refletir filtro quando ativo.
+- **Reuso**: usa `throwIfEdgeFunctionError` (helper criado no PR-FIX paralelo) para extrair mensagem real de erros da edge function — UX consistente.
+
 ### Modificado (PR-D — Unificar fluxo de reenvio/regenerar/polling — 2026-05-07)
 - **`useInvoiceActions` hook**: passa a expor `handleRegenerateBoleto` e `handleForcePolling` (extraídos das implementações duplicadas em `BillingErrorsPanel` e `InvoiceProcessingHistory`). Estados novos: `regeneratingBoleto`, `forcingPolling`. O hook centraliza agora 3 ações antes duplicadas: reenviar notificação, regenerar boleto, forçar polling.
 - **`BillingErrorsPanel.tsx`**: removidas 3 implementações próprias (`handleResendNotification`, `handleRegenerateBoleto`, `handleForcePolling`). Estados locais `resendingId` e `pollingId` deletados. Estado `reprocessingId` mantido (continua sendo usado por handlers específicos de NFSe que ficam fora do escopo deste PR — `handleClearFailedNfse`, retry de NFSe). onClicks adaptados: `handleResendNotification(inv.id, ["email"])` em vez de `(inv, "email")`. Loading visual usa `sendingNotification?.startsWith(inv.id)` para disable e `=== \`${inv.id}-email\`` para spinner por canal.

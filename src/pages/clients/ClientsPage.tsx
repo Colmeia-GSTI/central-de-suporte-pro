@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Search, Building2, Edit, Trash2, Phone, Mail, MessageCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Search, Building2, Edit, Trash2, Phone, Mail, MessageCircle, CheckCircle2, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { ClientForm } from "@/components/clients/ClientForm";
 import { DuplicatesBanner } from "@/components/clients/DuplicatesBanner";
@@ -108,8 +108,39 @@ export default function ClientsPage() {
       };
     },
   });
-  
+
+  // PR-FIX-2: identificar clientes SEM nenhuma cobrança ativa
+  // (sem contrato active E sem invoice nos últimos 90 dias)
+  // Roda uma vez por sessão; resultado em Set para lookup O(1)
+  const { data: clientsWithBilling } = useQuery({
+    queryKey: ["clients-with-active-billing"],
+    queryFn: async () => {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+      // 2 queries em paralelo
+      const [contractsResult, invoicesResult] = await Promise.all([
+        supabase.from("contracts").select("client_id").eq("status", "active"),
+        supabase.from("invoices").select("client_id").gte("created_at", ninetyDaysAgo),
+      ]);
+
+      const ids = new Set<string>();
+      (contractsResult.data ?? []).forEach((r) => r.client_id && ids.add(r.client_id));
+      (invoicesResult.data ?? []).forEach((r) => r.client_id && ids.add(r.client_id));
+      return ids;
+    },
+    staleTime: 60_000, // 1 min cache
+  });
+
+  // Toggle do filtro "sem cobrança"
+  const [showOnlyWithoutBilling, setShowOnlyWithoutBilling] = useState(false);
+
   const clients = data?.clients || [];
+
+  // Aplica filtro client-side (mantém paginação cursor-based intacta)
+  const filteredClients = showOnlyWithoutBilling && clientsWithBilling
+    ? clients.filter((c) => c.is_active && !clientsWithBilling.has(c.id))
+    : clients;
+
   const hasNextPage = data?.hasNextPage || false;
   const hasPreviousPage = previousCursors.length > 0;
   
@@ -208,8 +239,8 @@ export default function ClientsPage() {
 
         <DuplicatesBanner />
 
-        {/* Search */}
-        <div className="flex items-center gap-4">
+        {/* Search + Filtros */}
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -219,6 +250,20 @@ export default function ClientsPage() {
               className="pl-10"
             />
           </div>
+          <Button
+            variant={showOnlyWithoutBilling ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowOnlyWithoutBilling((v) => !v)}
+            title="Mostrar apenas clientes ativos SEM contrato e SEM invoice nos últimos 90 dias"
+          >
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            Sem cobrança
+            {showOnlyWithoutBilling && clientsWithBilling && (
+              <span className="ml-2 text-xs">
+                ({clients.filter((c) => c.is_active && !clientsWithBilling.has(c.id)).length})
+              </span>
+            )}
+          </Button>
         </div>
 
         {/* Table */}
@@ -244,17 +289,22 @@ export default function ClientsPage() {
                     <TableCell className="text-right"><div className="flex justify-end gap-2"><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /></div></TableCell>
                   </TableRow>
                 ))
-              ) : clients.length === 0 ? (
+              ) : filteredClients.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">
                     <Building2 className="mx-auto h-12 w-12 text-muted-foreground/50" />
                     <p className="mt-2 text-muted-foreground">
-                      Nenhum cliente encontrado
+                      {showOnlyWithoutBilling
+                        ? "Nenhum cliente sem cobrança ativa"
+                        : "Nenhum cliente encontrado"}
                     </p>
                   </TableCell>
                 </TableRow>
               ) : (
-                clients.map((client) => (
+                filteredClients.map((client) => {
+                  const hasBilling = clientsWithBilling?.has(client.id) ?? true; // assume sim até carregar
+                  const showWarning = client.is_active && clientsWithBilling && !hasBilling;
+                  return (
                   <TableRow 
                     key={client.id} 
                     className="cursor-pointer hover:bg-muted/50"
@@ -262,12 +312,27 @@ export default function ClientsPage() {
                   >
                     <TableCell>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-medium">{client.name}</p>
                           {(client as any).nickname && (
                             <Badge variant="outline" className="text-xs font-normal">
                               {(client as any).nickname}
                             </Badge>
+                          )}
+                          {showWarning && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Sem cobrança
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Cliente ativo sem contrato e sem invoice nos últimos 90 dias. Cadastre um contrato ou crie uma cobrança avulsa.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </div>
                         {client.trade_name && (
@@ -365,7 +430,8 @@ export default function ClientsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -374,7 +440,9 @@ export default function ClientsPage() {
           {(hasNextPage || hasPreviousPage) && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
               <p className="text-sm text-muted-foreground">
-                {clients.length} clientes carregados {data?.total ? `de ${data.total} total` : ""}
+                {showOnlyWithoutBilling
+                  ? `${filteredClients.length} sem cobrança (de ${clients.length} carregados)`
+                  : `${clients.length} clientes carregados ${data?.total ? `de ${data.total} total` : ""}`}
               </p>
               <div className="flex items-center gap-2">
                 <Button
