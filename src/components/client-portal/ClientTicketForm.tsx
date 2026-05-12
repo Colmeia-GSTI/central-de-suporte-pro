@@ -20,7 +20,7 @@ import { ChevronDown, Settings2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
-import { stripPhone } from "@/lib/phone";
+import { formatPhone, stripPhone } from "@/lib/phone";
 import { KBSuggestions } from "@/components/tickets/KBSuggestions";
 import {
   DeviceSelector, type DeviceSelectorValue, type AssetOption,
@@ -64,7 +64,7 @@ export function ClientTicketForm({
 
   const [device, setDevice] = useState<DeviceSelectorValue>(emptyDevice);
   const [contact, setContact] = useState<ContactBlockValue>({
-    phone: defaultPhone || "",
+    phone: defaultPhone ? formatPhone(defaultPhone) : "",
     is_whatsapp: defaultIsWhatsapp,
     for_someone_else: !defaultPhone,
   });
