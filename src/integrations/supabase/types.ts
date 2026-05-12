@@ -6936,6 +6936,21 @@ export type Database = {
         Args: { field_overrides?: Json; source_id: string; target_id: string }
         Returns: Json
       }
+      open_client_portal_ticket: {
+        Args: {
+          p_asset_description?: string
+          p_asset_id?: string
+          p_category_id?: string
+          p_contact_phone: string
+          p_contact_phone_is_whatsapp: boolean
+          p_description: string
+          p_device_hostname_text?: string
+          p_monitored_device_id?: string
+          p_priority: Database["public"]["Enums"]["ticket_priority"]
+          p_title: string
+        }
+        Returns: string
+      }
       sanitize_jsonb: { Args: { input: Json }; Returns: Json }
       try_bootstrap_admin: { Args: { _user_id: string }; Returns: boolean }
       update_invoice_status: {

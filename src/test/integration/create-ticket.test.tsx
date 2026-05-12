@@ -54,4 +54,15 @@ describe("Create ticket flow (buildTicketPayload)", () => {
     expect(payload.status).toBe("in_progress");
     expect(payload.first_response_at).not.toBeNull();
   });
+
+  it("portal: portal ticket forces origin=portal and is_internal=false", () => {
+    const payload = buildTicketPayload({
+      data: makeTicketFormData({ origin: "phone" }),
+      ticketType: "portal",
+      userId: "user-9",
+    });
+    expect(payload.origin).toBe("portal");
+    expect(payload.is_internal).toBe(false);
+    expect(payload.sla_deadline).toBeUndefined();
+  });
 });
