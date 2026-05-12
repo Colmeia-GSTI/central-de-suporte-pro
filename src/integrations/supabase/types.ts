@@ -6817,6 +6817,28 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      create_staff_ticket: {
+        Args: {
+          p_asset_description?: string
+          p_asset_id?: string
+          p_assigned_to?: string
+          p_category_id?: string
+          p_client_id?: string
+          p_contact_phone?: string
+          p_contact_phone_is_whatsapp?: boolean
+          p_description: string
+          p_device_hostname_text?: string
+          p_monitored_device_id?: string
+          p_origin: Database["public"]["Enums"]["ticket_origin"]
+          p_priority: Database["public"]["Enums"]["ticket_priority"]
+          p_requester_contact_id?: string
+          p_subcategory_id?: string
+          p_tag_ids?: string[]
+          p_ticket_type: string
+          p_title: string
+        }
+        Returns: string
+      }
       delete_client_safely: {
         Args: { p_client_id: string; p_preview?: boolean }
         Returns: Json
