@@ -18,6 +18,46 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido + Modificado (Refatoração — Portal do Cliente: abertura de chamados — 2026-05-12)
+**Reportado pelo usuário em produção:** clientes não conseguiam abrir chamados pelo portal (`/client-portal`). Toast genérico "Erro ao abrir chamado" mascarava a causa real.
+
+**Causa raiz:** três policies de INSERT sobrepostas em `tickets`, sendo a do portal frouxa demais (validava apenas `role`, não exigia `requester_contact_id` vinculado ao `auth.uid()`). Em alguns cenários o INSERT passava mas a policy de SELECT bloqueava o ticket recém-criado por inconsistência no vínculo `client_contacts.user_id ↔ tickets.requester_contact_id`, resultando em "sumiço" silencioso. Soma-se a isso: `ClientPortalPage.tsx` com 1059 LOC, ~250 LOC duplicadas em relação a `TicketForm.tsx` (admin), validação ad-hoc sem Zod, e `onError` que descartava `error.message` do Supabase.
+
+**Correção (3 partes, PR único):**
+
+**A. Migration `20260512043108` — RLS consolidada + RPC SECURITY DEFINER:**
+- `DROP` das policies antigas `"Users can create tickets"` e `"Client users can create tickets"`.
+- `CREATE` da policy única `"Tickets INSERT consolidated"` exigindo (para cliente): `requester_contact_id IS NOT NULL` + `EXISTS` em `client_contacts` casando `id`, `user_id=auth.uid()`, `client_id` e `is_active=true` + `origin='portal'`. Staff segue criando livremente via `is_staff()`.
+- Nova RPC `open_client_portal_ticket(...)` `SECURITY DEFINER` com `SET search_path = public`: resolve `contact + client` a partir de `auth.uid()`, valida role/tamanhos/telefone (10–11 dígitos) e XOR `monitored_device_id ↔ device_hostname_text`, faz `INSERT` em `tickets` e em `ticket_history` (estado inicial), retorna `ticket_id`. Erros lançados com `ERRCODE='P0001'` para mensagem amigável no frontend.
+- `GRANT EXECUTE ... TO authenticated`.
+
+**B. `src/lib/ticket-payload.ts`:**
+- Tipo `TicketType` estendido com `"portal"` (mantém retrocompatibilidade com `external`/`internal`/`task`).
+- Branch força `origin='portal'`, `is_internal=false`, sem `sla_deadline` (definido server-side).
+- Caso de teste novo em `src/test/integration/create-ticket.test.tsx` cobrindo o branch (64/64 testes verdes).
+
+**C. UI refatorada — `src/components/client-portal/ClientTicketForm.tsx` (novo):**
+- `react-hook-form` + `zodResolver` (mesmo padrão do admin).
+- Mutation chama `supabase.rpc('open_client_portal_ticket', {...})`; em caso de erro propaga `error.message` real (não mais texto genérico).
+- Constraint XOR validada no Zod (`refine`), evita request inválido.
+
+**D. Quebra de `ClientPortalPage.tsx` (1059 → 200 LOC):**
+- `src/pages/client-portal/components/ClientPortalHeader.tsx` (~30 LOC)
+- `src/pages/client-portal/components/ClientPortalNav.tsx` (~25 LOC)
+- `src/pages/client-portal/components/ClientTicketsList.tsx` (~150 LOC, 3 tabs unificadas)
+- `src/pages/client-portal/components/ClientTicketDetailPanel.tsx` (~110 LOC, painel + comentários)
+- `src/pages/client-portal/components/NewTicketDialog.tsx` (~25 LOC, wrapper)
+- `src/pages/client-portal/components/portal-types.ts` (tipos + labels/colors compartilhados)
+- `src/lib/phone.ts` (novo): `formatPhone`, `stripPhone`, `isPhoneValid` centralizados (eliminou duplicação).
+
+**Saldo:** ~-300 LOC líquidas, zero código duplicado entre portal e admin, `TicketForm.tsx` admin intacto.
+
+**Validação em produção (2026-05-12):** abertura de chamado pelo portal confirmada pelo usuário ("chamado criado com sucesso").
+
+**Prevenção:** RPC SECURITY DEFINER elimina caminho de INSERT direto pelo cliente — toda criação via portal passa por validação centralizada. Policies RLS de SELECT continuam exigindo vínculo correto, mas agora é estruturalmente impossível criar ticket inconsistente.
+
+---
+
 ### Corrigido (Hotfix — Card "Recebido" somava amount em vez de paid_amount — 2026-05-08)
 **Reportado pelo usuário em produção:** mesmo após o hotfix anterior (PR #31), o card "Recebido" mostrava valor incorreto (R$ 9.021,68 quando o real era menor).
 
