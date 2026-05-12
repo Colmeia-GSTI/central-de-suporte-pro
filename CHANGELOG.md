@@ -18,6 +18,61 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Modificado (Refatoração — Abertura de chamados unificada: admin + portal — 2026-05-12)
+**Motivação:** após restaurar a abertura pelo portal (entrada anterior), auditoria revelou problemas estruturais na criação de chamados em ambos os caminhos (admin + portal): (1) `TicketForm.tsx` admin com wizard de 3 steps e 4 inserts paralelos sem transação (`tickets` + `ticket_history` + `ticket_tag_assignments` + edge function), risco de inconsistência; (2) dois campos lado a lado para "dispositivo" no portal (`asset_id` do CRM vs `monitored_device_id` do RMM) confundindo o cliente — apesar de servirem a propósitos diferentes (RMM = computador com agente; assets = ativo catalogado); (3) telefone perguntado do zero em cada abertura, mesmo o sistema já sabendo o número via `client_contacts.phone` do user logado; (4) lógica de phone/whatsapp/device duplicada entre os dois forms; (5) `useFormPersistence` (draft) ativo só no admin.
+
+**Correção:**
+
+**A. Nova RPC `create_staff_ticket` (migration `20260512131803`):**
+- `SECURITY DEFINER` com `SET search_path = public`, restrita a staff via `is_staff(auth.uid())`.
+- Recebe `p_ticket_type` (`external` | `internal` | `task`) e todos os campos do ticket + `p_tag_ids uuid[]`.
+- Executa atomicamente: `INSERT tickets` → `INSERT ticket_history` → loop `INSERT ticket_tag_assignments`. Falha em qualquer ponto faz rollback do todo.
+- Validações no servidor: tamanhos, telefone (10–11 dígitos), XOR `monitored_device_id ↔ device_hostname_text`, obrigatoriedade de `client_id` em external. Erros lançados com `ERRCODE='P0001'`.
+- `first_response_at` setado automaticamente quando `assigned_to IS NOT NULL` (status vira `in_progress`).
+- `GRANT EXECUTE ... TO authenticated`.
+
+**B. Componente compartilhado `src/components/tickets/shared/DeviceSelector.tsx` (~180 LOC):**
+- Um único `<Select>` agrupado com 3 grupos visuais: **Computadores monitorados (RMM)** com indicador online/offline, **Outros ativos do cliente** (assets do CRM), **Outro / não sei** (texto livre).
+- Backend continua salvando em colunas distintas (`monitored_device_id` ou `asset_id` ou `device_hostname_text`) — apenas o frontend é unificado.
+- Sem clientes/assets cadastrados? Cai direto em input livre, evitando dropdown vazio.
+
+**C. Novo `src/components/client-portal/ContactBlock.tsx` (~130 LOC) — telefone com pré-preenchimento inteligente:**
+- Recebe `defaultPhone` e `defaultIsWhatsapp` do `client_contacts` do user logado.
+- Radio buttons "Falar com você (Nome · telefone)" vs "Outra pessoa". Caminho "você" tem campos travados (apenas confirma); "outra pessoa" libera edição.
+- Sem telefone padrão no contato? Força modo "outra pessoa" + banner amarelo solicitando preenchimento.
+- Atende necessidade operacional levantada pelo Jonatas: chamados frequentemente são abertos por funcionários diferentes do contato cadastrado.
+
+**D. `TicketForm.tsx` admin reescrito (792 → 609 LOC):**
+- **Wizard de 3 steps eliminado** — tudo em form único, scroll vertical, staff vê tudo de uma vez.
+- Mutation chama `create_staff_ticket` (1 RPC) em vez de 3 inserts paralelos. `send-ticket-notification` segue fire-and-forget, só para `external`.
+- Usa `DeviceSelector` compartilhado (substituindo lógica inline).
+- Telefone pré-preenchido automaticamente ao selecionar contato (lê `phone` ou `whatsapp`, marca `is_whatsapp` se `notify_whatsapp=true` ou se veio do campo `whatsapp`).
+- `useFormPersistence` mantido com key `ticket_new`.
+
+**E. `ClientTicketForm.tsx` portal reescrito (339 → 246 LOC):**
+- Usa `DeviceSelector` (substituindo os 2 campos lado a lado anteriores).
+- Usa `ContactBlock` com `defaultPhone`/`defaultIsWhatsapp` do contato logado.
+- Adicionado `useFormPersistence` com key `ticket_portal` (paridade com admin).
+- Adicionado `KBSuggestions` (deflexão antes de abrir, mesma feature do admin).
+- Bloco "Avançado" (collapse) contendo Prioridade + Categoria (defaults: `medium`, sem categoria).
+
+**F. `ClientPortalPage.tsx` + `NewTicketDialog.tsx`:**
+- Query `client-user` agora também retorna `name, phone, whatsapp, notify_whatsapp` do contato.
+- `NewTicketDialog` recebe e propaga `contactName`/`defaultPhone`/`defaultIsWhatsapp` para o form.
+
+**G. Limpeza:**
+- `src/lib/ticket-payload.ts` removido — lógica vivia no client, agora vive na RPC server-side (`create_staff_ticket` para staff, `open_client_portal_ticket` para portal).
+- `src/test/integration/create-ticket.test.tsx` removido — testava a função pura que foi eliminada; testes equivalentes para as RPCs serão adicionados quando implementarmos testes de integração contra Supabase real.
+- `framer-motion` (wizard transitions) removido do `TicketForm`.
+
+**Saldo:** ~-126 LOC + 2 componentes reutilizáveis novos + 1 RPC transacional. **Cliques para abrir um chamado típico no portal: de 8 para 3** (título, descrição, "Abrir"). Telefone confirma com 1 clique em vez de digitar.
+
+**Validação:** `npx tsc --noEmit` zero erros. `npx vitest run` 116/116 testes verdes. **Migration `20260512131803_create_staff_ticket_rpc.sql` precisa ser aplicada manualmente no Supabase antes do deploy do código** (Jonatas confirmou que aplica).
+
+**Não alterado:** `send-ticket-notification` edge function, `TicketRatingDialog`, `TicketDetails`, RPC `open_client_portal_ticket`.
+
+---
+
 ### Corrigido + Modificado (Refatoração — Portal do Cliente: abertura de chamados — 2026-05-12)
 **Reportado pelo usuário em produção:** clientes não conseguiam abrir chamados pelo portal (`/client-portal`). Toast genérico "Erro ao abrir chamado" mascarava a causa real.
 
