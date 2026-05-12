@@ -1,5 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
-import { KBSuggestions } from "@/components/tickets/KBSuggestions";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,7 +6,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTechnicianList } from "@/hooks/useTechnicianList";
+import { useClientMonitoredDevices } from "@/hooks/useClientMonitoredDevices";
 import { logger } from "@/lib/logger";
+import { stripPhone, formatPhone } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,29 +18,26 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { TagsInput } from "@/components/tickets/TagsInput";
-import { motion, AnimatePresence } from "framer-motion";
+import { KBSuggestions } from "@/components/tickets/KBSuggestions";
 import {
-  FileText, Building2, AlertCircle, Tag, User, Phone, Mail, Globe,
-  MessageSquare, ChevronRight, ChevronLeft, Check, Loader2, Lock, CheckSquare,
+  DeviceSelector, type DeviceSelectorValue,
+} from "@/components/tickets/shared/DeviceSelector";
+import {
+  FileText, Lock, CheckSquare, User, Loader2, Check, Phone,
 } from "lucide-react";
 import type { Enums } from "@/integrations/supabase/types";
-import { buildTicketPayload } from "@/lib/ticket-payload";
 
 type TicketType = "external" | "internal" | "task";
 
-const ticketSchema = z.object({
-  title: z.string()
-    .min(5, "Título deve ter pelo menos 5 caracteres")
-    .max(255, "Título deve ter no máximo 255 caracteres"),
-  description: z.string()
-    .min(20, "Descreva o problema com pelo menos 20 caracteres")
-    .max(10000, "Descrição deve ter no máximo 10.000 caracteres"),
+const schema = z.object({
+  title: z.string().min(5, "Título deve ter pelo menos 5 caracteres").max(255),
+  description: z.string().min(20, "Descreva o problema com pelo menos 20 caracteres").max(10000),
   client_id: z.string().optional(),
   requester_contact_id: z.string().optional(),
   category_id: z.string().optional(),
@@ -47,11 +45,13 @@ const ticketSchema = z.object({
   priority: z.enum(["low", "medium", "high", "critical"]),
   origin: z.enum(["portal", "phone", "email", "chat", "whatsapp", "internal", "task"]),
   assigned_to: z.string().optional(),
+  contact_phone: z.string().optional(),
+  contact_phone_is_whatsapp: z.boolean().default(false),
 });
 
-type TicketFormData = z.infer<typeof ticketSchema>;
+type FormData = z.infer<typeof schema>;
 
-interface TicketFormProps {
+interface Props {
   onSuccess: () => void;
   onCancel: () => void;
   initialData?: {
@@ -62,106 +62,103 @@ interface TicketFormProps {
   };
 }
 
-const STEPS = [
-  { id: "info", label: "Informações", icon: FileText, description: "Título e descrição do problema" },
-  { id: "context", label: "Contexto", icon: Building2, description: "Cliente, categoria e origem" },
-  { id: "config", label: "Configurações", icon: AlertCircle, description: "Prioridade, técnico e tags" },
-] as const;
-
-const priorityConfig = {
-  low: { label: "Baixa", description: "Pode aguardar", color: "bg-success/10 text-success border-success/30" },
-  medium: { label: "Média", description: "Resolver em breve", color: "bg-primary/10 text-primary border-primary/30" },
-  high: { label: "Alta", description: "Urgente", color: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
-  critical: { label: "Crítica", description: "Ação imediata", color: "bg-destructive/10 text-destructive border-destructive/30" },
-};
-
-const originConfig = {
-  portal: { label: "Portal", icon: Globe },
-  phone: { label: "Telefone", icon: Phone },
-  email: { label: "Email", icon: Mail },
-  chat: { label: "Chat", icon: MessageSquare },
-  whatsapp: { label: "WhatsApp", icon: Phone },
-};
-
 const ticketTypeConfig: Record<TicketType, { label: string; description: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   external: { label: "Chamado Externo", description: "Atendimento ao cliente com notificação", icon: FileText, color: "bg-primary/10 border-primary/40 text-primary" },
   internal: { label: "Chamado Interno", description: "Tratamento interno sem notificar cliente", icon: Lock, color: "bg-blue-500/10 border-blue-500/40 text-blue-600" },
-  task: { label: "Tarefa Interna", description: "Tarefa da equipe sem cliente", icon: CheckSquare, color: "bg-purple-500/10 border-purple-500/40 text-purple-600" },
+  task:     { label: "Tarefa Interna",  description: "Tarefa da equipe sem cliente",            icon: CheckSquare, color: "bg-purple-500/10 border-purple-500/40 text-purple-600" },
 };
 
-export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps) {
+const priorityConfig = {
+  low:      { label: "Baixa",    color: "bg-success/10 text-success border-success/30" },
+  medium:   { label: "Média",    color: "bg-primary/10 text-primary border-primary/30" },
+  high:     { label: "Alta",     color: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
+  critical: { label: "Crítica",  color: "bg-destructive/10 text-destructive border-destructive/30" },
+};
+
+const originLabels: Record<string, string> = {
+  portal: "Portal", phone: "Telefone", email: "Email", chat: "Chat", whatsapp: "WhatsApp",
+};
+
+const emptyDevice: DeviceSelectorValue = {
+  monitored_device_id: null, asset_id: null, asset_description: null, device_hostname_text: null,
+};
+
+export function TicketForm({ onSuccess, onCancel, initialData }: Props) {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [step, setStep] = useState(0);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [ticketType, setTicketType] = useState<TicketType>("external");
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [device, setDevice] = useState<DeviceSelectorValue>(emptyDevice);
 
-  const form = useForm<TicketFormData>({
-    resolver: zodResolver(ticketSchema),
+  const form = useForm<FormData>({
+    resolver: zodResolver(schema),
     defaultValues: {
       title: initialData?.title || "",
       description: initialData?.description || "",
       client_id: initialData?.client_id || "",
       requester_contact_id: "",
       priority: initialData?.priority || "medium",
-      origin: "portal",
+      origin: "phone",
       category_id: "",
       subcategory_id: "",
       assigned_to: "",
+      contact_phone: "",
+      contact_phone_is_whatsapp: false,
     },
   });
 
   const { clearDraft, wasRestored } = useFormPersistence({
-    form,
-    key: "ticket_new",
-    storage: "session",
+    form, key: "ticket_new", storage: "session",
   });
 
-  // Data queries
   const { data: clients = [] } = useQuery({
     queryKey: ["clients-select"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients").select("id, name").eq("is_active", true).order("name");
       if (error) throw error;
       return data;
     },
-    staleTime: 5 * 60 * 1000,
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ["categories-select"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_categories").select("id, name").eq("is_active", true).order("name");
       if (error) throw error;
       return data;
     },
-    staleTime: 5 * 60 * 1000,
   });
 
   const { data: subcategories = [] } = useQuery({
     queryKey: ["subcategories-select"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_subcategories").select("id, category_id, name").eq("is_active", true).order("name");
       if (error) throw error;
       return data;
     },
-    staleTime: 5 * 60 * 1000,
   });
 
   const { data: technicians = [] } = useTechnicianList();
 
   const selectedClientId = form.watch("client_id");
+  const selectedCategoryId = form.watch("category_id");
+
   const { data: clientContacts = [] } = useQuery({
     queryKey: ["client-contacts-select", selectedClientId],
+    enabled: !!selectedClientId,
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       if (!selectedClientId) return [];
       const { data, error } = await supabase
         .from("client_contacts")
-        .select("id, name, role, phone, whatsapp")
+        .select("id, name, role, phone, whatsapp, notify_whatsapp")
         .eq("client_id", selectedClientId)
         .eq("is_active", true)
         .order("is_primary", { ascending: false })
@@ -169,122 +166,130 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedClientId,
-    staleTime: 5 * 60 * 1000,
   });
 
-  const selectedCategoryId = form.watch("category_id");
-  const filteredSubcategories = useMemo(() => {
-    if (!selectedCategoryId) return [];
-    return subcategories.filter((sub) => sub.category_id === selectedCategoryId);
-  }, [subcategories, selectedCategoryId]);
+  const { data: clientAssets = [] } = useQuery({
+    queryKey: ["client-assets-form", selectedClientId],
+    enabled: !!selectedClientId,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assets")
+        .select("id, name, asset_type")
+        .eq("client_id", selectedClientId!)
+        .eq("status", "active")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
 
-  const handleClientChange = useCallback((value: string, fieldOnChange: (v: string) => void) => {
-    fieldOnChange(value);
-    form.setValue("requester_contact_id", "");
-  }, [form]);
+  const { items: monitoredDevices } = useClientMonitoredDevices(selectedClientId || null);
 
-  const handleTicketTypeChange = (type: TicketType) => {
-    setTicketType(type);
-    if (type === "internal") {
-      form.setValue("origin", "internal");
-    } else if (type === "task") {
-      form.setValue("origin", "task");
-      form.setValue("client_id", "");
-      form.setValue("requester_contact_id", "");
-    } else {
-      form.setValue("origin", "portal");
+  const filteredSubcategories = useMemo(
+    () => selectedCategoryId ? subcategories.filter((s) => s.category_id === selectedCategoryId) : [],
+    [subcategories, selectedCategoryId]
+  );
+
+  const handleContactChange = (contactId: string) => {
+    form.setValue("requester_contact_id", contactId);
+    const c = clientContacts.find((cc) => cc.id === contactId);
+    if (c) {
+      const phone = c.phone || c.whatsapp || "";
+      form.setValue("contact_phone", phone ? formatPhone(phone) : "");
+      form.setValue("contact_phone_is_whatsapp", !!(c.notify_whatsapp || c.whatsapp));
     }
   };
 
-  // Step validation
-  const canProceed = useMemo(() => {
-    if (step === 0) {
-      const title = form.watch("title");
-      const description = form.watch("description");
-      return title.length >= 5 && description.length >= 20;
+  const handleTicketTypeChange = (type: TicketType) => {
+    setTicketType(type);
+    if (type === "internal") form.setValue("origin", "internal");
+    else if (type === "task") {
+      form.setValue("origin", "task");
+      form.setValue("client_id", "");
+      form.setValue("requester_contact_id", "");
+      setDevice(emptyDevice);
+    } else if (form.getValues("origin") === "internal" || form.getValues("origin") === "task") {
+      form.setValue("origin", "phone");
     }
-    return true;
-  }, [step, form.watch("title"), form.watch("description")]);
+  };
 
   const mutation = useMutation({
-    mutationFn: async (data: TicketFormData) => {
-      const payload = buildTicketPayload({ data, ticketType, userId: user?.id });
-
-      const { data: newTicket, error } = await supabase
-        .from("tickets").insert(payload).select("id").single();
+    mutationFn: async (data: FormData) => {
+      const { data: ticketId, error } = await supabase.rpc("create_staff_ticket", {
+        p_ticket_type: ticketType,
+        p_title: data.title,
+        p_description: data.description,
+        p_priority: data.priority,
+        p_origin: data.origin as Enums<"ticket_origin">,
+        p_client_id: ticketType === "task" ? null : (data.client_id || null),
+        p_requester_contact_id: ticketType === "task" ? null : (data.requester_contact_id || null),
+        p_category_id: data.category_id || null,
+        p_subcategory_id: data.subcategory_id || null,
+        p_assigned_to: data.assigned_to || null,
+        p_asset_id: device.asset_id,
+        p_asset_description: device.asset_description,
+        p_monitored_device_id: device.monitored_device_id,
+        p_device_hostname_text: device.device_hostname_text,
+        p_contact_phone: data.contact_phone ? stripPhone(data.contact_phone) : null,
+        p_contact_phone_is_whatsapp: data.contact_phone_is_whatsapp,
+        p_tag_ids: tagIds,
+      });
       if (error) throw error;
 
-      if (newTicket?.id) {
-        const commentPrefix = ticketType === "task" ? "Tarefa criada" : ticketType === "internal" ? "Chamado interno criado" : "Chamado criado";
-        const { error: historyError } = await supabase.from("ticket_history").insert({
-          ticket_id: newTicket.id,
-          user_id: user?.id,
-          old_status: null,
-          new_status: payload.status,
-          comment: data.assigned_to ? `${commentPrefix} e atribuído` : commentPrefix,
-        });
-        if (historyError) logger.warn("Failed to insert creation history", "Tickets", { error: historyError.message });
-
-        if (selectedTagIds.length > 0) {
-          const tagAssignments = selectedTagIds.map((tagId) => ({
-            ticket_id: newTicket.id,
-            tag_id: tagId,
-          }));
-          const { error: tagError } = await supabase.from("ticket_tag_assignments").insert(tagAssignments);
-          if (tagError) logger.warn("Failed to assign tags", "Tickets", { error: tagError.message });
-        }
-
-        // Fire-and-forget — não bloquear criação do chamado
+      // fire-and-forget notification (skip for task/internal)
+      if (ticketId && ticketType === "external") {
         supabase.functions.invoke("send-ticket-notification", {
-          body: { ticket_id: newTicket.id, event_type: "created" }
-        }).catch(err =>
+          body: { ticket_id: ticketId, event_type: "created" },
+        }).catch((err) =>
           logger.warn("Failed to send creation notification", "Tickets", { error: err?.message })
         );
       }
+      return ticketId;
     },
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
-      const label = ticketType === "task" ? "Tarefa criada com sucesso!" : ticketType === "internal" ? "Chamado interno criado com sucesso!" : "Chamado criado com sucesso!";
+      const label = ticketType === "task" ? "Tarefa criada!"
+        : ticketType === "internal" ? "Chamado interno criado!"
+        : "Chamado criado!";
       toast({ title: label });
       onSuccess();
     },
-    onError: (error) => {
-      toast({ title: "Erro ao criar chamado", description: error.message, variant: "destructive" });
+    onError: (error: { message?: string }) => {
+      toast({
+        title: "Erro ao criar chamado",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
     },
   });
 
-  const onSubmit = (data: TicketFormData) => mutation.mutate(data);
+  const handleCancel = () => { clearDraft(); onCancel(); };
 
-  const handleCancel = () => {
-    clearDraft();
-    onCancel();
-  };
-
-  const nextStep = () => { if (step < STEPS.length - 1 && canProceed) setStep(step + 1); };
-  const prevStep = () => { if (step > 0) setStep(step - 1); };
+  const title = form.watch("title");
+  const description = form.watch("description");
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
         {wasRestored && <DraftRecoveryBanner onClear={clearDraft} />}
 
-        {/* Ticket Type Selection */}
+        {/* Tipo de Chamado */}
         <div className="space-y-2">
           <FormLabel className="text-sm font-semibold">Tipo de Chamado</FormLabel>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {(Object.entries(ticketTypeConfig) as [TicketType, typeof ticketTypeConfig.external][]).map(([key, cfg]) => {
               const Icon = cfg.icon;
-              const isSelected = ticketType === key;
+              const selected = ticketType === key;
               return (
                 <button
                   key={key}
                   type="button"
                   onClick={() => handleTicketTypeChange(key)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all active:scale-[0.98] ${
-                    isSelected ? cfg.color + " font-semibold border-2" : "bg-card border-border text-muted-foreground hover:border-muted-foreground/30"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 text-left transition-all active:scale-[0.98] ${
+                    selected ? cfg.color + " font-semibold" : "bg-card border-border text-muted-foreground hover:border-muted-foreground/30"
                   }`}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
@@ -300,491 +305,303 @@ export function TicketForm({ onSuccess, onCancel, initialData }: TicketFormProps
 
         <Separator />
 
-        {/* Step Indicator */}
-        <div className="flex items-center gap-1">
-          {STEPS.map((s, i) => {
-            const Icon = s.icon;
-            const isActive = i === step;
-            const isCompleted = i < step;
-            return (
-              <div key={s.id} className="flex items-center flex-1">
-                <button
-                  type="button"
-                  onClick={() => { if (i <= step || canProceed) setStep(i); }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all w-full ${
-                    isActive
-                      ? "bg-primary/10 border border-primary/30 text-primary"
-                      : isCompleted
-                      ? "bg-success/10 border border-success/30 text-success"
-                      : "bg-muted/50 border border-transparent text-muted-foreground"
-                  }`}
-                >
-                  <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold flex-shrink-0 ${
-                    isActive ? "bg-primary text-primary-foreground" : isCompleted ? "bg-success text-white" : "bg-muted text-muted-foreground"
-                  }`}>
-                    {isCompleted ? <Check className="h-3.5 w-3.5" /> : i + 1}
-                  </div>
-                  <div className="hidden sm:block text-left min-w-0">
-                    <p className="text-xs font-medium leading-none">{s.label}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.description}</p>
-                  </div>
-                </button>
-                {i < STEPS.length - 1 && (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/40 mx-1 flex-shrink-0 hidden sm:block" />
+        {/* Cliente + Contato (não para task) */}
+        {ticketType !== "task" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormField
+              control={form.control}
+              name="client_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cliente {ticketType === "external" && <span className="text-destructive">*</span>}</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={(v) => { field.onChange(v); form.setValue("requester_contact_id", ""); form.setValue("contact_phone", ""); setDevice(emptyDevice); }}
+                  >
+                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cliente" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {clients.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            {ticketType === "external" && (
+              <FormField
+                control={form.control}
+                name="requester_contact_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contato Solicitante</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={handleContactChange}
+                      disabled={!selectedClientId || clientContacts.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={
+                            !selectedClientId ? "Selecione um cliente primeiro"
+                            : clientContacts.length === 0 ? "Nenhum contato cadastrado"
+                            : "Selecione o solicitante"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {clientContacts.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            <span className="flex items-center gap-2">
+                              <User className="h-3 w-3 text-muted-foreground" />
+                              {c.name}{c.role && <span className="text-muted-foreground text-xs">— {c.role}</span>}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
                 )}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Título + Descrição */}
+        <FormField
+          control={form.control}
+          name="title"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{ticketType === "task" ? "O que precisa ser feito?" : "Qual o problema?"} <span className="text-destructive">*</span></FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={ticketType === "task" ? "Ex: Atualizar firmware..." : "Ex: Impressora não liga..."}
+                  className="text-base"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{ticketType === "task" ? "Detalhes da tarefa" : "Descreva em detalhes"} <span className="text-destructive">*</span></FormLabel>
+              <FormControl>
+                <Textarea rows={4} placeholder="Inclua: quando começou, frequência, passos tentados..." {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {ticketType === "external" && title.length >= 5 && (
+          <KBSuggestions title={title} description={description} />
+        )}
+
+        {/* Dispositivo (só externo e quando tem cliente) */}
+        {ticketType === "external" && selectedClientId && (
+          <DeviceSelector
+            monitoredDevices={monitoredDevices}
+            assets={clientAssets}
+            value={device}
+            onChange={setDevice}
+            label="Dispositivo com problema"
+          />
+        )}
+
+        {/* Telefone de contato (só externo) */}
+        {ticketType === "external" && (
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              Telefone de retorno
+            </div>
+            <FormField
+              control={form.control}
+              name="contact_phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Input
+                      placeholder="(00) 00000-0000"
+                      inputMode="tel"
+                      maxLength={15}
+                      value={field.value || ""}
+                      onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormDescription className="text-xs">
+                    Preenchido automaticamente ao selecionar o contato. Edite se for outro número.
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="contact_phone_is_whatsapp"
+              render={({ field }) => (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Este número tem WhatsApp?</span>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </div>
+              )}
+            />
+          </div>
+        )}
+
+        {/* Categoria + Subcategoria + Origem */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FormField
+            control={form.control}
+            name="category_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Categoria</FormLabel>
+                <Select
+                  value={field.value}
+                  onValueChange={(v) => { field.onChange(v); form.setValue("subcategory_id", ""); }}
+                >
+                  <FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {categories.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="subcategory_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Subcategoria</FormLabel>
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  disabled={filteredSubcategories.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={filteredSubcategories.length === 0 ? "Selecione categoria primeiro" : "Selecione"} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {filteredSubcategories.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {ticketType === "external" && (
+          <FormField
+            control={form.control}
+            name="origin"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Canal de Origem</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {Object.entries(originLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
+        )}
+
+        <Separator />
+
+        {/* Prioridade */}
+        <FormField
+          control={form.control}
+          name="priority"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-sm font-semibold">Prioridade</FormLabel>
+              <div className="grid grid-cols-4 gap-2">
+                {(Object.entries(priorityConfig) as [string, { label: string; color: string }][]).map(([key, cfg]) => {
+                  const selected = field.value === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => field.onChange(key)}
+                      className={`px-2 py-2 rounded-lg border-2 text-xs transition-all active:scale-[0.98] ${
+                        selected ? cfg.color + " font-semibold" : "bg-card border-border text-muted-foreground hover:border-muted-foreground/30"
+                      }`}
+                    >
+                      {cfg.label}
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
+            </FormItem>
+          )}
+        />
+
+        {ticketType !== "external" && (
+          <div className="bg-muted/30 border rounded-lg px-3 py-2 text-xs text-muted-foreground">
+            ⏱ SLA não aplicado — {ticketType === "task" ? "tarefas internas" : "chamados internos"} não têm prazo.
+          </div>
+        )}
+
+        {/* Técnico */}
+        <FormField
+          control={form.control}
+          name="assigned_to"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Atribuir a Técnico</FormLabel>
+              <FormDescription className="text-xs">
+                Opcional. Se atribuído, inicia como "Em Andamento".
+              </FormDescription>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <FormControl><SelectTrigger><SelectValue placeholder="Não atribuir (fila)" /></SelectTrigger></FormControl>
+                <SelectContent>
+                  <SelectItem value="">Não atribuir (fila)</SelectItem>
+                  {technicians.map((t) => (
+                    <SelectItem key={t.user_id} value={t.user_id}>
+                      <span className="flex items-center gap-2">
+                        <User className="h-3 w-3 text-muted-foreground" />
+                        {t.full_name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+
+        {/* Tags */}
+        <div className="space-y-2">
+          <FormLabel>Tags</FormLabel>
+          <TagsInput selectedTagIds={tagIds} onChange={setTagIds} />
         </div>
 
         <Separator />
 
-        {/* Step Content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={step}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {/* Step 1: Info */}
-            {step === 0 && (
-              <div className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">
-                        {ticketType === "task" ? "O que precisa ser feito?" : "Qual o problema?"} <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormDescription>
-                        {ticketType === "task" ? "Descreva a tarefa de forma clara" : "Um título curto e claro ajuda na triagem rápida"}
-                      </FormDescription>
-                      <FormControl>
-                        <Input
-                          placeholder={ticketType === "task" ? "Ex: Atualizar firmware dos switches, Configurar backup..." : "Ex: Impressora não liga, Email não envia, Sistema travando..."}
-                          className="text-base h-12"
-                          {...field}
-                        />
-                      </FormControl>
-                      <div className="flex justify-between">
-                        <FormMessage />
-                        <span className="text-xs text-muted-foreground">{field.value.length}/255</span>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">
-                        {ticketType === "task" ? "Detalhes da tarefa" : "Descreva em detalhes"} <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormDescription>
-                        {ticketType === "task"
-                          ? "Inclua instruções, prazos e critérios de conclusão."
-                          : "Quanto mais detalhes, mais rápido o diagnóstico. Inclua: quando começou, frequência, passos tentados."}
-                      </FormDescription>
-                      <FormControl>
-                        <Textarea
-                          placeholder={ticketType === "task" ? "Descreva a tarefa em detalhes..." : "Descreva o problema em detalhes..."}
-                          rows={5}
-                          className="text-base resize-none"
-                          {...field}
-                        />
-                      </FormControl>
-                      <div className="flex justify-between">
-                        <FormMessage />
-                        <span className="text-xs text-muted-foreground">{field.value.length}/10.000</span>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                {/* KB Suggestions — only for external */}
-                {ticketType === "external" && (
-                  <KBSuggestions
-                    title={form.watch("title")}
-                    description={form.watch("description")}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Step 2: Context */}
-            {step === 1 && (
-              <div className="space-y-5">
-                {/* Task info banner */}
-                {ticketType === "task" && (
-                  <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg px-4 py-3 text-sm text-purple-700 dark:text-purple-300">
-                    <CheckSquare className="h-4 w-4 inline mr-2" />
-                    Tarefa interna da equipe — não vinculada a cliente
-                  </div>
-                )}
-
-                {/* Internal info banner */}
-                {ticketType === "internal" && (
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
-                    <Lock className="h-4 w-4 inline mr-2" />
-                    Chamado interno — o cliente não será notificado
-                  </div>
-                )}
-
-                {/* Client + Contact — hidden for task, shown for external/internal */}
-                {ticketType !== "task" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="client_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Cliente {ticketType === "external" && <span className="text-destructive">*</span>}
-                          </FormLabel>
-                          <Select
-                            onValueChange={(value) => handleClientChange(value, field.onChange)}
-                            value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione um cliente" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {clients.map((client) => (
-                                <SelectItem key={client.id} value={client.id}>
-                                  {client.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {ticketType === "external" && (
-                      <FormField
-                        control={form.control}
-                        name="requester_contact_id"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Contato Solicitante</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              value={field.value}
-                              disabled={!selectedClientId || clientContacts.length === 0}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder={
-                                    !selectedClientId ? "Selecione um cliente primeiro"
-                                    : clientContacts.length === 0 ? "Nenhum contato cadastrado"
-                                    : "Selecione o solicitante"
-                                  } />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {clientContacts.map((contact) => (
-                                  <SelectItem key={contact.id} value={contact.id}>
-                                    <div className="flex items-center gap-2">
-                                      <User className="h-3 w-3 text-muted-foreground" />
-                                      <span>{contact.name}</span>
-                                      {contact.role && (
-                                        <span className="text-muted-foreground text-xs">— {contact.role}</span>
-                                      )}
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    )}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="category_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Categoria</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            form.setValue("subcategory_id", "");
-                          }}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione uma categoria" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {categories.map((category) => (
-                              <SelectItem key={category.id} value={category.id}>
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="subcategory_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Subcategoria</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={filteredSubcategories.length === 0}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={
-                                filteredSubcategories.length === 0
-                                  ? "Selecione uma categoria primeiro"
-                                  : "Selecione uma subcategoria"
-                              } />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {filteredSubcategories.map((sub) => (
-                              <SelectItem key={sub.id} value={sub.id}>
-                                {sub.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Origin selector — only for external */}
-                {ticketType === "external" && (
-                  <FormField
-                    control={form.control}
-                    name="origin"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Canal de Origem</FormLabel>
-                        <div className="flex flex-wrap gap-2">
-                          {(Object.entries(originConfig) as [string, { label: string; icon: React.ComponentType<{ className?: string }> }][]).map(([key, cfg]) => {
-                            const Icon = cfg.icon;
-                            const isSelected = field.value === key;
-                            return (
-                              <button
-                                key={key}
-                                type="button"
-                                onClick={() => field.onChange(key)}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-all active:scale-[0.98] ${
-                                  isSelected
-                                    ? "bg-primary/10 border-primary/40 text-primary font-medium"
-                                    : "bg-card border-border text-muted-foreground hover:bg-muted/50"
-                                }`}
-                              >
-                                <Icon className="h-3.5 w-3.5" />
-                                {cfg.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Step 3: Config */}
-            {step === 2 && (
-              <div className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-base font-semibold">Prioridade</FormLabel>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {(Object.entries(priorityConfig) as [string, { label: string; description: string; color: string }][]).map(([key, cfg]) => {
-                          const isSelected = field.value === key;
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              onClick={() => field.onChange(key)}
-                              className={`flex flex-col items-center gap-1 px-3 py-3 rounded-xl border-2 text-sm transition-all active:scale-[0.98] ${
-                                isSelected ? cfg.color + " font-semibold" : "bg-card border-border text-muted-foreground hover:border-muted-foreground/30"
-                              }`}
-                            >
-                              <span className="font-medium">{cfg.label}</span>
-                              <span className="text-[10px] opacity-70">{cfg.description}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* SLA notice for internal */}
-                {ticketType !== "external" && (
-                  <div className="bg-muted/30 border rounded-lg px-4 py-2 text-xs text-muted-foreground">
-                    ⏱️ SLA não será aplicado — {ticketType === "task" ? "tarefas internas" : "chamados internos"} não possuem prazo de atendimento.
-                  </div>
-                )}
-
-                <FormField
-                  control={form.control}
-                  name="assigned_to"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Atribuir a Técnico</FormLabel>
-                      <FormDescription>
-                        Opcional. Se atribuído, o chamado inicia com status "Em Andamento".
-                      </FormDescription>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Atribuir automaticamente (fila)" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="">Não atribuir (fila)</SelectItem>
-                          {technicians.map((tech) => (
-                            <SelectItem key={tech.user_id} value={tech.user_id}>
-                              <div className="flex items-center gap-2">
-                                <User className="h-3 w-3 text-muted-foreground" />
-                                {tech.full_name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Tags */}
-                <div className="space-y-2">
-                  <FormLabel className="flex items-center gap-1.5">
-                    <Tag className="h-3.5 w-3.5" />
-                    Tags
-                  </FormLabel>
-                  <FormDescription>
-                    Tags ajudam na organização e filtragem de chamados
-                  </FormDescription>
-                  <TagsInput selectedTagIds={selectedTagIds} onChange={setSelectedTagIds} />
-                </div>
-
-                {/* Summary Preview */}
-                <div className="bg-muted/30 border rounded-xl p-4 space-y-3">
-                  <p className="text-sm font-semibold text-muted-foreground">Resumo</p>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Tipo:</span>
-                      <p className="font-medium">{ticketTypeConfig[ticketType].label}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Título:</span>
-                      <p className="font-medium truncate">{form.watch("title") || "—"}</p>
-                    </div>
-                    {ticketType !== "task" && (
-                      <div>
-                        <span className="text-muted-foreground">Cliente:</span>
-                        <p className="font-medium truncate">
-                          {clients.find((c) => c.id === form.watch("client_id"))?.name || "Não selecionado"}
-                        </p>
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-muted-foreground">Prioridade:</span>
-                      <Badge className={`ml-1 ${priorityConfig[form.watch("priority")]?.color || ""}`}>
-                        {priorityConfig[form.watch("priority")]?.label}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Técnico:</span>
-                      <p className="font-medium truncate">
-                        {technicians.find((t) => t.user_id === form.watch("assigned_to"))?.full_name || "Fila"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-
-        <Separator />
-
-        {/* Navigation */}
         <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={step === 0 ? handleCancel : prevStep}
-            className="gap-1.5"
-          >
-            {step === 0 ? (
-              "Cancelar"
+          <Button type="button" variant="outline" onClick={handleCancel}>Cancelar</Button>
+          <Button type="submit" disabled={mutation.isPending} className="min-w-[140px] gap-1.5">
+            {mutation.isPending ? (
+              <><Loader2 className="h-4 w-4 animate-spin" />Criando...</>
             ) : (
-              <>
-                <ChevronLeft className="h-4 w-4" />
-                Voltar
+              <><Check className="h-4 w-4" />
+                {ticketType === "task" ? "Criar Tarefa" : ticketType === "internal" ? "Criar Interno" : "Criar Chamado"}
               </>
             )}
           </Button>
-
-          {step < STEPS.length - 1 ? (
-            <Button
-              type="button"
-              onClick={nextStep}
-              disabled={!canProceed}
-              className="gap-1.5"
-            >
-              Próximo
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button
-              type="submit"
-              disabled={mutation.isPending}
-              className="gap-1.5 min-w-[140px]"
-            >
-              {mutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Criando...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  {ticketType === "task" ? "Criar Tarefa" : ticketType === "internal" ? "Criar Interno" : "Criar Chamado"}
-                </>
-              )}
-            </Button>
-          )}
         </div>
       </form>
     </Form>

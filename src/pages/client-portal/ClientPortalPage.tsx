@@ -35,12 +35,18 @@ export default function ClientPortalPage() {
     queryFn: async () => {
       const { data: contact } = await supabase
         .from("client_contacts")
-        .select("client_id, id, clients(*)")
+        .select("client_id, id, name, phone, whatsapp, notify_whatsapp, clients(*)")
         .eq("user_id", user?.id)
         .maybeSingle();
       if (contact?.clients) {
         const c = contact.clients as unknown as Tables<"clients">;
-        return { ...c, contactId: contact.id };
+        return {
+          ...c,
+          contactId: contact.id,
+          contactName: contact.name,
+          contactPhone: contact.phone ?? contact.whatsapp ?? null,
+          contactIsWhatsapp: !!(contact.notify_whatsapp || contact.whatsapp),
+        };
       }
       return null;
     },
@@ -180,6 +186,9 @@ export default function ClientPortalPage() {
       <NewTicketDialog
         open={isNewTicketOpen}
         onOpenChange={setIsNewTicketOpen}
+        contactName={clientData?.contactName || profile?.full_name || "Você"}
+        defaultPhone={clientData?.contactPhone ?? null}
+        defaultIsWhatsapp={clientData?.contactIsWhatsapp ?? false}
         monitoredDevices={monitoredDevices}
         clientAssets={clientAssets}
         categories={categories}
