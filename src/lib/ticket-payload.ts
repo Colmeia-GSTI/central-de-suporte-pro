@@ -56,13 +56,15 @@ export function buildTicketPayload({
   ticketType,
   userId,
 }: BuildTicketPayloadInput): TicketInsertPayload {
-  const isInternal = ticketType !== "external";
+  const isInternal = ticketType !== "external" && ticketType !== "portal";
 
   const origin = (
     ticketType === "internal"
       ? "internal"
       : ticketType === "task"
       ? "task"
+      : ticketType === "portal"
+      ? "portal"
       : data.origin
   ) as Enums<"ticket_origin">;
 
