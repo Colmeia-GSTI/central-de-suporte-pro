@@ -10,7 +10,7 @@
 
 import type { Enums } from "@/integrations/supabase/types";
 
-export type TicketType = "external" | "internal" | "task";
+export type TicketType = "external" | "internal" | "task" | "portal";
 
 export interface BuildTicketPayloadInput {
   data: {
@@ -23,6 +23,12 @@ export interface BuildTicketPayloadInput {
     priority: "low" | "medium" | "high" | "critical";
     origin: "portal" | "phone" | "email" | "chat" | "whatsapp" | "internal" | "task";
     assigned_to?: string;
+    contact_phone?: string;
+    contact_phone_is_whatsapp?: boolean;
+    asset_id?: string | null;
+    asset_description?: string | null;
+    monitored_device_id?: string | null;
+    device_hostname_text?: string | null;
   };
   ticketType: TicketType;
   userId: string | undefined;
