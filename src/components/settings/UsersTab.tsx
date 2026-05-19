@@ -71,7 +71,8 @@ export function UsersTab() {
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<ProfileWithRoles | null>(null);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
-  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [inviteClientOpen, setInviteClientOpen] = useState(false);
+  const [inviteStaffOpen, setInviteStaffOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<ProfileWithRoles | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -83,6 +84,7 @@ export function UsersTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
+  const { data: pendingCount = 0 } = usePendingInvitesCount();
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users-with-roles", search],
