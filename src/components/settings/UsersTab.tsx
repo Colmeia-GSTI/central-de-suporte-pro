@@ -31,15 +31,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2, Pencil } from "lucide-react";
+import { Search, Shield, Trash2, Mail, KeyRound, Loader2, UserCheck, Clock, Building2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
-import { UserForm } from "./UserForm";
 import { UserProfileSheet } from "./UserProfileSheet";
-import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InviteClientDialog } from "./InviteClientDialog";
+import { InviteStaffDialog } from "./InviteStaffDialog";
+import { PendingInvitesTab } from "./PendingInvitesTab";
+import { usePendingInvitesCount } from "@/hooks/usePendingInvitesCount";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type ProfileWithRoles = Tables<"profiles"> & {
