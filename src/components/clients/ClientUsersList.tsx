@@ -102,35 +102,28 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
 
   const createUserMutation = useMutation({
     mutationFn: async (data: UserFormData) => {
-      const { data: result, error } = await supabase.functions.invoke("create-client-user", {
+      if (!data.email) throw new Error("Email é obrigatório para enviar o convite");
+      const { data: result, error } = await supabase.functions.invoke("invite-user", {
         body: {
-          clientId,
-          name: data.name,
-          username: data.username,
-          password: data.password,
-          email: data.email || undefined,
-          phone: data.phone || undefined,
-          role: data.role || undefined,
-          isPrimary: data.isPrimary,
-          isClientMaster: data.isClientMaster,
+          email: data.email,
+          full_name: data.name,
+          role: data.isClientMaster ? "client_master" : "client",
+          client_id: clientId,
         },
       });
-
       if (error) throw error;
-      if (result.error) throw new Error(result.error);
+      if (result?.error) throw new Error(result.error);
       return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
-      toast({ title: "Usuário criado com sucesso!" });
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-invites-count"] });
+      toast({ title: "Convite enviado", description: "O usuário receberá um email para criar a senha." });
       handleCloseForm();
     },
     onError: (error: Error) => {
-      toast({ 
-        title: "Erro ao criar usuário", 
-        description: error.message,
-        variant: "destructive" 
-      });
+      toast({ title: "Erro ao enviar convite", description: error.message, variant: "destructive" });
     },
   });
 
