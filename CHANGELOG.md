@@ -18,6 +18,48 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado (Fluxo de convite admin — fecha causa-raiz dos órfãos — 2026-05-19)
+**Motivação:** após hotfix dos 10 órfãos (entrada anterior), decisão arquitetural de eliminar a causa-raiz: bloquear signup público e exigir convite admin para criação de qualquer conta. Decisão alinhada com multi-tenancy futura (SaaS exige convite, não signup aberto).
+
+**Migration `20260519185808` (aplicada manualmente em produção):**
+- Tabela `pending_invites` (id, email, role, client_id, full_name, invited_by, token UUID, expires_at, accepted_at). CHECK constraint garante que role cliente exige `client_id` e role staff não pode ter.
+- RLS: apenas staff (`is_staff`) vê/cria/edita/deleta convites. Convidador é forçado a `invited_by = auth.uid()` no INSERT.
+- Trigger `enforce_invite_on_signup` em `auth.users BEFORE INSERT`: bypass para `service_role` (admin SDK), rejeita qualquer outro INSERT que não tenha convite pendente válido no email. Mensagem amigável: "Cadastro público desabilitado. Solicite acesso ao administrador."
+- RPC `accept_invite(p_token)` SECURITY DEFINER: valida token + expiração + match de email + cria role + cria `client_contacts` (se cliente) + cria `profile` + marca aceito. **Mata role 'client' default** criada pelo trigger `handle_new_user` quando o convite é para staff ou client_master, evitando role dupla que quebraria `is_staff()`.
+- RPC `get_invite_info(p_token)` STABLE SECURITY DEFINER, executável por `anon`: retorna info pública do convite (nome do cliente, role, expires_at) para a tela `/setup-account` mostrar antes do usuário criar a senha.
+- RPC `find_valid_invite(p_email)` helper interna.
+
+**Edge functions:**
+- `invite-user`: bloqueia se já existe user OU convite pendente, cria registro em `pending_invites`, gera URL `/setup-account?token=...`, envia email branded via `send-email-resend` (reusa `email-helpers.ts`). Rate limit 20/min por admin. Audit log no sucesso e na falha de email (HTTP 207 quando convite criado mas email falhou).
+- `resend-invite`: estende validade em +7 dias e reenvia. Rate 30/min.
+- `revoke-invite`: marca `expires_at = now()`. Rate 30/min.
+
+**Frontend:**
+- Nova página `/setup-account`: lê token da URL, chama `get_invite_info` para mostrar info, oferece form de criação de senha. Após signUp + signIn + accept_invite, redireciona conforme role (`/portal` para cliente, `/` para staff).
+- `/register` virou página informativa "Cadastro por convite" — sem formulário de signup.
+- `/login`: link "Cadastre-se" mudou para "Acesso por convite".
+- `/settings/users` ganhou aba "Convites pendentes" com tabela (status pendente/expirado/aceito derivado em JS), botões "Convidar Cliente" + "Convidar Staff", ações Reenviar/Revogar/Renovar/Ver usuário.
+- Sidebar `AppSidebar` mostra badge com contador de convites pendentes via `usePendingInvitesCount` (refetch 60s, resiliente se a tabela ainda não existe).
+- `ClientUsersList` (criação de usuário dentro do detalhe do cliente) refatorada para usar `invite-user` em vez de criar conta com senha definida pelo admin.
+
+**Removido:**
+- Edge function `create-client-user/` (substituída integralmente por `invite-user`).
+- Mutation `createUserMutation` e import `UserForm` no `UsersTab.tsx` (não mais necessários).
+
+**Pendente de aplicação manual:**
+- Secret `APP_URL=https://suporte.colmeiagsti.com.br` no Lovable Cloud (Secrets) — sem ele, `invite-user` cai no fallback do default mas é boa prática configurar explicitamente.
+
+**Não testado ainda em produção:** Jonatas vai testar depois (convidar email teste, validar email recebido, validar `/setup-account` → criação de senha → redirect).
+
+**Os 10 órfãos atuais não foram afetados:** continuam funcionando porque o trigger só roda em INSERTs futuros em `auth.users`.
+
+**Validação técnica realizada:**
+- TypeScript zero erros após merge.
+- Migration aplicada com sucesso (`tabela=1, trigger=1, funcoes=4`).
+- 2 bugs corrigidos pré-aplicação (commit `b88e563`): (1) role default duplicada quando convite é staff; (2) JOIN PostgREST em `pending_invites_invited_by_fkey` que não existe — substituído por JOIN manual via id.
+
+---
+
 ### Corrigido (Hotfix — 10 clientes órfãos sem client_contacts + hardening RPC portal — 2026-05-19)
 **Reportado em produção:** múltiplos clientes não conseguiam abrir chamados pelo portal, recebendo toast "Erro ao abrir chamado / Contato do cliente não encontrado ou inativo". Caso piloto: `fernanda@airduto.com.br`.
 
