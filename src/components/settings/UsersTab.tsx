@@ -618,6 +618,10 @@ export function UsersTab() {
             </TableBody>
           </Table>
         </div>
+          </TabsContent>
+        </Tabs>
+
+
 
         {/* Role Dialog */}
         <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
