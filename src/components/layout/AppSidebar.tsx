@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTechnicianTicketCount } from "@/hooks/useTechnicianTicketCount";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { usePendingInvitesCount } from "@/hooks/usePendingInvitesCount";
 import { Module, AppRole } from "@/lib/permissions";
 import {
   Sidebar,
