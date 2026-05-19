@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTechnicianTicketCount } from "@/hooks/useTechnicianTicketCount";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { usePendingInvitesCount } from "@/hooks/usePendingInvitesCount";
 import { Module, AppRole } from "@/lib/permissions";
 import {
   Sidebar,
@@ -126,6 +127,7 @@ export function AppSidebar() {
   const { data: ticketCount } = useTechnicianTicketCount();
   const { isMobile, setOpenMobile } = useSidebar();
   const gamificationEnabled = useFeatureFlag("gamification_enabled");
+  const { data: pendingInvitesCount = 0 } = usePendingInvitesCount();
 
   // Detect if user is a client: anyone without a staff role sees client menu
   const hasStaffRole = roles.some(role => ["admin", "manager", "technician", "financial"].includes(role));
@@ -168,6 +170,7 @@ export function AppSidebar() {
       ? location.pathname === itemPathBase && location.search.includes(itemQuery)
       : location.pathname === item.path;
     const showTicketBadge = item.path === "/tickets" && ticketCount && ticketCount > 0;
+    const showInvitesBadge = item.path === "/settings" && pendingInvitesCount > 0;
     
     const handleClick = () => {
       // Close mobile sidebar when clicking a menu item
@@ -224,6 +227,15 @@ export function AppSidebar() {
                 title={`${ticketCount} chamados atribuídos`}
               >
                 {ticketCount > 99 ? "99+" : ticketCount}
+              </Badge>
+            )}
+            {showInvitesBadge && (
+              <Badge
+                variant="secondary"
+                className="ml-auto bg-primary text-primary-foreground text-xs h-5 min-w-[20px] px-1.5 flex items-center justify-center shrink-0 font-bold"
+                title={`${pendingInvitesCount} convites pendentes`}
+              >
+                {pendingInvitesCount > 99 ? "99+" : pendingInvitesCount}
               </Badge>
             )}
           </Link>

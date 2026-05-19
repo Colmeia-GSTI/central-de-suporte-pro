@@ -31,15 +31,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, Trash2, UserPlus, KeyRound, Loader2, UserCheck, Clock, Building2, Pencil } from "lucide-react";
+import { Search, Shield, Trash2, Mail, KeyRound, Loader2, UserCheck, Clock, Building2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
-import { UserForm } from "./UserForm";
 import { UserProfileSheet } from "./UserProfileSheet";
-import { TableSkeleton } from "@/components/ui/loading-skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InviteClientDialog } from "./InviteClientDialog";
+import { InviteStaffDialog } from "./InviteStaffDialog";
+import { PendingInvitesTab } from "./PendingInvitesTab";
+import { usePendingInvitesCount } from "@/hooks/usePendingInvitesCount";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type ProfileWithRoles = Tables<"profiles"> & {
@@ -68,7 +71,8 @@ export function UsersTab() {
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<ProfileWithRoles | null>(null);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
-  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [inviteClientOpen, setInviteClientOpen] = useState(false);
+  const [inviteStaffOpen, setInviteStaffOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<ProfileWithRoles | null>(null);
   const [newPassword, setNewPassword] = useState("");
@@ -80,6 +84,7 @@ export function UsersTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
+  const { data: pendingCount = 0 } = usePendingInvitesCount();
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users-with-roles", search],
@@ -291,79 +296,6 @@ export function UsersTab() {
     removeRoleMutation.mutate({ userId, role });
   };
 
-  const createUserMutation = useMutation({
-    mutationFn: async (data: {
-      email: string;
-      password: string;
-      full_name: string;
-      phone?: string;
-      roles: string[];
-    }) => {
-      const { data: result, error } = await supabase.functions.invoke("create-user", {
-        body: data,
-      });
-      
-      if (error) {
-        logger.error("Edge function error", "Users", { error: error.message });
-        throw new Error(
-          error.message?.includes("non-2xx")
-            ? "Erro de comunicação com o servidor. Tente novamente."
-            : error.message || "Erro desconhecido ao criar usuário"
-        );
-      }
-      
-      if (result?.error) {
-        const errorMessage = translateErrorMessage(result.error);
-        throw new Error(errorMessage);
-      }
-      
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users-with-roles"] });
-      toast({ title: "Usuário criado com sucesso" });
-      setIsCreateUserOpen(false);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Erro ao criar usuário",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const translateErrorMessage = (error: string): string => {
-    const errorMap: Record<string, string> = {
-      "User already registered": "Este email já está cadastrado no sistema",
-      "Email already exists": "Este email já está em uso",
-      "Password should be at least 6 characters": "A senha deve ter pelo menos 6 caracteres",
-      "Invalid email": "Email inválido",
-      "Missing required fields": "Preencha todos os campos obrigatórios",
-      "Only admins can create users": "Apenas administradores podem criar usuários",
-      "Unauthorized": "Você não tem permissão para esta ação",
-      "No authorization header": "Sessão expirada. Faça login novamente.",
-      "Failed to create user profile": "Erro ao criar perfil do usuário. Tente novamente.",
-    };
-    
-    for (const [key, value] of Object.entries(errorMap)) {
-      if (error.toLowerCase().includes(key.toLowerCase())) {
-        return value;
-      }
-    }
-    
-    return error || "Erro desconhecido";
-  };
-
-  const handleCreateUser = (data: {
-    email: string;
-    password: string;
-    full_name: string;
-    phone?: string;
-    roles: string[];
-  }) => {
-    createUserMutation.mutate(data);
-  };
 
   const resetPasswordMutation = useMutation({
     mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
@@ -416,27 +348,49 @@ export function UsersTab() {
       <CardHeader>
         <CardTitle>Gestão de Usuários</CardTitle>
         <CardDescription>
-          Gerencie usuários e seus papéis no sistema
+          Gerencie usuários, papéis e convites pendentes
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:flex-1 sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar usuários..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 text-base"
-            />
-          </div>
-          <PermissionGate module="users" action="create">
-            <Button onClick={() => setIsCreateUserOpen(true)} className="w-full sm:w-auto">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Novo Usuário
-            </Button>
-          </PermissionGate>
-        </div>
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList>
+            <TabsTrigger value="users">Usuários</TabsTrigger>
+            <TabsTrigger value="invites" className="gap-2">
+              Convites pendentes
+              {pendingCount > 0 && (
+                <Badge className="h-5 min-w-[20px] px-1.5 bg-primary text-primary-foreground text-[10px]">
+                  {pendingCount > 99 ? "99+" : pendingCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="invites" className="mt-4">
+            <PendingInvitesTab />
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-4 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:flex-1 sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar usuários..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10 text-base"
+                />
+              </div>
+              <PermissionGate module="users" action="create">
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => setInviteClientOpen(true)}>
+                    <Mail className="mr-2 h-4 w-4" /> Convidar Cliente
+                  </Button>
+                  <Button variant="outline" onClick={() => setInviteStaffOpen(true)}>
+                    <Mail className="mr-2 h-4 w-4" /> Convidar Staff
+                  </Button>
+                </div>
+              </PermissionGate>
+            </div>
 
         <div className="rounded-lg border">
           <Table>
@@ -664,6 +618,10 @@ export function UsersTab() {
             </TableBody>
           </Table>
         </div>
+          </TabsContent>
+        </Tabs>
+
+
 
         {/* Role Dialog */}
         <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
@@ -692,12 +650,8 @@ export function UsersTab() {
           </DialogContent>
         </Dialog>
 
-        <UserForm
-          open={isCreateUserOpen}
-          onOpenChange={setIsCreateUserOpen}
-          onSubmit={handleCreateUser}
-          isLoading={createUserMutation.isPending}
-        />
+        <InviteClientDialog open={inviteClientOpen} onOpenChange={setInviteClientOpen} />
+        <InviteStaffDialog open={inviteStaffOpen} onOpenChange={setInviteStaffOpen} />
 
         {/* Reset Password Dialog */}
         <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
