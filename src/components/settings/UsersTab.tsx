@@ -646,12 +646,8 @@ export function UsersTab() {
           </DialogContent>
         </Dialog>
 
-        <UserForm
-          open={isCreateUserOpen}
-          onOpenChange={setIsCreateUserOpen}
-          onSubmit={handleCreateUser}
-          isLoading={createUserMutation.isPending}
-        />
+        <InviteClientDialog open={inviteClientOpen} onOpenChange={setInviteClientOpen} />
+        <InviteStaffDialog open={inviteStaffOpen} onOpenChange={setInviteStaffOpen} />
 
         {/* Reset Password Dialog */}
         <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
