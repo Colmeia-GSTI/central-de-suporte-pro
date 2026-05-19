@@ -233,7 +233,7 @@ export default function Login() {
               </motion.p>
               
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-sm text-muted-foreground">
-                Não tem uma conta? <Link to="/register" className="text-primary hover:underline font-medium">Cadastre-se</Link>
+                Não tem conta? <Link to="/register" className="text-primary hover:underline font-medium">Acesso por convite</Link>
               </motion.p>
             </CardFooter>
           </form>
