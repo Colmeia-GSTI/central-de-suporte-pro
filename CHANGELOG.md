@@ -18,6 +18,36 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (Hotfix — 10 clientes órfãos sem client_contacts + hardening RPC portal — 2026-05-19)
+**Reportado em produção:** múltiplos clientes não conseguiam abrir chamados pelo portal, recebendo toast "Erro ao abrir chamado / Contato do cliente não encontrado ou inativo". Caso piloto: `fernanda@airduto.com.br`.
+
+**Causa raiz:** signup público no portal cria `auth.users` + `user_roles(role='client')` automaticamente via trigger, mas o vínculo `client_contacts.user_id` precisa de ação manual administrativa. 10 usuários ficaram em estado órfão (conta válida, role correto, mas sem `client_contacts` apontando para eles) entre 23/02 e 12/05/2026. A RPC `open_client_portal_ticket` lançava mensagem genérica que não distinguia esse caso de "contato inativo" nem de "sem cliente vinculado", mascarando a causa real.
+
+**Correção em 2 frentes:**
+
+**Frente A — Vínculo dos órfãos (decisão por domínio do email):**
+Após query de match por domínio + razão social, 7 órfãos foram auto-vinculados (4 AIRDUTO, 1 MACOPAN, 2 BLEND, 1 CLUBE COMERCIAL) e 3 ficaram pendentes (`@gmail.com` da rede Mad Boards/Madness, cujo cliente ainda não está cadastrado). Vínculo executado manualmente pelo Jonatas via SQL no Supabase Dashboard.
+
+**Frente B — Hardening da RPC `open_client_portal_ticket` (migration `20260519175933_harden_open_client_portal_ticket`):**
+Substitui a versão anterior por uma que:
+- Distingue 5 causas de falha com mensagens específicas: sessão expirada, usuário sem contato, contato inativo, contato sem cliente vinculado, sem role de cliente.
+- Aceita telefone com 10–13 dígitos (suporta prefixo +55 internacional, antes só 10–11).
+- Valida `category_id` (existe E `is_active=true`) antes do INSERT.
+- Valida que `asset_id` e `monitored_device_id` pertencem ao mesmo cliente do contato.
+- Aplica `btrim()` em todos os campos de texto antes de gravar/validar (evita títulos só com espaços passarem na validação de tamanho).
+- Encapsula o INSERT em bloco `BEGIN/EXCEPTION WHEN OTHERS` com `GET STACKED DIAGNOSTICS` — qualquer erro de trigger/constraint downstream retorna `Falha ao criar chamado [SQLSTATE]: MESSAGE` em vez de mensagem genérica.
+
+**Frente C — Frontend `ClientTicketForm.tsx`:**
+`onError` agora loga `message + details + hint + code` do `PostgrestError` no console e o toast nunca fica vazio: cascata de fallbacks (`message → details → hint → "Código X" → fallback genérico final`). Antes só lia `error.message` e em alguns casos o toast vinha em branco.
+
+**Validação:** Fernanda Zanette (Airduto) confirmou abertura bem-sucedida após aplicar a migration. Mensagem de erro agora é específica e acionável para todos os cenários de falha futuros.
+
+**Não resolvido (registrado em REFACTORING_ROADMAP.md):**
+- Signup público no portal ainda cria role `client` sem vínculo em `client_contacts` — qualquer pessoa pode criar conta e ficar órfã. Precisa de uma das soluções: (a) bloquear signup público e exigir convite admin, (b) auto-vincular no signup por domínio com confirmação posterior, ou (c) criar painel admin `/settings/orphan-contacts` que lista usuários `client` sem vínculo. Decisão pendente.
+- 3 órfãos Mad Boards/Madness aguardando cadastro do cliente.
+
+---
+
 ### Modificado (Refatoração — Abertura de chamados unificada: admin + portal — 2026-05-12)
 **Motivação:** após restaurar a abertura pelo portal (entrada anterior), auditoria revelou problemas estruturais na criação de chamados em ambos os caminhos (admin + portal): (1) `TicketForm.tsx` admin com wizard de 3 steps e 4 inserts paralelos sem transação (`tickets` + `ticket_history` + `ticket_tag_assignments` + edge function), risco de inconsistência; (2) dois campos lado a lado para "dispositivo" no portal (`asset_id` do CRM vs `monitored_device_id` do RMM) confundindo o cliente — apesar de servirem a propósitos diferentes (RMM = computador com agente; assets = ativo catalogado); (3) telefone perguntado do zero em cada abertura, mesmo o sistema já sabendo o número via `client_contacts.phone` do user logado; (4) lógica de phone/whatsapp/device duplicada entre os dois forms; (5) `useFormPersistence` (draft) ativo só no admin.
 
