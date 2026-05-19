@@ -229,6 +229,15 @@ export function AppSidebar() {
                 {ticketCount > 99 ? "99+" : ticketCount}
               </Badge>
             )}
+            {showInvitesBadge && (
+              <Badge
+                variant="secondary"
+                className="ml-auto bg-primary text-primary-foreground text-xs h-5 min-w-[20px] px-1.5 flex items-center justify-center shrink-0 font-bold"
+                title={`${pendingInvitesCount} convites pendentes`}
+              >
+                {pendingInvitesCount > 99 ? "99+" : pendingInvitesCount}
+              </Badge>
+            )}
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
