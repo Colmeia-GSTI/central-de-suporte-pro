@@ -170,6 +170,7 @@ export function AppSidebar() {
       ? location.pathname === itemPathBase && location.search.includes(itemQuery)
       : location.pathname === item.path;
     const showTicketBadge = item.path === "/tickets" && ticketCount && ticketCount > 0;
+    const showInvitesBadge = item.path === "/settings" && pendingInvitesCount > 0;
     
     const handleClick = () => {
       // Close mobile sidebar when clicking a menu item
