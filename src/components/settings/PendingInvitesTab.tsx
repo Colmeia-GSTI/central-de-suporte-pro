@@ -66,16 +66,31 @@ export function PendingInvitesTab() {
   const { data: invites = [], isLoading } = useQuery({
     queryKey: ["pending-invites"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      // Query principal sem JOIN em profiles (FK não declarada via PostgREST)
+      const { data: rows, error } = await (supabase as any)
         .from("pending_invites")
         .select(`
           id, email, full_name, role, client_id, expires_at, accepted_at, created_at, invited_by,
-          clients(name),
-          invited_by_profile:profiles!pending_invites_invited_by_fkey(full_name)
+          clients(name)
         `)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as InviteRow[];
+      const list = (rows || []) as InviteRow[];
+
+      // Carrega nomes dos invited_by em uma única query
+      const inviterIds = Array.from(new Set(list.map((r) => r.invited_by).filter(Boolean))) as string[];
+      if (inviterIds.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", inviterIds);
+        const nameMap = new Map<string, string>((profs ?? []).map((p) => [p.user_id, p.full_name]));
+        list.forEach((row) => {
+          row.invited_by_profile = row.invited_by ? { full_name: nameMap.get(row.invited_by) ?? "—" } : null;
+        });
+      }
+
+      return list;
     },
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,

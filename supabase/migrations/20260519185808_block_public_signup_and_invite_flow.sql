@@ -159,10 +159,24 @@ BEGIN
     RAISE EXCEPTION 'O email do convite não corresponde à conta atual.' USING ERRCODE = 'P0001';
   END IF;
 
-  -- Cria role
+  -- Limpa role default 'client' inserida pelo trigger handle_new_user
+  -- caso o convite seja para staff (admin/manager/technician/financial)
+  IF v_invite.role NOT IN ('client', 'client_master') THEN
+    DELETE FROM public.user_roles
+    WHERE user_id = v_user_id AND role = 'client';
+  END IF;
+
+  -- Cria role do convite
   INSERT INTO public.user_roles (user_id, role)
   VALUES (v_user_id, v_invite.role)
   ON CONFLICT DO NOTHING;
+
+  -- Se for client_master, também remove role 'client' duplicada
+  -- (client_master engloba client; ter ambas confunde a lógica)
+  IF v_invite.role = 'client_master' THEN
+    DELETE FROM public.user_roles
+    WHERE user_id = v_user_id AND role = 'client';
+  END IF;
 
   -- Se é cliente, cria client_contacts vinculado
   IF v_invite.role IN ('client', 'client_master') THEN
