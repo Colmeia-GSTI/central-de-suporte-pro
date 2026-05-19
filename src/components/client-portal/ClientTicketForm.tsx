@@ -108,11 +108,24 @@ export function ClientTicketForm({
       setDevice(emptyDevice);
       onSuccess();
     },
-    onError: (error: { message?: string }) => {
-      console.error("[ClientTicketForm] RPC failed:", error);
+    onError: (error: { message?: string; details?: string; hint?: string; code?: string } | Error | unknown) => {
+      const err = error as { message?: string; details?: string; hint?: string; code?: string };
+      console.error("[ClientTicketForm] RPC failed:", {
+        message: err?.message,
+        details: err?.details,
+        hint: err?.hint,
+        code: err?.code,
+        raw: error,
+      });
+      const description =
+        err?.message ||
+        err?.details ||
+        err?.hint ||
+        (err?.code ? `Código ${err.code}` : "") ||
+        "Erro desconhecido. Tente novamente em alguns segundos. Se persistir, entre em contato com o suporte.";
       toast({
         title: "Erro ao abrir chamado",
-        description: error?.message || "Tente novamente.",
+        description,
         variant: "destructive",
       });
     },
