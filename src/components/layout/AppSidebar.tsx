@@ -127,6 +127,7 @@ export function AppSidebar() {
   const { data: ticketCount } = useTechnicianTicketCount();
   const { isMobile, setOpenMobile } = useSidebar();
   const gamificationEnabled = useFeatureFlag("gamification_enabled");
+  const { data: pendingInvitesCount = 0 } = usePendingInvitesCount();
 
   // Detect if user is a client: anyone without a staff role sees client menu
   const hasStaffRole = roles.some(role => ["admin", "manager", "technician", "financial"].includes(role));
