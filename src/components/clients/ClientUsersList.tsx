@@ -254,13 +254,14 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
     if (editingUser) {
       updateUserMutation.mutate({ id: editingUser.id, data });
     } else {
-      if (!data.password) {
-        form.setError("password", { message: "Senha é obrigatória para novos usuários" });
+      if (!data.email) {
+        form.setError("email", { message: "Email é obrigatório para enviar o convite" });
         return;
       }
-      createUserMutation.mutate({ ...data, username: data.username.toLowerCase() });
+      createUserMutation.mutate({ ...data, username: (data.username || data.email).toLowerCase() });
     }
   };
+
 
   const handleResetPassword = () => {
     if (!resetPasswordUser?.user_id || !newPassword) return;
