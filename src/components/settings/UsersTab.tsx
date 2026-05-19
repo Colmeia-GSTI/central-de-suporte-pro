@@ -348,27 +348,49 @@ export function UsersTab() {
       <CardHeader>
         <CardTitle>Gestão de Usuários</CardTitle>
         <CardDescription>
-          Gerencie usuários e seus papéis no sistema
+          Gerencie usuários, papéis e convites pendentes
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:flex-1 sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar usuários..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 text-base"
-            />
-          </div>
-          <PermissionGate module="users" action="create">
-            <Button onClick={() => setIsCreateUserOpen(true)} className="w-full sm:w-auto">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Novo Usuário
-            </Button>
-          </PermissionGate>
-        </div>
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList>
+            <TabsTrigger value="users">Usuários</TabsTrigger>
+            <TabsTrigger value="invites" className="gap-2">
+              Convites pendentes
+              {pendingCount > 0 && (
+                <Badge className="h-5 min-w-[20px] px-1.5 bg-primary text-primary-foreground text-[10px]">
+                  {pendingCount > 99 ? "99+" : pendingCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="invites" className="mt-4">
+            <PendingInvitesTab />
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-4 space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:flex-1 sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar usuários..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10 text-base"
+                />
+              </div>
+              <PermissionGate module="users" action="create">
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => setInviteClientOpen(true)}>
+                    <Mail className="mr-2 h-4 w-4" /> Convidar Cliente
+                  </Button>
+                  <Button variant="outline" onClick={() => setInviteStaffOpen(true)}>
+                    <Mail className="mr-2 h-4 w-4" /> Convidar Staff
+                  </Button>
+                </div>
+              </PermissionGate>
+            </div>
 
         <div className="rounded-lg border">
           <Table>
