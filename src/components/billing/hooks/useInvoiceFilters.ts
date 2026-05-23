@@ -1,18 +1,16 @@
 /**
- * Hook que isola toda a lógica de filtros + paginação do BillingInvoicesTab.
+ * Hook que isola o estado de filtros + paginação do BillingInvoicesTab.
  *
- * **Por que existe:** o componente principal tinha 22 useState, sendo 6 só de
- * filtros/paginação + a derivação de filtered/paginated invoices. Esse hook
- * centraliza essa fatia para reduzir densidade do componente — comportamento
- * idêntico ao código original.
+ * **Por que existe:** reduz a densidade do componente principal (que tinha 22
+ * useState) centralizando os 6 estados de filtros/paginação + handlers + a
+ * derivação de fromISO/toISO. Comportamento idêntico ao código original.
  *
  * **Inicialização via URL** (`?status=`, `?pm=`) é preservada — usado por
  * deep-links das abas deprecated (A Receber / Boletos / Erros).
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format, startOfMonth, endOfMonth, subDays } from "date-fns";
-import type { InvoiceWithClient } from "@/hooks/useInvoices";
 
 export const ITEMS_PER_PAGE = 15;
 
@@ -44,7 +42,7 @@ function getDateRangeForPreset(preset: PeriodPreset): { from: Date; to: Date } {
   }
 }
 
-export function useInvoiceFilters(invoices: InvoiceWithClient[]) {
+export function useInvoiceFilters() {
   const [searchParams] = useSearchParams();
 
   const initialStatus = searchParams.get("status") || "all";
@@ -77,37 +75,14 @@ export function useInvoiceFilters(invoices: InvoiceWithClient[]) {
     setCurrentPage(1);
   }, []);
 
-  const filteredInvoices = useMemo(() => {
-    if (!search.trim()) return invoices;
-    const term = search.toLowerCase().trim();
-    return invoices.filter((inv) => {
-      const clientName = inv.clients?.name?.toLowerCase() || "";
-      const invoiceNum = String(inv.invoice_number);
-      return clientName.includes(term) || invoiceNum.includes(term);
-    });
-  }, [invoices, search]);
-
-  const paginatedInvoices = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredInvoices.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredInvoices, currentPage]);
-
-  const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE);
-
   return {
-    // state
     search, setSearch,
     statusFilter, setStatusFilter,
     paymentMethodFilter, setPaymentMethodFilter,
     periodPreset,
     dateRange,
     currentPage, setCurrentPage,
-    // derived
     fromISO, toISO,
-    filteredInvoices,
-    paginatedInvoices,
-    totalPages,
-    // handlers
     handlePresetChange,
     handleCustomDateChange,
   };
