@@ -5394,6 +5394,30 @@ export type Database = {
         }
         Relationships: []
       }
+      suppressed_emails: {
+        Row: {
+          detail: string | null
+          email: string
+          reason: string
+          source: string
+          suppressed_at: string
+        }
+        Insert: {
+          detail?: string | null
+          email: string
+          reason: string
+          source?: string
+          suppressed_at?: string
+        }
+        Update: {
+          detail?: string | null
+          email?: string
+          reason?: string
+          source?: string
+          suppressed_at?: string
+        }
+        Relationships: []
+      }
       technician_badges: {
         Row: {
           badge_id: string
