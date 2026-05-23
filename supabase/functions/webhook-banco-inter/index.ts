@@ -89,12 +89,22 @@ async function notifyClientPaymentConfirmed(
 
 async function verifyWebhookAuth(req: Request, payload: string): Promise<boolean> {
   const webhookSecret = Deno.env.get("WEBHOOK_SECRET_BANCO_INTER");
-  
+
   if (!webhookSecret) {
     console.error("[WEBHOOK-BANCO-INTER] CRITICAL: No webhook secret configured - denying request for security");
     return false;
   }
 
+  // FIX: O Banco Inter autentica via mTLS e NÃO envia headers customizados.
+  // Como edge functions não validam mTLS no código, o webhook é registrado com
+  // ?token=<secret> na URL (ver banco-inter/register_webhook) e validamos aqui.
+  const url = new URL(req.url);
+  const tokenParam = url.searchParams.get("token");
+  if (tokenParam && tokenParam === webhookSecret) {
+    return true;
+  }
+
+  // Compatibilidade: ainda aceita os headers legados (caso algum fluxo os use).
   const secretHeader = req.headers.get("X-Webhook-Secret");
   if (secretHeader === webhookSecret) {
     return true;
@@ -110,12 +120,12 @@ async function verifyWebhookAuth(req: Request, payload: string): Promise<boolean
       false,
       ["sign"]
     );
-    
+
     const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
     const expectedSig = Array.from(new Uint8Array(signature))
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
-    
+
     if (signatureHeader === expectedSig || signatureHeader === `sha256=${expectedSig}`) {
       return true;
     }

@@ -301,7 +301,21 @@ Deno.serve(async (req) => {
         );
       }
 
-      const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook-banco-inter`;
+      // FIX webhook auth: o Banco Inter autentica via mTLS e NÃO envia headers
+      // customizados. Como edge functions não validam mTLS no código, usamos um
+      // token na query string (padrão de mercado p/ esse cenário). O webhook
+      // valida esse token contra WEBHOOK_SECRET_BANCO_INTER.
+      const webhookSecret = Deno.env.get("WEBHOOK_SECRET_BANCO_INTER");
+      if (!webhookSecret) {
+        return new Response(
+          JSON.stringify({
+            error: "Secret WEBHOOK_SECRET_BANCO_INTER não configurado.",
+            hint: "Configure o secret no Supabase/Lovable Cloud antes de registrar o webhook.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook-banco-inter?token=${webhookSecret}`;
 
       const response = await mtlsFetch(`${baseUrl}/cobranca/v3/cobrancas/webhook`, {
         method: "PUT",
@@ -723,7 +737,11 @@ Deno.serve(async (req) => {
         }
 
         let boletoCompleto = false;
-        const maxTentativas = 12; // ~3 minutos (15 segundos cada) - webhook/poll-services cuida do resto
+        // FIX timeout: polling inline curto (3x15s=45s) cobre o caso comum (Inter
+        // processa em segundos). Se não vier nesse tempo, grava pendente e o cron
+        // poll-services-6h completa como fallback. Antes eram 12x15s=3min, o que
+        // estourava o timeout da edge function (~150s) antes de gravar updateData.
+        const maxTentativas = 3; // ~45 segundos
         
         if (readToken) {
           for (let tentativa = 1; tentativa <= maxTentativas && !boletoCompleto; tentativa++) {
