@@ -1,23 +1,19 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useInvoices, type InvoiceWithClient, type InvoiceStatusFilter as InvoiceStatusFilterType } from "@/hooks/useInvoices";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
@@ -25,18 +21,16 @@ import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
 import { InvoiceStatusFilter } from "@/components/billing/InvoiceStatusFilter";
 import {
-  Search, Plus, DollarSign, AlertTriangle, Loader2, FileText, Send, Zap, XCircle, RefreshCw,
+  Search, Plus, AlertTriangle, Loader2, FileText, Send, Zap, RefreshCw,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Filter, X, Ban, Eye, MoreHorizontal, Ellipsis,
+  X, Ban, Ellipsis,
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, subDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
 import { logger, retryWithBackoff } from "@/lib/logger";
 import { downloadStorageFileSafe } from "@/lib/storage-utils";
-import { InvoiceForm } from "@/components/financial/InvoiceForm";
 import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
 import { NfseAvulsaDialog } from "@/components/billing/nfse/NfseAvulsaDialog";
 import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
@@ -53,45 +47,13 @@ import { ManualPaymentDialog } from "@/components/billing/ManualPaymentDialog";
 import { SecondCopyDialog } from "@/components/billing/SecondCopyDialog";
 import { RenegotiateInvoiceDialog } from "@/components/billing/RenegotiateInvoiceDialog";
 import { CancelNfseDialog } from "@/components/billing/CancelNfseDialog";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { NewInvoiceDialog } from "@/components/billing/NewInvoiceDialog";
+import { CancelInvoiceAlertDialog } from "@/components/billing/CancelInvoiceAlertDialog";
+import { useInvoiceFilters, ITEMS_PER_PAGE, PERIOD_OPTIONS } from "@/components/billing/hooks/useInvoiceFilters";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
-import type { Tables, Enums } from "@/integrations/supabase/types";
 import { formatDate } from "@/lib/date";
 
 type NfseByInvoice = Record<string, { id: string; status: string; numero_nfse: string | null; pdf_url?: string | null; xml_url?: string | null; asaas_invoice_id?: string | null }>;
-
-const ITEMS_PER_PAGE = 15;
-
-type PeriodPreset = "month" | "30" | "60" | "90" | "custom";
-
-function getDateRangeForPreset(preset: PeriodPreset): { from: Date; to: Date } {
-  const now = new Date();
-  switch (preset) {
-    case "month":
-      return { from: startOfMonth(now), to: endOfMonth(now) };
-    case "30":
-      return { from: subDays(now, 30), to: now };
-    case "60":
-      return { from: subDays(now, 60), to: now };
-    case "90":
-      return { from: subDays(now, 90), to: now };
-    case "custom":
-      return { from: startOfMonth(now), to: endOfMonth(now) };
-  }
-}
-
-const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
-  { value: "month", label: "Mês Atual" },
-  { value: "30", label: "30 dias" },
-  { value: "60", label: "60 dias" },
-  { value: "90", label: "90 dias" },
-  { value: "custom", label: "Personalizado" },
-];
 
 interface BillingInvoicesTabProps {
   autoOpenNew?: boolean;
@@ -100,23 +62,8 @@ interface BillingInvoicesTabProps {
 
 export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingInvoicesTabProps = {}) {
   const isMobile = useIsMobile();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
 
-  // Inicialização via URL params — suporta deep-link de tabs deprecated:
-  //   ?tab=invoices&status=overdue   (vindo de A Receber)
-  //   ?tab=invoices&pm=boleto         (vindo de Boletos)
-  //   ?tab=invoices&status=with_errors (vindo de Erros)
-  const initialStatus = searchParams.get("status") || "all";
-  const initialPm = searchParams.get("pm") || "all";
-
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState(initialStatus);
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "boleto" | "pix" | "transferencia">(
-    (["boleto", "pix", "transferencia"].includes(initialPm) ? initialPm : "all") as "all" | "boleto" | "pix" | "transferencia"
-  );
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("month");
-  const [dateRange, setDateRange] = useState(() => getDateRangeForPreset("month"));
-  const [currentPage, setCurrentPage] = useState(1);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   // Auto-open form when triggered by parent (FAB ?action=new)
@@ -145,23 +92,17 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   const [isBatchNotifying, setIsBatchNotifying] = useState(false);
   const queryClient = useQueryClient();
 
-  const fromISO = format(dateRange.from, "yyyy-MM-dd");
-  const toISO = format(dateRange.to, "yyyy-MM-dd");
-
-  const handlePresetChange = useCallback((preset: PeriodPreset) => {
-    setPeriodPreset(preset);
-    if (preset !== "custom") {
-      setDateRange(getDateRangeForPreset(preset));
-    }
-    setCurrentPage(1);
-  }, []);
-
-  const handleCustomDateChange = useCallback((field: "from" | "to", date: Date | undefined) => {
-    if (!date) return;
-    setDateRange((prev) => ({ ...prev, [field]: date }));
-    setPeriodPreset("custom");
-    setCurrentPage(1);
-  }, []);
+  const {
+    search, setSearch,
+    statusFilter, setStatusFilter,
+    paymentMethodFilter, setPaymentMethodFilter,
+    periodPreset,
+    dateRange,
+    currentPage, setCurrentPage,
+    fromISO, toISO,
+    handlePresetChange,
+    handleCustomDateChange,
+  } = useInvoiceFilters();
 
   const {
     generatingPayment,
@@ -428,25 +369,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
               Inadimplência
             </Button>
           </Link>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <PermissionGate module="financial" action="create">
-              <DialogTrigger asChild>
-                <Button size="sm" className="h-9">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Nova Fatura
-                </Button>
-              </DialogTrigger>
-            </PermissionGate>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Nova Fatura</DialogTitle>
-              </DialogHeader>
-              <InvoiceForm
-                onSuccess={() => { setIsFormOpen(false); queryClient.invalidateQueries({ queryKey: ["billing-counters"] }); }}
-                onCancel={() => setIsFormOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
+          <PermissionGate module="financial" action="create">
+            <Button size="sm" className="h-9" onClick={() => setIsFormOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nova Fatura
+            </Button>
+          </PermissionGate>
+          <NewInvoiceDialog
+            open={isFormOpen}
+            onOpenChange={setIsFormOpen}
+            onSuccess={() => { setIsFormOpen(false); queryClient.invalidateQueries({ queryKey: ["billing-counters"] }); }}
+          />
+
         </div>
       </div>
 
@@ -1066,40 +1000,21 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
           }}
         />
       )}
-      {/* Cancel Invoice Dialog */}
-      <AlertDialog open={!!cancelInvoiceTarget} onOpenChange={(open) => { if (!open) { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar Fatura #{cancelInvoiceTarget?.invoice_number}</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação irá cancelar a fatura permanentemente. Informe o motivo do cancelamento.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Textarea
-            placeholder="Motivo do cancelamento (obrigatório)"
-            value={cancelInvoiceReason}
-            onChange={(e) => setCancelInvoiceReason(e.target.value)}
-            className="min-h-[80px]"
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={!cancelInvoiceReason.trim() || cancelInvoiceMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (cancelInvoiceTarget && cancelInvoiceReason.trim()) {
-                  cancelInvoiceMutation.mutate(
-                    { invoiceId: cancelInvoiceTarget.id, reason: cancelInvoiceReason.trim() },
-                    { onSuccess: () => { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }
-                  );
-                }
-              }}
-            >
-              {cancelInvoiceMutation.isPending ? "Cancelando..." : "Confirmar Cancelamento"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CancelInvoiceAlertDialog
+        target={cancelInvoiceTarget}
+        reason={cancelInvoiceReason}
+        setReason={setCancelInvoiceReason}
+        onOpenChange={(open) => { if (!open) { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }}
+        isLoading={cancelInvoiceMutation.isPending}
+        onConfirm={() => {
+          if (cancelInvoiceTarget && cancelInvoiceReason.trim()) {
+            cancelInvoiceMutation.mutate(
+              { invoiceId: cancelInvoiceTarget.id, reason: cancelInvoiceReason.trim() },
+              { onSuccess: () => { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }
+            );
+          }
+        }}
+      />
 
     </div>
   );
