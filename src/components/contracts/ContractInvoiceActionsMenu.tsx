@@ -13,8 +13,8 @@ import {
   MoreHorizontal, Barcode, QrCode, Zap, Mail, MessageCircle, Send,
   Building2, Loader2, ExternalLink, CheckCircle2, FileText, Trash2, History,
 } from "lucide-react";
-import { EmitNfseDialog } from "@/components/financial/EmitNfseDialog";
-import { PixCodeDialog } from "@/components/financial/PixCodeDialog";
+import { EmitNfseDialog } from "@/components/billing/EmitNfseDialog";
+import { PixCodeDialog } from "@/components/billing/PixCodeDialog";
 import { InvoiceNotificationHistory } from "@/components/billing/InvoiceNotificationHistory";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import type { Tables } from "@/integrations/supabase/types";

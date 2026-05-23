@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { InvoiceForm } from "@/components/financial/InvoiceForm";
+import { InvoiceForm } from "@/components/billing/InvoiceForm";
 
 interface NewInvoiceDialogProps {
   open: boolean;
