@@ -369,25 +369,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
               Inadimplência
             </Button>
           </Link>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <PermissionGate module="financial" action="create">
-              <DialogTrigger asChild>
-                <Button size="sm" className="h-9">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Nova Fatura
-                </Button>
-              </DialogTrigger>
-            </PermissionGate>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Nova Fatura</DialogTitle>
-              </DialogHeader>
-              <InvoiceForm
-                onSuccess={() => { setIsFormOpen(false); queryClient.invalidateQueries({ queryKey: ["billing-counters"] }); }}
-                onCancel={() => setIsFormOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
+          <PermissionGate module="financial" action="create">
+            <Button size="sm" className="h-9" onClick={() => setIsFormOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nova Fatura
+            </Button>
+          </PermissionGate>
+          <NewInvoiceDialog
+            open={isFormOpen}
+            onOpenChange={setIsFormOpen}
+            onSuccess={() => { setIsFormOpen(false); queryClient.invalidateQueries({ queryKey: ["billing-counters"] }); }}
+          />
+
         </div>
       </div>
 
