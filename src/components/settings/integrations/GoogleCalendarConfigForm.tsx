@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Calendar, Loader2, Save, Check, X, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useIntegrationSettings } from "@/hooks/useIntegrationSettings";
 import { useAuth } from "@/hooks/useAuth";
-import type { Json } from "@/integrations/supabase/types";
 
 interface GoogleSettings {
   client_id: string;
@@ -26,29 +26,15 @@ const defaultSettings: GoogleSettings = {
 
 export function GoogleCalendarConfigForm() {
   const { user } = useAuth();
-  const [settings, setSettings] = useState<GoogleSettings>(defaultSettings);
-  const [isActive, setIsActive] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { settings, patch, isActive, setIsActive, loading, save } =
+    useIntegrationSettings<GoogleSettings>("google_calendar", defaultSettings);
   const [userConnected, setUserConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
-    loadSettings();
     checkUserConnection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
-
-  const loadSettings = async () => {
-    const { data } = await supabase
-      .from("integration_settings")
-      .select("settings, is_active")
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-
-    if (data) {
-      setSettings({ ...defaultSettings, ...(data.settings as unknown as GoogleSettings) });
-      setIsActive(data.is_active);
-    }
-  };
 
   const checkUserConnection = async () => {
     if (!user) return;
@@ -57,47 +43,8 @@ export function GoogleCalendarConfigForm() {
       .select("id")
       .eq("user_id", user.id)
       .single();
-    
+
     setUserConnected(!!data);
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const { data: existing } = await supabase
-        .from("integration_settings")
-        .select("id")
-        .eq("integration_type", "google_calendar")
-        .maybeSingle();
-
-      let error;
-      if (existing) {
-        const result = await supabase
-          .from("integration_settings")
-          .update({
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          })
-          .eq("integration_type", "google_calendar");
-        error = result.error;
-      } else {
-        const result = await supabase
-          .from("integration_settings")
-          .insert({
-            integration_type: "google_calendar",
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          });
-        error = result.error;
-      }
-
-      if (error) throw error;
-      toast.success("Configurações do Google Calendar salvas!");
-    } catch (error: unknown) {
-      toast.error("Erro ao salvar: " + getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleConnect = async () => {
@@ -205,7 +152,7 @@ export function GoogleCalendarConfigForm() {
             id="google-client-id"
             placeholder="xxxxx.apps.googleusercontent.com"
             value={settings.client_id}
-            onChange={(e) => setSettings({ ...settings, client_id: e.target.value })}
+            onChange={(e) => patch({ client_id: e.target.value })}
           />
         </div>
 
@@ -216,7 +163,7 @@ export function GoogleCalendarConfigForm() {
             type="password"
             placeholder="••••••••"
             value={settings.client_secret}
-            onChange={(e) => setSettings({ ...settings, client_secret: e.target.value })}
+            onChange={(e) => patch({ client_secret: e.target.value })}
           />
         </div>
 
@@ -269,7 +216,7 @@ export function GoogleCalendarConfigForm() {
         )}
 
         <div className="flex justify-end border-t pt-4">
-          <Button onClick={handleSave} disabled={loading}>
+          <Button onClick={() => save()} disabled={loading}>
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (

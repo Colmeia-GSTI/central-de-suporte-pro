@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Server, Loader2, Save, TestTube, Check, X, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import { useIntegrationSettings } from "@/hooks/useIntegrationSettings";
 
 interface CheckMkSettings {
   url: string;
@@ -40,66 +40,9 @@ const defaultSettings: CheckMkSettings = {
 };
 
 export function CheckMkConfigForm() {
-  const [settings, setSettings] = useState<CheckMkSettings>(defaultSettings);
-  const [isActive, setIsActive] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { settings, patch, isActive, setIsActive, loading, save } =
+    useIntegrationSettings<CheckMkSettings>("checkmk", defaultSettings);
   const [testing, setTesting] = useState(false);
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    const { data } = await supabase
-      .from("integration_settings")
-      .select("settings, is_active")
-      .eq("integration_type", "checkmk")
-      .maybeSingle();
-
-    if (data) {
-      setSettings({ ...defaultSettings, ...(data.settings as unknown as CheckMkSettings) });
-      setIsActive(data.is_active);
-    }
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const { data: existing } = await supabase
-        .from("integration_settings")
-        .select("id")
-        .eq("integration_type", "checkmk")
-        .maybeSingle();
-
-      let error;
-      if (existing) {
-        const result = await supabase
-          .from("integration_settings")
-          .update({
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          })
-          .eq("integration_type", "checkmk");
-        error = result.error;
-      } else {
-        const result = await supabase
-          .from("integration_settings")
-          .insert({
-            integration_type: "checkmk",
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          });
-        error = result.error;
-      }
-
-      if (error) throw error;
-      toast.success("Configurações do CheckMK salvas!");
-    } catch (error: unknown) {
-      toast.error("Erro ao salvar: " + getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleTest = async () => {
     if (!settings.url || !settings.username || !settings.secret) {
@@ -109,7 +52,7 @@ export function CheckMkConfigForm() {
 
     setTesting(true);
     try {
-      await handleSave();
+      await save({ silent: true });
 
       const { data, error } = await supabase.functions.invoke("checkmk-sync", {
         body: { action: "test" },
@@ -187,7 +130,7 @@ export function CheckMkConfigForm() {
             id="checkmk-url"
             placeholder="https://checkmk.empresa.com/meusite"
             value={settings.url}
-            onChange={(e) => setSettings({ ...settings, url: e.target.value })}
+            onChange={(e) => patch({ url: e.target.value })}
           />
           <p className="text-xs text-muted-foreground">
             Inclua o nome do site (ex: /meusite ou /monitoring)
@@ -201,7 +144,7 @@ export function CheckMkConfigForm() {
               id="checkmk-username"
               placeholder="automation"
               value={settings.username}
-              onChange={(e) => setSettings({ ...settings, username: e.target.value })}
+              onChange={(e) => patch({ username: e.target.value })}
             />
           </div>
 
@@ -212,7 +155,7 @@ export function CheckMkConfigForm() {
               type="password"
               placeholder="••••••••"
               value={settings.secret}
-              onChange={(e) => setSettings({ ...settings, secret: e.target.value })}
+              onChange={(e) => patch({ secret: e.target.value })}
             />
           </div>
         </div>
@@ -221,7 +164,7 @@ export function CheckMkConfigForm() {
           <Label>Intervalo de Sincronização</Label>
           <RadioGroup
             value={settings.sync_interval_hours.toString()}
-            onValueChange={(v) => setSettings({ ...settings, sync_interval_hours: parseInt(v) })}
+            onValueChange={(v) => patch({ sync_interval_hours: parseInt(v) })}
             className="flex gap-4"
           >
             <div className="flex items-center space-x-2">
@@ -247,10 +190,7 @@ export function CheckMkConfigForm() {
                 id="alert-crit"
                 checked={settings.alert_levels?.crit !== false}
                 onCheckedChange={(checked) =>
-                  setSettings({
-                    ...settings,
-                    alert_levels: { ...settings.alert_levels, crit: !!checked },
-                  })
+                  patch({ alert_levels: { ...settings.alert_levels, crit: !!checked } })
                 }
               />
               <Label htmlFor="alert-crit" className="font-normal">CRIT (crítico)</Label>
@@ -260,10 +200,7 @@ export function CheckMkConfigForm() {
                 id="alert-warn"
                 checked={settings.alert_levels?.warn !== false}
                 onCheckedChange={(checked) =>
-                  setSettings({
-                    ...settings,
-                    alert_levels: { ...settings.alert_levels, warn: !!checked },
-                  })
+                  patch({ alert_levels: { ...settings.alert_levels, warn: !!checked } })
                 }
               />
               <Label htmlFor="alert-warn" className="font-normal">WARN (aviso)</Label>
@@ -273,10 +210,7 @@ export function CheckMkConfigForm() {
                 id="alert-unknown"
                 checked={settings.alert_levels?.unknown === true}
                 onCheckedChange={(checked) =>
-                  setSettings({
-                    ...settings,
-                    alert_levels: { ...settings.alert_levels, unknown: !!checked },
-                  })
+                  patch({ alert_levels: { ...settings.alert_levels, unknown: !!checked } })
                 }
               />
               <Label htmlFor="alert-unknown" className="font-normal">UNKNOWN</Label>
@@ -289,7 +223,7 @@ export function CheckMkConfigForm() {
             id="import-services"
             checked={settings.import_services !== false}
             onCheckedChange={(checked) =>
-              setSettings({ ...settings, import_services: !!checked })
+              patch({ import_services: !!checked })
             }
           />
           <Label htmlFor="import-services" className="font-normal">
@@ -306,7 +240,7 @@ export function CheckMkConfigForm() {
             )}
             Testar Conexão
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
+          <Button onClick={() => save()} disabled={loading}>
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (

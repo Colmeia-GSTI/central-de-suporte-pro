@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { getErrorMessage } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { MessageCircle, Loader2, Save, TestTube, Check, X, Copy, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import { useIntegrationSettings } from "@/hooks/useIntegrationSettings";
 
 interface EvolutionSettings {
   api_url: string;
@@ -29,74 +29,17 @@ const defaultSettings: EvolutionSettings = {
 const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-whatsapp-status`;
 
 export function EvolutionApiConfigForm() {
-  const [settings, setSettings] = useState<EvolutionSettings>(defaultSettings);
-  const [isActive, setIsActive] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { settings, patch, isActive, setIsActive, loading, save } =
+    useIntegrationSettings<EvolutionSettings>("evolution_api", defaultSettings);
   const [testing, setTesting] = useState(false);
   const [testNumber, setTestNumber] = useState("");
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    const { data } = await supabase
-      .from("integration_settings")
-      .select("settings, is_active")
-      .eq("integration_type", "evolution_api")
-      .maybeSingle();
-
-    if (data) {
-      setSettings({ ...defaultSettings, ...(data.settings as unknown as EvolutionSettings) });
-      setIsActive(data.is_active);
-    }
-  };
 
   const copyWebhookUrl = async () => {
     await navigator.clipboard.writeText(WEBHOOK_URL);
     setCopied(true);
     toast.success("URL do webhook copiada!");
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const { data: existing } = await supabase
-        .from("integration_settings")
-        .select("id")
-        .eq("integration_type", "evolution_api")
-        .maybeSingle();
-
-      let error;
-      if (existing) {
-        const result = await supabase
-          .from("integration_settings")
-          .update({
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          })
-          .eq("integration_type", "evolution_api");
-        error = result.error;
-      } else {
-        const result = await supabase
-          .from("integration_settings")
-          .insert({
-            integration_type: "evolution_api",
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          });
-        error = result.error;
-      }
-
-      if (error) throw error;
-      toast.success("Configurações Evolution API salvas com sucesso!");
-    } catch (error: unknown) {
-      toast.error("Erro ao salvar: " + getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleTest = async () => {
@@ -107,7 +50,7 @@ export function EvolutionApiConfigForm() {
 
     setTesting(true);
     try {
-      await handleSave();
+      await save({ silent: true });
 
       const { data, error } = await supabase.functions.invoke("send-whatsapp", {
         body: {
@@ -174,7 +117,7 @@ export function EvolutionApiConfigForm() {
               id="evolution-url"
               placeholder="https://api.evolution.com"
               value={settings.api_url}
-              onChange={(e) => setSettings({ ...settings, api_url: e.target.value })}
+              onChange={(e) => patch({ api_url: e.target.value })}
             />
           </div>
           <div className="space-y-2">
@@ -184,7 +127,7 @@ export function EvolutionApiConfigForm() {
               type="password"
               placeholder="••••••••"
               value={settings.api_key}
-              onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+              onChange={(e) => patch({ api_key: e.target.value })}
             />
           </div>
         </div>
@@ -196,7 +139,7 @@ export function EvolutionApiConfigForm() {
               id="evolution-instance"
               placeholder="minha-instancia"
               value={settings.instance_name}
-              onChange={(e) => setSettings({ ...settings, instance_name: e.target.value })}
+              onChange={(e) => patch({ instance_name: e.target.value })}
             />
           </div>
           <div className="space-y-2">
@@ -205,7 +148,7 @@ export function EvolutionApiConfigForm() {
               id="evolution-default"
               placeholder="5511999999999"
               value={settings.default_number}
-              onChange={(e) => setSettings({ ...settings, default_number: e.target.value })}
+              onChange={(e) => patch({ default_number: e.target.value })}
             />
           </div>
         </div>
@@ -257,7 +200,7 @@ export function EvolutionApiConfigForm() {
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={loading}>
+          <Button onClick={() => save()} disabled={loading}>
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
