@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Monitor, Loader2, Save, TestTube, Check, X, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import { useIntegrationSettings } from "@/hooks/useIntegrationSettings";
 
 interface TacticalRmmSettings {
   url: string;
@@ -32,92 +32,31 @@ const defaultSettings: TacticalRmmSettings = {
 };
 
 export function TacticalRmmConfigForm() {
-  const [settings, setSettings] = useState<TacticalRmmSettings>(defaultSettings);
-  const [isActive, setIsActive] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { settings, patch, isActive, setIsActive, loading, loaded, save } =
+    useIntegrationSettings<TacticalRmmSettings>("tactical_rmm", defaultSettings);
   const [testing, setTesting] = useState(false);
 
+  // Migração: converte sync_interval_minutes (legado) para horas, uma vez após o load
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    const { data } = await supabase
-      .from("integration_settings")
-      .select("settings, is_active")
-      .eq("integration_type", "tactical_rmm")
-      .maybeSingle();
-
-    if (data) {
-      const loadedSettings = data.settings as unknown as TacticalRmmSettings;
-      // Convert old minutes setting to hours if present
-      const syncHours = loadedSettings.sync_interval_hours || 
-        (loadedSettings as any).sync_interval_minutes 
-          ? Math.round((loadedSettings as any).sync_interval_minutes / 60) || 6
-          : 6;
-      
-      setSettings({ 
-        ...defaultSettings, 
-        ...loadedSettings,
-        sync_interval_hours: syncHours,
-      });
-      setIsActive(data.is_active);
+    if (!loaded) return;
+    const legacy = (settings as unknown as { sync_interval_minutes?: number }).sync_interval_minutes;
+    if (legacy && !settings.sync_interval_hours) {
+      patch({ sync_interval_hours: Math.round(legacy / 60) || 6 });
     }
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const { data: existing } = await supabase
-        .from("integration_settings")
-        .select("id")
-        .eq("integration_type", "tactical_rmm")
-        .maybeSingle();
-
-      let error;
-      if (existing) {
-        const result = await supabase
-          .from("integration_settings")
-          .update({
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          })
-          .eq("integration_type", "tactical_rmm");
-        error = result.error;
-      } else {
-        const result = await supabase
-          .from("integration_settings")
-          .insert({
-            integration_type: "tactical_rmm",
-            settings: settings as unknown as Json,
-            is_active: isActive,
-          });
-        error = result.error;
-      }
-
-      if (error) throw error;
-      toast.success("Configurações do Tactical RMM salvas!");
-    } catch (error: unknown) {
-      toast.error("Erro ao salvar: " + getErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   const handleTest = async () => {
     if (!settings.url) {
       toast.error("Informe a URL do Tactical RMM");
       return;
     }
-
     setTesting(true);
     try {
-      await handleSave();
-
+      await save({ silent: true });
       const { data, error } = await supabase.functions.invoke("tactical-rmm-sync", {
         body: { action: "test" },
       });
-
       if (error || data?.error) {
         toast.error(data?.error || "Erro ao testar conexão");
       } else {
@@ -160,11 +99,7 @@ export function TacticalRmmConfigForm() {
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="rmm-active" className="text-sm">Ativo</Label>
-            <Switch
-              id="rmm-active"
-              checked={isActive}
-              onCheckedChange={setIsActive}
-            />
+            <Switch id="rmm-active" checked={isActive} onCheckedChange={setIsActive} />
           </div>
         </div>
       </CardHeader>
@@ -190,7 +125,7 @@ export function TacticalRmmConfigForm() {
             id="rmm-url"
             placeholder="https://api.seudominio.com"
             value={settings.url}
-            onChange={(e) => setSettings({ ...settings, url: e.target.value })}
+            onChange={(e) => patch({ url: e.target.value })}
           />
         </div>
 
@@ -201,7 +136,7 @@ export function TacticalRmmConfigForm() {
             type="password"
             placeholder="••••••••"
             value={settings.api_key}
-            onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+            onChange={(e) => patch({ api_key: e.target.value })}
           />
         </div>
 
@@ -209,7 +144,7 @@ export function TacticalRmmConfigForm() {
           <Label>Intervalo de Sincronização</Label>
           <RadioGroup
             value={settings.sync_interval_hours.toString()}
-            onValueChange={(v) => setSettings({ ...settings, sync_interval_hours: parseInt(v) })}
+            onValueChange={(v) => patch({ sync_interval_hours: parseInt(v) })}
             className="flex gap-4"
           >
             <div className="flex items-center space-x-2">
@@ -234,9 +169,7 @@ export function TacticalRmmConfigForm() {
               <Checkbox
                 id="import-hardware"
                 checked={settings.import_hardware !== false}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, import_hardware: !!checked })
-                }
+                onCheckedChange={(checked) => patch({ import_hardware: !!checked })}
               />
               <Label htmlFor="import-hardware" className="font-normal">
                 Detalhes de hardware (CPU, RAM, OS)
@@ -246,9 +179,7 @@ export function TacticalRmmConfigForm() {
               <Checkbox
                 id="import-metrics"
                 checked={settings.import_metrics !== false}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, import_metrics: !!checked })
-                }
+                onCheckedChange={(checked) => patch({ import_metrics: !!checked })}
               />
               <Label htmlFor="import-metrics" className="font-normal">
                 Métricas de performance (médias das últimas 10 leituras)
@@ -258,9 +189,7 @@ export function TacticalRmmConfigForm() {
               <Checkbox
                 id="import-reboot"
                 checked={settings.import_reboot_status !== false}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, import_reboot_status: !!checked })
-                }
+                onCheckedChange={(checked) => patch({ import_reboot_status: !!checked })}
               />
               <Label htmlFor="import-reboot" className="font-normal">
                 Status de reinicialização pendente
@@ -271,19 +200,11 @@ export function TacticalRmmConfigForm() {
 
         <div className="flex items-center justify-between border-t pt-4">
           <Button variant="outline" onClick={handleTest} disabled={testing || !settings.url}>
-            {testing ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <TestTube className="h-4 w-4 mr-2" />
-            )}
+            {testing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <TestTube className="h-4 w-4 mr-2" />}
             Testar Conexão
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
+          <Button onClick={() => save()} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
             Salvar Configurações
           </Button>
         </div>
