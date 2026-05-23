@@ -1000,40 +1000,21 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
           }}
         />
       )}
-      {/* Cancel Invoice Dialog */}
-      <AlertDialog open={!!cancelInvoiceTarget} onOpenChange={(open) => { if (!open) { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar Fatura #{cancelInvoiceTarget?.invoice_number}</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação irá cancelar a fatura permanentemente. Informe o motivo do cancelamento.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Textarea
-            placeholder="Motivo do cancelamento (obrigatório)"
-            value={cancelInvoiceReason}
-            onChange={(e) => setCancelInvoiceReason(e.target.value)}
-            className="min-h-[80px]"
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={!cancelInvoiceReason.trim() || cancelInvoiceMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (cancelInvoiceTarget && cancelInvoiceReason.trim()) {
-                  cancelInvoiceMutation.mutate(
-                    { invoiceId: cancelInvoiceTarget.id, reason: cancelInvoiceReason.trim() },
-                    { onSuccess: () => { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }
-                  );
-                }
-              }}
-            >
-              {cancelInvoiceMutation.isPending ? "Cancelando..." : "Confirmar Cancelamento"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CancelInvoiceAlertDialog
+        target={cancelInvoiceTarget}
+        reason={cancelInvoiceReason}
+        setReason={setCancelInvoiceReason}
+        onOpenChange={(open) => { if (!open) { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }}
+        isLoading={cancelInvoiceMutation.isPending}
+        onConfirm={() => {
+          if (cancelInvoiceTarget && cancelInvoiceReason.trim()) {
+            cancelInvoiceMutation.mutate(
+              { invoiceId: cancelInvoiceTarget.id, reason: cancelInvoiceReason.trim() },
+              { onSuccess: () => { setCancelInvoiceTarget(null); setCancelInvoiceReason(""); } }
+            );
+          }
+        }}
+      />
 
     </div>
   );
