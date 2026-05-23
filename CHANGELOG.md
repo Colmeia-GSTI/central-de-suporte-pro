@@ -18,6 +18,31 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Refatorado (Sessão de refatoração estrutural — 2026-05-23)
+Objetivo da sessão: enxugar e reorganizar o projeto ("reduzir, compactar, reutilizar"). Auditoria inicial: 86.514 LOC / 372 arquivos (~79k sem types.ts auto-gerado), components/ = 70% do código. Veredito da auditoria: o projeto NÃO estava "cheio de lixo" — já passara por 3 fases de refatoração (Fases 1-3, -1.700 LOC). Pouco código morto e baixa duplicação real. Ganhos capturados de forma cirúrgica e segura, sem reescrita.
+
+**Código morto removido (-1.178 LOC, zero risco, tsc verde após cada remoção):**
+- `components/inventory/DeviceDetailsPanel.tsx` (órfão)
+- `lib/nfse-validation.ts` (validateNfseData nunca chamado)
+- `components/settings/UserForm.tsx` (órfão após fluxo de convite)
+- `pages/Index.tsx` (boilerplate "Welcome to Your Blank App" do Lovable; rota / usa Dashboard)
+- `components/inventory/MetricGauge.tsx` (órfão)
+- `components/ui/chart.tsx` + `components/ui/toggle.tsx` (shadcn scaffold nunca usado)
+
+**Consolidação de ConfigForms de integração (hook useIntegrationSettings):**
+Criados `src/hooks/useIntegrationSettings.ts` (centraliza load/save contra `integration_settings`, com callbacks opcionais `onAfterLoad`/`beforeSave`) e `src/components/settings/integrations/IntegrationConfigCard.tsx` (shell visual). 6 ConfigForms migrados, eliminando ~40 LOC duplicadas de load/save cada: Telegram (231→120), TacticalRmm (293→214), CheckMk (322→255), EvolutionApi (273→215), GoogleCalendar (285→231), Asaas (726→648, com callbacks para preservar geração do webhook_token). NÃO migrados por decisão: NoContactCheck e Unifi (usam React Query, padrão diferente), Resend (será removido na migração de email), BancoInter (lógica própria de webhook/certificado — risco não compensa).
+
+**Split de legibilidade dos 3 maiores arquivos (via Lovable, sem alterar lógica/UX/validação):**
+- `ContractForm.tsx` 1232→754: extraídas seções para `contracts/sections/` (ContractBillingSection, ContractAdjustmentSection, ContractInternalNotesSection, ContractNfseSection, DatePickerField). Schema Zod e mutation intactos; seções recebem `form` via props.
+- `NfseDetailsSheet.tsx` 1173→982: extraídos para `billing/nfse/details/` (NfseEditForm, NfseCancelDialog, NfseDeleteDialog, NfseCancelDeleteDialog). Nenhuma regra fiscal/payload/edge function tocada; máquina de estados e mutations no principal.
+- `BillingInvoicesTab.tsx` 1106→1021: extraído hook `billing/hooks/useInvoiceFilters.ts` (filtros + paginação + sync URL) + `NewInvoiceDialog.tsx` + `CancelInvoiceAlertDialog.tsx`. Batch processing e os 7 dialogs já-componentes preservados.
+
+**Nota de método:** split de arquivo grande aumenta LOC total (props/boilerplate por componente) mas melhora legibilidade — era o objetivo declarado. Reescrita completa foi avaliada e DESCARTADA: 79k LOC funcionais em produção com 32 clientes, sem gargalo de performance medido; reescrever reintroduziria meses de bugs de domínio já corrigidos.
+
+**Pendente:** reorganização de pastas (passo 3); retomar roadmap Seção 4.5 CMDB (passo 4).
+
+---
+
 ### Adicionado (Fluxo de convite admin — fecha causa-raiz dos órfãos — 2026-05-19)
 **Motivação:** após hotfix dos 10 órfãos (entrada anterior), decisão arquitetural de eliminar a causa-raiz: bloquear signup público e exigir convite admin para criação de qualquer conta. Decisão alinhada com multi-tenancy futura (SaaS exige convite, não signup aberto).
 

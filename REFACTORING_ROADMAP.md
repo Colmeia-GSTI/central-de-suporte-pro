@@ -22,6 +22,8 @@ Estes princípios guiam toda decisão dentro deste roadmap. Em caso de conflito,
 
 Itens executados antes da formalização deste roadmap, mantidos aqui para rastreabilidade.
 
+> **Nota (2026-05-23) — Sessão de refatoração estrutural.** Auditoria completa do projeto (86k LOC, mapa de calor). Veredito: projeto já enxuto após Fases 1-3; pouco código morto/duplicado real. Executado: (1) remoção de 7 arquivos mortos (-1.178 LOC); (2) hook `useIntegrationSettings` consolidando load/save de 6 ConfigForms; (3) split de legibilidade dos 3 maiores arquivos (ContractForm 1232→754, NfseDetailsSheet 1173→982, BillingInvoicesTab 1106→1021) sem alterar lógica/UX. Reescrita completa foi avaliada e descartada (risco de reintroduzir bugs de domínio em sistema produtivo sem gargalo medido). Pendente: passo 3 (reorganização de pastas) e passo 4 (retomar Seção 4.5 CMDB). Detalhes no CHANGELOG.
+
 - ✅ Rastreabilidade de e-mails de cobrança (envio, abertura, falha)
 - ✅ Edge Function `resend-confirmation` criada e deployada (rate-limit 3/h)
 - ✅ Helpers de e-mail consolidados em `supabase/functions/_shared/email-helpers.ts`
