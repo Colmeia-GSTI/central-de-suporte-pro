@@ -102,7 +102,7 @@ const contractSchema = z.object({
   }
 });
 
-type ContractFormData = z.infer<typeof contractSchema>;
+export type ContractFormData = z.infer<typeof contractSchema>;
 
 // Extended type to include all contract fields used in the form
 type ContractWithClient = Tables<"contracts"> & {
