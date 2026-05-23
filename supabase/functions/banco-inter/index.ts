@@ -363,9 +363,10 @@ Deno.serve(async (req) => {
         await response.text();
       }
 
-      console.log("[BANCO-INTER] Webhook registrado com sucesso:", webhookUrl);
+      const maskedUrl = maskWebhookUrl(webhookUrl);
+      console.log("[BANCO-INTER] Webhook registrado com sucesso:", maskedUrl);
       return new Response(
-        JSON.stringify({ success: true, webhookUrl }),
+        JSON.stringify({ success: true, webhookUrl: maskedUrl }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
