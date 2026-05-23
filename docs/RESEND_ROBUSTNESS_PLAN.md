@@ -74,6 +74,13 @@ Observação: já existe o padrão de webhook de status para **WhatsApp** (`webh
 ### PC1 — Verificação de domínio e DNS (SPF/DKIM/DMARC)
 Sem SPF/DKIM/DMARC corretos no domínio `suporte.colmeiagsti.com`, emails caem em spam — independente de todo o resto. **Verificar o status do domínio no Resend** e confirmar os registros DNS. Isto é pré-requisito de entrega; de nada adianta retry se o email vai pra spam. (Ação de infra, não código.)
 
+> **VERIFICADO em 2026-05-23 (via DNS-over-HTTPS):** autenticação está CORRETA e completa, no padrão Resend de duas camadas:
+> - DKIM presente em `resend._domainkey.suporte.colmeiagsti.com` ✅
+> - SPF (`v=spf1 include:amazonses.com ~all`) + MX (`feedback-smtp.sa-east-1.amazonses.com`) em `send.suporte.colmeiagsti.com` ✅ (return-path/bounce — Resend roda sobre Amazon SES)
+> - O `from` `noreply@suporte.colmeiagsti.com` é autenticado por DKIM; NÃO há mismatch (o "SPF ausente na raiz" é esperado nesse modelo).
+> - DMARC presente: `v=DMARC1; p=none; rua=mailto:dmarcreports@lovable.dev` — único ajuste recomendado (cosmético/baixa prioridade): trocar o `rua` para um email da Colmeia (hoje os relatórios DMARC vão para o Lovable, resíduo da config de Custom Emails) e, no futuro, considerar `p=quarantine`.
+> **Conclusão:** entrega não está comprometida por autenticação. PC1 OK.
+
 ### PC2 — Idempotência de envio
 Se uma edge function falhar no meio e for re-disparada (cron, retry do chamador), pode enviar o mesmo email 2x. Hoje não há `idempotency_key`. **Propor:** aceitar um `idempotency_key` opcional no `send-email-resend` e checar `message_logs` antes de reenviar (dedupe por chave + janela de tempo). O Resend também aceita `Idempotency-Key` header nativamente — usar.
 
