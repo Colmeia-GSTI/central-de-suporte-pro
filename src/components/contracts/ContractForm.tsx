@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,8 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Form,
@@ -28,13 +26,15 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
-import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
+import { ContractBillingSection } from "./sections/ContractBillingSection";
+import { ContractAdjustmentSection } from "./sections/ContractAdjustmentSection";
+import { ContractInternalNotesSection } from "./sections/ContractInternalNotesSection";
+import { ContractNfseSection } from "./sections/ContractNfseSection";
+import { DatePickerField } from "./sections/DatePickerField";
+import { MessageSquare, Check, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -43,8 +43,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { format, parse } from "date-fns";
-import { ptBR } from "date-fns/locale/pt-BR";
 import { cn } from "@/lib/utils";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
@@ -104,7 +102,7 @@ const contractSchema = z.object({
   }
 });
 
-type ContractFormData = z.infer<typeof contractSchema>;
+export type ContractFormData = z.infer<typeof contractSchema>;
 
 // Extended type to include all contract fields used in the form
 type ContractWithClient = Tables<"contracts"> & {
@@ -471,46 +469,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   }, [form]);
 
   const supportModel = form.watch("support_model");
-  const nfseEnabled = form.watch("nfse_enabled");
   const termType = form.watch("term_type");
 
-  // Date picker helper component
-  const DatePickerField = ({ field, label, description }: { field: { value: string; onChange: (v: string) => void }; label: string; description?: string }) => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <FormControl>
-          <Button
-            variant="outline"
-            className={cn(
-              "w-full pl-3 text-left font-normal",
-              !field.value && "text-muted-foreground"
-            )}
-          >
-            {field.value ? (
-              format(parse(field.value, "yyyy-MM-dd", new Date()), "dd/MM/yyyy")
-            ) : (
-              <span>Selecione a data</span>
-            )}
-            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-          </Button>
-        </FormControl>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          captionLayout="dropdown-buttons"
-          fromYear={2020}
-          toYear={2036}
-          fixedWeeks
-          selected={field.value ? parse(field.value, "yyyy-MM-dd", new Date()) : undefined}
-          onSelect={(date) => field.onChange(date ? format(date, "yyyy-MM-dd") : "")}
-          locale={ptBR}
-          initialFocus
-          className={cn("p-3 pointer-events-auto")}
-        />
-      </PopoverContent>
-    </Popover>
-  );
 
   return (
     <Form {...form}>
@@ -712,269 +672,9 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           )}
         </div>
 
-        {/* Billing Section */}
-        <Separator className="my-6" />
-        
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <CreditCard className="h-5 w-5 text-primary" />
-            Faturamento
-          </div>
+        <ContractBillingSection form={form} calculatedTotal={calculatedTotal} isNewContract={!contractData} />
 
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="billing_day"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dia do Vencimento</FormLabel>
-                  <FormControl>
-                    <Input type="number" min="1" max="28" {...field} />
-                  </FormControl>
-                  <FormDescription>Dia 1 a 28</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="days_before_due"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dias de Antecedência</FormLabel>
-                  <FormControl>
-                    <Input type="number" min="1" max="30" {...field} />
-                  </FormControl>
-                  <FormDescription>Para geração automática</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <FormItem>
-              <FormLabel>Provedor de Cobrança</FormLabel>
-              <div className="flex h-10 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm">
-                <span className="font-medium">Asaas</span>
-                <span className="text-xs text-muted-foreground">(único provedor ativo)</span>
-              </div>
-              <FormDescription>Boleto, PIX e NFS-e via Asaas</FormDescription>
-            </FormItem>
-
-            <FormField
-              control={form.control}
-              name="payment_preference"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Preferência de Pagamento</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent modal={false}>
-                      <SelectItem value="boleto">Boleto</SelectItem>
-                      <SelectItem value="pix">PIX</SelectItem>
-                      <SelectItem value="both">Boleto + PIX</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="billing_frequency"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Periodicidade da Cobrança</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent modal={false}>
-                    <SelectItem value="monthly">Mensal</SelectItem>
-                    <SelectItem value="bimonthly">Bimestral (a cada 2 meses)</SelectItem>
-                    <SelectItem value="quarterly">Trimestral (a cada 3 meses)</SelectItem>
-                    <SelectItem value="semiannual">Semestral (a cada 6 meses)</SelectItem>
-                    <SelectItem value="yearly">Anual (a cada 12 meses)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  O cron de geração de faturas pula meses não-elegíveis. Mudar a periodicidade afeta apenas faturas futuras.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Initial Invoice Generation - Only for new contracts */}
-          {/* First Payment Date - always visible */}
-          <div className="mt-4 p-4 rounded-lg border bg-muted/30 space-y-4">
-            <FormField
-              control={form.control}
-              name="first_payment_date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>📅 Data do Primeiro Pagamento</FormLabel>
-                  <DatePickerField field={field} label="Data do Primeiro Pagamento" />
-                  <FormDescription>
-                    Data de vencimento da primeira fatura deste contrato. Se não informada, será calculada pelo dia de vencimento ({form.watch("billing_day") || 10}) do mês atual.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {form.watch("first_payment_date") && (
-              <div className="text-sm text-muted-foreground bg-background/50 rounded p-2">
-                <p><strong>Competência:</strong> {form.watch("first_payment_date")!.substring(0, 7)}</p>
-                <p><strong>Vencimento:</strong> {form.watch("first_payment_date")}</p>
-                <p><strong>Valor:</strong> {calculatedTotal > 0 ? `R$ ${calculatedTotal.toFixed(2)}` : "Será calculado pelos serviços"}</p>
-              </div>
-            )}
-
-            {/* Initial Invoice Generation - Only for new contracts */}
-            {!contractData && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="generate_initial_invoice"
-                  render={({ field }) => (
-                    <FormItem className="flex items-start gap-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1">
-                        <FormLabel className="cursor-pointer font-medium">
-                          Gerar primeira cobrança ao criar contrato
-                        </FormLabel>
-                        <FormDescription>
-                          A fatura será gerada com base na data do primeiro pagamento acima
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
-
-                {form.watch("generate_initial_invoice") && (
-                  <div className="ml-6 space-y-3 border-l-2 border-primary/30 pl-4">
-                    <FormField
-                      control={form.control}
-                      name="generate_payment"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center gap-2 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <FormLabel className="cursor-pointer text-sm">
-                            Gerar boleto/PIX automaticamente (Asaas)
-                          </FormLabel>
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="send_notification"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center gap-2 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <FormLabel className="cursor-pointer text-sm">
-                            Enviar notificação por email
-                          </FormLabel>
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Adjustment Section */}
-        <Separator className="my-6" />
-        
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            Reajuste Anual
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <FormField
-              control={form.control}
-              name="adjustment_date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Data do Próximo Reajuste</FormLabel>
-                  <DatePickerField field={field} label="Data do Próximo Reajuste" />
-                  <FormDescription>Geralmente 1 ano após início</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="adjustment_index"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Índice de Reajuste</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent modal={false}>
-                      <SelectItem value="IGPM">IGP-M</SelectItem>
-                      <SelectItem value="IPCA">IPCA</SelectItem>
-                      <SelectItem value="INPC">INPC</SelectItem>
-                      <SelectItem value="FIXO">Percentual Fixo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {form.watch("adjustment_index") === "FIXO" && (
-              <FormField
-                control={form.control}
-                name="adjustment_percentage"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Percentual Fixo (%)</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" placeholder="5.00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-          </div>
-        </div>
+        <ContractAdjustmentSection form={form} />
 
         {/* Services Section */}
         <Separator className="my-6" />
@@ -1036,187 +736,9 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           />
         </div>
 
-        {/* Internal Notes Section */}
-        <Separator className="my-6" />
+        <ContractInternalNotesSection form={form} />
 
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <Lock className="h-5 w-5 text-muted-foreground" />
-            Observações Internas
-          </div>
-
-          <FormField
-            control={form.control}
-            name="internal_notes"
-            render={({ field }) => (
-              <FormItem>
-                <FormControl>
-                  <Textarea
-                    placeholder="Anotações visíveis apenas para a equipe..."
-                    rows={3}
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Estas observações não aparecem para o cliente
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {/* NFSE Section */}
-        <Separator className="my-6" />
-        
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <FileText className="h-5 w-5 text-primary" />
-            Nota Fiscal de Serviço (NFS-e)
-          </div>
-
-          <FormField
-            control={form.control}
-            name="nfse_enabled"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-3 space-y-0 rounded-lg border p-4">
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-                <div className="space-y-0.5">
-                  <FormLabel className="cursor-pointer">
-                    Emitir NFS-e automaticamente
-                  </FormLabel>
-                  <FormDescription>
-                    Habilita a geração de nota fiscal para este contrato
-                  </FormDescription>
-                </div>
-              </FormItem>
-            )}
-          />
-
-          {nfseEnabled && (
-            <div className="space-y-4 pt-2">
-              <FormField
-                control={form.control}
-                name="nfse_service_code"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código de Serviço</FormLabel>
-                    <ServiceCodeSelect
-                      value={field.value}
-                      onSelect={(code) => {
-                        field.onChange(code?.codigo_tributacao || "");
-                        if (code?.cnae_principal) {
-                          form.setValue("nfse_cnae", code.cnae_principal);
-                        }
-                        if (code?.aliquota_sugerida) {
-                          form.setValue("nfse_aliquota", code.aliquota_sugerida);
-                        }
-                      }}
-                    />
-                    <FormDescription>
-                      Código de tributação nacional conforme LC 116/2003
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="nfse_aliquota"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Alíquota ISS (%)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={25}
-                          step={0.01}
-                          placeholder="Ex: 2.00"
-                          value={field.value || ""}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Preenchido ao selecionar código de serviço
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="nfse_iss_retido"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col justify-end">
-                      <div className="flex items-center gap-3 rounded-lg border p-3 h-10">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <FormLabel className="cursor-pointer text-sm font-normal">
-                          ISS Retido pelo Tomador
-                        </FormLabel>
-                      </div>
-                      <FormDescription>
-                        Quando o cliente retém o ISS na fonte
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="nfse_cnae"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CNAE</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Ex: 6209100" />
-                    </FormControl>
-                    <FormDescription>
-                      Preenchido automaticamente ao selecionar o código de serviço
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="nfse_descricao_customizada"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descrição do Serviço para NFS-e</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        placeholder="Descrição detalhada do serviço que aparecerá na nota fiscal..."
-                        rows={3}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Se não preenchido, será gerada automaticamente com base nos serviços
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          )}
-        </div>
+        <ContractNfseSection form={form} />
 
         <div className="flex justify-end gap-2 pt-4">
           <Button type="button" variant="outline" onClick={onCancel}>
