@@ -833,121 +833,26 @@ export function NfseDetailsSheet(props: {
       </Sheet>
 
       {/* Edit - Formulário Completo */}
-      <Dialog
+      <NfseEditForm
         open={editOpen}
-        onOpenChange={(open) => {
-          setEditOpen(open);
-          if (open && nfse) {
-            setValor(nfse.valor_servico);
-            setCompetencia(normalizeCompetencia(nfse.competencia));
-            setDescricao(nfse.descricao_servico || "");
-            setCodigoTributacao(nfse.codigo_tributacao ?? "");
-            setCnae(nfse.cnae ?? "");
-            setTributacao({
-              issRetido: nfse.iss_retido ?? false,
-              aliquotaIss: Number(nfse.aliquota) || 0,
-              valorPis: Number(nfse.valor_pis) || 0,
-              valorCofins: Number(nfse.valor_cofins) || 0,
-              valorCsll: Number(nfse.valor_csll) || 0,
-              valorIrrf: Number(nfse.valor_irrf) || 0,
-              valorInss: Number(nfse.valor_inss) || 0,
-            });
-          }
-        }}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Editar NFS-e</DialogTitle>
-            <DialogDescription>Corrija os dados fiscais e reenvie para processamento.</DialogDescription>
-          </DialogHeader>
-
-          <ScrollArea className="max-h-[65vh] pr-4">
-            <div className="space-y-4">
-              {/* Erro atual da nota */}
-              {nfse.mensagem_retorno && ["erro", "rejeitada"].includes(nfse.status) && (
-                <Alert variant="destructive">
-                  <XCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <p className="font-medium">Erro atual:</p>
-                    <pre className="mt-1 whitespace-pre-wrap text-xs">{nfse.mensagem_retorno}</pre>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Dados básicos */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Valor do serviço</Label>
-                  <CurrencyInput value={valor} onChange={setValor} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Competência (AAAA-MM)</Label>
-                  <Input
-                    value={competencia}
-                    onChange={(e) => setCompetencia(e.target.value)}
-                    placeholder="2026-01"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Descrição do serviço</Label>
-                <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={3} />
-              </div>
-
-              <Separator />
-
-              {/* Código de Serviço */}
-              <div className="space-y-2">
-                <Label>Código de Serviço (LC 116/2003)</Label>
-                <NfseServiceCodeCombobox
-                  value={codigoTributacao}
-                  onChange={(code: NfseServiceCode | null) => {
-                    if (code) {
-                      setCodigoTributacao(code.codigo_tributacao);
-                      if (code.cnae_principal) setCnae(code.cnae_principal);
-                      if (code.aliquota_sugerida !== null && code.aliquota_sugerida !== undefined) {
-                        setTributacao(prev => ({ ...prev, aliquotaIss: code.aliquota_sugerida! }));
-                      }
-                    } else {
-                      setCodigoTributacao("");
-                    }
-                  }}
-                />
-              </div>
-
-              {/* CNAE */}
-              <div className="space-y-2">
-                <Label>CNAE</Label>
-                <Input
-                  value={cnae}
-                  onChange={(e) => setCnae(e.target.value)}
-                  placeholder="Ex: 6202-3/00"
-                />
-              </div>
-
-              {/* Tributação completa */}
-              <NfseTributacaoSection
-                valorServico={valor}
-                aliquotaIss={tributacao.aliquotaIss || companyForValidation?.nfse_aliquota_padrao || 0}
-                data={tributacao}
-                onChange={setTributacao}
-                regimeTributario={companyForValidation?.nfse_regime_tributario}
-              />
-            </div>
-          </ScrollArea>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
-              {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setEditOpen}
+        nfse={nfse}
+        valor={valor}
+        setValor={setValor}
+        competencia={competencia}
+        setCompetencia={setCompetencia}
+        descricao={descricao}
+        setDescricao={setDescricao}
+        codigoTributacao={codigoTributacao}
+        setCodigoTributacao={setCodigoTributacao}
+        cnae={cnae}
+        setCnae={setCnae}
+        tributacao={tributacao}
+        setTributacao={setTributacao}
+        companyForValidation={companyForValidation}
+        onSave={() => updateMutation.mutate()}
+        isSaving={updateMutation.isPending}
+      />
 
       {/* Validation */}
       <Dialog open={validationOpen} onOpenChange={setValidationOpen}>
