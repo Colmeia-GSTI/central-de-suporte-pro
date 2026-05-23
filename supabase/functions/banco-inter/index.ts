@@ -34,6 +34,29 @@ function createMtlsClient(certBase64: string, keyBase64: string): Deno.HttpClien
   });
 }
 
+// Mascara o valor do query param `token` em uma URL antes de devolver ao frontend.
+// A URL enviada ao Banco Inter continua usando o token real.
+function maskWebhookUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.searchParams.has("token")) u.searchParams.set("token", "***");
+    return u.toString();
+  } catch {
+    return url.replace(/([?&]token=)[^&]+/i, "$1***");
+  }
+}
+
+// Compara duas URLs ignorando query string (apenas origin + pathname).
+function sameWebhookBase(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return ua.origin === ub.origin && ua.pathname === ub.pathname;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
