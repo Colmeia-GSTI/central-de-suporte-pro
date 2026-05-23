@@ -1,6 +1,6 @@
 # Plano de Conserto — Integração Banco Inter
 
-> **Status:** DIAGNOSTICADO (fix não aplicado).
+> **Status:** FIXES APLICADOS (commit 5fb3377) — pendente teste em sandbox.
 > **Criado:** 2026-05-23
 > **Contexto:** Inter foi migrado para Asaas (07/05). Jonatas quer reativar para alguns clientes, mas a integração tinha 2 bugs que precisam ser corrigidos antes.
 
