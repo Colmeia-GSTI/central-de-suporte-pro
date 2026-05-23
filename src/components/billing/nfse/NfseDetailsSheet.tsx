@@ -943,127 +943,32 @@ export function NfseDetailsSheet(props: {
       </Dialog>
 
       {/* Cancel Confirmation with Mandatory Reason */}
-      <Dialog open={cancelConfirmOpen} onOpenChange={(open) => {
-        setCancelConfirmOpen(open);
-        if (!open) setMotivoCancelamento("");
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Ban className="h-5 w-5" />
-              Cancelar NFS-e?
-            </DialogTitle>
-            <DialogDescription>
-              Esta ação irá solicitar o cancelamento da NFS-e {nfse.numero_nfse ? `#${nfse.numero_nfse}` : ""} no Asaas.
-              O cancelamento será processado e o status atualizado automaticamente.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30">
-              <AlertTriangle className="h-4 w-4 text-yellow-700" />
-              <AlertDescription className="text-yellow-900 dark:text-yellow-200">
-                O motivo do cancelamento é obrigatório para fins de auditoria e conformidade fiscal.
-              </AlertDescription>
-            </Alert>
-            
-            <div className="space-y-2">
-              <Label htmlFor="motivo-cancelamento">Motivo do Cancelamento *</Label>
-              <Textarea
-                id="motivo-cancelamento"
-                placeholder="Ex: Erro na descrição do serviço, cliente solicitou cancelamento, nota emitida em duplicidade..."
-                value={motivoCancelamento}
-                onChange={(e) => setMotivoCancelamento(e.target.value)}
-                rows={3}
-                className={!motivoCancelamento.trim() && cancelMutation.isPending ? "border-destructive" : ""}
-              />
-              {!motivoCancelamento.trim() && (
-                <p className="text-xs text-muted-foreground">
-                  Informe o motivo pelo qual esta nota está sendo cancelada.
-                </p>
-              )}
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setCancelConfirmOpen(false);
-              setMotivoCancelamento("");
-            }}>
-              Voltar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending || !motivoCancelamento.trim()}
-            >
-              {cancelMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Confirmar Cancelamento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NfseCancelDialog
+        open={cancelConfirmOpen}
+        onOpenChange={setCancelConfirmOpen}
+        numeroNfse={nfse.numero_nfse}
+        motivo={motivoCancelamento}
+        setMotivo={setMotivoCancelamento}
+        onConfirm={() => cancelMutation.mutate()}
+        isLoading={cancelMutation.isPending}
+      />
 
       {/* Delete Confirmation */}
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" />
-              Excluir Registro?
-            </DialogTitle>
-            <DialogDescription>
-              Esta ação irá remover permanentemente o registro da NFS-e do sistema.
-              Esta ação não pode ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
-              Voltar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteMutation.mutate()}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Excluir Permanentemente
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NfseDeleteDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        onConfirm={() => deleteMutation.mutate()}
+        isLoading={deleteMutation.isPending}
+      />
 
       {/* Cancel and Delete Confirmation */}
-      <Dialog open={cancelAndDeleteConfirmOpen} onOpenChange={setCancelAndDeleteConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" />
-              Cancelar e Excluir NFS-e?
-            </DialogTitle>
-            <DialogDescription>
-              Esta ação irá:
-              <br />1) Solicitar o cancelamento da NFS-e {nfse.numero_nfse ? `#${nfse.numero_nfse}` : ""} no Asaas
-              <br />2) Excluir permanentemente o registro do sistema
-              <br /><br />
-              <strong>Esta ação não pode ser desfeita.</strong>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelAndDeleteConfirmOpen(false)}>
-              Voltar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => cancelAndDeleteMutation.mutate()}
-              disabled={cancelAndDeleteMutation.isPending}
-            >
-              {cancelAndDeleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Cancelar e Excluir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <NfseCancelDeleteDialog
+        open={cancelAndDeleteConfirmOpen}
+        onOpenChange={setCancelAndDeleteConfirmOpen}
+        numeroNfse={nfse.numero_nfse}
+        onConfirm={() => cancelAndDeleteMutation.mutate()}
+        isLoading={cancelAndDeleteMutation.isPending}
+      />
 
       {/* Link External NFS-e Dialog */}
       <NfseLinkExternalDialog
