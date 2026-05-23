@@ -157,7 +157,7 @@ export function NfseEditForm({
               aliquotaIss={tributacao.aliquotaIss || companyForValidation?.nfse_aliquota_padrao || 0}
               data={tributacao}
               onChange={setTributacao}
-              regimeTributario={companyForValidation?.nfse_regime_tributario ?? undefined}
+              regimeTributario={companyForValidation?.nfse_regime_tributario}
             />
           </div>
         </ScrollArea>
