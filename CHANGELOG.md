@@ -18,6 +18,25 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Corrigido (Cobrança por frequência não respeitava o intervalo — 2026-05-23)
+**Bug em produção:** contrato com `billing_frequency` diferente de mensal (trimestral, bimestral, semestral, anual) cobrava apenas 1 mês em vez do período completo. Ex.: contrato trimestral de R$50/mês gerava fatura de R$50 em vez de R$150 (50×3).
+
+**Causa raiz:** o `intervalMonths` derivado da frequência era usado apenas para decidir SE a fatura seria gerada naquele mês (pulando os meses intermediários — lógica correta), mas o **valor** da fatura usava `monthly_value` puro, sem multiplicar pelo intervalo.
+
+**Corrigido nos 2 caminhos de geração:**
+- `generate-monthly-invoices` (cron): `recurringAmount = monthly_value × intervalMonths`. Cobranças adicionais (`contract_additional_charges`) NÃO são multiplicadas (têm valor próprio por competência).
+- `ContractForm` (fatura inicial via `generate_initial_invoice`): mesmo cálculo, usando `FREQUENCY_INTERVAL_MONTHS` baseado em `billing_frequency`.
+
+A nota da fatura passou a indicar o período coberto (ex.: "Fatura 3 meses (quarterly)"). A lógica de pular meses intermediários no cron já estava correta e não foi alterada.
+
+**Não alterado:** `InvoiceForm` (fatura manual) continua pré-preenchendo 1 mês — é editável pelo operador antes de salvar.
+
+**Faturas passadas:** as já geradas com valor errado foram corrigidas manualmente pelo Jonatas. Os fixes valem daqui pra frente.
+
+**A validar em runtime:** caso de borda onde `reference_month` da fatura inicial (via `first_payment_date` futuro) diverge do mês do cron — testar com um contrato trimestral real (fatura inicial ×3 + cron pulando no mês seguinte).
+
+---
+
 ### Refatorado (Sessão de refatoração estrutural — 2026-05-23)
 Objetivo da sessão: enxugar e reorganizar o projeto ("reduzir, compactar, reutilizar"). Auditoria inicial: 86.514 LOC / 372 arquivos (~79k sem types.ts auto-gerado), components/ = 70% do código. Veredito da auditoria: o projeto NÃO estava "cheio de lixo" — já passara por 3 fases de refatoração (Fases 1-3, -1.700 LOC). Pouco código morto e baixa duplicação real. Ganhos capturados de forma cirúrgica e segura, sem reescrita.
 
