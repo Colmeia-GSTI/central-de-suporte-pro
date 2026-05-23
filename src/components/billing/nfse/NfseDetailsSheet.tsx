@@ -11,9 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import {
@@ -34,15 +31,17 @@ import {
 
 import type { Tables } from "@/integrations/supabase/types";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { buildNfseValidation, normalizeCompetencia, type ValidationIssue } from "./nfseValidation";
 import { formatCompetenciaLabel, formatDateTime, providerLabel, statusLabel, asaasStatusLabel, isE0014Error, formatNfseErrorMessage, type NfseStatus } from "./nfseFormat";
 import { NfseEventLogsDialog } from "./NfseEventLogsDialog";
 import { NfseProcessingIndicator } from "./NfseProcessingIndicator";
 import { NfseShareMenu } from "./NfseShareMenu";
 import { NfseLinkExternalDialog } from "./NfseLinkExternalDialog";
-import { NfseServiceCodeCombobox, type NfseServiceCode } from "./NfseServiceCodeCombobox";
-import { NfseTributacaoSection, type TributacaoData } from "./NfseTributacaoSection";
+import { type TributacaoData } from "./NfseTributacaoSection";
+import { NfseCancelDialog } from "./details/NfseCancelDialog";
+import { NfseDeleteDialog } from "./details/NfseDeleteDialog";
+import { NfseCancelDeleteDialog } from "./details/NfseCancelDeleteDialog";
+import { NfseEditForm } from "./details/NfseEditForm";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
   clients: {
