@@ -373,7 +373,18 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           dueDate = `${referenceMonth}-${String(actualBillingDay).padStart(2, "0")}`;
         }
         
-        const invoiceAmount = calculatedTotal > 0 ? calculatedTotal : data.monthly_value;
+        // FIX cobrança por frequência: monthly_value é MENSAL. Para frequências
+        // > mensal, a primeira fatura cobre `intervalMonths` meses (mesmo critério
+        // do cron generate-monthly-invoices). Antes cobrava só 1 mês.
+        const FREQUENCY_INTERVAL_MONTHS: Record<string, number> = {
+          monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, yearly: 12,
+        };
+        const initialIntervalMonths = FREQUENCY_INTERVAL_MONTHS[data.billing_frequency ?? "monthly"] ?? 1;
+        const baseValue = calculatedTotal > 0 ? calculatedTotal : data.monthly_value;
+        const invoiceAmount = baseValue * initialIntervalMonths;
+        const initialNotes = initialIntervalMonths > 1
+          ? `Primeira fatura (${initialIntervalMonths} meses - ${data.billing_frequency}) - ${data.name}`
+          : `Primeira fatura - ${data.name}`;
         const { data: invoice, error: invoiceError } = await supabase
           .from("invoices")
           .insert({
@@ -384,7 +395,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             reference_month: referenceMonth,
             status: "pending" as const,
             billing_provider: data.billing_provider,
-            notes: `Primeira fatura - ${data.name}`,
+            notes: initialNotes,
           })
           .select("id, invoice_number")
           .single();

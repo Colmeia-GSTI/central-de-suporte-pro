@@ -533,10 +533,24 @@ Deno.serve(async (req) => {
 
         const charges = (additionalCharges || []) as AdditionalCharge[];
         const additionalTotal = charges.reduce((sum, c) => sum + c.amount, 0);
-        const totalAmount = contract.monthly_value + additionalTotal;
+        // FIX cobrança por frequência: o valor recorrente do contrato é MENSAL.
+        // Para frequências > mensal (bimonthly=2, quarterly=3, semiannual=6, yearly=12),
+        // a fatura cobre `intervalMonths` meses de uma vez, então o valor recorrente
+        // é multiplicado pelo intervalo. Charges adicionais NÃO multiplicam (têm valor
+        // próprio por competência). Antes: cobrava só 1 mês mesmo em contrato trimestral.
+        const recurringAmount = contract.monthly_value * intervalMonths;
+        const totalAmount = recurringAmount + additionalTotal;
+
+        // Descrição da competência cobrada (período, quando > 1 mês)
+        const periodoLabel = intervalMonths > 1
+          ? `${intervalMonths} meses (${frequency})`
+          : "mensal";
 
         // Build invoice notes with contract info and additional charges
-        let invoiceNotes = `Fatura mensal - Contrato: ${contract.name} - Competência: ${currentReferenceMonth}`;
+        let invoiceNotes = `Fatura ${periodoLabel} - Contrato: ${contract.name} - Competência: ${currentReferenceMonth}`;
+        if (intervalMonths > 1) {
+          invoiceNotes += `\nValor recorrente: ${intervalMonths}x R$ ${contract.monthly_value.toFixed(2)} = R$ ${recurringAmount.toFixed(2)}`;
+        }
         if (charges.length > 0) {
           invoiceNotes += `\n\nValores adicionais:`;
           for (const charge of charges) {
