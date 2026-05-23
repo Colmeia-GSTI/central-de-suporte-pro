@@ -4946,6 +4946,60 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_invites: {
+        Row: {
+          accepted_at: string | null
+          client_id: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          full_name: string | null
+          id: string
+          invited_by: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          client_id?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          full_name?: string | null
+          id?: string
+          invited_by?: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          client_id?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          full_name?: string | null
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_invites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_invites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients_contact_only"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -6789,6 +6843,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_invite: { Args: { p_token: string }; Returns: Json }
       auto_reconcile_bank_entries: { Args: never; Returns: Json }
       calculate_penalties: {
         Args: {
@@ -6851,6 +6906,27 @@ export type Database = {
           occurrences: number
         }[]
       }
+      find_valid_invite: {
+        Args: { p_email: string }
+        Returns: {
+          accepted_at: string | null
+          client_id: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          full_name: string | null
+          id: string
+          invited_by: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          token: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pending_invites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       generate_signed_url: {
         Args: { p_bucket: string; p_expires_in?: number; p_path: string }
         Returns: string
@@ -6886,6 +6962,7 @@ export type Database = {
         }[]
       }
       get_integration_health_stats: { Args: never; Returns: Json }
+      get_invite_info: { Args: { p_token: string }; Returns: Json }
       get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
       get_license_key: { Args: { license_id: string }; Returns: string }
       get_technician_ranking: {
