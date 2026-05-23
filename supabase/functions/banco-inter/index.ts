@@ -415,12 +415,17 @@ Deno.serve(async (req) => {
       }
 
       const data = await response.json();
-      console.log("[BANCO-INTER] Webhook cadastrado:", JSON.stringify(data));
+      const expectedBase = `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook-banco-inter`;
+      const rawUrl: string | undefined = data.webhookUrl;
+      const maskedUrl = rawUrl ? maskWebhookUrl(rawUrl) : null;
+      const isOurs = rawUrl ? sameWebhookBase(rawUrl, expectedBase) : false;
+      console.log("[BANCO-INTER] Webhook cadastrado:", JSON.stringify({ webhookUrl: maskedUrl, criacao: data.criacao, isOurs }));
       return new Response(
-        JSON.stringify({ 
-          registered: true, 
-          webhookUrl: data.webhookUrl, 
-          criacao: data.criacao 
+        JSON.stringify({
+          registered: true,
+          webhookUrl: maskedUrl,
+          isOurs,
+          criacao: data.criacao,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
