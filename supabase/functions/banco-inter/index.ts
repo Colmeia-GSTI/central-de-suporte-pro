@@ -34,6 +34,29 @@ function createMtlsClient(certBase64: string, keyBase64: string): Deno.HttpClien
   });
 }
 
+// Mascara o valor do query param `token` em uma URL antes de devolver ao frontend.
+// A URL enviada ao Banco Inter continua usando o token real.
+function maskWebhookUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.searchParams.has("token")) u.searchParams.set("token", "***");
+    return u.toString();
+  } catch {
+    return url.replace(/([?&]token=)[^&]+/i, "$1***");
+  }
+}
+
+// Compara duas URLs ignorando query string (apenas origin + pathname).
+function sameWebhookBase(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return ua.origin === ub.origin && ua.pathname === ub.pathname;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -340,9 +363,10 @@ Deno.serve(async (req) => {
         await response.text();
       }
 
-      console.log("[BANCO-INTER] Webhook registrado com sucesso:", webhookUrl);
+      const maskedUrl = maskWebhookUrl(webhookUrl);
+      console.log("[BANCO-INTER] Webhook registrado com sucesso:", maskedUrl);
       return new Response(
-        JSON.stringify({ success: true, webhookUrl }),
+        JSON.stringify({ success: true, webhookUrl: maskedUrl }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -391,12 +415,17 @@ Deno.serve(async (req) => {
       }
 
       const data = await response.json();
-      console.log("[BANCO-INTER] Webhook cadastrado:", JSON.stringify(data));
+      const expectedBase = `${Deno.env.get("SUPABASE_URL")}/functions/v1/webhook-banco-inter`;
+      const rawUrl: string | undefined = data.webhookUrl;
+      const maskedUrl = rawUrl ? maskWebhookUrl(rawUrl) : null;
+      const isOurs = rawUrl ? sameWebhookBase(rawUrl, expectedBase) : false;
+      console.log("[BANCO-INTER] Webhook cadastrado:", JSON.stringify({ webhookUrl: maskedUrl, criacao: data.criacao, isOurs }));
       return new Response(
-        JSON.stringify({ 
-          registered: true, 
-          webhookUrl: data.webhookUrl, 
-          criacao: data.criacao 
+        JSON.stringify({
+          registered: true,
+          webhookUrl: maskedUrl,
+          isOurs,
+          criacao: data.criacao,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
