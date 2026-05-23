@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,8 +7,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import {
   Form,
@@ -28,13 +26,15 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
-import { FileText, Lock, CreditCard, TrendingUp, MessageSquare, CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
+import { ContractBillingSection } from "./sections/ContractBillingSection";
+import { ContractAdjustmentSection } from "./sections/ContractAdjustmentSection";
+import { ContractInternalNotesSection } from "./sections/ContractInternalNotesSection";
+import { ContractNfseSection } from "./sections/ContractNfseSection";
+import { DatePickerField } from "./sections/DatePickerField";
+import { MessageSquare, Check, ChevronsUpDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -43,8 +43,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { format, parse } from "date-fns";
-import { ptBR } from "date-fns/locale/pt-BR";
 import { cn } from "@/lib/utils";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
