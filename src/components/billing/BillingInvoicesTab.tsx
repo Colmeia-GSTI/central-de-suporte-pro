@@ -93,6 +93,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   const queryClient = useQueryClient();
 
   const {
+    search, setSearch,
+    statusFilter, setStatusFilter,
+    paymentMethodFilter, setPaymentMethodFilter,
+    periodPreset,
+    dateRange,
+    currentPage, setCurrentPage,
+    fromISO, toISO,
+    handlePresetChange,
+    handleCustomDateChange,
+  } = useInvoiceFilters();
+
+  const {
     generatingPayment,
     processingComplete,
     sendingNotification,
