@@ -469,46 +469,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   }, [form]);
 
   const supportModel = form.watch("support_model");
-  const nfseEnabled = form.watch("nfse_enabled");
   const termType = form.watch("term_type");
 
-  // Date picker helper component
-  const DatePickerField = ({ field, label, description }: { field: { value: string; onChange: (v: string) => void }; label: string; description?: string }) => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <FormControl>
-          <Button
-            variant="outline"
-            className={cn(
-              "w-full pl-3 text-left font-normal",
-              !field.value && "text-muted-foreground"
-            )}
-          >
-            {field.value ? (
-              format(parse(field.value, "yyyy-MM-dd", new Date()), "dd/MM/yyyy")
-            ) : (
-              <span>Selecione a data</span>
-            )}
-            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-          </Button>
-        </FormControl>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          captionLayout="dropdown-buttons"
-          fromYear={2020}
-          toYear={2036}
-          fixedWeeks
-          selected={field.value ? parse(field.value, "yyyy-MM-dd", new Date()) : undefined}
-          onSelect={(date) => field.onChange(date ? format(date, "yyyy-MM-dd") : "")}
-          locale={ptBR}
-          initialFocus
-          className={cn("p-3 pointer-events-auto")}
-        />
-      </PopoverContent>
-    </Popover>
-  );
 
   return (
     <Form {...form}>
