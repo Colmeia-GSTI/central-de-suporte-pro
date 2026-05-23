@@ -14,6 +14,12 @@ import { toast } from "sonner";
 export function useIntegrationSettings<T extends Record<string, unknown>>(
   integrationType: string,
   defaultSettings: T,
+  options?: {
+    /** Transforma os settings logo após o load (ex.: gerar webhook_token se ausente). */
+    onAfterLoad?: (loaded: T) => T;
+    /** Transforma os settings imediatamente antes de salvar (ex.: garantir token). */
+    beforeSave?: (current: T) => T;
+  },
 ) {
   const [settings, setSettings] = useState<T>(defaultSettings);
   const [isActive, setIsActive] = useState(false);
@@ -28,8 +34,12 @@ export function useIntegrationSettings<T extends Record<string, unknown>>(
       .maybeSingle();
 
     if (data) {
-      setSettings({ ...defaultSettings, ...(data.settings as unknown as T) });
+      const merged = { ...defaultSettings, ...(data.settings as unknown as T) };
+      setSettings(options?.onAfterLoad ? options.onAfterLoad(merged) : merged);
       setIsActive(data.is_active);
+    } else if (options?.onAfterLoad) {
+      // Sem registro: ainda aplica onAfterLoad sobre os defaults (ex.: gerar token inicial)
+      setSettings(options.onAfterLoad({ ...defaultSettings }));
     }
     setLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,8 +59,12 @@ export function useIntegrationSettings<T extends Record<string, unknown>>(
           .eq("integration_type", integrationType)
           .maybeSingle();
 
+        const toSave = options?.beforeSave ? options.beforeSave(settings) : settings;
+        // Reflete a transformação no estado para a UI ficar consistente
+        if (options?.beforeSave) setSettings(toSave);
+
         const payload = {
-          settings: settings as unknown as Json,
+          settings: toSave as unknown as Json,
           is_active: isActive,
         };
 
@@ -73,6 +87,7 @@ export function useIntegrationSettings<T extends Record<string, unknown>>(
         setLoading(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [integrationType, settings, isActive],
   );
 

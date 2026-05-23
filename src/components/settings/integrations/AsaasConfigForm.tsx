@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useIntegrationSettings } from "@/hooks/useIntegrationSettings";
 import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,10 +35,16 @@ const defaultSettings: AsaasSettings = {
   webhook_token: "",
 };
 
+function generateWebhookToken(): string {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
 export function AsaasConfigForm() {
-  const [settings, setSettings] = useState<AsaasSettings>(defaultSettings);
-  const [isActive, setIsActive] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { settings, patch, isActive, setIsActive, loading, save } =
+    useIntegrationSettings<AsaasSettings>("asaas", defaultSettings, {
+      onAfterLoad: (s) => ({ ...s, webhook_token: s.webhook_token || generateWebhookToken() }),
+      beforeSave: (s) => ({ ...s, webhook_token: s.webhook_token || generateWebhookToken() }),
+    });
   const [testing, setTesting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
@@ -61,96 +68,12 @@ export function AsaasConfigForm() {
     number?: string;
   } | null>(null);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  async function loadSettings() {
-    try {
-      const { data, error } = await supabase
-        .from("integration_settings")
-        .select("id, settings, is_active")
-        .eq("integration_type", "asaas")
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data) {
-        const loadedSettings = data.settings as unknown as AsaasSettings;
-        setSettings({
-          api_key: loadedSettings?.api_key || "",
-          wallet_id: loadedSettings?.wallet_id || "",
-          environment: loadedSettings?.environment || "sandbox",
-          webhook_token: loadedSettings?.webhook_token || generateWebhookToken(),
-        });
-        setIsActive(data.is_active);
-      } else {
-        setSettings({
-          ...defaultSettings,
-          webhook_token: generateWebhookToken(),
-        });
-      }
-    } catch (error) {
-      logger.error("Erro ao carregar configurações Asaas", "Integrations", { error: String(error) });
-    }
-  }
-
-  function generateWebhookToken(): string {
-    return crypto.randomUUID().replace(/-/g, "");
-  }
-
-  async function handleSave() {
-    setLoading(true);
-    try {
-      const { data: existing } = await supabase
-        .from("integration_settings")
-        .select("id")
-        .eq("integration_type", "asaas")
-        .maybeSingle();
-
-      const settingsToSave = {
-        ...settings,
-        webhook_token: settings.webhook_token || generateWebhookToken(),
-      };
-
-      if (existing) {
-        const { error } = await supabase
-          .from("integration_settings")
-          .update({
-            settings: settingsToSave,
-            is_active: isActive,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("integration_settings")
-          .insert([{
-            integration_type: "asaas",
-            settings: settingsToSave,
-            is_active: isActive,
-          }]);
-
-        if (error) throw error;
-      }
-
-      toast.success("Configurações do Asaas salvas com sucesso!");
-    } catch (error) {
-      logger.error("Erro ao salvar configurações", "Integrations", { error: String(error) });
-      toast.error("Erro ao salvar configurações");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function handleTest() {
     setTesting(true);
     setTestResult(null);
 
     try {
-      await handleSave();
+      await save({ silent: true });
 
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: { action: "test" },
@@ -392,7 +315,7 @@ export function AsaasConfigForm() {
               type="password"
               placeholder="$aact_..."
               value={settings.api_key}
-              onChange={(e) => setSettings({ ...settings, api_key: e.target.value })}
+              onChange={(e) => patch({ api_key: e.target.value })}
             />
           </div>
 
@@ -402,7 +325,7 @@ export function AsaasConfigForm() {
               id="asaas-wallet-id"
               placeholder="ID da carteira para subconta"
               value={settings.wallet_id}
-              onChange={(e) => setSettings({ ...settings, wallet_id: e.target.value })}
+              onChange={(e) => patch({ wallet_id: e.target.value })}
             />
             <p className="text-xs text-muted-foreground">
               Use apenas se estiver emitindo notas para uma subconta específica
@@ -414,7 +337,7 @@ export function AsaasConfigForm() {
             <RadioGroup
               value={settings.environment}
               onValueChange={(value: "sandbox" | "production") =>
-                setSettings({ ...settings, environment: value })
+                patch({ environment: value })
               }
               className="flex gap-4"
             >
@@ -714,7 +637,7 @@ export function AsaasConfigForm() {
             {testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Testar Conexão
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
+          <Button onClick={() => save()} disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Salvar Configurações
           </Button>
