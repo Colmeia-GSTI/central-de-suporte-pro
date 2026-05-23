@@ -39,7 +39,9 @@ Criados `src/hooks/useIntegrationSettings.ts` (centraliza load/save contra `inte
 
 **Nota de método:** split de arquivo grande aumenta LOC total (props/boilerplate por componente) mas melhora legibilidade — era o objetivo declarado. Reescrita completa foi avaliada e DESCARTADA: 79k LOC funcionais em produção com 32 clientes, sem gargalo de performance medido; reescrever reintroduziria meses de bugs de domínio já corrigidos.
 
-**Pendente:** reorganização de pastas (passo 3); retomar roadmap Seção 4.5 CMDB (passo 4).
+**Reorganização de pastas (passo 3):** pasta resíduo `financial/` (3 componentes que pertenciam a billing: EmitNfseDialog, InvoiceForm, PixCodeDialog) consolidada em `billing/` via git mv. Demais pastas pequenas mantidas (domínio correto, crescem com o roadmap).
+
+**Pendente:** retomar roadmap Seção 4.5 CMDB (passo 4).
 
 ---
 
