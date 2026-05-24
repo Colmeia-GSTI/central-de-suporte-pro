@@ -13,7 +13,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute = forwardRef<HTMLDivElement, ProtectedRouteProps>(
   function ProtectedRoute({ children, allowedRoles, requireStaff = false }, ref) {
-    const { user, roles, isLoading, isStaff, rolesLoaded, isRevalidating } = useAuth();
+    const { user, profile, roles, isLoading, isStaff, rolesLoaded, isRevalidating } = useAuth();
     const location = useLocation();
 
     // Only show full-screen loader on initial bootstrapping.
@@ -31,6 +31,11 @@ export const ProtectedRoute = forwardRef<HTMLDivElement, ProtectedRouteProps>(
 
     if (!user) {
       return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    // Força troca de senha se a flag está ativa (admin resetou a senha)
+    if (profile?.must_change_password && location.pathname !== "/reset-password") {
+      return <Navigate to="/reset-password?forced=1" replace />;
     }
 
     // If roles haven't loaded yet (but we're revalidating), keep children mounted and
