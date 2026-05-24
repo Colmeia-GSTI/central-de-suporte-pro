@@ -12,7 +12,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationSettings, NotificationPreferences, defaultLocalPrefs } from "@/components/profile/NotificationSettings";
-import { User, Bell, Shield, Loader2, Save, Camera } from "lucide-react";
+import { ChangePasswordCard } from "@/components/profile/ChangePasswordCard";
+import { User, Bell, Shield, Loader2, Save, Camera, Lock } from "lucide-react";
 import { ROLE_METADATA, MODULE_METADATA, AppRole, Module, PERMISSIONS_CONFIG } from "@/lib/permissions";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -177,7 +178,7 @@ export default function ProfilePage() {
         </Card>
 
         <Tabs defaultValue="personal" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="personal" className="gap-2">
               <User className="h-4 w-4" />
               Dados Pessoais
@@ -185,6 +186,10 @@ export default function ProfilePage() {
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
               Notificações
+            </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <Lock className="h-4 w-4" />
+              Segurança
             </TabsTrigger>
             <TabsTrigger value="permissions" className="gap-2">
               <Shield className="h-4 w-4" />
@@ -255,6 +260,11 @@ export default function ProfilePage() {
               localPrefs={localPrefs}
               onLocalPrefChange={handleLocalPrefChange}
             />
+          </TabsContent>
+
+          {/* Security Tab */}
+          <TabsContent value="security">
+            <ChangePasswordCard />
           </TabsContent>
 
           {/* Permissions Tab */}
