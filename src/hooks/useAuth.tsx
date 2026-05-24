@@ -23,6 +23,7 @@ interface Profile {
   notify_email: boolean | null;
   notify_whatsapp: boolean | null;
   notify_telegram: boolean | null;
+  must_change_password: boolean | null;
 }
 
 interface AuthContextType {
