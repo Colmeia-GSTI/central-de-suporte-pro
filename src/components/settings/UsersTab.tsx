@@ -654,42 +654,16 @@ export function UsersTab() {
         <InviteStaffDialog open={inviteStaffOpen} onOpenChange={setInviteStaffOpen} />
 
         {/* Reset Password Dialog */}
-        <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Redefinir Senha</DialogTitle>
-              <DialogDescription>
-                Definir nova senha para: <strong>{resetPasswordUser?.full_name}</strong>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-password">Nova Senha</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsResetPasswordOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleResetPassword}
-                disabled={newPassword.length < 6 || resetPasswordMutation.isPending}
-              >
-                {resetPasswordMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Redefinir Senha
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ResetPasswordDialog
+          open={isResetPasswordOpen}
+          onOpenChange={(open) => {
+            setIsResetPasswordOpen(open);
+            if (!open) setResetPasswordUser(null);
+          }}
+          userId={resetPasswordUser?.user_id ?? null}
+          userName={resetPasswordUser?.full_name}
+          userEmail={resetPasswordUser?.email}
+        />
 
         {/* Delete User Confirm */}
         <ConfirmDialog
