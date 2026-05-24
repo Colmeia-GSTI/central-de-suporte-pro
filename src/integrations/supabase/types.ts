@@ -5007,6 +5007,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          must_change_password: boolean
           notify_email: boolean | null
           notify_telegram: boolean | null
           notify_whatsapp: boolean | null
@@ -5022,6 +5023,7 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          must_change_password?: boolean
           notify_email?: boolean | null
           notify_telegram?: boolean | null
           notify_whatsapp?: boolean | null
@@ -5037,6 +5039,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          must_change_password?: boolean
           notify_email?: boolean | null
           notify_telegram?: boolean | null
           notify_whatsapp?: boolean | null
