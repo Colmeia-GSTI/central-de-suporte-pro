@@ -76,7 +76,7 @@ export function UsersTab() {
   const [inviteStaffOpen, setInviteStaffOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<ProfileWithRoles | null>(null);
-  const [newPassword, setNewPassword] = useState("");
+  // newPassword removido — controle agora dentro de ResetPasswordDialog
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<ProfileWithRoles | null>(null);
   const [linkClientUser, setLinkClientUser] = useState<ProfileWithRoles | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
