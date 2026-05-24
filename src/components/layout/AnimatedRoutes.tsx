@@ -31,6 +31,7 @@ function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType }>
 const Dashboard = lazyWithRetry(() => import("@/pages/Dashboard"));
 const TicketsPage = lazyWithRetry(() => import("@/pages/tickets/TicketsPage"));
 const ForgotPassword = lazyWithRetry(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazyWithRetry(() => import("@/pages/ResetPassword"));
 const Register = lazyWithRetry(() => import("@/pages/Register"));
 const SetupAccount = lazyWithRetry(() => import("@/pages/SetupAccount"));
 const Unauthorized = lazyWithRetry(() => import("@/pages/Unauthorized"));
