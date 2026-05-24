@@ -18,6 +18,7 @@ import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useToast } from "@/hooks/use-toast";
 import { formatPhone } from "@/lib/utils";
 import { Plus, Users, Pencil, Key, Trash2, UserCheck, UserX, Eye, EyeOff, MessageCircle, Bell, BellOff } from "lucide-react";
+import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
 
 const userSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
