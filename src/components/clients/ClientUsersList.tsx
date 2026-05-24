@@ -18,6 +18,7 @@ import { PermissionGate } from "@/components/auth/PermissionGate";
 import { useToast } from "@/hooks/use-toast";
 import { formatPhone } from "@/lib/utils";
 import { Plus, Users, Pencil, Key, Trash2, UserCheck, UserX, Eye, EyeOff, MessageCircle, Bell, BellOff } from "lucide-react";
+import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
 
 const userSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -685,58 +686,14 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de reset de senha */}
-        <Dialog open={!!resetPasswordUser} onOpenChange={() => setResetPasswordUser(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Alterar Senha</DialogTitle>
-              <DialogDescription>
-                Defina uma nova senha para {resetPasswordUser?.name}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Nova Senha</label>
-                <div className="relative">
-                  <Input
-                    type={showNewPassword ? "text" : "password"}
-                    placeholder="Mínimo 6 caracteres"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                  >
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setResetPasswordUser(null);
-                  setNewPassword("");
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={handleResetPassword}
-                disabled={resetPasswordMutation.isPending || !newPassword}
-              >
-                {resetPasswordMutation.isPending ? "Alterando..." : "Alterar Senha"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Dialog de reset de senha (componente compartilhado) */}
+        <ResetPasswordDialog
+          open={!!resetPasswordUser}
+          onOpenChange={(open) => { if (!open) setResetPasswordUser(null); }}
+          userId={resetPasswordUser?.id ?? null}
+          userName={resetPasswordUser?.name}
+          userEmail={resetPasswordUser?.email}
+        />
 
         {/* Confirmação de exclusão */}
         <ConfirmDialog

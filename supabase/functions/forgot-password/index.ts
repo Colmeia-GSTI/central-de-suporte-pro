@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
       type: "recovery",
       email: realEmail,
       options: {
-        redirectTo: `${req.headers.get("origin") || supabaseUrl}/login`,
+        redirectTo: `${req.headers.get("origin") || supabaseUrl}/reset-password`,
       },
     });
 
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
       
       // Tentar método alternativo
       const { error: altError } = await adminClient.auth.resetPasswordForEmail(realEmail, {
-        redirectTo: `${req.headers.get("origin") || supabaseUrl}/login`,
+        redirectTo: `${req.headers.get("origin") || supabaseUrl}/reset-password`,
       });
 
       if (altError) {

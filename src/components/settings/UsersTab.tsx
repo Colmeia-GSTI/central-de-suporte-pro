@@ -44,6 +44,7 @@ import { InviteStaffDialog } from "./InviteStaffDialog";
 import { PendingInvitesTab } from "./PendingInvitesTab";
 import { usePendingInvitesCount } from "@/hooks/usePendingInvitesCount";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
 
 type ProfileWithRoles = Tables<"profiles"> & {
   user_roles: { role: Enums<"app_role"> }[];
@@ -75,7 +76,7 @@ export function UsersTab() {
   const [inviteStaffOpen, setInviteStaffOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<ProfileWithRoles | null>(null);
-  const [newPassword, setNewPassword] = useState("");
+  // newPassword removido — controle agora dentro de ResetPasswordDialog
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<ProfileWithRoles | null>(null);
   const [linkClientUser, setLinkClientUser] = useState<ProfileWithRoles | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -297,41 +298,11 @@ export function UsersTab() {
   };
 
 
-  const resetPasswordMutation = useMutation({
-    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
-      const { data, error } = await supabase.functions.invoke("reset-password", {
-        body: { user_id: userId, new_password: password },
-      });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: () => {
-      toast({ title: "Senha redefinida com sucesso" });
-      setIsResetPasswordOpen(false);
-      setResetPasswordUser(null);
-      setNewPassword("");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Erro ao redefinir senha",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleOpenResetPassword = (user: ProfileWithRoles) => {
     setResetPasswordUser(user);
-    setNewPassword("");
     setIsResetPasswordOpen(true);
   };
 
-  const handleResetPassword = () => {
-    if (resetPasswordUser && newPassword) {
-      resetPasswordMutation.mutate({ userId: resetPasswordUser.user_id, password: newPassword });
-    }
-  };
 
   const handleLinkClient = () => {
     if (linkClientUser && selectedClientId) {
@@ -654,42 +625,16 @@ export function UsersTab() {
         <InviteStaffDialog open={inviteStaffOpen} onOpenChange={setInviteStaffOpen} />
 
         {/* Reset Password Dialog */}
-        <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Redefinir Senha</DialogTitle>
-              <DialogDescription>
-                Definir nova senha para: <strong>{resetPasswordUser?.full_name}</strong>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-password">Nova Senha</Label>
-                <Input
-                  id="new-password"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsResetPasswordOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleResetPassword}
-                disabled={newPassword.length < 6 || resetPasswordMutation.isPending}
-              >
-                {resetPasswordMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Redefinir Senha
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ResetPasswordDialog
+          open={isResetPasswordOpen}
+          onOpenChange={(open) => {
+            setIsResetPasswordOpen(open);
+            if (!open) setResetPasswordUser(null);
+          }}
+          userId={resetPasswordUser?.user_id ?? null}
+          userName={resetPasswordUser?.full_name}
+          userEmail={resetPasswordUser?.email}
+        />
 
         {/* Delete User Confirm */}
         <ConfirmDialog

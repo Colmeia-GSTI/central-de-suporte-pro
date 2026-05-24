@@ -1,68 +1,98 @@
-# Plano: Diagnóstico E2E do Faturamento e correção dos erros recentes
+# Fluxo completo de Reset de Senha
 
-## Contexto
-A página `/billing` está quebrada com o erro de runtime:
-`ReferenceError: InvoiceTableRow is not defined` em `BillingInvoicesTab.tsx:684`.
+## O que existe hoje (auditoria)
 
-O componente `src/components/billing/InvoiceTableRow.tsx` existe, mas **não está importado** no `BillingInvoicesTab.tsx` — provavelmente uma refatoração de hoje extraiu a linha da tabela para um arquivo separado e esqueceu o import.
+**1. Recuperação por email — QUEBRADA**
+- `/forgot-password` ✅ existe e chama edge `forgot-password`
+- Edge `forgot-password` gera link de recovery com `redirectTo: /login` ❌
+- Template `RecoveryEmail` envia o link ✅
+- **NÃO existe a página `/reset-password`** ❌ — quando o usuário clica no link, o Supabase confirma o token, faz auto-login e joga em `/login` sem nunca trocar a senha. O usuário entra com a senha antiga (ou fica perdido). **É o bug clássico descrito na própria doc do Lovable.**
 
-Esse erro impede qualquer teste posterior do fluxo, então é correção #1.
+**2. Reset pelo admin (painel) — PARCIAL**
+- Edge `reset-password` ✅ funciona (admin-only, Zod, mínimo 8 chars)
+- Botão em `UsersTab` (staff) ✅
+- Botão em `ClientUsersList` (clientes) ✅
+- ❌ Não notifica o usuário por email que a senha foi resetada
+- ❌ Não tem opção "gerar senha aleatória"
+- ❌ Não força o usuário a trocar a senha no próximo login
+- ❌ Não registra em `audit_logs` de forma estruturada (só log do console)
 
-## Estratégia em 3 fases
+**3. Trocar a própria senha — NÃO EXISTE**
+- `ProfilePage` não tem opção de trocar a própria senha. Único caminho hoje é "esqueci minha senha".
 
-### Fase 1 — Hotfix imediato (desbloqueia a tela)
-1. Adicionar `import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";` em `BillingInvoicesTab.tsx`.
-2. Validar que `InvoiceTableRow` exporta named export (caso seja default, ajustar import).
-3. Verificar visualmente em `/billing` (preview) que a tabela renderiza sem erro.
+---
 
-### Fase 2 — Auditoria do que foi alterado hoje
-Listar e revisar arquivos do faturamento modificados nas últimas ~24h:
-- `src/components/billing/*` (em especial: `BillingInvoicesTab`, `InvoiceTableRow`, `InvoiceActionsPopover`, `InvoiceInlineActions`, `BillingErrorsPanel`, `NfseAvulsaDialog`)
-- `src/hooks/useInvoices.ts`, `useInvoiceActions.ts`, `useBillingCounters.ts`
-- `src/lib/edgeFunctionError.ts` (criado nesta sessão)
-- `supabase/functions/generate-monthly-invoices/index.ts` (hotfix Bortolini/Capasemu da sessão anterior — verificar se foi aplicado)
+## O que vou construir
 
-Para cada arquivo: checar imports faltando/quebrados, props incompatíveis, refs a símbolos removidos. Ferramenta: `rg` + leitura cirúrgica.
+### A) Página `/reset-password` (NOVA)
+- Rota pública (sem ProtectedRoute), igual a `/login`.
+- Detecta o token de recovery na URL (Supabase manda `?code=...` ou hash `#access_token=...&type=recovery`).
+- Aguarda o evento `PASSWORD_RECOVERY` do `supabase.auth.onAuthStateChange`.
+- Mostra form: nova senha + confirmar (mínimo 8 chars, checagem de igualdade).
+- Chama `supabase.auth.updateUser({ password })`.
+- Em sucesso: `signOut` → toast → redireciona para `/login`.
+- Em erro de link expirado/inválido: mensagem clara + botão "Solicitar novo link".
 
-### Fase 3 — Teste E2E do fluxo (manual via browser tools + queries SQL)
-Rodar cada cenário no preview, capturar console + network + estado no banco:
+### B) Ajustar edge `forgot-password`
+- `redirectTo` passa a ser `${origin}/reset-password` (não mais `/login`).
+- Mantém o fluxo de identificar email/username, rate limit, etc.
 
-1. **Listagem de Faturas** (`/billing` tab Faturas)
-   - Carregamento inicial, filtros (status, período, payment_method), busca textual, paginação.
-2. **Filtro "Com erros"** (redirect deprecado `?tab=errors`)
-   - Confirmar que invoices Bortolini/Capasemu aparecem corretamente classificadas.
-3. **Criar fatura nova** (`?action=new`) — InvoiceForm submit.
-4. **Ações por linha** (InvoiceInlineActions + Popover):
-   - Baixar boleto / copiar código de barras / abrir PIX
-   - Emitir NFS-e (EmitNfseDialog)
-   - Reenviar notificação, registrar pagamento manual, 2ª via, renegociar, cancelar NFS-e
-5. **NFS-e tab** — listagem, retry de erros, histórico.
-6. **Conciliação bancária** — abrir tab, render sem erro.
-7. **Saúde / Contas / Serviços / Códigos Tributários** — abrir cada tab, render sem erro.
-8. **Counters** (`useBillingCounters`) — badges batem com queries diretas no banco.
-9. **Edge Functions críticas** — chamar via `supabase--curl_edge_functions`:
-   - `generate-monthly-invoices` (dry-run se houver flag)
-   - `generate-invoice-payments`
-   - `batch-collection-notification`
-   - `manual-payment`, `generate-second-copy`, `renegotiate-invoice`
-   - Verificar logs de cada uma após chamada.
-10. **Estado dos boletos Bortolini + Capasemu** — confirmar via SQL que o hotfix da sessão anterior foi aplicado (boleto_status correto, sem erro residual).
+### C) Ajustar template `RecoveryEmail`
+- Não muda visual. Só garante que o botão usa `confirmationUrl` recebido (já usa). O link vai apontar para `/reset-password` automaticamente porque mudamos o `redirectTo`.
 
-### Entregáveis
-- Relatório E2E: cenário → resultado (✅/❌) → causa raiz se falhar → correção aplicada.
-- Lista consolidada de bugs encontrados, categorizados por severidade.
-- Correções aplicadas em commits atômicos.
-- Atualização do `CHANGELOG.md`.
+### D) Reset pelo admin — versão completa
+Substituir o dialog atual por um com 2 modos:
+1. **Gerar senha temporária** (novo, padrão) — gera senha aleatória forte (12 chars), mostra UMA vez com botão "Copiar", e envia email opcional ao usuário.
+2. **Definir senha manualmente** (atual) — mantém comportamento.
 
-## Detalhes técnicos
-- Não vou rodar `npm run build`/`tsc` manualmente (harness faz automaticamente).
-- Para testes que mutam dados (criar fatura, registrar pagamento), confirmar com você antes ou usar dados de teste descartáveis.
-- Edge functions com webhook (Asaas, Banco Inter) **não** serão disparadas — apenas inspeção de código e logs históricos.
-- Vou usar `supabase--read_query` para validar invariantes no banco (ex: nenhuma invoice com `boleto_status='erro'` e `boleto_url` preenchido simultaneamente).
+Em ambos:
+- Marca um flag `must_change_password = true` em `profiles` (nova coluna).
+- Grava em `audit_logs` (action `PASSWORD_RESET_BY_ADMIN`, com `target_user_id` e `method`).
+- Envia email transacional (opcional, checkbox marcado por padrão) avisando "Sua senha foi redefinida pelo administrador" — sem incluir a senha no email (segurança); só avisa que foi resetada e como entrar.
 
-## Riscos
-- Algumas ações (registrar pagamento, cancelar NFS-e) são destrutivas — vou pular ou pedir confirmação explícita.
-- O hotfix de `generate-monthly-invoices` da sessão anterior pode não ter sido aplicado; se não foi, vou propor reaplicar antes do E2E.
+### E) Forçar troca no próximo login
+- Hook `useAuth`: após login bem-sucedido, se `profile.must_change_password = true`, redireciona para `/reset-password?forced=1`.
+- Na página de reset, modo `forced`: pula a verificação de token de recovery e usa a sessão atual; depois de trocar, limpa o flag.
 
-## Pergunta antes de começar
-Posso executar ações **não destrutivas** no preview (abrir tabs, listar, baixar PDFs) sem pedir confirmação a cada passo? Para qualquer ação destrutiva (criar/editar/deletar registros, disparar emissões reais de NFS-e ou notificações) eu paro e pergunto.
+### F) "Alterar minha senha" no Perfil (NOVO)
+- Card em `ProfilePage`: senha atual + nova + confirmar.
+- Reautentica via `signInWithPassword(email, currentPassword)` para validar a senha atual (Supabase não tem checkpassword nativo).
+- Se ok, `updateUser({password: new})`.
+- Toast + opcional `signOut` de outras sessões.
+
+---
+
+## Mudanças técnicas (resumo)
+
+```text
+NOVO  src/pages/ResetPassword.tsx
+NOVO  src/components/profile/ChangePasswordCard.tsx
+EDIT  src/components/layout/AnimatedRoutes.tsx        (+ rota /reset-password)
+EDIT  src/pages/profile/ProfilePage.tsx               (+ ChangePasswordCard)
+EDIT  src/hooks/useAuth.tsx                           (+ redirect se must_change_password)
+EDIT  src/components/settings/UsersTab.tsx            (dialog novo: gerar/manual + email)
+EDIT  src/components/clients/ClientUsersList.tsx      (mesmo dialog)
+EDIT  supabase/functions/forgot-password/index.ts     (redirectTo → /reset-password)
+EDIT  supabase/functions/reset-password/index.ts      (suporta generate_random, must_change, audit, envio de email)
+MIGRATION  profiles.must_change_password BOOLEAN DEFAULT false
+```
+
+Sem mudar: template visual do email, regras de RLS existentes, fluxo de convite (`SetupAccount`).
+
+---
+
+## Riscos / pontos de atenção
+
+- O recovery do Supabase agora pode vir como `?code=` (PKCE) **ou** `#access_token=...&type=recovery` dependendo da config do projeto — a página `/reset-password` precisa lidar com os dois. Vou usar `onAuthStateChange` que cobre os dois.
+- Email do reset feito pelo admin sai pelo Resend (`send-email-resend`), seguindo a regra da memória do projeto (Resend para transacional).
+- Migration adiciona coluna nullable com default, reversível.
+
+---
+
+## Confirmações que preciso de você antes de implementar
+
+1. **Senha temporária gerada pelo admin: mostro em tela (1 vez) E mando por email, ou só uma das duas?** Recomendo mostrar em tela + email avisando que foi resetada (sem a senha no email, mais seguro).
+2. **Forçar troca no próximo login** quando o admin reseta: você quer isso ligado por padrão? (Recomendo sim.)
+3. **"Alterar minha senha" no Perfil**: incluo nesse mesmo PR ou fica pra depois?
+
+Me responde 1/2/3 e eu já mando implementar tudo de uma vez.
