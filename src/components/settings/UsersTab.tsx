@@ -44,6 +44,7 @@ import { InviteStaffDialog } from "./InviteStaffDialog";
 import { PendingInvitesTab } from "./PendingInvitesTab";
 import { usePendingInvitesCount } from "@/hooks/usePendingInvitesCount";
 import type { Tables, Enums } from "@/integrations/supabase/types";
+import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
 
 type ProfileWithRoles = Tables<"profiles"> & {
   user_roles: { role: Enums<"app_role"> }[];
