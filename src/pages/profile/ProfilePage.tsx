@@ -262,6 +262,11 @@ export default function ProfilePage() {
             />
           </TabsContent>
 
+          {/* Security Tab */}
+          <TabsContent value="security">
+            <ChangePasswordCard />
+          </TabsContent>
+
           {/* Permissions Tab */}
           <TabsContent value="permissions">
             <Card>
