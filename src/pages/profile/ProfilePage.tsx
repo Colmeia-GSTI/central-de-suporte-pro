@@ -178,7 +178,7 @@ export default function ProfilePage() {
         </Card>
 
         <Tabs defaultValue="personal" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="personal" className="gap-2">
               <User className="h-4 w-4" />
               Dados Pessoais
@@ -186,6 +186,10 @@ export default function ProfilePage() {
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
               Notificações
+            </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <Lock className="h-4 w-4" />
+              Segurança
             </TabsTrigger>
             <TabsTrigger value="permissions" className="gap-2">
               <Shield className="h-4 w-4" />
