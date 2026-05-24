@@ -298,41 +298,11 @@ export function UsersTab() {
   };
 
 
-  const resetPasswordMutation = useMutation({
-    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
-      const { data, error } = await supabase.functions.invoke("reset-password", {
-        body: { user_id: userId, new_password: password },
-      });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: () => {
-      toast({ title: "Senha redefinida com sucesso" });
-      setIsResetPasswordOpen(false);
-      setResetPasswordUser(null);
-      setNewPassword("");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Erro ao redefinir senha",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleOpenResetPassword = (user: ProfileWithRoles) => {
     setResetPasswordUser(user);
-    setNewPassword("");
     setIsResetPasswordOpen(true);
   };
 
-  const handleResetPassword = () => {
-    if (resetPasswordUser && newPassword) {
-      resetPasswordMutation.mutate({ userId: resetPasswordUser.user_id, password: newPassword });
-    }
-  };
 
   const handleLinkClient = () => {
     if (linkClientUser && selectedClientId) {
