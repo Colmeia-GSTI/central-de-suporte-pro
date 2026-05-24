@@ -12,7 +12,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationSettings, NotificationPreferences, defaultLocalPrefs } from "@/components/profile/NotificationSettings";
-import { User, Bell, Shield, Loader2, Save, Camera } from "lucide-react";
+import { ChangePasswordCard } from "@/components/profile/ChangePasswordCard";
+import { User, Bell, Shield, Loader2, Save, Camera, Lock } from "lucide-react";
 import { ROLE_METADATA, MODULE_METADATA, AppRole, Module, PERMISSIONS_CONFIG } from "@/lib/permissions";
 import { usePermissions } from "@/hooks/usePermissions";
 
