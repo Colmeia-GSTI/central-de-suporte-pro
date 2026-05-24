@@ -135,6 +135,7 @@ export function AnimatedRoutes() {
       {/* Auth routes */}
       <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
       <Route path="/forgot-password" element={<LazyPage><ForgotPassword /></LazyPage>} />
+      <Route path="/reset-password" element={<LazyPage><ResetPassword /></LazyPage>} />
       <Route path="/register" element={<LazyPage><Register /></LazyPage>} />
       <Route path="/setup-account" element={<LazyPage><SetupAccount /></LazyPage>} />
       <Route path="/unauthorized" element={<LazyPage><Unauthorized /></LazyPage>} />
