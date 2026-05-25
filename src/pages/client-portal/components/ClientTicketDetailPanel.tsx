@@ -5,11 +5,12 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Paperclip, X as XIcon, FileText } from "lucide-react";
+import { MessageSquare, Paperclip, X as XIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useTicketAttachments, type AttachmentInfo } from "@/hooks/useTicketAttachments";
+import { TicketAttachmentList } from "@/components/tickets/TicketAttachmentList";
 import { type PortalTicket, statusLabels, statusColors } from "./portal-types";
 
 interface Props {
@@ -136,28 +137,7 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
             <div key={c.id} className={`p-3 rounded-lg ${isOwn ? "bg-primary text-primary-foreground ml-8" : "bg-muted mr-8"}`}>
               <p className="text-xs font-semibold mb-1 opacity-80">{sender}</p>
               {c.content && <p className="text-sm whitespace-pre-wrap">{c.content}</p>}
-              {c.attachments && c.attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {c.attachments.map((att, i) =>
-                    att.type.startsWith("image/") ? (
-                      <a key={i} href={att.url} target="_blank" rel="noreferrer" className="block">
-                        <img src={att.url} alt={att.name} className="max-h-32 rounded border object-cover" />
-                      </a>
-                    ) : (
-                      <a
-                        key={i}
-                        href={att.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded border bg-background/50 text-xs hover:underline"
-                      >
-                        <FileText className="h-3 w-3" />
-                        {att.name}
-                      </a>
-                    ),
-                  )}
-                </div>
-              )}
+              <TicketAttachmentList attachments={c.attachments || []} />
               <p className="text-xs opacity-70 mt-1">{format(new Date(c.created_at), "dd/MM HH:mm", { locale: ptBR })}</p>
             </div>
           );

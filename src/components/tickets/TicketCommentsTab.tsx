@@ -15,12 +15,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { User, Lock, Zap, Search, Paperclip, X as XIcon, FileText, Image as ImageIcon } from "lucide-react";
+import { User, Lock, Zap, Search, Paperclip, X as XIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useTicketAttachments, type AttachmentInfo } from "@/hooks/useTicketAttachments";
+import { TicketAttachmentList } from "@/components/tickets/TicketAttachmentList";
 
 interface TicketCommentsTabProps {
   ticketId: string;
@@ -234,30 +235,8 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
               }`}>
                 {c.content}
               </p>
-              {/* Attachments display */}
-              {(c as CommentWithProfile).attachments && (c as CommentWithProfile).attachments!.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {(c as CommentWithProfile).attachments!.map((att, i) => (
-                    <a
-                      key={i}
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-2 py-1 rounded border bg-background hover:bg-muted transition-colors text-xs"
-                    >
-                      {att.type.startsWith("image/") ? (
-                        <ImageIcon className="h-3.5 w-3.5 text-blue-500" />
-                      ) : (
-                        <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                      <span className="max-w-[120px] truncate">{att.name}</span>
-                      <span className="text-muted-foreground">
-                        ({Math.round(att.size / 1024)}KB)
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              )}
+              {/* Attachments display (signed URLs via componente reutilizável) */}
+              <TicketAttachmentList attachments={(c as CommentWithProfile).attachments || []} />
             </div>
           </div>
           );

@@ -5,20 +5,38 @@ import { logger } from "@/lib/logger";
 
 export type AttachmentInfo = {
   name: string;
-  url: string;
+  /** Caminho completo com prefixo do bucket: `ticket-attachments/{ticketId}/{file}`.
+   *  Usado por src/lib/storage-utils.ts (getSignedUrl/openStorageFileSafe). */
+  path: string;
   size: number;
   type: string;
-  path: string;
 };
 
+const BUCKET = "ticket-attachments";
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ACCEPT = "image/*,.pdf,.txt,.log,.zip,.doc,.docx,.xls,.xlsx";
+const ACCEPT = "image/*,application/pdf,.txt,.log,.csv,.zip,.doc,.docx,.xls,.xlsx";
+
+const ALLOWED_PREFIXES = ["image/", "application/pdf", "text/"];
+const ALLOWED_EXACT = [
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
+
+function isAllowed(type: string): boolean {
+  if (!type) return true; // alguns .log/.csv vêm sem MIME — extensão já filtra no input
+  return ALLOWED_PREFIXES.some((p) => type.startsWith(p)) || ALLOWED_EXACT.includes(type);
+}
 
 /**
  * Fonte única de anexos de chamado — usada pelo operador (TicketCommentsTab)
- * e pelo portal do cliente (NewTicketDialog / ClientTicketDetailPanel).
- * Encapsula seleção, validação (10MB), colagem (Ctrl+V) e upload pro bucket
- * `ticket-attachments`. Mantém pendingFiles em estado e expõe uploadPending().
+ * e pelo portal do cliente (ClientTicketDetailPanel / ClientTicketForm).
+ * Encapsula seleção, validação (10MB + tipos), colagem (Ctrl+V) e upload pro
+ * bucket privado `ticket-attachments`. Armazena apenas o `path`; a exibição usa
+ * signed URLs via src/lib/storage-utils.ts (bucket é privado).
  */
 export function useTicketAttachments() {
   const { toast } = useToast();
@@ -30,6 +48,10 @@ export function useTicketAttachments() {
       const valid = files.filter((f) => {
         if (f.size > MAX_BYTES) {
           toast({ title: `"${f.name}" excede 10MB`, variant: "destructive" });
+          return false;
+        }
+        if (!isAllowed(f.type)) {
+          toast({ title: `Tipo não permitido: "${f.name}"`, variant: "destructive" });
           return false;
         }
         return true;
@@ -47,7 +69,7 @@ export function useTicketAttachments() {
     [addFiles],
   );
 
-  /** Cola imagem do clipboard (Ctrl+V / print screen). Renomeia para nome legível. */
+  /** Cola imagem do clipboard (Ctrl+V / print screen). */
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
       const items = Array.from(e.clipboardData?.items || []);
@@ -59,9 +81,7 @@ export function useTicketAttachments() {
         const blob = it.getAsFile();
         if (!blob) continue;
         const ext = it.type.split("/")[1] || "png";
-        files.push(
-          new File([blob], `colado-${Date.now()}.${ext}`, { type: it.type }),
-        );
+        files.push(new File([blob], `colado-${Date.now()}.${ext}`, { type: it.type }));
       }
       addFiles(files);
     },
@@ -74,7 +94,7 @@ export function useTicketAttachments() {
 
   const clear = useCallback(() => setPendingFiles([]), []);
 
-  /** Faz upload dos pendentes e retorna os metadados. Não lança em falha de 1 arquivo. */
+  /** Sobe os pendentes e retorna metadados (com `path` prefixado). Não lança em falha de 1 arquivo. */
   const uploadPending = useCallback(
     async (ticketId: string): Promise<AttachmentInfo[]> => {
       if (pendingFiles.length === 0) return [];
@@ -83,22 +103,20 @@ export function useTicketAttachments() {
         const attachments: AttachmentInfo[] = [];
         for (const file of pendingFiles) {
           const ext = file.name.split(".").pop();
-          const path = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const objectPath = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
           const { data: uploadData, error: uploadError } = await supabase.storage
-            .from("ticket-attachments")
-            .upload(path, file, { upsert: false });
+            .from(BUCKET)
+            .upload(objectPath, file, { upsert: false });
           if (uploadError) {
             logger.warn("File upload failed", "Tickets", { error: uploadError.message, file: file.name });
             toast({ title: `Falha ao enviar "${file.name}"`, variant: "destructive" });
             continue;
           }
-          const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(path);
           attachments.push({
             name: file.name,
-            url: urlData.publicUrl,
+            path: `${BUCKET}/${uploadData.path}`,
             size: file.size,
             type: file.type,
-            path: uploadData.path,
           });
         }
         return attachments;
