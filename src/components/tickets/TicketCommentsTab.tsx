@@ -20,6 +20,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useTicketAttachments, type AttachmentInfo } from "@/hooks/useTicketAttachments";
 
 interface TicketCommentsTabProps {
   ticketId: string;
@@ -31,8 +32,8 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
   const [isInternal, setIsInternal] = useState(false);
   const [macroSearch, setMacroSearch] = useState("");
   const [macroPopoverOpen, setMacroPopoverOpen] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const { pendingFiles, accept, handleFileSelect, handlePaste, removeFile, addFiles, clear: clearFiles } = useTicketAttachments();
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -65,8 +66,6 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
     setMacroPopoverOpen(false);
     setMacroSearch("");
   };
-
-  type AttachmentInfo = { name: string; url: string; size: number; type: string; path: string };
 
   type CommentWithProfile = {
     id: string;
@@ -116,28 +115,9 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
   });
 
   const addCommentMutation = useMutation({
-    mutationFn: async ({ content, internal, files }: { content: string; internal: boolean; files: File[] }) => {
-      // Upload files to Supabase Storage first (FALHA-05)
-      const attachments: AttachmentInfo[] = [];
-      for (const file of files) {
-        const ext = file.name.split(".").pop();
-        const path = `${ticketId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("ticket-attachments")
-          .upload(path, file, { upsert: false });
-        if (uploadError) {
-          logger.warn("File upload failed", "Tickets", { error: uploadError.message, file: file.name });
-          continue;
-        }
-        const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(path);
-        attachments.push({
-          name: file.name,
-          url: urlData.publicUrl,
-          size: file.size,
-          type: file.type,
-          path: uploadData.path,
-        });
-      }
+    mutationFn: async ({ content, internal }: { content: string; internal: boolean }) => {
+      // Upload via hook compartilhado (fonte única de anexos)
+      const attachments = await uploadPending(ticketId);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("ticket_comments") as any).insert({
@@ -177,7 +157,7 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       setComment("");
       setIsInternal(false);
-      setPendingFiles([]);
+      clearFiles();
       toast({ title: "Comentário adicionado" });
     },
     onError: () => {
@@ -187,25 +167,14 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
 
   const handleAddComment = () => {
     if (!comment.trim()) return;
-    addCommentMutation.mutate({ content: comment, internal: isInternal, files: pendingFiles });
+    addCommentMutation.mutate({ content: comment, internal: isInternal });
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const MAX = 10 * 1024 * 1024; // 10 MB
-    const valid = files.filter((f) => {
-      if (f.size > MAX) {
-        toast({ title: `"${f.name}" excede 10MB`, variant: "destructive" });
-        return false;
-      }
-      return true;
-    });
-    setPendingFiles((prev) => [...prev, ...valid]);
-    e.target.value = "";
-  };
-
-  const removeFile = (index: number) => {
-    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length) addFiles(files);
   };
 
   if (isLoading) {
@@ -301,11 +270,17 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
       </div>
 
       {/* Add Comment Form */}
-      <div className="space-y-3 border-t pt-4">
+      <div
+        className={`space-y-3 border-t pt-4 rounded-lg transition-colors ${isDragging ? "ring-2 ring-primary ring-offset-2 bg-primary/5" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
         <Textarea
-          placeholder="Adicione um comentário..."
+          placeholder="Adicione um comentário... (cole uma imagem com Ctrl+V ou arraste arquivos)"
           value={comment}
           onChange={(e) => setComment(e.target.value)}
+          onPaste={handlePaste}
           rows={3}
         />
 
@@ -350,7 +325,7 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
               <input
                 type="file"
                 multiple
-                accept="image/*,.pdf,.txt,.log,.zip,.doc,.docx,.xls,.xlsx"
+                accept={accept}
                 className="hidden"
                 onChange={handleFileSelect}
               />

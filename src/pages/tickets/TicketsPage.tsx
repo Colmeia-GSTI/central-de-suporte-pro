@@ -51,34 +51,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 import { TicketTypeBadge } from "@/components/tickets/TicketTypeBadge";
+import { statusLabelsShort as statusLabels, statusColors, priorityLabels, priorityColors } from "@/lib/ticket-status";
 
 type TicketWithRelations = Tables<"tickets"> & {
   clients: Tables<"clients"> | null;
   ticket_categories: Tables<"ticket_categories"> | null;
   ticket_subcategories: { id: string; name: string } | null;
   ticket_tag_assignments: { ticket_tags: { id: string; name: string; color: string | null } }[];
-};
-
-const statusLabels: Record<Enums<"ticket_status">, string> = {
-  open: "Aberto", in_progress: "Em Andamento", waiting: "Aguardando",
-  paused: "Pausado", waiting_third_party: "Ag. Terceiro",
-  no_contact: "Sem Contato", resolved: "Resolvido", closed: "Fechado",
-};
-
-const statusColors: Record<Enums<"ticket_status">, string> = {
-  open: "bg-status-open text-white", in_progress: "bg-status-progress text-white",
-  waiting: "bg-status-waiting text-white", paused: "bg-amber-500 text-white",
-  waiting_third_party: "bg-purple-500 text-white", no_contact: "bg-orange-500 text-white",
-  resolved: "bg-status-success text-white", closed: "bg-muted text-muted-foreground",
-};
-
-const priorityLabels: Record<Enums<"ticket_priority">, string> = {
-  low: "Baixa", medium: "Média", high: "Alta", critical: "Crítica",
-};
-
-const priorityColors: Record<Enums<"ticket_priority">, string> = {
-  low: "bg-priority-low text-white", medium: "bg-priority-medium text-white",
-  high: "bg-priority-high text-white", critical: "bg-priority-critical text-white",
 };
 
 const PAGE_SIZE = 20;

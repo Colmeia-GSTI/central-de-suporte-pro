@@ -1,13 +1,15 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { MessageSquare } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { MessageSquare, Paperclip, X as XIcon, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { useTicketAttachments, type AttachmentInfo } from "@/hooks/useTicketAttachments";
 import { type PortalTicket, statusLabels, statusColors } from "./portal-types";
 
 interface Props {
@@ -15,9 +17,24 @@ interface Props {
   currentUserId: string | undefined;
 }
 
+type PortalComment = {
+  id: string;
+  ticket_id: string;
+  user_id: string | null;
+  content: string;
+  is_internal: boolean;
+  attachments?: AttachmentInfo[] | null;
+  created_at: string;
+  user_full_name?: string | null;
+};
+
 export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [content, setContent] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const { pendingFiles, accept, handleFileSelect, handlePaste, removeFile, addFiles, clear: clearFiles, uploadPending } =
+    useTicketAttachments();
 
   const { data: comments = [] } = useQuery({
     queryKey: ["ticket-comments", ticket?.id],
@@ -25,12 +42,12 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ticket_comments")
-        .select("id, ticket_id, user_id, content, is_internal, created_at")
+        .select("id, ticket_id, user_id, content, is_internal, attachments, created_at")
         .eq("ticket_id", ticket!.id)
         .eq("is_internal", false)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      const rows = data || [];
+      const rows = (data || []) as PortalComment[];
       const userIds = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean))) as string[];
       const nameMap = new Map<string, string>();
       if (userIds.length) {
@@ -42,17 +59,22 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
   });
 
   const addComment = useMutation({
-    mutationFn: async ({ ticketId, content }: { ticketId: string; content: string }) => {
-      const { error } = await supabase.from("ticket_comments").insert({
+    mutationFn: async ({ ticketId, text }: { ticketId: string; text: string }) => {
+      const attachments = await uploadPending(ticketId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("ticket_comments") as any).insert({
         ticket_id: ticketId,
         user_id: currentUserId,
-        content,
+        content: text,
         is_internal: false,
+        attachments: attachments.length > 0 ? attachments : [],
       });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-comments"] });
+      setContent("");
+      clearFiles();
       toast({ title: "Comentário adicionado" });
     },
     onError: (error: Error) => {
@@ -60,6 +82,19 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
       toast({ title: "Erro ao enviar comentário", description: "Tente novamente.", variant: "destructive" });
     },
   });
+
+  const handleSubmit = () => {
+    const text = content.trim();
+    if ((!text && pendingFiles.length === 0) || !ticket) return;
+    addComment.mutate({ ticketId: ticket.id, text });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length) addFiles(files);
+  };
 
   if (!ticket) {
     return (
@@ -73,6 +108,8 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
       </Card>
     );
   }
+
+  const canReply = !["resolved", "closed"].includes(ticket.status);
 
   return (
     <Card className="h-[600px] flex flex-col">
@@ -98,30 +135,79 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
           return (
             <div key={c.id} className={`p-3 rounded-lg ${isOwn ? "bg-primary text-primary-foreground ml-8" : "bg-muted mr-8"}`}>
               <p className="text-xs font-semibold mb-1 opacity-80">{sender}</p>
-              <p className="text-sm">{c.content}</p>
+              {c.content && <p className="text-sm whitespace-pre-wrap">{c.content}</p>}
+              {c.attachments && c.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {c.attachments.map((att, i) =>
+                    att.type.startsWith("image/") ? (
+                      <a key={i} href={att.url} target="_blank" rel="noreferrer" className="block">
+                        <img src={att.url} alt={att.name} className="max-h-32 rounded border object-cover" />
+                      </a>
+                    ) : (
+                      <a
+                        key={i}
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded border bg-background/50 text-xs hover:underline"
+                      >
+                        <FileText className="h-3 w-3" />
+                        {att.name}
+                      </a>
+                    ),
+                  )}
+                </div>
+              )}
               <p className="text-xs opacity-70 mt-1">{format(new Date(c.created_at), "dd/MM HH:mm", { locale: ptBR })}</p>
             </div>
           );
         })}
       </CardContent>
-      {!["resolved", "closed"].includes(ticket.status) && (
-        <div className="border-t p-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const content = (fd.get("content") as string)?.trim();
-              if (!content) return;
-              addComment.mutate({ ticketId: ticket.id, content });
-              e.currentTarget.reset();
-            }}
-            className="flex gap-2"
-          >
-            <Input name="content" placeholder="Digite sua mensagem..." required />
-            <Button type="submit" size="icon" disabled={addComment.isPending} aria-label="Enviar comentário">
-              <MessageSquare className="h-4 w-4" />
+      {canReply && (
+        <div
+          className={`border-t p-4 space-y-2 transition-colors ${isDragging ? "ring-2 ring-primary ring-inset bg-primary/5" : ""}`}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+        >
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded border bg-muted text-xs">
+                  <Paperclip className="h-3 w-3 text-muted-foreground" />
+                  <span className="max-w-[120px] truncate">{f.name}</span>
+                  <button type="button" onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive ml-0.5" aria-label="Remover arquivo">
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onPaste={handlePaste}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+            placeholder="Digite sua mensagem... (cole uma imagem com Ctrl+V ou arraste arquivos)"
+            rows={2}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <label className="cursor-pointer">
+              <input type="file" multiple accept={accept} className="hidden" onChange={handleFileSelect} />
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium rounded-md border border-input bg-background hover:bg-accent transition-colors" title="Anexar arquivo (máx. 10MB)">
+                <Paperclip className="h-3 w-3" />
+                Anexar
+                {pendingFiles.length > 0 && (
+                  <span className="ml-0.5 bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
+                    {pendingFiles.length}
+                  </span>
+                )}
+              </span>
+            </label>
+            <Button onClick={handleSubmit} disabled={(!content.trim() && pendingFiles.length === 0) || addComment.isPending} size="sm">
+              {addComment.isPending ? "Enviando..." : "Enviar"}
             </Button>
-          </form>
+          </div>
         </div>
       )}
     </Card>

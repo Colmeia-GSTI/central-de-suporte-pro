@@ -29,6 +29,7 @@ import { TagsInput } from "@/components/tickets/TagsInput";
 import { TagBadge } from "@/components/tickets/TagBadge";
 import { RequesterContactCard } from "@/components/tickets/RequesterContactCard";
 import { TicketLinksSection } from "@/components/tickets/TicketLinksSection";
+import { statusLabels, statusColors, priorityLabels, validTransitions } from "@/lib/ticket-status";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type RequesterContactType = {
@@ -59,35 +60,6 @@ interface TicketFormData {
   categories: { id: string; name: string }[];
   assets: { id: string; name: string; asset_type: string }[];
 }
-
-const statusLabels: Record<Enums<"ticket_status">, string> = {
-  open: "Aberto",
-  in_progress: "Em Andamento",
-  waiting: "Aguardando",
-  paused: "Pausado",
-  waiting_third_party: "Aguardando Terceiro",
-  no_contact: "Sem Contato",
-  resolved: "Resolvido",
-  closed: "Fechado",
-};
-
-const statusColors: Record<Enums<"ticket_status">, string> = {
-  open: "bg-status-open text-white",
-  in_progress: "bg-status-progress text-white",
-  waiting: "bg-status-waiting text-white",
-  paused: "bg-amber-500 text-white",
-  waiting_third_party: "bg-purple-500 text-white",
-  no_contact: "bg-orange-500 text-white",
-  resolved: "bg-status-success text-white",
-  closed: "bg-muted text-muted-foreground",
-};
-
-const priorityLabels: Record<Enums<"ticket_priority">, string> = {
-  low: "Baixa",
-  medium: "Média",
-  high: "Alta",
-  critical: "Crítica",
-};
 
 export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -336,18 +308,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     setIsEditing(false);
   };
 
-  // Valid status transitions - prevents invalid state changes
-  const validTransitions: Record<string, string[]> = {
-    open: ["in_progress", "waiting", "paused", "waiting_third_party", "no_contact", "closed"],
-    in_progress: ["waiting", "paused", "waiting_third_party", "no_contact", "resolved", "closed"],
-    waiting: ["in_progress", "paused", "waiting_third_party", "no_contact", "resolved", "closed"],
-    paused: ["in_progress", "waiting", "waiting_third_party", "no_contact"],
-    waiting_third_party: ["in_progress", "waiting", "paused", "no_contact"],
-    no_contact: ["in_progress", "waiting", "paused", "waiting_third_party", "closed"],
-    resolved: ["closed", "in_progress"],
-    closed: ["in_progress"],
-  };
-
+  // Valid status transitions - prevents invalid state changes (src/lib/ticket-status.ts)
   const handleStatusChange = async (newStatus: string) => {
     const oldStatus = formData.status;
     const allowed = validTransitions[oldStatus] || [];
