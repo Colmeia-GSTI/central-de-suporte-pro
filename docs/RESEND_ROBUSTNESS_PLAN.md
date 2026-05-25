@@ -31,9 +31,16 @@ Observação: já existe o padrão de webhook de status para **WhatsApp** (`webh
 
 ---
 
-## LACUNA 1 — Captura de status de entrega (webhook-resend-status)
+## LACUNA 1 — Captura de status de entrega (webhook-resend-status) ✅ CONCLUÍDA E VALIDADA
 
-**Problema:** hoje o sistema dispara o email e não sabe o que aconteceu. Resend envia eventos (`email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.opened`, `email.clicked`) mas ninguém os captura.
+> **Status (2026-05-25):** IMPLEMENTADA, ATIVA E VALIDADA EM PRODUÇÃO.
+> - Edge function `webhook-resend-status` deployada; assinatura Svix verificada manualmente (passou de primeira).
+> - Secret `RESEND_WEBHOOK_SECRET` configurado; webhook registrado no dashboard do Resend (eventos delivered/opened/bounced/complained).
+> - Migration `suppressed_emails` aplicada (versão canônica: `20260523235448`; a duplicata `20260523234903` foi removida do repo).
+> - **Teste em produção:** email de teste avançou `sent → delivered` com `delivered_at`; 3 eventos `email.delivered` em `webhook_events`; function respondeu 200. Pipeline `send-email-resend → Resend → webhook-resend-status → message_logs` 100% operacional.
+> - Nota: emails enviados ANTES do secret permanecem `sent` (eventos da época foram rejeitados com 401, não retornam) — esperado.
+
+**Problema (resolvido):** hoje o sistema dispara o email e não sabe o que aconteceu. Resend envia eventos (`email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.opened`, `email.clicked`) mas ninguém os captura.
 
 **Solução (reutiliza padrão WhatsApp/Telegram):**
 - Nova edge function `webhook-resend-status` que recebe o webhook do Resend, valida assinatura (Svix — Resend usa Svix para assinar webhooks; header `svix-id`/`svix-signature`/`svix-timestamp`), mapeia o evento para o status de `message_logs` e atualiza a linha correspondente.
