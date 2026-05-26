@@ -7,11 +7,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Mail, RotateCw, Trash2, RefreshCw, ExternalLink, Building2 } from "lucide-react";
+import { Loader2, Mail, RotateCw, Trash2, RefreshCw, ExternalLink, Building2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InviteClientDialog } from "./InviteClientDialog";
 import { InviteStaffDialog } from "./InviteStaffDialog";
+import { ActivateInviteDialog } from "./ActivateInviteDialog";
 
 interface InviteRow {
   id: string;
@@ -62,6 +63,7 @@ export function PendingInvitesTab() {
   const [openClient, setOpenClient] = useState(false);
   const [openStaff, setOpenStaff] = useState(false);
   const [revokeId, setRevokeId] = useState<InviteRow | null>(null);
+  const [activateInvite, setActivateInvite] = useState<InviteRow | null>(null);
 
   const { data: invites = [], isLoading } = useQuery({
     queryKey: ["pending-invites"],
@@ -199,6 +201,9 @@ export function PendingInvitesTab() {
                           <Button size="sm" variant="outline" disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(inv.id)}>
                             <RotateCw className="mr-1 h-3 w-3" /> Reenviar
                           </Button>
+                          <Button size="sm" variant="outline" onClick={() => setActivateInvite(inv)} title="Ativar manualmente (definir senha)">
+                            <KeyRound className="mr-1 h-3 w-3" /> Ativar
+                          </Button>
                           <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10" onClick={() => setRevokeId(inv)}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -235,6 +240,12 @@ export function PendingInvitesTab() {
         variant="destructive"
         isLoading={revokeMutation.isPending}
         onConfirm={() => revokeId && revokeMutation.mutate(revokeId.id)}
+      />
+
+      <ActivateInviteDialog
+        open={!!activateInvite}
+        onOpenChange={(o) => !o && setActivateInvite(null)}
+        invite={activateInvite ? { id: activateInvite.id, email: activateInvite.email, full_name: activateInvite.full_name } : null}
       />
     </div>
   );
