@@ -7107,6 +7107,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      vault_upsert_secret: {
+        Args: { p_name: string; p_secret: string }
+        Returns: string
+      }
       verify_tv_dashboard_token: {
         Args: { token_param: string }
         Returns: {
