@@ -7018,6 +7018,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      hermes_comment_ticket: {
+        Args: { p_comment: string; p_ticket_id: string }
+        Returns: string
+      }
+      hermes_resolve_ticket: {
+        Args: { p_comment: string; p_confidence: number; p_ticket_id: string }
+        Returns: undefined
+      }
+      hermes_take_ticket: {
+        Args: { p_comment?: string; p_ticket_id: string }
+        Returns: undefined
+      }
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
