@@ -6871,6 +6871,10 @@ export type Database = {
     }
     Functions: {
       accept_invite: { Args: { p_token: string }; Returns: Json }
+      admin_accept_invite: {
+        Args: { p_invite_id: string; p_user_id: string }
+        Returns: Json
+      }
       auto_reconcile_bank_entries: { Args: never; Returns: Json }
       calculate_penalties: {
         Args: {
