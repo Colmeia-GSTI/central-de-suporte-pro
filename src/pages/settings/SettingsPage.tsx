@@ -209,6 +209,30 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* BOTÃO TEMPORÁRIO — REMOVER APÓS SETUP DO HERMES BOT */}
+        {isAdmin && (
+          <Card className="border-dashed border-warning/50 bg-warning/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Bot className="h-4 w-4 text-warning" />
+                Configurar Hermes Bot (temporário)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSetupHermes}
+                disabled={isSettingUpHermes}
+                className="w-full sm:w-auto"
+              >
+                {isSettingUpHermes ? "Configurando..." : "Executar setup"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+
         <div className="flex gap-6 min-w-0">
           {/* Desktop sidebar nav */}
           <aside className="hidden md:block w-56 shrink-0">
