@@ -41,6 +41,18 @@ Deno.serve(async (req) => {
     const admin = adminClient();
     const password = generateStrongPassword(40);
 
+    // 0) Insert a temporary pending invite to bypass the enforce_invite_on_signup trigger.
+    //    The trigger raises "Cadastro público desabilitado" for any new auth user without a valid invite.
+    const { error: inviteErr } = await admin.from("pending_invites").insert({
+      email: HERMES_EMAIL,
+      role: "technician",
+      full_name: "Hermes Bot",
+      invited_by: auth.userId,
+    });
+    if (inviteErr && !(inviteErr.message || "").toLowerCase().includes("duplicate")) {
+      console.error("[setup-hermes-bot] pending_invite insert error:", inviteErr.message);
+    }
+
     // 1) Create or update Hermes auth user
     let hermesId: string | null = null;
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -56,8 +68,9 @@ Deno.serve(async (req) => {
         msg.includes("already") || msg.includes("registered") || msg.includes("exists") || msg.includes("duplicate");
       if (!isDuplicate) {
         console.error("[setup-hermes-bot] createUser error:", createErr.message);
-        return jsonResponse({ error: "Failed to create Hermes user" }, 500);
+        return jsonResponse({ error: `Failed to create Hermes user: ${createErr.message}` }, 500);
       }
+
       hermesId = await resolveUserIdByEmail(admin, HERMES_EMAIL);
       if (!hermesId) {
         return jsonResponse({ error: "Hermes user exists but could not be resolved" }, 500);
@@ -104,6 +117,9 @@ Deno.serve(async (req) => {
       console.error("[setup-hermes-bot] vault_upsert_secret error:", vaultErr.message);
       return jsonResponse({ error: "Failed to store password in Vault" }, 500);
     }
+
+    // 5) Cleanup: remove the temporary pending invite for Hermes
+    await admin.from("pending_invites").delete().eq("email", HERMES_EMAIL);
 
     return jsonResponse({
       success: true,
