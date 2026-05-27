@@ -118,6 +118,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Failed to store password in Vault" }, 500);
     }
 
+    // 5) Cleanup: remove the temporary pending invite for Hermes
+    await admin.from("pending_invites").delete().eq("email", HERMES_EMAIL);
+
     return jsonResponse({
       success: true,
       user_id: hermesId,
