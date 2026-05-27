@@ -4,16 +4,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   Users, Tags, Shield, Sliders, Plug, History, Link2, Bell,
   MessageSquare, BarChart3, Building2, Layers, KeyRound, Tag,
-  Mail, Menu, LucideIcon,
+  Mail, Menu, Bot, LucideIcon,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
 
 // Lazy-loaded tab content
 const UsersTab = lazy(() => import("@/components/settings/UsersTab").then(m => ({ default: m.UsersTab })));
