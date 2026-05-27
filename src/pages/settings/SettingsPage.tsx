@@ -4,16 +4,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   Users, Tags, Shield, Sliders, Plug, History, Link2, Bell,
   MessageSquare, BarChart3, Building2, Layers, KeyRound, Tag,
-  Mail, Menu, LucideIcon,
+  Mail, Menu, Bot, LucideIcon,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
 
 // Lazy-loaded tab content
 const UsersTab = lazy(() => import("@/components/settings/UsersTab").then(m => ({ default: m.UsersTab })));
@@ -89,6 +93,29 @@ export default function SettingsPage() {
   const defaultTab = canManage ? "users" : "categories";
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isSettingUpHermes, setIsSettingUpHermes] = useState(false);
+
+  // BOTÃO TEMPORÁRIO — REMOVER APÓS SETUP DO HERMES BOT
+  const handleSetupHermes = async () => {
+    setIsSettingUpHermes(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("setup-hermes-bot");
+      if (error) {
+        toast.error(`Erro ao configurar Hermes Bot: ${error.message}`);
+        return;
+      }
+      if (data?.success) {
+        toast.success("Hermes Bot configurado: role technician, senha no Vault");
+      } else {
+        toast.error(`Erro: ${data?.error || "Resposta inesperada"}`);
+      }
+    } catch (e) {
+      toast.error(`Erro inesperado: ${(e as Error).message}`);
+    } finally {
+      setIsSettingUpHermes(false);
+    }
+  };
+
 
   const filteredMenu = SETTINGS_MENU.filter((item) => {
     if (item.requiresAdmin && !isAdmin) return false;
@@ -181,6 +208,30 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {/* BOTÃO TEMPORÁRIO — REMOVER APÓS SETUP DO HERMES BOT */}
+        {isAdmin && (
+          <Card className="border-dashed border-warning/50 bg-warning/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Bot className="h-4 w-4 text-warning" />
+                Configurar Hermes Bot (temporário)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSetupHermes}
+                disabled={isSettingUpHermes}
+                className="w-full sm:w-auto"
+              >
+                {isSettingUpHermes ? "Configurando..." : "Executar setup"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
 
         <div className="flex gap-6 min-w-0">
           {/* Desktop sidebar nav */}
