@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# npm lockfile — projeto usa bun (bun.lockb)
+package-lock.json
