@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Mail, RotateCw, Trash2, RefreshCw, ExternalLink, Building2, KeyRound } from "lucide-react";
+import { Loader2, Mail, RotateCw, Trash2, RefreshCw, Building2, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InviteClientDialog } from "./InviteClientDialog";
@@ -46,8 +46,7 @@ const roleColors: Record<string, string> = {
   client_master: "bg-primary text-primary-foreground",
 };
 
-function deriveStatus(row: InviteRow): "accepted" | "expired" | "pending" {
-  if (row.accepted_at) return "accepted";
+function deriveStatus(row: InviteRow): "expired" | "pending" {
   if (new Date(row.expires_at) < new Date()) return "expired";
   return "pending";
 }
@@ -59,7 +58,6 @@ function extractError(err: any): string {
 
 export function PendingInvitesTab() {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [openClient, setOpenClient] = useState(false);
   const [openStaff, setOpenStaff] = useState(false);
   const [revokeId, setRevokeId] = useState<InviteRow | null>(null);
@@ -68,13 +66,16 @@ export function PendingInvitesTab() {
   const { data: invites = [], isLoading } = useQuery({
     queryKey: ["pending-invites"],
     queryFn: async () => {
-      // Query principal sem JOIN em profiles (FK não declarada via PostgREST)
+      // Query principal sem JOIN em profiles (FK não declarada via PostgREST).
+      // Filtro: oculta convites já aceitos (viraram usuários ativos — lugar deles é a aba "Usuários").
+      // Mantém pendentes e expirados para que o admin possa reenviar/revogar.
       const { data: rows, error } = await (supabase as any)
         .from("pending_invites")
         .select(`
           id, email, full_name, role, client_id, expires_at, accepted_at, created_at, invited_by,
           clients(name)
         `)
+        .is("accepted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       const list = (rows || []) as InviteRow[];
@@ -184,15 +185,12 @@ export function PendingInvitesTab() {
                   <TableCell>
                     {status === "pending" && <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">Pendente</Badge>}
                     {status === "expired" && <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">Expirado</Badge>}
-                    {status === "accepted" && <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">Aceito</Badge>}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {inv.invited_by_profile?.full_name || "—"}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {status === "accepted"
-                      ? "—"
-                      : formatDistanceToNow(new Date(inv.expires_at), { locale: ptBR, addSuffix: true })}
+                    {formatDistanceToNow(new Date(inv.expires_at), { locale: ptBR, addSuffix: true })}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -212,11 +210,6 @@ export function PendingInvitesTab() {
                       {status === "expired" && (
                         <Button size="sm" variant="outline" disabled={resendMutation.isPending} onClick={() => resendMutation.mutate(inv.id)}>
                           <RefreshCw className="mr-1 h-3 w-3" /> Renovar
-                        </Button>
-                      )}
-                      {status === "accepted" && (
-                        <Button size="sm" variant="ghost" onClick={() => navigate("/settings?tab=users")}>
-                          <ExternalLink className="mr-1 h-3 w-3" /> Ver usuário
                         </Button>
                       )}
                     </div>
