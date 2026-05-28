@@ -73,7 +73,6 @@ export default function SetupAccountPage() {
       password,
       options: {
         data: { full_name: info.full_name ?? "" },
-        emailRedirectTo: `${window.location.origin}/`,
       },
     });
 
@@ -87,22 +86,26 @@ export default function SetupAccountPage() {
       return;
     }
 
-    // 2. Como Supabase pode exigir confirmação por email, tenta signIn imediato com a senha
+    // 2. Autentica a sessão (necessária para accept_invite, que usa auth.uid()).
+    // Com "Confirm email" desligado no Auth, o login funciona imediatamente.
     const { error: signInErr } = await supabase.auth.signInWithPassword({
       email: info.email,
       password,
     });
     if (signInErr) {
+      // Sem sessão não há como vincular o convite. NÃO redirecionamos para o login
+      // (isso deixaria o usuário criado sem role/empresa). O admin pode ativar
+      // manualmente em Configurações → Convites pendentes → "Ativar manualmente".
       setSubmitting(false);
       toast({
-        title: "Conta criada — confirme seu email",
-        description: "Enviamos um link de confirmação para o seu email. Após confirmar, faça login.",
+        title: "Não foi possível ativar a conta automaticamente",
+        description: "Avise o administrador para concluir a ativação. Detalhe: " + signInErr.message,
+        variant: "destructive",
       });
-      navigate("/login");
       return;
     }
 
-    // 3. Chama RPC para criar vínculos (role + client_contacts + profile + marca aceito)
+    // 3. Cria os vínculos (role + client_contacts + profile + marca convite aceito).
     const { data: result, error: acceptErr } = await supabase.rpc("accept_invite", { p_token: token });
     if (acceptErr) {
       setSubmitting(false);
