@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     }
 
     // 4. Monta URL de aceite
-    const appUrl = Deno.env.get("APP_URL") || "https://suporte.colmeiagsti.com.br";
+    const appUrl = Deno.env.get("APP_URL") || "https://suporte.colmeiagsti.com";
     const acceptUrl = `${appUrl}/setup-account?token=${invite.token}`;
 
     // 5. Resolve nome do cliente (se houver)

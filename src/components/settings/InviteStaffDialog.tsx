@@ -65,7 +65,7 @@ export function InviteStaffDialog({ open, onOpenChange }: Props) {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="is-email">Email *</Label>
-            <Input id="is-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@colmeiagsti.com.br" />
+            <Input id="is-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@colmeiagsti.com" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="is-name">Nome completo *</Label>

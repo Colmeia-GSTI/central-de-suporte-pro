@@ -93,7 +93,7 @@ Criados `src/hooks/useIntegrationSettings.ts` (centraliza load/save contra `inte
 - Mutation `createUserMutation` e import `UserForm` no `UsersTab.tsx` (não mais necessários).
 
 **Pendente de aplicação manual:**
-- Secret `APP_URL=https://suporte.colmeiagsti.com.br` no Lovable Cloud (Secrets) — sem ele, `invite-user` cai no fallback do default mas é boa prática configurar explicitamente.
+- Secret `APP_URL=https://suporte.colmeiagsti.com` no Lovable Cloud (Secrets) — sem ele, `invite-user` cai no fallback do default mas é boa prática configurar explicitamente.
 
 **Não testado ainda em produção:** Jonatas vai testar depois (convidar email teste, validar email recebido, validar `/setup-account` → criação de senha → redirect).
 

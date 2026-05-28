@@ -9,7 +9,7 @@ const corsHeaders = {
 // VAPID keys for Web Push - must match frontend public key
 const VAPID_PUBLIC_KEY = "BDQ4g_RaLdz1m7aQEEezyJ8OGEdpBMXqY9q3iKE0gHr3Q9mIPhNQ3NqzV8xzuPfRDKxT_G8kHy9sXB7CvKP_RvU";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") || "";
-const VAPID_SUBJECT = "mailto:suporte@colmeiagsti.com.br";
+const VAPID_SUBJECT = "mailto:suporte@colmeiagsti.com";
 
 interface PushPayload {
   title: string;

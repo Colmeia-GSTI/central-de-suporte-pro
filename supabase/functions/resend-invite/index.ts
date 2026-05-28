@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     }
 
     // Monta email novamente
-    const appUrl = Deno.env.get("APP_URL") || "https://suporte.colmeiagsti.com.br";
+    const appUrl = Deno.env.get("APP_URL") || "https://suporte.colmeiagsti.com";
     const acceptUrl = `${appUrl}/setup-account?token=${invite.token}`;
 
     let clientName: string | null = null;
