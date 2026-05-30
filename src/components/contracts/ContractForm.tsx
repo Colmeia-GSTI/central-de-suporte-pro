@@ -33,7 +33,8 @@ import { ContractAdjustmentSection } from "./sections/ContractAdjustmentSection"
 import { ContractInternalNotesSection } from "./sections/ContractInternalNotesSection";
 import { ContractNfseSection } from "./sections/ContractNfseSection";
 import { DatePickerField } from "./sections/DatePickerField";
-import { MessageSquare, Check, ChevronsUpDown } from "lucide-react";
+import { MessageSquare, Check, ChevronsUpDown, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
