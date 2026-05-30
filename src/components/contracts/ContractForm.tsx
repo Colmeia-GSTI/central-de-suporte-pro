@@ -684,6 +684,18 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           )}
         </div>
 
+        {contractData && (calculatedTotal > 0 ? calculatedTotal : form.watch("monthly_value")) !== contractData.monthly_value && (
+          <Alert className="border-yellow-500/50 bg-yellow-500/10">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-700 dark:text-yellow-400">Você está alterando o valor mensal direto</AlertTitle>
+            <AlertDescription className="text-xs text-yellow-700/90 dark:text-yellow-300/90">
+              Se for um <strong>reajuste anual de índice</strong> (IGPM/IPCA/INPC), prefira usar o botão <strong>"Aplicar Reajuste"</strong> na página do contrato — ele registra o histórico de reajustes, atualiza os serviços proporcionalmente e agenda o próximo ciclo automaticamente.
+              <br />
+              Para <strong>renegociação ou upgrade de escopo</strong>, pode continuar editando direto.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <ContractBillingSection form={form} calculatedTotal={calculatedTotal} isNewContract={!contractData} />
 
         <ContractAdjustmentSection form={form} />
