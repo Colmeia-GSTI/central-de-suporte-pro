@@ -18,6 +18,14 @@ Categorias usadas em cada entrada:
 
 ## [Não lançado]
 
+### Adicionado
+- Alerta visual no formulário de edição de contrato quando o valor mensal é alterado direto, orientando o uso do botão "Aplicar Reajuste" para reajustes anuais de índice.
+
+### Modificado
+- Contrato AIRDUTO: registrado `renegotiation` em `contract_history` (R$ 1.500 → R$ 2.300) e definida `adjustment_date` para 2027-05-30.
+
+
+
 ### Corrigido (Cobrança por frequência não respeitava o intervalo — 2026-05-23)
 **Bug em produção:** contrato com `billing_frequency` diferente de mensal (trimestral, bimestral, semestral, anual) cobrava apenas 1 mês em vez do período completo. Ex.: contrato trimestral de R$50/mês gerava fatura de R$50 em vez de R$150 (50×3).
 
