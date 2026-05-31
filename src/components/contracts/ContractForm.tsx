@@ -489,298 +489,320 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="col-span-2">
-                <FormLabel>Nome do Contrato *</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Suporte Mensal" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <Tabs defaultValue="geral" className="w-full">
+          <TabsList className="w-full justify-start overflow-x-auto h-auto flex-wrap gap-1 bg-muted/50 p-1">
+            <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
+            <TabsTrigger value="faturamento" className="text-xs">Faturamento</TabsTrigger>
+            <TabsTrigger value="reajuste" className="text-xs">Reajuste</TabsTrigger>
+            <TabsTrigger value="servicos" className="text-xs">Serviços</TabsTrigger>
+            <TabsTrigger value="nfse" className="text-xs">NFS-e</TabsTrigger>
+            <TabsTrigger value="avancado" className="text-xs">Avançado</TabsTrigger>
+          </TabsList>
 
-          <FormField
-            control={form.control}
-            name="client_id"
-            render={({ field }) => (
-              <FormItem className="col-span-2 flex flex-col">
-                <FormLabel>Cliente *</FormLabel>
-                <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
-                  <PopoverTrigger asChild>
+          {/* ===== Aba GERAL ===== */}
+          <TabsContent value="geral" className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">Identificação do contrato, cliente vinculado, modelo de suporte e vigência.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel>Nome do Contrato *</FormLabel>
                     <FormControl>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={clientPopoverOpen}
-                        className={cn(
-                          "w-full justify-between font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value
-                          ? clients.find((c) => c.id === field.value)?.name ?? "Cliente não encontrado"
-                          : "Selecione um cliente"}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
+                      <Input placeholder="Ex: Suporte Mensal" {...field} />
                     </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Buscar cliente..." />
-                      <CommandList className="max-h-[200px]">
-                        <CommandEmpty>Nenhum cliente encontrado</CommandEmpty>
-                        <CommandGroup>
-                          {clients.map((client) => (
-                            <CommandItem
-                              key={client.id}
-                              value={client.name}
-                              onSelect={() => {
-                                field.onChange(client.id);
-                                setClientPopoverOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  field.value === client.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {client.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="support_model"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Modelo de Suporte</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent modal={false}>
-                    <SelectItem value="ticket">Por Ticket</SelectItem>
-                    <SelectItem value="hours_bank">Banco de Horas</SelectItem>
-                    <SelectItem value="unlimited">Ilimitado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="client_id"
+                render={({ field }) => (
+                  <FormItem className="col-span-2 flex flex-col">
+                    <FormLabel>Cliente *</FormLabel>
+                    <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={clientPopoverOpen}
+                            className={cn(
+                              "w-full justify-between font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value
+                              ? clients.find((c) => c.id === field.value)?.name ?? "Cliente não encontrado"
+                              : "Selecione um cliente"}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Buscar cliente..." />
+                          <CommandList className="max-h-[200px]">
+                            <CommandEmpty>Nenhum cliente encontrado</CommandEmpty>
+                            <CommandGroup>
+                              {clients.map((client) => (
+                                <CommandItem
+                                  key={client.id}
+                                  value={client.name}
+                                  onSelect={() => {
+                                    field.onChange(client.id);
+                                    setClientPopoverOpen(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === client.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {client.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {supportModel === "hours_bank" && (
-            <FormField
-              control={form.control}
-              name="hours_included"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Horas Incluídas</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+              <FormField
+                control={form.control}
+                name="support_model"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Modelo de Suporte</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent modal={false}>
+                        <SelectItem value="ticket">Por Ticket</SelectItem>
+                        <SelectItem value="hours_bank">Banco de Horas</SelectItem>
+                        <SelectItem value="unlimited">Ilimitado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {supportModel === "hours_bank" && (
+                <FormField
+                  control={form.control}
+                  name="hours_included"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Horas Incluídas</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
-          )}
 
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent modal={false}>
-                    <SelectItem value="pending">Pendente</SelectItem>
-                    <SelectItem value="active">Ativo</SelectItem>
-                    <SelectItem value="suspended">Suspenso</SelectItem>
-                    <SelectItem value="expired">Expirado</SelectItem>
-                    <SelectItem value="cancelled">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent modal={false}>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="active">Ativo</SelectItem>
+                        <SelectItem value="suspended">Suspenso</SelectItem>
+                        <SelectItem value="expired">Expirado</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="start_date"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Data de Início do Contrato *</FormLabel>
-                <DatePickerField field={field} label="Data de Início do Contrato" />
-                <FormDescription>
-                  Data em que o contrato entra em vigor. Não é a data do primeiro pagamento.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="start_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data de Início do Contrato *</FormLabel>
+                    <DatePickerField field={field} label="Data de Início do Contrato" />
+                    <FormDescription>Data em que o contrato entra em vigor. Não é a data do primeiro pagamento.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Unified Term Type selector */}
-          <FormField
-            control={form.control}
-            name="term_type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Vigência do Contrato</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent modal={false}>
-                    <SelectItem value="indefinite">Indeterminado</SelectItem>
-                    <SelectItem value="auto_renew">Renovação automática</SelectItem>
-                    <SelectItem value="fixed">Prazo fixo</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  {termType === "indefinite" && "Sem data de término, vigente até cancelamento"}
-                  {termType === "auto_renew" && "Renova automaticamente ao atingir a data de término"}
-                  {termType === "fixed" && "Encerra na data de término definida"}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="term_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vigência do Contrato</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent modal={false}>
+                        <SelectItem value="indefinite">Indeterminado</SelectItem>
+                        <SelectItem value="auto_renew">Renovação automática</SelectItem>
+                        <SelectItem value="fixed">Prazo fixo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {termType === "indefinite" && "Sem data de término, vigente até cancelamento"}
+                      {termType === "auto_renew" && "Renova automaticamente ao atingir a data de término"}
+                      {termType === "fixed" && "Encerra na data de término definida"}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {termType !== "indefinite" && (
-            <FormField
-              control={form.control}
-              name="end_date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Data de Término</FormLabel>
-                  <DatePickerField field={field} label="Data de Término" />
-                  <FormMessage />
-                </FormItem>
+              {termType !== "indefinite" && (
+                <FormField
+                  control={form.control}
+                  name="end_date"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Data de Término</FormLabel>
+                      <DatePickerField field={field} label="Data de Término" />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
+            </div>
+          </TabsContent>
+
+          {/* ===== Aba FATURAMENTO ===== */}
+          <TabsContent value="faturamento" className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">Dia do vencimento, periodicidade e provedor de cobrança. O valor mensal só pode ser alterado na aba Reajuste.</p>
+
+            {contractData && (calculatedTotal > 0 ? calculatedTotal : form.watch("monthly_value")) !== contractData.monthly_value && (
+              <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertTitle className="text-yellow-700 dark:text-yellow-400">Você está alterando o valor mensal direto</AlertTitle>
+                <AlertDescription className="text-xs text-yellow-700/90 dark:text-yellow-300/90">
+                  Para reajustes anuais (IGPM/IPCA/INPC) prefira a aba <strong>Reajuste</strong> — ela registra o histórico, atualiza serviços proporcionalmente e agenda o próximo ciclo.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <ContractBillingSection form={form} calculatedTotal={calculatedTotal} isNewContract={!contractData} />
+
+            <Separator className="my-6" />
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                Mensagem de Cobrança
+              </div>
+              <FormField
+                control={form.control}
+                name="notification_message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <ContractNotificationMessageForm
+                        value={field.value || ""}
+                        onChange={field.onChange}
+                        clientName={clients.find((c) => c.id === form.watch("client_id"))?.name}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </TabsContent>
+
+          {/* ===== Aba REAJUSTE ===== */}
+          <TabsContent value="reajuste" className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">Aplique reajustes anuais por índice, registre renegociações de escopo e veja como ficará a próxima cobrança no Asaas.</p>
+            {contractData ? (
+              <ContractAdjustmentCard
+                contract={{
+                  id: contractData.id,
+                  name: contractData.name,
+                  monthly_value: contractData.monthly_value,
+                  adjustment_date: contractData.adjustment_date,
+                  adjustment_index: contractData.adjustment_index,
+                  adjustment_percentage: contractData.adjustment_percentage,
+                  billing_frequency: contractData.billing_frequency,
+                  billing_day: contractData.billing_day,
+                  days_before_due: contractData.days_before_due,
+                  payment_preference: contractData.payment_preference,
+                }}
+              />
+            ) : (
+              <ContractAdjustmentSection form={form} />
+            )}
+          </TabsContent>
+
+          {/* ===== Aba SERVIÇOS ===== */}
+          <TabsContent value="servicos" className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">Serviços incluídos no contrato. O valor mensal é calculado automaticamente pela soma dos serviços.</p>
+            <ContractServicesSection
+              contractId={contractData?.id}
+              initialServices={existingServices}
+              onChange={handleServicesChange}
             />
-          )}
-        </div>
 
-        {contractData && (calculatedTotal > 0 ? calculatedTotal : form.watch("monthly_value")) !== contractData.monthly_value && (
-          <Alert className="border-yellow-500/50 bg-yellow-500/10">
-            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-            <AlertTitle className="text-yellow-700 dark:text-yellow-400">Você está alterando o valor mensal direto</AlertTitle>
-            <AlertDescription className="text-xs text-yellow-700/90 dark:text-yellow-300/90">
-              Se for um <strong>reajuste anual de índice</strong> (IGPM/IPCA/INPC), prefira usar o botão <strong>"Aplicar Reajuste"</strong> na página do contrato — ele registra o histórico de reajustes, atualiza os serviços proporcionalmente e agenda o próximo ciclo automaticamente.
-              <br />
-              Para <strong>renegociação ou upgrade de escopo</strong>, pode continuar editando direto.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <ContractBillingSection form={form} calculatedTotal={calculatedTotal} isNewContract={!contractData} />
-
-        {contractData ? (
-          <ContractAdjustmentCard
-            contract={{
-              id: contractData.id,
-              name: contractData.name,
-              monthly_value: contractData.monthly_value,
-              adjustment_date: contractData.adjustment_date,
-              adjustment_index: contractData.adjustment_index,
-              adjustment_percentage: contractData.adjustment_percentage,
-              billing_frequency: contractData.billing_frequency,
-            }}
-          />
-        ) : (
-          <ContractAdjustmentSection form={form} />
-        )}
-
-        {/* Services Section */}
-        <Separator className="my-6" />
-
-        <ContractServicesSection
-          contractId={contractData?.id}
-          initialServices={existingServices}
-          onChange={handleServicesChange}
-        />
-
-        {/* Manual Value Override — somente em contratos novos sem serviços; existentes devem usar Reajuste/Renegociação */}
-        {contractServices.length === 0 && !contractData && (
-          <FormField
-            control={form.control}
-            name="monthly_value"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Valor Mensal *</FormLabel>
-                <FormControl>
-                  <CurrencyInput
-                    value={field.value}
-                    onChange={field.onChange}
-                    placeholder="0,00"
-                  />
-                </FormControl>
-                <FormDescription>
-                  Adicione serviços acima para calcular automaticamente
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
+            {contractServices.length === 0 && !contractData && (
+              <FormField
+                control={form.control}
+                name="monthly_value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valor Mensal *</FormLabel>
+                    <FormControl>
+                      <CurrencyInput value={field.value} onChange={field.onChange} placeholder="0,00" />
+                    </FormControl>
+                    <FormDescription>Adicione serviços acima para calcular automaticamente</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             )}
-          />
-        )}
+          </TabsContent>
 
-        {/* Notification Message Section */}
-        <Separator className="my-6" />
-        
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <MessageSquare className="h-5 w-5 text-primary" />
-            Mensagem de Cobrança
-          </div>
+          {/* ===== Aba NFS-e ===== */}
+          <TabsContent value="nfse" className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">Configurações fiscais para emissão de NFS-e via Asaas (alíquota ISS, código de serviço, CNAE).</p>
+            <ContractNfseSection form={form} />
+          </TabsContent>
 
-          <FormField
-            control={form.control}
-            name="notification_message"
-            render={({ field }) => (
-              <FormItem>
-                <FormControl>
-                  <ContractNotificationMessageForm
-                    value={field.value || ""}
-                    onChange={field.onChange}
-                    clientName={clients.find((c) => c.id === form.watch("client_id"))?.name}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+          {/* ===== Aba AVANÇADO ===== */}
+          <TabsContent value="avancado" className="space-y-4 mt-4">
+            <p className="text-xs text-muted-foreground">Notas internas visíveis apenas para a equipe.</p>
+            <ContractInternalNotesSection form={form} />
+          </TabsContent>
+        </Tabs>
 
-        <ContractInternalNotesSection form={form} />
-
-        <ContractNfseSection form={form} />
-
-        <div className="flex justify-end gap-2 pt-4">
+        <div className="flex justify-end gap-2 pt-4 border-t mt-6">
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancelar
           </Button>
@@ -792,3 +814,4 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
     </Form>
   );
 }
+
