@@ -14,6 +14,20 @@ Categorias usadas em cada entrada:
 - **Segurança** — correções de vulnerabilidades
 - **Obsoleto** — funcionalidades marcadas como obsoletas
 
+## [2026-05-31] — Refatoração da Edição de Contrato
+
+### Modificado
+- `EditContractPage` agora usa header sticky com identidade do contrato + barra de ações rápidas (Faturas, Histórico, Cobrança extra, Cancelar).
+- `ContractForm` reorganizado em **6 abas**: Geral, Faturamento, Reajuste, Serviços, NFS-e, Avançado. Reduz o scroll vertical e separa intenções (salvar form vs aplicar reajuste).
+
+### Adicionado
+- `NextAsaasInvoicePreview` — bloco visual mostrando exatamente qual será a próxima cobrança gerada no Asaas com o valor atual do contrato (valor, vencimento, data de geração automática). Embutido no `ContractAdjustmentCard`.
+- `ContractEditHeader` — header sticky com nome/cliente/status/valor sempre visível.
+- `ContractQuickActions` — acesso direto a Faturas, Histórico, Cobrança extra e Cancelamento a partir da página de edição.
+
+### Validado
+- Fluxo de reajuste → Asaas conferido ponta-a-ponta: `apply-contract-adjustment` atualiza `contracts.monthly_value` → `generate-monthly-invoices` (cron 11h UTC) lê o novo valor → `asaas-nfse create_payment` cria cobrança nova no Asaas com o valor reajustado. Asaas não usa subscriptions neste projeto, então não há cobranças antigas para sincronizar.
+
 ---
 
 ## [Não lançado]
