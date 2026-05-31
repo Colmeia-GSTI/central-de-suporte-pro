@@ -269,7 +269,12 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         billing_provider: data.billing_provider,
         payment_preference: data.payment_preference,
         billing_frequency: data.billing_frequency,
-        adjustment_date: data.adjustment_date || null,
+        adjustment_date: data.adjustment_date || (() => {
+          // Default: start_date + 1 year so the annual adjustment reminder cron picks it up
+          const base = data.start_date ? new Date(data.start_date) : new Date();
+          base.setFullYear(base.getFullYear() + 1);
+          return base.toISOString().split("T")[0];
+        })(),
         adjustment_index: data.adjustment_index,
         adjustment_percentage: data.adjustment_percentage || null,
         notification_message: data.notification_message || null,
