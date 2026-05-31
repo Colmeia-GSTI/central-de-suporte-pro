@@ -10,6 +10,7 @@ import { ContractAdjustmentDialog } from "./ContractAdjustmentDialog";
 import { ContractRenegotiationDialog } from "./ContractRenegotiationDialog";
 import { ContractAdjustmentConfigSheet } from "./ContractAdjustmentConfigSheet";
 import { ContractAdjustmentHistoryList } from "./ContractAdjustmentHistoryList";
+import { NextAsaasInvoicePreview } from "./NextAsaasInvoicePreview";
 
 interface ContractAdjustmentCardProps {
   contract: {
@@ -20,6 +21,9 @@ interface ContractAdjustmentCardProps {
     adjustment_index?: string | null;
     adjustment_percentage?: number | null;
     billing_frequency?: string | null;
+    billing_day?: number | null;
+    days_before_due?: number | null;
+    payment_preference?: string | null;
   };
 }
 
@@ -167,6 +171,14 @@ export function ContractAdjustmentCard({ contract }: ContractAdjustmentCardProps
             Última atualização: <span className="font-mono tabular-nums">{format(new Date(lastEntry.date + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}</span> · {lastEntry.label}
           </div>
         )}
+
+        <NextAsaasInvoicePreview
+          monthlyValue={contract.monthly_value}
+          billingFrequency={contract.billing_frequency}
+          billingDay={contract.billing_day}
+          daysBeforeDue={contract.days_before_due}
+          paymentPreference={contract.payment_preference}
+        />
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2 pt-1">
