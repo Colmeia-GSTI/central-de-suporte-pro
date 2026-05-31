@@ -30,6 +30,7 @@ import { ContractServicesSection, ContractService } from "./ContractServicesSect
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
 import { ContractBillingSection } from "./sections/ContractBillingSection";
 import { ContractAdjustmentSection } from "./sections/ContractAdjustmentSection";
+import { ContractAdjustmentCard } from "./ContractAdjustmentCard";
 import { ContractInternalNotesSection } from "./sections/ContractInternalNotesSection";
 import { ContractNfseSection } from "./sections/ContractNfseSection";
 import { DatePickerField } from "./sections/DatePickerField";
