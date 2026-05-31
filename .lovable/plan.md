@@ -1,152 +1,152 @@
 
-# Validação Gayger + Redesign do Reajuste Anual
+# Refatoração da Interface de Contratos + Validação do Reajuste no Asaas
 
-> Aplicando a skill **ui-ux-pro-max**. Referências usadas:
-> - `ui-reasoning.csv` linha 6 (**Financial Dashboard** — clareza, números animados, alerta) + linha 16 (**Productivity Tool** — micro-interactions, ações rápidas 150ms) + linha 5 (**B2B Service** — minimalismo, confiança, sem decoração).
-> - `quick-reference.md` seções: **Forms & Feedback** (`input-helper-text`, `inline-validation`, `confirmation-dialogs`, `success-feedback`), **Touch & Interaction** (`loading-buttons`, `press-feedback`), **Animation** (`duration-timing 150–300ms`, `motion-meaning`), **Typography & Color** (`number-tabular`, `color-semantic`).
+> Skill aplicada: **ui-ux-pro-max** — `ui-reasoning.csv` linha 5 (B2B Service: minimalismo + confiança), linha 6 (Financial Dashboard: clareza de números), linha 16 (Productivity Tool: ações rápidas). `quick-reference.md` → `progressive-disclosure`, `tab-navigation`, `inline-validation`, `confirmation-dialogs`, `number-tabular`, `sticky-header`.
 
 ---
 
-## Parte 1 — Validação da cobrança do Gayger (R$ 50 mensal cobrado a cada 3 meses)
+## Parte 1 — Diagnóstico atual
 
-**Estado atual do contrato** `Gayger - Backup em nuvem 25GB`:
+A página `EditContractPage` hoje renderiza **um único formulário gigante de 793 linhas** com tudo empilhado: identificação, vigência, faturamento, reajuste, serviços, NFS-e, mensagens, notas internas. Resultado:
 
-| Campo | Valor | OK? |
-|---|---|---|
-| `monthly_value` | R$ 50,00 | ✅ |
-| `billing_frequency` | `quarterly` | ✅ |
-| `billing_day` | 7 | ✅ |
-| `billing_provider` | asaas | ✅ |
-| `payment_preference` | boleto | ✅ |
-| `status` | active | ✅ |
-| `first_billing_month` | NULL (não bloqueia) | ✅ |
-| Faturas existentes | **0** | — |
+1. Usuário rola muito, perde contexto e não acha onde está cada coisa.
+2. Card de **Reajuste** aparece no meio do form, competindo com inputs do mesmo form (duplica intenção: "salvar" vs "aplicar reajuste").
+3. Ações importantes (faturas do contrato, histórico, cobrança extra) estão escondidas só na listagem `ContractsPage`, sem atalho na própria edição.
+4. Não tem header fixo identificando qual contrato/cliente está sendo editado.
+5. Mobile: scroll vertical interminável, sem agrupamento visual.
 
-**Lógica do cron `generate-monthly-invoices` (já validada no código, linhas 331–541):**
-1. Mapa: `quarterly = 3 meses`.
-2. Gate de frequência: só gera se `monthsSince ≥ 3` desde a última fatura ativa. Gayger nunca faturou → permite gerar.
-3. Valor: `monthly_value × intervalMonths = 50 × 3 = R$ 150,00`. ✅
-4. Notas registram explicitamente: `Valor recorrente: 3x R$ 50,00 = R$ 150,00`.
-5. Próximo ciclo: setembro/2026 (gate de 3 meses bloqueia jul/ago).
+## Parte 2 — Validação do reajuste indo correto pro Asaas
 
-**Quando entra a 1ª fatura?**
-- Vencimento previsto: **07/06/2026** (ref 2026-06).
-- Janela `days_before_due=5` → cron gera a partir de **02/06/2026** às 11h UTC.
-- Cron de amanhã (31/05) **vai pular** o Gayger — comportamento correto.
-
-**Conclusão Gayger:** ✅ Cobrança vai sair correta e a cadência trimestral será respeitada automaticamente.
-**Validação prevista 02/06 às 11h05:** conferir 1 fatura R$ 150,00, Asaas, com `asaas_payment_id` preenchido.
-
----
-
-## Parte 2 — Redesign da UI de Reajuste Anual
-
-### Diagnóstico (problemas hoje)
-1. **Duas UIs desconectadas:** seção crua no formulário (só campos) + dialog escondido na listagem.
-2. **Usuário leigo não vê:** quando será o próximo, quanto falta, quem dispara (automático ou manual), histórico.
-3. **`monthly_value` editável direto** no form, gerando confusão com reajuste real.
-4. **Sem preview de impacto:** ninguém vê "R$ 50 → R$ 52,50/mês = R$ 157,50/trimestre".
-5. Viola `quick-reference.md → input-helper-text, progressive-disclosure, success-feedback`.
-
-### Solução visual (estilo Financial Dashboard, minimal, app-like)
-
-#### A. Novo `ContractAdjustmentCard.tsx` — substitui a seção atual e aparece também na página de detalhe do contrato
+Fluxo conferido no código:
 
 ```text
-┌─ Reajuste Anual ─────────────────────────────────── ⓘ ─┐
-│                                                         │
-│  [●] Próximo reajuste em  11 meses 20 dias              │
-│      📅 15/05/2027  •  Índice: IGP-M (revisão manual)   │
-│                                                         │
-│  Valor atual                Última atualização          │
-│  R$ 50,00 / mês             31/05/2026 (Renegociação)   │
-│                                                         │
-│  ┌─────────────────────┐  ┌──────────────────────────┐  │
-│  │ 📈 Aplicar Reajuste │  │ ✏️ Editar Configuração   │  │
-│  └─────────────────────┘  └──────────────────────────┘  │
-│                                                         │
-│  ▾ Histórico (3)                                        │
-│   31/05/26 · Renegociação  R$ 1.500 → R$ 2.300  +53%    │
-│   10/05/25 · IGPM 4,87%    R$ 1.430 → R$ 1.500  +5%     │
-│   10/05/24 · IGPM 3,50%    R$ 1.380 → R$ 1.430  +4%     │
-└─────────────────────────────────────────────────────────┘
+Aplicar Reajuste (ContractAdjustmentDialog)
+   └─► edge fn apply-contract-adjustment
+         ├─ insert contract_adjustments (histórico)
+         ├─ UPDATE contracts.monthly_value = novo valor
+         ├─ UPDATE contracts.adjustment_date = +1 ano
+         ├─ UPDATE contract_services (proporcional)
+         └─ insert contract_history(action=adjustment)
+
+Próxima fatura
+   └─► cron generate-monthly-invoices (11h UTC diário)
+         ├─ lê contracts.monthly_value JÁ ATUALIZADO
+         ├─ amount = monthly_value × intervalMonths
+         ├─ INSERT invoices
+         └─ invoke asaas-nfse create_payment → cria cobrança nova no Asaas com valor novo
 ```
 
-Regras visuais (skill):
-- **Badge de status** seguindo semântica de cores do projeto (`#2F9E44 success`, `#F08C00 warning`, `#E03131 danger`):
-  - 🟢 > 60 dias | 🟡 30–60 dias | 🔴 ≤ 30 dias ou vencido.
-  - Cor + ícone + texto (`color-not-only`).
-- **Tipografia tabular** (`font-variant-numeric: tabular-nums`) em todos os valores — `quick-reference.md → number-tabular`.
-- **Microanimação** ao trocar o valor: contador animado 200ms ease-out (`duration-timing`, Financial Dashboard "real-time number animations").
-- **Tooltip** no índice explicando em PT-BR simples (público leigo, conforme memória do usuário):
-  - IGP-M/IPCA/INPC → "Reajuste manual pelo financeiro quando a data chegar."
-  - FIXO → "Reajuste aplicado automaticamente pelo sistema em XX/XX/XXXX."
-- **Histórico colapsável** (`progressive-disclosure`) — fica fechado por padrão, expande on-demand.
+**Asaas NÃO usa subscriptions** neste projeto — cada fatura cria uma cobrança pontual via `create_payment`. Logo, o reajuste é refletido **automaticamente** na próxima cobrança gerada pelo cron. Não precisa atualizar nada em cobranças antigas (corretas: foram emitidas pelo valor da época).
 
-#### B. Melhorias no `ContractAdjustmentDialog` (botão "Aplicar Reajuste")
+✅ **Reajuste vai chegar correto ao Asaas.** Vamos só adicionar uma **validação visual** ("Próxima fatura: R$ X em DD/MM via Asaas") no card de reajuste para o usuário leigo ter certeza.
 
-Adicionar **bloco de preview de impacto** que aparece em tempo real ao digitar o %:
+## Parte 3 — Nova UI de Edição de Contrato (com abas)
+
+### A. Layout reorganizado em abas (Tabs do shadcn)
 
 ```text
-┌─ Pré-visualização do impacto ──────────────────────┐
-│ Valor mensal         R$ 50,00  →  R$ 52,50  (+5%)  │
-│ Por cobrança (3m)    R$ 150,00 →  R$ 157,50        │
-│ Próximo reajuste     31/05/2027 (1 ano)            │
-└────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ ← Voltar     Editar Contrato                       [Salvar]     │
+│ AirDuto · Backup nuvem 25GB                                     │
+│ Ativo · R$ 50,00/mês · Próxima fatura 07/06/2026 · Asaas        │
+├─────────────────────────────────────────────────────────────────┤
+│ [Geral] [Faturamento] [Reajuste] [Serviços] [NFS-e] [Avançado]  │
+├─────────────────────────────────────────────────────────────────┤
+│  (conteúdo da aba selecionada)                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+       Toolbar lateral / topo direito:
+       📄 Faturas   🕓 Histórico   ➕ Cobrança Extra   ⋮ Mais
 ```
 
-- **Atalho "Buscar IGP-M atual"**: botão que chama a edge function existente `fetch-economic-indices` e preenche o % automaticamente (1-click, conforme preferência do usuário leigo).
-- **Campo "Data de vigência"** opcional (default: hoje) para reajustes retroativos/futuros.
-- **Validação inline on blur** (`inline-validation`) — não a cada tecla.
-- Botão primário em `bg-primary` (Honey Gold #F5B700) com `loading-buttons` (disabled + spinner durante mutation).
-- **AlertDialog de confirmação** antes de aplicar (`confirmation-dialogs`): "Confirma reajuste de R$ X para R$ Y? Esta ação é registrada no histórico."
+**Aba a aba:**
+- **Geral** — nome, cliente (combobox), status, modelo de suporte, horas, vigência (term_type + data início/término), descrição.
+- **Faturamento** — `ContractBillingSection` (dia, dias antes vencer, frequência, provider, preferência), mensagem de cobrança (`ContractNotificationMessageForm`). **Sem o campo `monthly_value` direto** — só leitura com link "Para alterar valor, vá em Reajuste".
+- **Reajuste** — `ContractAdjustmentCard` em destaque. Adicionar bloco "Próxima cobrança no Asaas: R$ Y em DD/MM" calculado a partir de `monthly_value × intervalMonths` + `billing_day`. Botões "Aplicar Reajuste" / "Registrar Renegociação" / "Editar Configuração". Histórico colapsável.
+- **Serviços** — `ContractServicesSection` (já existe).
+- **NFS-e** — `ContractNfseSection`.
+- **Avançado** — notas internas + ações destrutivas (cancelar contrato, com `confirmation-dialogs`).
 
-#### C. Remoção da ambiguidade no `ContractForm`
+### B. Header sticky com identidade do contrato
 
-- `monthly_value` em contratos **existentes** → **readonly** com link "Para alterar, use Aplicar Reajuste ou Registrar Renegociação".
-- Em contratos **novos** → continua editável (precisa definir valor inicial).
-- Manter o aviso amarelo já implementado para casos limite.
-- **Novo botão "Registrar Renegociação"** (dialog menor, separado do reajuste):
-  - Para mudanças de escopo que NÃO são reajuste de índice.
-  - Grava só em `contract_history(action='renegotiation')` + atualiza `monthly_value` e `contract_services`.
-  - **NÃO** mexe em `contract_adjustments` nem em `adjustment_date`.
+- Componente novo `ContractEditHeader` (sticky `top-0`, `z-10`, `backdrop-blur`):
+  - Botão voltar (padrão iOS, canto superior esquerdo conforme regra do projeto)
+  - Nome do contrato + cliente em destaque (`Orbitron` para nome)
+  - Linha de metadados: status badge + valor atual (`tabular-nums`) + próxima fatura
+  - Botão "Salvar" sempre visível (some o fim-de-form perdido)
 
-#### D. Indicador na listagem `ContractsPage`
+### C. Barra de ações rápidas
 
-- Badge sutil no card: 🔔 "Reajuste em 15 dias" quando `adjustment_date` ≤ 30 dias.
-- O cron `check-adjustments-daily` já cria notificação — vamos só refletir visualmente.
+Substitui ações que só existiam no menu da listagem. Acessível em qualquer aba:
+- **Faturas do contrato** → abre `ContractInvoicesSheet`
+- **Histórico** → abre `ContractHistorySheet`
+- **Nova cobrança extra** → abre `ContractAdditionalChargeDialog`
+- **Menu ⋮**: Duplicar contrato (futuro), Cancelar contrato (com AlertDialog)
 
-### Regras de negócio consolidadas (vai pro tooltip "ⓘ" do card)
+### D. Melhorias de UX/leigo (skill)
 
-| Quero fazer | Uso | Atualiza |
-|---|---|---|
-| Reajuste anual por índice (IGPM/IPCA/INPC) | Botão **Aplicar Reajuste** | `contract_adjustments` + history + `monthly_value` + services + `adjustment_date += 1 ano` |
-| Reajuste FIXO automático | Cron `check-contract-adjustments` na data configurada | Igual ao acima, automático |
-| Mudança de escopo (upgrade/downgrade) | Botão **Registrar Renegociação** | `contract_history` + `monthly_value` + services (não toca em `adjustment_date`) |
-| Só alterar data/índice de referência | Botão **Editar Configuração** | apenas `adjustment_date`, `adjustment_index`, `adjustment_percentage` |
+- Cada aba tem 1 frase de helper explicando para que serve (`input-helper-text`).
+- Tooltips PT-BR simples em todos os termos técnicos (NFS-e, IGP-M, Asaas, etc).
+- Validação inline on blur, não on change (`inline-validation`).
+- Mobile: as Tabs viram Accordion vertical (sem scroll horizontal de abas).
+- Toast Sonner em toda mutation (sucesso + erro com mensagem amigável).
+- Empty state em todas as listas (faturas, histórico, serviços).
+
+### E. Conferência de "menus que não funcionavam"
+
+Auditar os fluxos abaixo nesta refatoração (botões clicados → ação real):
+1. Voltar — `navigate("/contracts")` ✅
+2. Salvar — `mutation.mutate(form.getValues())` em qualquer aba (não só na última)
+3. Aplicar Reajuste → edge fn `apply-contract-adjustment` → invalidar `["contract", id]` e `["contracts"]`
+4. Registrar Renegociação → grava `contract_history`, atualiza `monthly_value` (sem mexer em `adjustment_date`)
+5. Editar Configuração de reajuste → só atualiza `adjustment_date/index/percentage`
+6. Faturas/Histórico/Cobrança extra → abrem os sheets/dialogs já existentes
+7. Cancelar contrato → muda `status='cancelled'` com `contract_history`
+
+## Parte 4 — Validação automatizada do Asaas pós-reajuste
+
+Pequeno indicador no card de Reajuste:
+
+```text
+┌─ Próxima cobrança no Asaas ─────────────────┐
+│ R$ 150,00 (3× R$ 50,00)                     │
+│ Vence em 07/06/2026 · Boleto · Asaas        │
+│ Será gerada automaticamente em 02/06/2026   │
+└─────────────────────────────────────────────┘
+```
+
+Cálculo no frontend (sem chamar Asaas):
+- `intervalMonths` ← mapa de `billing_frequency`
+- `nextAmount = monthly_value × intervalMonths`
+- `nextDue = próximo billing_day a partir de hoje`
+- `nextGen = nextDue - days_before_due`
+
+Isso dá ao usuário **certeza visual** de que o reajuste vai chegar correto no Asaas.
 
 ---
 
 ## Arquivos
 
 **Criar:**
-- `src/components/contracts/ContractAdjustmentCard.tsx` (card principal)
-- `src/components/contracts/ContractAdjustmentConfigSheet.tsx` (Sheet de "Editar Configuração")
-- `src/components/contracts/ContractRenegotiationDialog.tsx` (novo dialog)
-- `src/components/contracts/ContractAdjustmentHistoryList.tsx` (lista colapsável)
-- `src/hooks/useContractAdjustmentHistory.ts` (combina `contract_adjustments` + `contract_history`)
+- `src/components/contracts/ContractEditHeader.tsx` — header sticky com identidade
+- `src/components/contracts/ContractEditTabs.tsx` — Tabs (desktop) / Accordion (mobile)
+- `src/components/contracts/ContractQuickActions.tsx` — barra de ações (Faturas/Histórico/Extra/⋮)
+- `src/components/contracts/sections/ContractGeneralSection.tsx` — extrai bloco "Geral" do form
+- `src/components/contracts/sections/ContractAdvancedSection.tsx` — notas internas + cancelar
+- `src/components/contracts/NextAsaasInvoicePreview.tsx` — bloco de preview da próxima cobrança
 
 **Editar:**
-- `src/components/contracts/ContractForm.tsx` — substituir `ContractAdjustmentSection` pelo card; readonly em `monthly_value` para contratos existentes
-- `src/components/contracts/ContractAdjustmentDialog.tsx` — preview de impacto + data de vigência + atalho IGP-M + AlertDialog
-- `src/pages/contracts/ContractsPage.tsx` — badge "Reajuste em X dias"
+- `src/pages/contracts/EditContractPage.tsx` — usar header + tabs + quick actions
+- `src/components/contracts/ContractForm.tsx` — quebrar em seções por aba (mantém schema/mutation, só reorganiza render)
+- `src/components/contracts/ContractAdjustmentCard.tsx` — embutir `NextAsaasInvoicePreview`
 - `CHANGELOG.md`
 
-**Remover:** `src/components/contracts/sections/ContractAdjustmentSection.tsx` (substituído).
+**Sem alteração de regra de negócio:** schema do form, edge functions (`apply-contract-adjustment`, `generate-monthly-invoices`, `asaas-nfse`), tabelas e cron continuam exatamente iguais. **A mudança é puramente de apresentação e organização** — alinhada ao princípio do projeto de "não adicionar features novas".
 
 ## Fora do escopo
-- Não muda nada do cron de geração de faturas (validado correto).
-- Não toca em `contract_adjustments` do Gayger (não houve reajuste).
-- Não altera `apply-contract-adjustment` edge function.
+- Não mexer em `ContractsPage` (listagem) — só a edição.
+- Não mexer no fluxo de criação de contrato (`NewContractPage`) — fica para outra rodada.
+- Não alterar nenhum cron, edge function ou tabela.
+- Não tocar em integração Asaas (já validada correta).
 
 **Posso implementar?**
