@@ -1,6 +1,20 @@
 # Changelog
 
+## [Não publicado] - Validação do reajuste anual
+
+### Corrigido
+- **Reajuste anual sem aviso**: 26 contratos ativos (incluindo Gayger) estavam sem `adjustment_date`, então o cron `check-contract-adjustments` nunca os enxergava. Migração de backfill aplicada: `start_date + N anos` (próxima data futura) ou `hoje + 1 ano` quando não há `start_date`.
+
+### Melhorado
+- **`check-contract-adjustments`**: agora envia lembretes progressivos — **D-30** (info), **D-7** (warning), **D-0** (auto-aplica FIXO ou warning manual) e **D+1..D+30** (warning diário de vencimento). Idempotência via `contract_history` (`action='adjustment_reminder'` + `changes.bucket`) impede duplicatas no mesmo dia.
+- **`ContractForm`**: ao criar contrato sem informar `adjustment_date`, o sistema preenche automaticamente com `start_date + 1 ano`, garantindo que o lembrete anual sempre dispare.
+
+### Validado
+- Persistência do reajuste: `apply-contract-adjustment` atualiza `contracts.monthly_value` e `contract_services.unit_value`. O cron `generate-monthly-invoices` lê `monthly_value × intervalMonths`, então o novo valor vale automaticamente para todas as próximas faturas (mensal, trimestral, semestral, anual) — inclusive Asaas, que usa pagamentos pontuais por fatura.
+
 Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
+
+
 
 O formato é baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere a versionamento semântico quando aplicável.
