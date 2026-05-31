@@ -35,6 +35,7 @@ import { ContractInternalNotesSection } from "./sections/ContractInternalNotesSe
 import { ContractNfseSection } from "./sections/ContractNfseSection";
 import { DatePickerField } from "./sections/DatePickerField";
 import { MessageSquare, Check, ChevronsUpDown, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
