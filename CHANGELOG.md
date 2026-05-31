@@ -19,10 +19,25 @@ Categorias usadas em cada entrada:
 ## [Não lançado]
 
 ### Adicionado
-- Alerta visual no formulário de edição de contrato quando o valor mensal é alterado direto, orientando o uso do botão "Aplicar Reajuste" para reajustes anuais de índice.
+- **Reajuste Anual — UI repaginada (skill ui-ux-pro-max):**
+  - Novo `ContractAdjustmentCard` (substitui a antiga `ContractAdjustmentSection` em contratos existentes): mostra status colorido com countdown até o próximo reajuste, índice + tooltip explicativo, valor atual com cálculo por cobrança (mensal/trimestral/etc.), última atualização e histórico colapsável.
+  - Novo dialog `ContractRenegotiationDialog` para registrar mudanças de escopo (upgrade/downgrade) — grava em `contract_history(action='renegotiation')` sem mexer em `contract_adjustments` nem na data do próximo reajuste.
+  - Nova `ContractAdjustmentConfigSheet` para alterar apenas data/índice/percentual fixo sem aplicar reajuste.
+  - Novo hook `useContractAdjustmentHistory` (combina `contract_adjustments` + `contract_history` em timeline unificada).
+  - Novo hook `useLatestEconomicIndex` (lê último IGPM/IPCA/INPC acumulado 12m de `economic_indices`).
+- **`ContractAdjustmentDialog` melhorado:**
+  - Pré-visualização em tempo real do impacto (valor mensal, por cobrança, próxima data).
+  - Atalho "Buscar atual" preenche automaticamente o % com o índice mais recente.
+  - Campo "Data de vigência" (default hoje).
+  - `AlertDialog` de confirmação antes de aplicar.
 
 ### Modificado
+- `ContractForm`: campo `monthly_value` (CurrencyInput manual) só aparece em **contratos novos**. Em contratos existentes, valor é alterado exclusivamente via Aplicar Reajuste / Registrar Renegociação.
+- Alerta visual amarelo mantido para edição direta de `monthly_value` via serviços, orientando o uso dos botões corretos.
 - Contrato AIRDUTO: registrado `renegotiation` em `contract_history` (R$ 1.500 → R$ 2.300) e definida `adjustment_date` para 2027-05-30.
+
+### Validado
+- Contrato **Gayger** (R$ 50/mês trimestral): cron `generate-monthly-invoices` vai gerar 1 fatura R$ 150,00 no dia 02/06/2026 (janela `days_before_due=5` a partir do vencimento 07/06). Cadência trimestral garantida pelo gate `monthsSince >= intervalMonths` em `index.ts:341-375`.
 
 
 

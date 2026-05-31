@@ -30,6 +30,7 @@ import { ContractServicesSection, ContractService } from "./ContractServicesSect
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
 import { ContractBillingSection } from "./sections/ContractBillingSection";
 import { ContractAdjustmentSection } from "./sections/ContractAdjustmentSection";
+import { ContractAdjustmentCard } from "./ContractAdjustmentCard";
 import { ContractInternalNotesSection } from "./sections/ContractInternalNotesSection";
 import { ContractNfseSection } from "./sections/ContractNfseSection";
 import { DatePickerField } from "./sections/DatePickerField";
@@ -698,19 +699,33 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
 
         <ContractBillingSection form={form} calculatedTotal={calculatedTotal} isNewContract={!contractData} />
 
-        <ContractAdjustmentSection form={form} />
+        {contractData ? (
+          <ContractAdjustmentCard
+            contract={{
+              id: contractData.id,
+              name: contractData.name,
+              monthly_value: contractData.monthly_value,
+              adjustment_date: contractData.adjustment_date,
+              adjustment_index: contractData.adjustment_index,
+              adjustment_percentage: contractData.adjustment_percentage,
+              billing_frequency: contractData.billing_frequency,
+            }}
+          />
+        ) : (
+          <ContractAdjustmentSection form={form} />
+        )}
 
         {/* Services Section */}
         <Separator className="my-6" />
-        
+
         <ContractServicesSection
           contractId={contractData?.id}
           initialServices={existingServices}
           onChange={handleServicesChange}
         />
 
-        {/* Manual Value Override */}
-        {contractServices.length === 0 && (
+        {/* Manual Value Override — somente em contratos novos sem serviços; existentes devem usar Reajuste/Renegociação */}
+        {contractServices.length === 0 && !contractData && (
           <FormField
             control={form.control}
             name="monthly_value"
