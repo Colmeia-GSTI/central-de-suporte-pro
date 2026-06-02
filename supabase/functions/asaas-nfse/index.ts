@@ -307,6 +307,95 @@ async function ensureCustomerSync(
   return { customerId, client: client as ClientData };
 }
 
+/**
+ * Versão "leve" do sync de cliente, usada antes de criar BOLETO/PIX.
+ * Diferente de ensureCustomerSync (que exige email+endereço+CEP por causa da NFS-e),
+ * aqui exigimos apenas nome + CNPJ/CPF. Sempre faz PUT se o cliente já existir no
+ * Asaas, para garantir que mudanças locais de CNPJ/email se propaguem antes do
+ * boleto ser emitido.
+ */
+async function ensureCustomerForPayment(
+  supabase: SupabaseClient,
+  settings: AsaasSettings,
+  clientId: string,
+  correlationId: string,
+): Promise<{ customerId: string; client: ClientData }> {
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("id, name, email, financial_email, phone, whatsapp, document, zip_code, address, city, state, asaas_customer_id")
+    .eq("id", clientId)
+    .single();
+
+  if (clientError || !client) {
+    throw new AsaasApiError(ERROR_CODES.CLIENT_NOT_FOUND, 404, "CLIENT_NOT_FOUND");
+  }
+
+  const cpfCnpj = client.document?.replace(/\D/g, "");
+  if (!cpfCnpj) {
+    throw new AsaasApiError(
+      "Cliente sem CPF/CNPJ cadastrado. Atualize o cadastro antes de gerar cobrança.",
+      400,
+      "CLIENT_MISSING_DOCUMENT",
+    );
+  }
+
+  const email = client.financial_email || client.email || undefined;
+  const postalCode = client.zip_code?.replace(/\D/g, "");
+
+  const customerPayload: Record<string, unknown> = {
+    name: client.name,
+    cpfCnpj,
+    email,
+    phone: client.phone?.replace(/\D/g, "") || undefined,
+    mobilePhone: client.whatsapp?.replace(/\D/g, "") || undefined,
+    externalReference: client.id,
+    notificationDisabled: false,
+  };
+  // Endereço é opcional para boleto/PIX, mas se houver enviamos
+  if (postalCode && postalCode.length === 8) {
+    customerPayload.postalCode = postalCode;
+    if (client.address) {
+      customerPayload.address = extractStreetFromAddress(client.address);
+      customerPayload.addressNumber = extractNumberFromAddress(client.address) || "S/N";
+    }
+    if (client.city) customerPayload.province = client.city;
+  }
+
+  let customerId: string;
+  if (client.asaas_customer_id) {
+    log(correlationId, "info", "Sincronizando cliente no Asaas antes da cobrança", {
+      customer_id: client.asaas_customer_id,
+      cpf_cnpj: cpfCnpj,
+    });
+    try {
+      await asaasRequest(
+        settings,
+        `/customers/${client.asaas_customer_id}`,
+        "PUT",
+        customerPayload,
+        correlationId,
+      );
+      customerId = client.asaas_customer_id;
+    } catch (updateError) {
+      log(correlationId, "warn", "Falha ao atualizar cliente no Asaas, criando novo", {
+        error: updateError instanceof Error ? updateError.message : String(updateError),
+      });
+      const newCustomer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+      customerId = newCustomer.id;
+      await supabase.from("clients").update({ asaas_customer_id: customerId }).eq("id", clientId);
+    }
+  } else {
+    log(correlationId, "info", "Criando cliente no Asaas (não existia)");
+    const newCustomer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+    customerId = newCustomer.id;
+    await supabase.from("clients").update({ asaas_customer_id: customerId }).eq("id", clientId);
+  }
+
+  return { customerId, client: client as ClientData };
+}
+
+
+
 function generateValidCpf(): string {
   const randomDigit = () => Math.floor(Math.random() * 10);
   const computeDigit = (digits: number[], factor: number) => {
