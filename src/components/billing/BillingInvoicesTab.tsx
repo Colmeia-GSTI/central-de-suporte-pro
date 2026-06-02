@@ -704,16 +704,24 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             onResendNotification={handleResendNotification}
                             onEmitNfse={() => setNfseInvoice(invoice)}
                             onCancelBoleto={async () => {
-                              if (!invoice.boleto_barcode && !invoice.boleto_url) {
+                              if (!invoice.boleto_barcode && !invoice.boleto_url && !invoice.asaas_payment_id) {
                                 toast.error("Nenhum boleto gerado para cancelar");
                                 return;
                               }
                               setIsCancellingBoleto(true);
                               try {
-                                const { data, error } = await supabase.functions.invoke("banco-inter", {
-                                  body: { action: "cancel", invoice_id: invoice.id, motivo_cancelamento: "ACERTOS" },
-                                });
-                                if (error || data?.error) throw new Error(data?.error || "Erro ao cancelar");
+                                const provider = invoice.billing_provider ?? "banco_inter";
+                                const { data, error } =
+                                  provider === "asaas"
+                                    ? await supabase.functions.invoke("asaas-nfse", {
+                                        body: { action: "cancel_payment", invoice_id: invoice.id, motivo: "ACERTOS" },
+                                      })
+                                    : await supabase.functions.invoke("banco-inter", {
+                                        body: { action: "cancel", invoice_id: invoice.id, motivo_cancelamento: "ACERTOS" },
+                                      });
+                                if (error || data?.error || data?.success === false) {
+                                  throw new Error(data?.error || error?.message || "Erro ao cancelar");
+                                }
                                 toast.success(`Boleto #${invoice.invoice_number} cancelado`);
                                 queryClient.invalidateQueries({ queryKey: ["invoices"] });
                                 queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
@@ -723,6 +731,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                                 setIsCancellingBoleto(false);
                               }
                             }}
+
                             onCancelNfse={() => setCancelNfseInvoice(invoice)}
                             onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
