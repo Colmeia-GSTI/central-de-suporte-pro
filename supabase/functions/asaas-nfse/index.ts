@@ -1907,6 +1907,7 @@ Deno.serve(async (req) => {
             amount,
             due_date,
             description,
+            asaas_payment_id,
             clients (
               id,
               name,
@@ -1923,29 +1924,33 @@ Deno.serve(async (req) => {
           throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
         }
 
-        // 2. Garantir que o cliente existe no Asaas
-        let customerId = (invoice.clients as any)?.asaas_customer_id;
-        if (!customerId) {
-          log(correlationId, "info", "Criando cliente no Asaas para cobrança");
-          
-          const clientData = invoice.clients as any;
-          const customerData = {
-            name: clientData?.name || "Cliente",
-            email: clientData?.financial_email || clientData?.email || null,
-            cpfCnpj: clientData?.document?.replace(/\D/g, "") || null,
-            externalReference: invoice.client_id,
-            notificationDisabled: false,
-          };
-
-          const customer = await asaasRequest(settings, "/customers", "POST", customerData, correlationId);
-          customerId = customer.id;
-
-          // Atualizar cliente com asaas_customer_id
-          await supabase
-            .from("clients")
-            .update({ asaas_customer_id: customerId })
-            .eq("id", invoice.client_id);
+        // 1.5 IDEMPOTÊNCIA: se já existe payment Asaas para essa fatura, não recria.
+        // Evita race condition entre fluxos paralelos (boleto + NFS-e) criando 2 cobranças.
+        if (invoice.asaas_payment_id) {
+          log(correlationId, "info", "Fatura já possui asaas_payment_id, reutilizando", {
+            asaas_payment_id: invoice.asaas_payment_id,
+          });
+          return new Response(
+            JSON.stringify({
+              success: true,
+              payment_id: invoice.asaas_payment_id,
+              reused: true,
+              correlation_id: correlationId,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
+
+        // 2. SINCRONIZAR cliente no Asaas (PUT) ANTES de criar cobrança.
+        // Garante que mudanças locais de CNPJ/email cheguem ao Asaas antes do boleto.
+        // Bug histórico (caso Calherão 06/2026): cobrança era criada sem PUT e saía
+        // com o CNPJ antigo que estava cadastrado no Asaas.
+        const { customerId } = await ensureCustomerForPayment(
+          supabase,
+          settings,
+          invoice.client_id,
+          correlationId,
+        );
 
         // 3. Criar cobrança no Asaas
         const paymentType = billing_type || "BOLETO";
@@ -1957,6 +1962,7 @@ Deno.serve(async (req) => {
           description: invoice.description || `Fatura #${invoice.invoice_number}`,
           externalReference: invoice.id,
         };
+
 
         log(correlationId, "info", "Criando cobrança no Asaas", { billing_type: paymentType });
         const payment = await asaasRequest(settings, "/payments", "POST", paymentData, correlationId);
