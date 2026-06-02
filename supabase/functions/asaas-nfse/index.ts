@@ -1997,6 +1997,10 @@ Deno.serve(async (req) => {
             due_date,
             description,
             asaas_payment_id,
+            asaas_invoice_url,
+            boleto_url,
+            boleto_barcode,
+            pix_code,
             clients (
               id,
               name,
@@ -2013,17 +2017,50 @@ Deno.serve(async (req) => {
           throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
         }
 
-        // 1.5 IDEMPOTÊNCIA: se já existe payment Asaas para essa fatura, não recria.
-        // Evita race condition entre fluxos paralelos (boleto + NFS-e) criando 2 cobranças.
+        const requestedType = (billing_type || "BOLETO").toUpperCase();
+
+        // 1.5 IDEMPOTÊNCIA: se já existe cobrança Asaas para essa fatura, NÃO cria outra.
+        // Reusa o mesmo payment_id (boleto + PIX podem coexistir no MESMO payment do Asaas).
+        // Bug histórico: cada chamada (boleto, PIX) criava uma cobrança nova → 2 boletos por fatura.
         if (invoice.asaas_payment_id) {
-          log(correlationId, "info", "Fatura já possui asaas_payment_id, reutilizando", {
+          log(correlationId, "info", "Fatura já possui cobrança no Asaas, reutilizando", {
             asaas_payment_id: invoice.asaas_payment_id,
+            requested: requestedType,
           });
+
+          const updateData: Record<string, unknown> = {};
+
+          // Se está pedindo PIX e ainda não temos o código, buscar agora
+          if (requestedType === "PIX" && !invoice.pix_code) {
+            try {
+              const pixInfo = await asaasRequest(
+                settings,
+                `/payments/${invoice.asaas_payment_id}/pixQrCode`,
+                "GET",
+                undefined,
+                correlationId,
+              );
+              if (pixInfo?.payload) {
+                updateData.pix_code = pixInfo.payload;
+                updateData.payment_method = "pix";
+              }
+            } catch (e) {
+              log(correlationId, "warn", "Falha ao buscar PIX da cobrança existente", { error: String(e) });
+            }
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            await supabase.from("invoices").update(updateData).eq("id", invoice_id);
+          }
+
           return new Response(
             JSON.stringify({
               success: true,
               payment_id: invoice.asaas_payment_id,
               reused: true,
+              pix_code: updateData.pix_code ?? invoice.pix_code ?? null,
+              boleto_url: invoice.boleto_url,
+              invoice_url: invoice.asaas_invoice_url,
               correlation_id: correlationId,
             }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -2040,6 +2077,8 @@ Deno.serve(async (req) => {
           invoice.client_id,
           correlationId,
         );
+
+
 
         // 3. Criar cobrança no Asaas
         const paymentType = billing_type || "BOLETO";
