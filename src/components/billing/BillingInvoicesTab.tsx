@@ -852,15 +852,22 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
               let errorCount = 0;
               for (const inv of withBoleto) {
                 try {
-                  const { data, error } = await supabase.functions.invoke("banco-inter", {
-                    body: { action: "cancel", invoice_id: inv.id, motivo_cancelamento: "ACERTOS" },
-                  });
-                  if (error || data?.error) errorCount++;
+                  const provider = inv.billing_provider ?? "banco_inter";
+                  const { data, error } =
+                    provider === "asaas"
+                      ? await supabase.functions.invoke("asaas-nfse", {
+                          body: { action: "cancel_payment", invoice_id: inv.id, motivo: "ACERTOS" },
+                        })
+                      : await supabase.functions.invoke("banco-inter", {
+                          body: { action: "cancel", invoice_id: inv.id, motivo_cancelamento: "ACERTOS" },
+                        });
+                  if (error || data?.error || data?.success === false) errorCount++;
                   else successCount++;
                 } catch {
                   errorCount++;
                 }
               }
+
               if (successCount > 0) {
                 toast.success(`${successCount} boleto(s) cancelado(s)`, {
                   description: errorCount > 0 ? `${errorCount} falha(s)` : undefined,
