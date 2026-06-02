@@ -307,6 +307,95 @@ async function ensureCustomerSync(
   return { customerId, client: client as ClientData };
 }
 
+/**
+ * Versão "leve" do sync de cliente, usada antes de criar BOLETO/PIX.
+ * Diferente de ensureCustomerSync (que exige email+endereço+CEP por causa da NFS-e),
+ * aqui exigimos apenas nome + CNPJ/CPF. Sempre faz PUT se o cliente já existir no
+ * Asaas, para garantir que mudanças locais de CNPJ/email se propaguem antes do
+ * boleto ser emitido.
+ */
+async function ensureCustomerForPayment(
+  supabase: SupabaseClient,
+  settings: AsaasSettings,
+  clientId: string,
+  correlationId: string,
+): Promise<{ customerId: string; client: ClientData }> {
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("id, name, email, financial_email, phone, whatsapp, document, zip_code, address, city, state, asaas_customer_id")
+    .eq("id", clientId)
+    .single();
+
+  if (clientError || !client) {
+    throw new AsaasApiError(ERROR_CODES.CLIENT_NOT_FOUND, 404, "CLIENT_NOT_FOUND");
+  }
+
+  const cpfCnpj = client.document?.replace(/\D/g, "");
+  if (!cpfCnpj) {
+    throw new AsaasApiError(
+      "Cliente sem CPF/CNPJ cadastrado. Atualize o cadastro antes de gerar cobrança.",
+      400,
+      "CLIENT_MISSING_DOCUMENT",
+    );
+  }
+
+  const email = client.financial_email || client.email || undefined;
+  const postalCode = client.zip_code?.replace(/\D/g, "");
+
+  const customerPayload: Record<string, unknown> = {
+    name: client.name,
+    cpfCnpj,
+    email,
+    phone: client.phone?.replace(/\D/g, "") || undefined,
+    mobilePhone: client.whatsapp?.replace(/\D/g, "") || undefined,
+    externalReference: client.id,
+    notificationDisabled: false,
+  };
+  // Endereço é opcional para boleto/PIX, mas se houver enviamos
+  if (postalCode && postalCode.length === 8) {
+    customerPayload.postalCode = postalCode;
+    if (client.address) {
+      customerPayload.address = extractStreetFromAddress(client.address);
+      customerPayload.addressNumber = extractNumberFromAddress(client.address) || "S/N";
+    }
+    if (client.city) customerPayload.province = client.city;
+  }
+
+  let customerId: string;
+  if (client.asaas_customer_id) {
+    log(correlationId, "info", "Sincronizando cliente no Asaas antes da cobrança", {
+      customer_id: client.asaas_customer_id,
+      cpf_cnpj: cpfCnpj,
+    });
+    try {
+      await asaasRequest(
+        settings,
+        `/customers/${client.asaas_customer_id}`,
+        "PUT",
+        customerPayload,
+        correlationId,
+      );
+      customerId = client.asaas_customer_id;
+    } catch (updateError) {
+      log(correlationId, "warn", "Falha ao atualizar cliente no Asaas, criando novo", {
+        error: updateError instanceof Error ? updateError.message : String(updateError),
+      });
+      const newCustomer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+      customerId = newCustomer.id;
+      await supabase.from("clients").update({ asaas_customer_id: customerId }).eq("id", clientId);
+    }
+  } else {
+    log(correlationId, "info", "Criando cliente no Asaas (não existia)");
+    const newCustomer = await asaasRequest(settings, "/customers", "POST", customerPayload, correlationId);
+    customerId = newCustomer.id;
+    await supabase.from("clients").update({ asaas_customer_id: customerId }).eq("id", clientId);
+  }
+
+  return { customerId, client: client as ClientData };
+}
+
+
+
 function generateValidCpf(): string {
   const randomDigit = () => Math.floor(Math.random() * 10);
   const computeDigit = (digits: number[], factor: number) => {
@@ -1907,6 +1996,11 @@ Deno.serve(async (req) => {
             amount,
             due_date,
             description,
+            asaas_payment_id,
+            asaas_invoice_url,
+            boleto_url,
+            boleto_barcode,
+            pix_code,
             clients (
               id,
               name,
@@ -1923,32 +2017,71 @@ Deno.serve(async (req) => {
           throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
         }
 
-        // 2. Garantir que o cliente existe no Asaas
-        let customerId = (invoice.clients as any)?.asaas_customer_id;
-        if (!customerId) {
-          log(correlationId, "info", "Criando cliente no Asaas para cobrança");
-          
-          const clientData = invoice.clients as any;
-          const customerData = {
-            name: clientData?.name || "Cliente",
-            email: clientData?.financial_email || clientData?.email || null,
-            cpfCnpj: clientData?.document?.replace(/\D/g, "") || null,
-            externalReference: invoice.client_id,
-            notificationDisabled: false,
-          };
+        const requestedType = (billing_type || "BOLETO").toUpperCase();
 
-          const customer = await asaasRequest(settings, "/customers", "POST", customerData, correlationId);
-          customerId = customer.id;
+        // 1.5 IDEMPOTÊNCIA: se já existe cobrança Asaas para essa fatura, NÃO cria outra.
+        // Reusa o mesmo payment_id (boleto + PIX podem coexistir no MESMO payment do Asaas).
+        // Bug histórico: cada chamada (boleto, PIX) criava uma cobrança nova → 2 boletos por fatura.
+        if (invoice.asaas_payment_id) {
+          log(correlationId, "info", "Fatura já possui cobrança no Asaas, reutilizando", {
+            asaas_payment_id: invoice.asaas_payment_id,
+            requested: requestedType,
+          });
 
-          // Atualizar cliente com asaas_customer_id
-          await supabase
-            .from("clients")
-            .update({ asaas_customer_id: customerId })
-            .eq("id", invoice.client_id);
+          const updateData: Record<string, unknown> = {};
+
+          // Se está pedindo PIX e ainda não temos o código, buscar agora
+          if (requestedType === "PIX" && !invoice.pix_code) {
+            try {
+              const pixInfo = await asaasRequest(
+                settings,
+                `/payments/${invoice.asaas_payment_id}/pixQrCode`,
+                "GET",
+                undefined,
+                correlationId,
+              );
+              if (pixInfo?.payload) {
+                updateData.pix_code = pixInfo.payload;
+                updateData.payment_method = "pix";
+              }
+            } catch (e) {
+              log(correlationId, "warn", "Falha ao buscar PIX da cobrança existente", { error: String(e) });
+            }
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            await supabase.from("invoices").update(updateData).eq("id", invoice_id);
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              payment_id: invoice.asaas_payment_id,
+              reused: true,
+              pix_code: updateData.pix_code ?? invoice.pix_code ?? null,
+              boleto_url: invoice.boleto_url,
+              invoice_url: invoice.asaas_invoice_url,
+              correlation_id: correlationId,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
+        // 2. SINCRONIZAR cliente no Asaas (PUT) ANTES de criar cobrança.
+        // Garante que mudanças locais de CNPJ/email cheguem ao Asaas antes do boleto.
+        // Bug histórico (caso Calherão 06/2026): cobrança era criada sem PUT e saía
+        // com o CNPJ antigo que estava cadastrado no Asaas.
+        const { customerId } = await ensureCustomerForPayment(
+          supabase,
+          settings,
+          invoice.client_id,
+          correlationId,
+        );
+
+
+
         // 3. Criar cobrança no Asaas
-        const paymentType = billing_type || "BOLETO";
+        const paymentType = requestedType;
         const paymentData = {
           customer: customerId,
           billingType: paymentType,
@@ -1957,6 +2090,8 @@ Deno.serve(async (req) => {
           description: invoice.description || `Fatura #${invoice.invoice_number}`,
           externalReference: invoice.id,
         };
+
+
 
         log(correlationId, "info", "Criando cobrança no Asaas", { billing_type: paymentType });
         const payment = await asaasRequest(settings, "/payments", "POST", paymentData, correlationId);
@@ -2137,7 +2272,112 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "cancel_payment": {
+        // Cancela (deleta) o boleto/PIX no Asaas e limpa os campos locais.
+        // Usado pelo botão "Cancelar Boleto" quando billing_provider = 'asaas'.
+        const { invoice_id, motivo } = params;
+        if (!invoice_id) {
+          throw new AsaasApiError("invoice_id é obrigatório", 400, "MISSING_PARAM");
+        }
+
+        const { data: inv, error: invErr } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, asaas_payment_id, billing_provider, status")
+          .eq("id", invoice_id)
+          .single();
+
+        if (invErr || !inv) {
+          throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
+        }
+        if (!inv.asaas_payment_id) {
+          throw new AsaasApiError("Fatura não possui cobrança no Asaas", 400, "NO_ASAAS_PAYMENT");
+        }
+        if (inv.status === "paid") {
+          throw new AsaasApiError("Fatura já paga não pode ser cancelada", 400, "ALREADY_PAID");
+        }
+
+        log(correlationId, "info", "Cancelando cobrança no Asaas", {
+          invoice_id,
+          asaas_payment_id: inv.asaas_payment_id,
+          motivo,
+        });
+
+        try {
+          await asaasRequest(
+            settings,
+            `/payments/${inv.asaas_payment_id}`,
+            "DELETE",
+            undefined,
+            correlationId,
+          );
+        } catch (delErr) {
+          const msg = delErr instanceof Error ? delErr.message : String(delErr);
+          log(correlationId, "warn", "Falha ao deletar payment no Asaas", { error: msg });
+          // Erros típicos: "invalid_action" (já recebido/processando) → propagar
+          throw new AsaasApiError(
+            `Não foi possível cancelar a cobrança no Asaas: ${msg}`,
+            400,
+            "ASAAS_CANCEL_FAILED",
+          );
+        }
+
+        // Limpar campos locais da cobrança (mantém a fatura)
+        await supabase
+          .from("invoices")
+          .update({
+            asaas_payment_id: null,
+            asaas_invoice_url: null,
+            boleto_url: null,
+            boleto_barcode: null,
+            boleto_status: "cancelado",
+            pix_code: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invoice_id);
+
+        await supabase.from("audit_logs").insert({
+          action: "asaas_payment_cancelled",
+          table_name: "invoices",
+          record_id: invoice_id,
+          new_data: {
+            asaas_payment_id: inv.asaas_payment_id,
+            motivo: motivo || "Não informado",
+            correlation_id: correlationId,
+          },
+        });
+
+        log(correlationId, "info", "Cobrança cancelada com sucesso", { invoice_id });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Cobrança da fatura #${inv.invoice_number} cancelada no Asaas`,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "sync_customer": {
+        // Força sincronização (PUT) do cliente no Asaas. Útil após editar CNPJ/email
+        // localmente — propaga a mudança ANTES da próxima emissão.
+        const { client_id } = params;
+        if (!client_id) {
+          throw new AsaasApiError("client_id é obrigatório", 400, "MISSING_PARAM");
+        }
+        const { customerId } = await ensureCustomerForPayment(supabase, settings, client_id, correlationId);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            customer_id: customerId,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
+
         log(correlationId, "warn", `Ação desconhecida: ${action}`);
         return new Response(
           JSON.stringify({ success: false, error: `Ação desconhecida: ${action}`, code: "UNKNOWN_ACTION", correlation_id: correlationId }),

@@ -1,75 +1,104 @@
-# Validação do fluxo de reajuste — diagnóstico e correções
 
-## ✅ O que JÁ funciona corretamente
+# Investigação: Boleto do Calherão emitido no CNPJ antigo
 
-### 1. Persistência do novo valor nos próximos meses
-A função `apply-contract-adjustment` faz, em transação lógica:
-- Atualiza `contracts.monthly_value` para o novo valor
-- Atualiza proporcionalmente todos os `contract_services` (unit_value e value)
-- Registra histórico em `contract_adjustments` e `contract_history`
-- Define `contracts.adjustment_date = hoje + 1 ano`
+## 📋 O que aconteceu (cronologia real, do banco)
 
-A função `generate-monthly-invoices` (cron 11h) lê **sempre** `contracts.monthly_value × intervalMonths`. Ou seja, no caso do **Gayger** (R$ 50/mês, trimestral):
-- Hoje → fatura = 50 × 3 = R$ 150
-- Após reajuste de 10% → `monthly_value` vira R$ 55 → próxima fatura = 55 × 3 = **R$ 165**
+Cliente afetado: **CALHERRAO & FILHO LTDA – Matriz** (`20113749-…`).  
+CNPJ correto: `87.653.887/0001-03`. CNPJ antigo (errado): `93.730.224/0001-30`.  
+Asaas customer ID: `cus_000173909063`.
 
-✅ **Confirmado: o reajuste vale automaticamente para todos os meses seguintes, inclusive em ciclos trimestrais/semestrais/anuais.**
+| Data | Evento |
+|---|---|
+| 2026-05-01 11:01 | Cliente criado no Asaas com o CNPJ **errado** (`93.730.224/0001-30`) → `cus_000173909063`. |
+| 2026-05-14 17:21 | CNPJ corrigido no nosso banco para `87.653.887/0001-03`. **Asaas não foi atualizado.** |
+| 2026-06-01 11:00 | Geração automática da fatura #371. Boleto criado no Asaas usando `cus_000173909063` → emitido com **CNPJ antigo**. |
+| 2026-06-01 13:11 | NFS-e #245 autorizada → saiu com **CNPJ novo** (fluxo de NFS-e faz um PUT no cliente do Asaas que acabou aplicando o CNPJ correto). |
+| 2026-06-01 17:59 | Usuário re-salvou o cliente tentando forçar sincronização. |
+| Em seguida | Usuário tentou **cancelar o boleto** → erro. |
 
-### 2. Cron diário de verificação existe
-Job `check-adjustments-daily` roda todo dia às **10h UTC** e chama `check-contract-adjustments`, que:
-- Se índice = `FIXO` → aplica automaticamente via `apply-contract-adjustment`
-- Se índice = `IGPM/IPCA/INPC` → cria notificação no sino para admin + financeiro
+(O mesmo padrão de “duas chamadas Asaas em paralelo” aparece nos audit_logs: cada fatura recebeu **dois** `asaas_payment_id` em menos de 2s — fluxo de boleto e fluxo de NFS-e criando cobranças concorrentes.)
 
----
+## 🎯 Causa raiz (3 bugs reais)
 
-## ⚠️ Problemas encontrados (precisam ser corrigidos)
+### Bug 1 — Boleto Asaas nunca re-sincroniza o cliente
+`supabase/functions/asaas-nfse/index.ts`, action `create_payment` (linhas ~1895-1948):  
+só **cria** o cliente no Asaas se `asaas_customer_id` estiver vazio. **Nunca faz PUT.** Se o CNPJ mudar localmente depois, o boleto continua sendo emitido com os dados antigos do Asaas.
 
-### Problema 1 — Muitos contratos sem `adjustment_date`
-Levantamento atual: **26 de 38 contratos ativos** estão com `adjustment_date = NULL`, incluindo o **Gayger**.
-Impacto: o cron `check-contract-adjustments` filtra `WHERE adjustment_date = today`, então esses contratos **nunca disparam aviso de reajuste anual**.
+Já o fluxo de NFS-e usa `ensureCustomerInAsaas` (linhas ~262-289), que **sempre** faz PUT antes de emitir. Por isso a NFS-e saiu certa e o boleto saiu errado.
 
-### Problema 2 — Notificação só dispara no dia exato
-A função só notifica `adjustment_date = hoje`. Se o cron falhar num dia, ou se o financeiro estiver de férias, o aviso é perdido. Não há lembrete antecipado.
+### Bug 2 — Botão “Cancelar Boleto” vai sempre pro Banco Inter
+`src/components/billing/BillingInvoicesTab.tsx` linha 706-725:
+```ts
+onCancelBoleto={async () => {
+  ...
+  await supabase.functions.invoke("banco-inter", { body: { action: "cancel", ... } });
+}}
+```
+Hardcoded em `banco-inter`. A fatura do Calherão tem `billing_provider = 'asaas'` → a requisição vai pro provedor errado e dá erro. **Não existe nenhuma action `cancel` na função `asaas-nfse` para cobranças (payments).**
 
-### Problema 3 — Sem aviso prévio
-O financeiro precisa de tempo para apurar o índice acumulado (IGPM/IPCA dos últimos 12m) **antes** do vencimento. Hoje o sistema avisa só no dia D.
+### Bug 3 — Cobrança duplicada por race condition
+A geração mensal dispara, no mesmo segundo, criação de boleto + emissão de NFS-e. Cada um chama o Asaas, cria um `payment` e atualiza `invoices.asaas_payment_id`. Resultado: até 2 cobranças no Asaas por fatura (uma órfã). Audit confirma:
+- Fatura #371: `pay_b83irkjzbo4saw99` → `pay_w2l6nmjntct4m4ks`
+- Fatura #372: `pay_gpft34lhseo985mr` → `pay_606rt4w0m4kemo4c`
 
----
+## 🛠 Plano de correção
 
-## 🛠️ O que vou fazer
+### A) Sincronizar cliente no Asaas **antes** de criar boleto
+Em `supabase/functions/asaas-nfse/index.ts`, action `create_payment`: substituir o `if (!customerId) { criar }` por uma chamada a `ensureCustomerInAsaas(...)` (a mesma usada na NFS-e). Isso faz:
+- PUT em `/customers/{id}` com `cpfCnpj`, email, endereço, etc., toda vez que vamos emitir;
+- se o PUT falhar (cliente removido no Asaas), cria um novo e atualiza o `asaas_customer_id` local.
 
-### A) Migration: preencher `adjustment_date` dos contratos legados
-Para todos os contratos ativos sem `adjustment_date`:
-- Se houver `start_date` → `adjustment_date = start_date + 1 ano` (ajustando se já passou, soma anos até cair no futuro)
-- Caso contrário → `adjustment_date = hoje + 1 ano`
+Resultado: qualquer alteração local de CNPJ/endereço/email propaga pro Asaas antes da próxima cobrança.
 
-Resultado esperado: Gayger e os outros 25 contratos passam a entrar no cron de verificação.
+### B) Roteamento correto do “Cancelar Boleto” por `billing_provider`
+Em `src/components/billing/BillingInvoicesTab.tsx` (e no `ContractInvoiceActionsMenu.tsx`), trocar a chamada hardcoded por:
 
-### B) Melhorar `check-contract-adjustments` (lembretes antecipados)
-Adicionar notificações progressivas:
-- **D-30** → notificação `info`: "Contrato X terá reajuste anual em 30 dias (índice IGPM). Apure o acumulado."
-- **D-7** → notificação `warning`: "Contrato X tem reajuste em 7 dias."
-- **D-0** → comportamento atual (auto-aplica FIXO ou notifica `warning` para revisão manual).
-- **D+1 até D+30** → se ainda não foi aplicado, notificação `warning` diária com link direto para o card de reajuste (evita esquecimento).
+```ts
+const provider = invoice.billing_provider ?? "banco_inter";
+if (provider === "asaas") {
+  await supabase.functions.invoke("asaas-nfse", {
+    body: { action: "cancel_payment", invoice_id: invoice.id, motivo: "ACERTOS" },
+  });
+} else {
+  await supabase.functions.invoke("banco-inter", {
+    body: { action: "cancel", invoice_id: invoice.id, motivo_cancelamento: "ACERTOS" },
+  });
+}
+```
 
-Idempotência: gravar uma flag/última data notificada em `contract_history` (`action='adjustment_reminder'`) para não duplicar no mesmo dia.
+E implementar a action `cancel_payment` em `asaas-nfse/index.ts`:
+- Buscar `invoices.asaas_payment_id`;
+- `DELETE /payments/{id}` no Asaas (com tratamento dos erros 400/“invalid_action”/“payment_already_received”);
+- Limpar `boleto_url`, `boleto_barcode`, `pix_code`, `asaas_payment_id`, `boleto_status='cancelado'`;
+- Registrar em `audit_logs`.
 
-### C) Default no cadastro de contrato
-Em `ContractForm.tsx` (criação): se `adjustment_date` ficar vazio, calcular automaticamente `start_date + 1 ano` ao salvar (proteção para novos contratos).
+### C) Eliminar race de cobrança duplicada
+No `generate-monthly-invoices` (e/ou no `asaas-nfse create_payment`):  
+antes de criar um novo payment, checar se `invoices.asaas_payment_id` já existe. Se sim, reaproveitar. Garantir que boleto e NFS-e usem o **mesmo** payment (NFS-e do Asaas aceita `payment` opcional para vincular). Isso elimina cobranças órfãs.
 
-### D) Indicador visual no `ContractAdjustmentCard`
-O card já mostra "Próximo em X meses". Vou adicionar:
-- Badge **âmbar** quando faltar ≤ 30 dias ("Reajuste em breve")
-- Badge **vermelho** quando `adjustment_date ≤ hoje` ("Reajuste vencido — aplicar agora")
+### D) Limpeza específica do caso Calherão (one-shot, manual)
+1. No Asaas (painel ou via DELETE /payments/{id}): cancelar `pay_b83irkjzbo4saw99` (órfão) e `pay_w2l6nmjntct4m4ks` (boleto com CNPJ errado).
+2. Forçar PUT no `cus_000173909063` com o CNPJ correto (a correção A já fará isso na próxima emissão; opcionalmente rodar um job único agora).
+3. Re-emitir boleto da fatura #371 → sairá com CNPJ correto.
+4. Repetir verificação para a fatura #372 (Concreteira) por garantia.
 
----
+### E) Prevenção
+- Adicionar log explícito no Asaas sync quando `cpfCnpj` mudar (`old → new`) gravando em `application_logs` para auditoria.
+- Quando o usuário editar CNPJ de um cliente que já tem `asaas_customer_id`, disparar imediatamente um `sync_customer` para o Asaas (action nova, leve), em vez de esperar a próxima emissão.
 
-## Resumo da entrega
+## 🔍 Arquivos que serão alterados
+- `supabase/functions/asaas-nfse/index.ts` — refactor `create_payment` (usar `ensureCustomerInAsaas`); nova action `cancel_payment`; nova action `sync_customer`.
+- `src/components/billing/BillingInvoicesTab.tsx` — roteamento de cancelar boleto por provider.
+- `src/components/contracts/ContractInvoiceActionsMenu.tsx` — idem.
+- `src/hooks/useInvoiceActions.ts` — centralizar `handleCancelBoleto(invoice)` que escolhe o provider (DRY).
+- `src/components/clients/ClientForm.tsx` (ou equivalente) — chamar `sync_customer` após salvar quando CNPJ mudar.
+- `supabase/functions/generate-monthly-invoices/...` — guard contra duplicidade de `asaas_payment_id`.
+- `CHANGELOG.md`.
 
-1. Migration para corrigir os 26 contratos sem data
-2. Edge function `check-contract-adjustments` ampliada (D-30, D-7, D-0, vencidos)
-3. Default automático ao criar contrato novo
-4. Badges de urgência no card de reajuste
-5. Atualização do `CHANGELOG.md`
+## ✅ Como vou validar
+1. Reproduzir: alterar CNPJ de um cliente teste, gerar boleto → confirmar que o boleto sai com CNPJ novo.
+2. Clicar “Cancelar boleto” numa fatura `billing_provider=asaas` → confirmar DELETE no Asaas e limpeza dos campos.
+3. Rodar `generate-monthly-invoices` duas vezes → confirmar que não cria payment duplicado.
+4. Caso Calherão: re-emitir #371 e validar PDF/boleto com `87.653.887/0001-03`.
 
-**Não muda:** schema das tabelas, lógica do `generate-monthly-invoices`, integração Asaas, valores existentes. Só preenche datas faltantes e amplia a régua de notificação.
+Sem mudanças destrutivas no schema. Tudo reversível.
