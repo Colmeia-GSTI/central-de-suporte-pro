@@ -2081,7 +2081,7 @@ Deno.serve(async (req) => {
 
 
         // 3. Criar cobrança no Asaas
-        const paymentType = billing_type || "BOLETO";
+        const paymentType = requestedType;
         const paymentData = {
           customer: customerId,
           billingType: paymentType,
@@ -2090,6 +2090,7 @@ Deno.serve(async (req) => {
           description: invoice.description || `Fatura #${invoice.invoice_number}`,
           externalReference: invoice.id,
         };
+
 
 
         log(correlationId, "info", "Criando cobrança no Asaas", { billing_type: paymentType });
