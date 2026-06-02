@@ -1,5 +1,23 @@
 # Changelog
 
+## [Não publicado] - Correção emissão Asaas (caso Calherão)
+
+### Corrigido
+- **Boleto Asaas saía com CNPJ antigo após edição do cliente** (`asaas-nfse / create_payment`): a action só CRIAVA o cliente no Asaas quando `asaas_customer_id` era nulo — nunca fazia PUT. Resultado: qualquer alteração local de CNPJ/email não chegava ao Asaas e o boleto era emitido com os dados velhos. Agora chama o novo helper `ensureCustomerForPayment` que faz PUT em `/customers/{id}` antes de criar a cobrança (mesmo padrão já usado pela NFS-e).
+- **Botão "Cancelar Boleto" sempre chamava `banco-inter`** (`BillingInvoicesTab.tsx`): faturas com `billing_provider = 'asaas'` falhavam no cancelamento porque a requisição ia ao provedor errado. Agora roteia por `invoice.billing_provider` — Asaas vai para `asaas-nfse/cancel_payment`, Inter continua em `banco-inter/cancel`. Vale para o botão individual e para o cancelamento em lote.
+- **Cobrança duplicada por fatura no Asaas**: cada chamada de `create_payment` (uma para BOLETO, outra para PIX no mesmo "Emitir Completo") criava uma cobrança nova, deixando uma órfã no Asaas. Agora a action é idempotente: se a fatura já tem `asaas_payment_id`, reutiliza o mesmo payment (boleto + PIX coexistem na mesma cobrança Asaas) e, quando pedirem PIX, busca o QR Code do payment existente.
+
+### Adicionado
+- **`asaas-nfse / cancel_payment`**: nova action que faz `DELETE /payments/{id}` no Asaas, limpa `boleto_url`, `boleto_barcode`, `pix_code`, `asaas_payment_id`, marca `boleto_status='cancelado'` e grava em `audit_logs`. Bloqueia cancelamento de faturas já pagas.
+- **`asaas-nfse / sync_customer`**: nova action leve para forçar PUT do cliente no Asaas (CNPJ/email/endereço). Usada para corrigir clientes que ficaram com dados antigos no Asaas, sem precisar emitir cobrança.
+
+### One-shot manual (caso Calherão)
+- Re-sincronizados os clientes `cus_000173909063` (Matriz) e `cus_000173909071` (Concreteira) no Asaas com os CNPJs corretos via `sync_customer`. As próximas emissões já sairão corretas.
+- Para cancelar o boleto da fatura #371 que saiu com CNPJ antigo: agora basta clicar em "Cancelar Boleto" na interface (o roteamento corrigido vai chamar o Asaas).
+
+## [Não publicado] - Validação do reajuste anual
+
+
 ## [Não publicado] - Validação do reajuste anual
 
 ### Corrigido
