@@ -2232,7 +2232,112 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "cancel_payment": {
+        // Cancela (deleta) o boleto/PIX no Asaas e limpa os campos locais.
+        // Usado pelo botão "Cancelar Boleto" quando billing_provider = 'asaas'.
+        const { invoice_id, motivo } = params;
+        if (!invoice_id) {
+          throw new AsaasApiError("invoice_id é obrigatório", 400, "MISSING_PARAM");
+        }
+
+        const { data: inv, error: invErr } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, asaas_payment_id, billing_provider, status")
+          .eq("id", invoice_id)
+          .single();
+
+        if (invErr || !inv) {
+          throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
+        }
+        if (!inv.asaas_payment_id) {
+          throw new AsaasApiError("Fatura não possui cobrança no Asaas", 400, "NO_ASAAS_PAYMENT");
+        }
+        if (inv.status === "paid") {
+          throw new AsaasApiError("Fatura já paga não pode ser cancelada", 400, "ALREADY_PAID");
+        }
+
+        log(correlationId, "info", "Cancelando cobrança no Asaas", {
+          invoice_id,
+          asaas_payment_id: inv.asaas_payment_id,
+          motivo,
+        });
+
+        try {
+          await asaasRequest(
+            settings,
+            `/payments/${inv.asaas_payment_id}`,
+            "DELETE",
+            undefined,
+            correlationId,
+          );
+        } catch (delErr) {
+          const msg = delErr instanceof Error ? delErr.message : String(delErr);
+          log(correlationId, "warn", "Falha ao deletar payment no Asaas", { error: msg });
+          // Erros típicos: "invalid_action" (já recebido/processando) → propagar
+          throw new AsaasApiError(
+            `Não foi possível cancelar a cobrança no Asaas: ${msg}`,
+            400,
+            "ASAAS_CANCEL_FAILED",
+          );
+        }
+
+        // Limpar campos locais da cobrança (mantém a fatura)
+        await supabase
+          .from("invoices")
+          .update({
+            asaas_payment_id: null,
+            asaas_invoice_url: null,
+            boleto_url: null,
+            boleto_barcode: null,
+            boleto_status: "cancelado",
+            pix_code: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", invoice_id);
+
+        await supabase.from("audit_logs").insert({
+          action: "asaas_payment_cancelled",
+          table_name: "invoices",
+          record_id: invoice_id,
+          new_data: {
+            asaas_payment_id: inv.asaas_payment_id,
+            motivo: motivo || "Não informado",
+            correlation_id: correlationId,
+          },
+        });
+
+        log(correlationId, "info", "Cobrança cancelada com sucesso", { invoice_id });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Cobrança da fatura #${inv.invoice_number} cancelada no Asaas`,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "sync_customer": {
+        // Força sincronização (PUT) do cliente no Asaas. Útil após editar CNPJ/email
+        // localmente — propaga a mudança ANTES da próxima emissão.
+        const { client_id } = params;
+        if (!client_id) {
+          throw new AsaasApiError("client_id é obrigatório", 400, "MISSING_PARAM");
+        }
+        const { customerId } = await ensureCustomerForPayment(supabase, settings, client_id, correlationId);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            customer_id: customerId,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
+
         log(correlationId, "warn", `Ação desconhecida: ${action}`);
         return new Response(
           JSON.stringify({ success: false, error: `Ação desconhecida: ${action}`, code: "UNKNOWN_ACTION", correlation_id: correlationId }),
