@@ -54,7 +54,9 @@ interface InvoiceActionsPopoverProps {
   onCancelInvoice: () => void;
   onViewHistory: () => void;
   onCheckPayment: () => void;
+  onRegenerateBoleto?: () => void;
 }
+
 
 export function InvoiceActionsPopover({
   invoice,
