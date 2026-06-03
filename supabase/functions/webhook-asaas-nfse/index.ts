@@ -419,6 +419,23 @@ async function processPaymentWebhook(
   const externalReference = payment.externalReference as string | null;
   
   console.log(`[WEBHOOK-ASAAS] Payment status: ${paymentStatus}, value: ${payment.value}, externalRef: ${externalReference}`);
+
+  // PAYMENT_DELETED: marca a fatura para regeneração na próxima emissão.
+  // Mantém asaas_payment_id para auditoria, mas seta asaas_payment_deleted_at
+  // — o create_payment vai detectar e regenerar com dados atuais do cliente.
+  if (event === "PAYMENT_DELETED" && externalReference) {
+    console.log(`[WEBHOOK-ASAAS] Marcando fatura ${externalReference} com payment deletado`);
+    await supabase
+      .from("invoices")
+      .update({
+        asaas_payment_deleted_at: new Date().toISOString(),
+        boleto_status: "cancelado",
+      })
+      .eq("id", externalReference)
+      .in("status", ["pending", "overdue"]);
+    return;
+  }
+
   
   // Update invoice status based on payment event
   if (externalReference) {
