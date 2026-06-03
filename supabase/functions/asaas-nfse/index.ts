@@ -2076,6 +2076,7 @@ Deno.serve(async (req) => {
             due_date,
             description,
             asaas_payment_id,
+            asaas_payment_deleted_at,
             asaas_invoice_url,
             boleto_url,
             boleto_barcode,
@@ -2098,53 +2099,153 @@ Deno.serve(async (req) => {
 
         const requestedType = (billing_type || "BOLETO").toUpperCase();
 
-        // 1.5 IDEMPOTÊNCIA: se já existe cobrança Asaas para essa fatura, NÃO cria outra.
-        // Reusa o mesmo payment_id (boleto + PIX podem coexistir no MESMO payment do Asaas).
-        // Bug histórico: cada chamada (boleto, PIX) criava uma cobrança nova → 2 boletos por fatura.
+        // 1.5 IDEMPOTÊNCIA com VALIDAÇÃO DE DRIFT.
+        // Antes de reutilizar a cobrança existente, verificamos:
+        //  (a) Se o webhook marcou o payment como deletado → recria
+        //  (b) Se o payment ainda existe no Asaas e não está deletado → recria
+        //  (c) Se o CNPJ do customer no Asaas diverge do CNPJ local → recria
+        // Esses 3 casos cobrem o bug do "boleto com CNPJ antigo" porque o PDF
+        // do boleto é CONGELADO no momento da emissão pelo Asaas.
         if (invoice.asaas_payment_id) {
-          log(correlationId, "info", "Fatura já possui cobrança no Asaas, reutilizando", {
-            asaas_payment_id: invoice.asaas_payment_id,
-            requested: requestedType,
-          });
+          let needsRegenerate = false;
+          let regenerateReason = "";
 
-          const updateData: Record<string, unknown> = {};
+          // (a) Webhook PAYMENT_DELETED já marcou
+          if (invoice.asaas_payment_deleted_at) {
+            needsRegenerate = true;
+            regenerateReason = "payment_deleted_by_webhook";
+          }
 
-          // Se está pedindo PIX e ainda não temos o código, buscar agora
-          if (requestedType === "PIX" && !invoice.pix_code) {
+          // (b) Checa status no Asaas
+          if (!needsRegenerate) {
             try {
-              const pixInfo = await asaasRequest(
+              const existingPayment = await asaasRequest(
                 settings,
-                `/payments/${invoice.asaas_payment_id}/pixQrCode`,
+                `/payments/${invoice.asaas_payment_id}`,
                 "GET",
                 undefined,
                 correlationId,
               );
-              if (pixInfo?.payload) {
-                updateData.pix_code = pixInfo.payload;
-                updateData.payment_method = "pix";
+              if (!existingPayment || existingPayment.deleted === true || existingPayment.status === "DELETED") {
+                needsRegenerate = true;
+                regenerateReason = "payment_deleted_on_asaas";
               }
             } catch (e) {
-              log(correlationId, "warn", "Falha ao buscar PIX da cobrança existente", { error: String(e) });
+              const msg = e instanceof Error ? e.message : String(e);
+              if (msg.includes("not found") || msg.includes("404") || msg.toLowerCase().includes("deletad")) {
+                needsRegenerate = true;
+                regenerateReason = "payment_not_found_on_asaas";
+              } else {
+                log(correlationId, "warn", "Falha ao validar payment existente no Asaas", { error: msg });
+              }
             }
           }
 
-          if (Object.keys(updateData).length > 0) {
-            await supabase.from("invoices").update(updateData).eq("id", invoice_id);
+          // (c) Checa drift de CNPJ entre Asaas e banco local
+          if (!needsRegenerate && (invoice.clients as any)?.asaas_customer_id && (invoice.clients as any)?.document) {
+            try {
+              const asaasCustomer = await asaasRequest(
+                settings,
+                `/customers/${(invoice.clients as any).asaas_customer_id}`,
+                "GET",
+                undefined,
+                correlationId,
+              );
+              const localCnpj = (invoice.clients as any).document.replace(/\D/g, "");
+              const asaasCnpj = (asaasCustomer?.cpfCnpj || "").replace(/\D/g, "");
+              if (asaasCnpj && localCnpj && asaasCnpj !== localCnpj) {
+                needsRegenerate = true;
+                regenerateReason = `cnpj_drift (local=${localCnpj}, asaas=${asaasCnpj})`;
+                log(correlationId, "warn", "Drift de CNPJ detectado — boleto antigo será regenerado", {
+                  invoice_id, local: localCnpj, asaas: asaasCnpj,
+                });
+              }
+            } catch (e) {
+              log(correlationId, "warn", "Falha ao validar customer no Asaas", {
+                error: e instanceof Error ? e.message : String(e),
+              });
+            }
           }
 
-          return new Response(
-            JSON.stringify({
-              success: true,
-              payment_id: invoice.asaas_payment_id,
-              reused: true,
-              pix_code: updateData.pix_code ?? invoice.pix_code ?? null,
-              boleto_url: invoice.boleto_url,
-              invoice_url: invoice.asaas_invoice_url,
-              correlation_id: correlationId,
-            }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          if (needsRegenerate) {
+            log(correlationId, "info", "Regenerando boleto: condição detectada", {
+              reason: regenerateReason, old_payment_id: invoice.asaas_payment_id,
+            });
+            // Limpa campos e cai no fluxo de criação nova abaixo
+            await supabase.from("invoices").update({
+              asaas_payment_id: null,
+              asaas_invoice_url: null,
+              boleto_url: null,
+              boleto_barcode: null,
+              pix_code: null,
+              asaas_payment_deleted_at: null,
+              auto_payment_generated: false,
+              updated_at: new Date().toISOString(),
+            }).eq("id", invoice_id);
+            // Remove PDF antigo do Storage (se existir)
+            try {
+              await supabase.storage.from("invoice-documents")
+                .remove([`boletos/${invoice_id}/boleto.pdf`]);
+            } catch (_) { /* ignora */ }
+            await supabase.from("invoice_documents")
+              .delete().eq("invoice_id", invoice_id).eq("document_type", "boleto_pdf");
+            await supabase.from("audit_logs").insert({
+              action: "boleto_auto_regenerated",
+              table_name: "invoices",
+              record_id: invoice_id,
+              new_data: {
+                reason: regenerateReason,
+                old_asaas_payment_id: invoice.asaas_payment_id,
+                correlation_id: correlationId,
+              },
+            });
+            // segue para criação nova
+            invoice.asaas_payment_id = null;
+          } else {
+            // Reuso seguro
+            log(correlationId, "info", "Fatura já possui cobrança válida no Asaas, reutilizando", {
+              asaas_payment_id: invoice.asaas_payment_id, requested: requestedType,
+            });
+
+            const updateData: Record<string, unknown> = {};
+
+            if (requestedType === "PIX" && !invoice.pix_code) {
+              try {
+                const pixInfo = await asaasRequest(
+                  settings,
+                  `/payments/${invoice.asaas_payment_id}/pixQrCode`,
+                  "GET",
+                  undefined,
+                  correlationId,
+                );
+                if (pixInfo?.payload) {
+                  updateData.pix_code = pixInfo.payload;
+                  updateData.payment_method = "pix";
+                }
+              } catch (e) {
+                log(correlationId, "warn", "Falha ao buscar PIX da cobrança existente", { error: String(e) });
+              }
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              await supabase.from("invoices").update(updateData).eq("id", invoice_id);
+            }
+
+            return new Response(
+              JSON.stringify({
+                success: true,
+                payment_id: invoice.asaas_payment_id,
+                reused: true,
+                pix_code: updateData.pix_code ?? invoice.pix_code ?? null,
+                boleto_url: invoice.boleto_url,
+                invoice_url: invoice.asaas_invoice_url,
+                correlation_id: correlationId,
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
+
 
         // 2. SINCRONIZAR cliente no Asaas (PUT) ANTES de criar cobrança.
         // Garante que mudanças locais de CNPJ/email cheguem ao Asaas antes do boleto.
