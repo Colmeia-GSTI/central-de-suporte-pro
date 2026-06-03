@@ -1,6 +1,22 @@
 # Changelog
 
-## [Não publicado] - Correção emissão Asaas (caso Calherão)
+## [Não publicado] - NFS-e: arquivamento em vez de exclusão (conformidade fiscal)
+
+### Corrigido
+- **Erro `DELETE_FAILED` por FK de `nfse_cancellation_log`** (`asaas-nfse / delete_record`): a função tentava `DELETE` físico em `nfse_history`, violando a FK do log de cancelamento e impedindo a "exclusão" da NFS-e #256 (Blend Solutions). Causa raiz: NFS-e não pode ser apagada por retenção fiscal de 7 anos.
+
+### Mudado (conformidade fiscal)
+- **NFS-e, boletos e logs financeiros não são mais apagados fisicamente.** Substituímos exclusão por arquivamento (`is_active=false`, `archived_at`, `archived_reason`).
+- **Edge `asaas-nfse`**: action `delete_record` foi convertida em **soft-delete** (`archive_record`), e adicionada `restore_record`. O alias `delete_record` permanece por compatibilidade, mas nunca apaga linha — apenas arquiva. Exige `reason` (≥5 chars) e grava evento `archived` em `nfse_event_logs`.
+- **Migration**: novos campos em `nfse_history` (`is_active boolean default true`, `archived_at`, `archived_reason`, `archived_by`) + índice parcial em `is_active=true` para acelerar a listagem ativa.
+
+### UI — reorganização do painel da NFS-e (skill UI/UX Pro Max)
+- Removidos os botões "Cancelar e Excluir" e "Excluir Registro" — violavam conformidade fiscal e poluíam a tela.
+- Painel reorganizado em 3 grupos claros: **Ação principal** (uma única CTA por estado: Validar e reenviar / Cancelar NFS-e / Cancelar processamento), **Ajustes operacionais** (Editar, Alterar status) e **Conformidade e arquivo** (Arquivar registro / Restaurar registro).
+- Novo `NfseArchiveDialog` substitui `NfseDeleteDialog` e `NfseCancelDeleteDialog` (removidos). Texto explica que arquivar não cancela nem apaga.
+- Lista de NFS-e oculta arquivadas por padrão; novo toggle "Mostrar arquivadas" nos filtros.
+
+## [Não publicado anterior] - Correção emissão Asaas (caso Calherão)
 
 ### Corrigido
 - **Cancelamento de NFS-e retornava erro 500 após o Asaas aceitar o DELETE** (`asaas-nfse`): o Asaas pode responder cancelamentos com corpo vazio, e a função tentava executar `response.json()` mesmo assim. Agora lê como texto, aceita resposta vazia como sucesso e só tenta converter JSON quando houver conteúdo.
