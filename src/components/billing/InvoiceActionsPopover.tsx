@@ -78,7 +78,9 @@ export function InvoiceActionsPopover({
   onCancelInvoice,
   onViewHistory,
   onCheckPayment,
+  onRegenerateBoleto,
 }: InvoiceActionsPopoverProps) {
+
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
   const hasPaymentMethod = !!invoice.boleto_url || !!invoice.pix_code;
   const hasBoleto = !!invoice.boleto_url;
