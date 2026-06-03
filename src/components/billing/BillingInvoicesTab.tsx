@@ -1040,6 +1040,17 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
         }}
       />
 
+      {regenerateInvoice && (
+        <RegenerateBoletoDialog
+          open={!!regenerateInvoice}
+          onOpenChange={(open) => { if (!open) setRegenerateInvoice(null); }}
+          invoiceId={regenerateInvoice.id}
+          invoiceNumber={regenerateInvoice.invoice_number}
+          billingProvider={regenerateInvoice.billing_provider}
+        />
+      )}
+
     </div>
+
   );
 }
