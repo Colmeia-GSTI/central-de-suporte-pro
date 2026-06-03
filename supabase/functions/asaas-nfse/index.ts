@@ -1702,7 +1702,16 @@ Deno.serve(async (req) => {
         const cancellationLogId = cancellationLog.id;
 
         try {
-          await asaasRequest(settings, `/invoices/${invoice_id}`, "DELETE", undefined, correlationId);
+          try {
+            await asaasRequest(settings, `/invoices/${invoice_id}`, "DELETE", undefined, correlationId);
+          } catch (delErr) {
+            // Se Asaas devolve 404, a invoice já não existe lá — tratamos como cancelada
+            if (delErr instanceof AsaasApiError && delErr.status === 404) {
+              log(correlationId, "warn", "Invoice não existe mais no Asaas (404) — tratando como já cancelada", { invoice_id });
+            } else {
+              throw delErr;
+            }
+          }
 
           // Success: update audit log to CANCELLED
           await supabase
@@ -1733,6 +1742,7 @@ Deno.serve(async (req) => {
             JSON.stringify({ success: true, correlation_id: correlationId }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
+
         } catch (cancelError) {
           // Failure: update audit log to FAILED with error payload
           const errorMessage = cancelError instanceof Error ? cancelError.message : String(cancelError);
