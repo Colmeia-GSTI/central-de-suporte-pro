@@ -460,6 +460,7 @@ export function NfseDetailsSheet(props: {
           action: "cancel",
           invoice_id: nfse.asaas_invoice_id,
           nfse_history_id: nfse.id,
+          motivo: "Cancelamento e exclusão solicitada pelo usuário",
         },
       });
       
