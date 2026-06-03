@@ -165,7 +165,9 @@ export function NfseDetailsSheet(props: {
   const canEdit = nfse ? ["pendente", "rejeitada", "erro"].includes(nfse.status) : false;
   const canResend = canEdit;
   const canCancel = nfse ? nfse.status === "autorizada" && !!nfse.asaas_invoice_id : false;
-  const canDelete = nfse ? ["pendente", "erro", "rejeitada", "processando", "cancelada"].includes(nfse.status) : false;
+  // Arquivar (soft-delete) só faz sentido para registros não ativos no fluxo fiscal
+  const isArchived = nfse ? (nfse as { is_active?: boolean }).is_active === false : false;
+  const canArchive = nfse ? !isArchived && ["pendente", "erro", "rejeitada", "cancelada"].includes(nfse.status) : false;
   const canAbortProcessing = nfse ? nfse.status === "processando" : false;
   const isE0014 = nfse ? isE0014Error(nfse.mensagem_retorno) : false;
 
