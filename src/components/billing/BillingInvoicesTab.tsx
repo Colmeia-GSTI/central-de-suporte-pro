@@ -16,6 +16,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
+import { RegenerateBoletoDialog } from "@/components/billing/RegenerateBoletoDialog";
+
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
 import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
