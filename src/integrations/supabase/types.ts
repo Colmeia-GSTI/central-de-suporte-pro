@@ -3738,6 +3738,7 @@ export type Database = {
         Row: {
           amount: number
           asaas_invoice_url: string | null
+          asaas_payment_deleted_at: string | null
           asaas_payment_id: string | null
           auto_nfse_emitted: boolean | null
           auto_payment_generated: boolean | null
@@ -3792,6 +3793,7 @@ export type Database = {
         Insert: {
           amount: number
           asaas_invoice_url?: string | null
+          asaas_payment_deleted_at?: string | null
           asaas_payment_id?: string | null
           auto_nfse_emitted?: boolean | null
           auto_payment_generated?: boolean | null
@@ -3846,6 +3848,7 @@ export type Database = {
         Update: {
           amount?: number
           asaas_invoice_url?: string | null
+          asaas_payment_deleted_at?: string | null
           asaas_payment_id?: string | null
           auto_nfse_emitted?: boolean | null
           auto_payment_generated?: boolean | null
