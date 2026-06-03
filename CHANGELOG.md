@@ -1,5 +1,28 @@
 # Changelog
 
+## [Não publicado] - Boleto Asaas: regeneração automática quando cadastro muda
+
+### Corrigido
+- **Boleto da Blend (#389) continuava com CNPJ antigo após atualização do cadastro.** O PDF do boleto é congelado pelo Asaas no momento da emissão, então mudar `clients.document` não atualizava o boleto já existente. Além disso, o pagamento havia sido `PAYMENT_DELETED` no Asaas mas a fatura continuava apontando para ele, devolvendo a URL morta. Causa raiz: a "idempotência" de `create_payment` reusava o `asaas_payment_id` sem validar se ele ainda existia nem se o CNPJ no Asaas batia com o local.
+
+### Adicionado
+- **`asaas-nfse / create_payment` — validação tripla antes de reusar boleto**: (1) verifica `asaas_payment_deleted_at`; (2) faz `GET /payments/:id` para detectar payment deletado/inexistente; (3) faz `GET /customers/:id` e compara `cpfCnpj` com o cadastro local — qualquer divergência dispara regeneração automática (cancela payment antigo, limpa colunas, apaga PDF do Storage, audita em `boleto_auto_regenerated`).
+- **Nova action `asaas-nfse / regenerate_payment`**: cancela o payment atual, limpa `asaas_payment_id/boleto_url/boleto_barcode/pix_code`, remove PDF do Storage, exige `reason` (≥5 chars) e registra `boleto_regenerated` em `audit_logs`. A UI chama `create_payment` em seguida para emitir o novo.
+- **UI — botão "Regerar Boleto"** no popover de ações da fatura (apenas Asaas + boleto existente + status pendente/atrasado). Confirmação com campo "Motivo" obrigatório (`RegenerateBoletoDialog`). Skill `ui-ux-pro-max` (regras `destructive-emphasis`, `confirmation-dialogs`, `error-clarity`).
+- **Webhook `webhook-asaas-nfse`**: evento `PAYMENT_DELETED` agora marca `invoices.asaas_payment_deleted_at = now()` e `boleto_status='cancelado'`, fazendo a próxima `create_payment` regenerar automaticamente.
+- **Sincronização proativa em `ClientForm`**: ao salvar mudança de CNPJ/endereço/CEP, dispara `asaas-nfse / sync_customer` e marca todas as faturas pending/overdue do cliente com `asaas_payment_deleted_at = now()` para forçar a regeneração na próxima emissão/segunda via.
+
+### Migration
+- `invoices.asaas_payment_deleted_at timestamptz` — sinalizador usado pela edge function para detectar boletos que precisam ser regenerados.
+
+### Teste end-to-end executado
+1. `sync_customer` → Asaas atualizado com CNPJ 46.381.469/0001-19.
+2. `regenerate_payment` na fatura #389 → payment antigo (`pay_kn7v6jd2jv5oudws`) cancelado.
+3. `create_payment` → novo `pay_9vhml6e7xr9exwvn`.
+4. Download e inspeção do PDF: **Pagador BLEND SOLUTIONS COMPANY LTDA, CNPJ: 46.381.469/0001-19** ✓ (CNPJ correto).
+
+
+
 ## [Não publicado] - NFS-e: arquivamento em vez de exclusão (conformidade fiscal)
 
 ### Corrigido
