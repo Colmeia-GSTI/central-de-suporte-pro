@@ -54,7 +54,9 @@ interface InvoiceActionsPopoverProps {
   onCancelInvoice: () => void;
   onViewHistory: () => void;
   onCheckPayment: () => void;
+  onRegenerateBoleto?: () => void;
 }
+
 
 export function InvoiceActionsPopover({
   invoice,
@@ -76,7 +78,9 @@ export function InvoiceActionsPopover({
   onCancelInvoice,
   onViewHistory,
   onCheckPayment,
+  onRegenerateBoleto,
 }: InvoiceActionsPopoverProps) {
+
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
   const hasPaymentMethod = !!invoice.boleto_url || !!invoice.pix_code;
   const hasBoleto = !!invoice.boleto_url;
@@ -269,6 +273,18 @@ export function InvoiceActionsPopover({
 
         {/* Cancel Actions */}
         <DropdownMenuSeparator />
+
+        {/* Regerar Boleto — disponível quando existe boleto e é Asaas */}
+        {onRegenerateBoleto && invoice.billing_provider === "asaas" && hasBoleto && isPendingOrOverdue && (
+          <DropdownMenuItem onClick={onRegenerateBoleto}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            <div className="flex flex-col items-start">
+              <span>Regerar Boleto</span>
+              <span className="text-xs text-muted-foreground">Atualiza dados do cliente (CNPJ, endereço)</span>
+            </div>
+          </DropdownMenuItem>
+        )}
+
         <DropdownMenuItem
           onClick={cancelBoletoPerm.allowed ? onCancelBoleto : undefined}
           disabled={!cancelBoletoPerm.allowed}
@@ -282,6 +298,7 @@ export function InvoiceActionsPopover({
             )}
           </div>
         </DropdownMenuItem>
+
 
         <DropdownMenuItem
           onClick={hasAuthorizedNfse ? onCancelNfse : undefined}

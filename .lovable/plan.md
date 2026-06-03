@@ -1,131 +1,78 @@
-## Plano atualizado: NFS-e com conformidade fiscal + UI mais clara
+# Correção: Boleto Blend permanece com CNPJ antigo
 
-Vou corrigir a causa raiz e remodelar a área de ações da NFS-e usando a skill **UI/UX Pro Max**. A tela atual está confusa porque mistura ações comuns, ações fiscais e ações perigosas no mesmo bloco, incluindo “Cancelar e Excluir”, que não deve existir em um fluxo fiscal.
+## O que aconteceu (causa raiz)
 
-## Regra principal
+Investiguei a fatura #389 da Blend (`pay_kn7v6jd2jv5oudws`) e encontrei **três falhas encadeadas** no fluxo `asaas-nfse → create_payment`:
 
-Notas fiscais, boletos e logs financeiros não serão apagados fisicamente do banco.
+1. **Reuso cego do boleto antigo.** Quando a fatura já tem `asaas_payment_id`, o código entra no bloco de "idempotência" (linha 2104) e retorna o `boleto_url` salvo no Storage **sem checar se os dados do cliente no Asaas mudaram**. O PDF do boleto é congelado no momento da emissão — alterar o CNPJ no cadastro local NÃO regenera o PDF. Resultado: o boleto continua com o CNPJ antigo.
 
-A partir deste ajuste:
+2. **Não há sincronização do customer no reuso.** O `ensureCustomerForPayment` (PUT no Asaas) só roda quando vai criar boleto novo. No reuso, nem o customer é atualizado.
 
-- “Excluir Registro” será removido.
-- “Cancelar e Excluir” será removido.
-- O fluxo correto será:
-  - **Cancelar NFS-e**: cancela fiscalmente no Asaas/prefeitura e mantém histórico.
-  - **Arquivar registro**: apenas oculta da listagem ativa, mantendo tudo no banco.
-  - **Restaurar arquivado**: permite voltar a mostrar o registro.
-  - **Ver logs**: continua mostrando o histórico/auditoria.
+3. **Pagamento foi DELETADO no Asaas mas ficou registrado no banco.** Os logs mostram `PAYMENT_DELETED` para `pay_kn7v6jd2jv5oudws` (00:46) e depois `O QR Code para cobrança 824548961 está deletado. Restaure a cobrança` (00:48). A fatura ficou apontando para um pagamento morto, mas o banco não foi limpo — então o sistema continua devolvendo a URL velha.
 
-## Nova organização visual da tela
+Além disso, **não existe ferramenta de admin** para "regenerar boleto" após mudança de cadastro. O usuário precisa abrir o banco para destravar.
 
-A área de botões será dividida em grupos claros:
+## O que vou corrigir
 
-```text
-Documentos
-[Ver logs] [XML] [PDF] [DANFSe]
+### 1. Edge Function `asaas-nfse` — bloco `create_payment`
+- Antes de reusar, fazer `GET /customers/:id` no Asaas e comparar `cpfCnpj` com `clients.document` local. Se divergir → tratar como drift: cancela o payment antigo, limpa `asaas_payment_id/boleto_url/boleto_barcode/pix_code` e cai no fluxo de criação nova (que já roda o PUT do customer).
+- Capturar o webhook `PAYMENT_DELETED` no estado da fatura: se o `GET /payments/:id` devolver 404 ou status `DELETED`, mesmo tratamento (limpa e recria).
+- Cobrir o erro `O QR Code ... está deletado` (já aparecendo nos logs) com o mesmo caminho de regeneração em vez de só logar warn.
 
-Ação principal
-[Validar e reenviar] ou [Cancelar NFS-e] ou [Reemitir]
+### 2. Nova action `regenerate_payment`
+- Recebe `invoice_id` + `billing_type` + `reason`.
+- Cancela `asaas_payment_id` atual via `DELETE /payments/:id` (ignora se já estiver deletado).
+- Limpa colunas: `asaas_payment_id`, `asaas_invoice_url`, `boleto_url`, `boleto_barcode`, `pix_code`, `auto_payment_generated=false`.
+- Remove o PDF antigo do Storage (`invoice-documents/boletos/{invoice_id}/boleto.pdf`) e a linha em `invoice_documents`.
+- Chama o fluxo normal `create_payment` (que vai rodar `ensureCustomerForPayment` → PUT com CNPJ novo → criar boleto novo).
+- Audita em `audit_logs` (`action='boleto_regenerated'`, `new_data` com motivo, payment antigo, payment novo).
 
-Ajustes operacionais
-[Editar] [Alterar status]
+### 3. Webhook `webhook-asaas-nfse`
+- No evento `PAYMENT_DELETED`, além de logar, atualizar a fatura: `boleto_status='cancelado'`, **manter** `asaas_payment_id` para auditoria mas adicionar coluna `asaas_payment_deleted_at` (migration) para o `create_payment` saber que precisa recriar em vez de reutilizar.
 
-Conformidade e arquivo
-[Arquivar registro] / [Restaurar registro]
+### 4. Migration
+```sql
+ALTER TABLE public.invoices
+ADD COLUMN IF NOT EXISTS asaas_payment_deleted_at timestamptz;
 ```
+(Sem `GRANT` extra — herda permissões existentes da tabela.)
 
-Na prática, para a NFS-e 256 da imagem:
+### 5. UI — botão "Regerar boleto"
+- No `BillingNfseTab` / detalhes da fatura (área de boleto), adicionar botão **"Regerar boleto"** (variant destructive-secondary, com ícone `RefreshCw`).
+- Confirmação obrigatória (`AlertDialog`) com campo "Motivo" (≥5 caracteres) — segue padrão do `NfseArchiveDialog`.
+- Chama `supabase.functions.invoke('asaas-nfse', { body: { action: 'regenerate_payment', invoice_id, billing_type: 'BOLETO', reason } })`.
+- Toast de sucesso e refetch.
 
-- “Validar e reenviar” não ficará competindo visualmente com cancelamento quando a nota já está autorizada.
-- “Cancelar NFS-e” ficará separado como ação fiscal séria.
-- “Cancelar e Excluir” desaparece.
-- “Arquivar registro” entra como ação de organização, não como destruição de dado.
-- O usuário verá uma mensagem curta explicando que arquivar não remove a nota nem os logs.
+### 6. Sincronização proativa quando CNPJ muda
+- No componente de edição de cliente (`ClientForm` / hook que faz update do `document`), detectar mudança de `document` e: chamar `asaas-nfse` action `sync_customer` (já existe) para empurrar o PUT imediato; marcar `invoices` em status `pending`/`overdue` do cliente com `asaas_payment_deleted_at = now()` para forçar regeneração na próxima emissão/segunda via. (Sem deletar nada — só sinaliza.)
 
-## Correção no backend
-
-Vou alterar a função `asaas-nfse` para bloquear exclusão física.
-
-Mudanças previstas:
-
-- Substituir `delete_record` por `archive_record`.
-- Criar `restore_record`.
-- Remover o trecho que faz `.delete()` em `nfse_history`.
-- Registrar arquivamento/restauração em logs de auditoria.
-- Manter compatibilidade defensiva: se algum botão antigo ou chamada antiga tentar excluir, o backend não apagará mais; responderá orientando usar arquivamento.
-
-## Banco de dados
-
-Adicionar campos de arquivamento em `nfse_history`:
-
-```text
-is_active boolean default true
-archived_at data/hora
-archived_reason texto
-archived_by usuário
+### 7. Correção pontual do registro atual (Blend #389)
+Insert manual para destravar a fatura atual:
+```sql
+UPDATE invoices SET asaas_payment_id=NULL, boleto_url=NULL, boleto_barcode=NULL,
+  pix_code=NULL, auto_payment_generated=false, boleto_status='pendente'
+WHERE id='18f0cba4-eb29-4d74-b30b-3480ab16951c';
 ```
+Depois disparar `create_payment` para gerar boleto novo com CNPJ correto. (Vou rodar via insert tool após aprovação.)
 
-Isso resolve a causa raiz do erro:
+### 8. CHANGELOG.md
+Documentar: detecção de drift de CNPJ, action `regenerate_payment`, botão na UI, tratamento de `PAYMENT_DELETED`.
 
-```text
-nfse_history não pode ser apagada porque nfse_cancellation_log aponta para ela
-```
+## Teste end-to-end que vou executar após implementar
+1. Verificar que `GET /customers/cus_000174038336` retorna o CNPJ correto (46.381.469/0001-19) — se não, o PUT vai sincronizar.
+2. Rodar `regenerate_payment` para a fatura #389.
+3. Confirmar: novo `asaas_payment_id`, novo PDF no Storage, novo `boleto_url`, CNPJ correto no PDF (validação visual via download do PDF gerado).
+4. Confirmar `audit_logs` com o evento.
+5. Rodar `bunx vitest run` nos testes afetados.
 
-Em vez de tentar apagar uma linha que tem histórico fiscal ligado a ela, vamos apenas marcar como arquivada.
-
-## Listagem de NFS-e
-
-Na aba de notas fiscais:
-
-- Mostrar apenas notas ativas por padrão.
-- Adicionar opção “Mostrar arquivadas”.
-- Notas arquivadas aparecerão com badge “Arquivada”.
-- Relatórios fiscais continuarão considerando o histórico, pois arquivar não é cancelar nem apagar.
-
-## Diálogos atualizados
-
-Trocar os diálogos atuais:
-
-- `Excluir Registro?` vira `Arquivar registro?`
-- `Cancelar e Excluir NFS-e?` será removido.
-- O novo diálogo terá campo obrigatório:
-
-```text
-Motivo do arquivamento
-```
-
-Texto simples para o usuário:
-
-```text
-Este registro será ocultado da listagem principal, mas continuará salvo para auditoria fiscal.
-```
-
-## Asaas e cancelamento fiscal
-
-Também vou corrigir o cancelamento conforme documentação do Asaas:
-
-- Cancelar NFS-e usando o endpoint correto de cancelamento da nota fiscal.
-- Enviar justificativa obrigatória.
-- Tratar respostas como processamento, cancelamento negado ou nota já cancelada.
-- Não transformar erro do Asaas em exclusão local.
-
-## Arquivos previstos
-
-- `supabase/functions/asaas-nfse/index.ts`
-- `src/components/billing/nfse/NfseDetailsSheet.tsx`
-- `src/components/billing/BillingNfseTab.tsx`
-- `src/components/billing/nfse/details/NfseDeleteDialog.tsx`, renomeado/refatorado para arquivamento
-- `src/components/billing/nfse/details/NfseCancelDeleteDialog.tsx`, removido do fluxo
-- Nova migration para campos de arquivamento
+## Arquivos a alterar
+- `supabase/functions/asaas-nfse/index.ts` (bloco `create_payment` + nova action `regenerate_payment`)
+- `supabase/functions/webhook-asaas-nfse/index.ts` (handler `PAYMENT_DELETED`)
+- Nova migration `add_asaas_payment_deleted_at.sql`
+- `src/components/billing/BillingNfseTab.tsx` ou componente de detalhes do boleto (botão + dialog)
+- Novo `src/components/billing/RegenerateBoletoDialog.tsx`
+- Hook/componente de edição de cliente (gatilho ao mudar CNPJ)
 - `CHANGELOG.md`
-- Memória do projeto sobre regra fiscal: NFS-e nunca é apagada fisicamente
 
-## Resultado esperado
-
-Depois da implementação:
-
-- A NFS-e 256 não tentará mais ser excluída fisicamente.
-- O erro de chave estrangeira não ocorrerá mais.
-- Novas notas também ficarão protegidas contra exclusão indevida.
-- A interface ficará mais simples: cancelar é fiscal, arquivar é organização, logs são auditoria.
-- O sistema ficará alinhado à retenção fiscal e auditoria.
+## Skill usada
+`/skill:ui-ux-pro-max` para o botão "Regerar boleto" (regras: `destructive-emphasis`, `confirmation-dialogs`, `error-clarity`).

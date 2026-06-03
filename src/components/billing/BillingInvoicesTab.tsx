@@ -16,6 +16,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InvoiceActionsPopover } from "@/components/billing/InvoiceActionsPopover";
+import { RegenerateBoletoDialog } from "@/components/billing/RegenerateBoletoDialog";
+
 import { InvoiceInlineActions } from "@/components/billing/InvoiceInlineActions";
 import { InvoiceTableRow } from "@/components/billing/InvoiceTableRow";
 import { InvoiceStatusBadge } from "@/components/billing/StatusBadges";
@@ -88,6 +90,8 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   const [cancelInvoiceTarget, setCancelInvoiceTarget] = useState<InvoiceWithClient | null>(null);
   const [cancelInvoiceReason, setCancelInvoiceReason] = useState("");
   const [isCancellingBoleto, setIsCancellingBoleto] = useState(false);
+  const [regenerateInvoice, setRegenerateInvoice] = useState<InvoiceWithClient | null>(null);
+
   const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false);
   const [isBatchNotifying, setIsBatchNotifying] = useState(false);
   const queryClient = useQueryClient();
@@ -522,6 +526,8 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                         onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                         onViewHistory={() => setHistoryInvoice(invoice)}
                         onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
+                        onRegenerateBoleto={() => setRegenerateInvoice(invoice)}
+
                       />
                     </div>
                   </div>
@@ -736,6 +742,8 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
+                            onRegenerateBoleto={() => setRegenerateInvoice(invoice)}
+
                           />
                         }
                       />
@@ -1032,6 +1040,17 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
         }}
       />
 
+      {regenerateInvoice && (
+        <RegenerateBoletoDialog
+          open={!!regenerateInvoice}
+          onOpenChange={(open) => { if (!open) setRegenerateInvoice(null); }}
+          invoiceId={regenerateInvoice.id}
+          invoiceNumber={regenerateInvoice.invoice_number}
+          billingProvider={regenerateInvoice.billing_provider}
+        />
+      )}
+
     </div>
+
   );
 }
