@@ -114,6 +114,7 @@ export function BillingNfseTab() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [competenciaFilter, setCompetenciaFilter] = useState<string>("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(1);
 
   const [avulsaOpen, setAvulsaOpen] = useState(false);
