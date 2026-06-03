@@ -492,6 +492,19 @@ export function BillingNfseTab() {
                 ))}
               </SelectContent>
             </Select>
+
+            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground select-none cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-primary"
+                checked={showArchived}
+                onChange={(e) => {
+                  setShowArchived(e.target.checked);
+                  setPage(1);
+                }}
+              />
+              Mostrar arquivadas
+            </label>
           </div>
 
           <div className="rounded-lg border bg-card overflow-hidden">
