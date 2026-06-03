@@ -742,6 +742,8 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
+                            onRegenerateBoleto={() => setRegenerateInvoice(invoice)}
+
                           />
                         }
                       />
