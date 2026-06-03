@@ -4660,6 +4660,9 @@ export type Database = {
         Row: {
           aliquota: number | null
           ambiente: string | null
+          archived_at: string | null
+          archived_by: string | null
+          archived_reason: string | null
           asaas_invoice_id: string | null
           asaas_payment_id: string | null
           asaas_status: string | null
@@ -4680,6 +4683,7 @@ export type Database = {
           emitido_por: string | null
           id: string
           invoice_id: string | null
+          is_active: boolean
           iss_retido: boolean | null
           mensagem_retorno: string | null
           motivo_cancelamento: string | null
@@ -4711,6 +4715,9 @@ export type Database = {
         Insert: {
           aliquota?: number | null
           ambiente?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          archived_reason?: string | null
           asaas_invoice_id?: string | null
           asaas_payment_id?: string | null
           asaas_status?: string | null
@@ -4731,6 +4738,7 @@ export type Database = {
           emitido_por?: string | null
           id?: string
           invoice_id?: string | null
+          is_active?: boolean
           iss_retido?: boolean | null
           mensagem_retorno?: string | null
           motivo_cancelamento?: string | null
@@ -4762,6 +4770,9 @@ export type Database = {
         Update: {
           aliquota?: number | null
           ambiente?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          archived_reason?: string | null
           asaas_invoice_id?: string | null
           asaas_payment_id?: string | null
           asaas_status?: string | null
@@ -4782,6 +4793,7 @@ export type Database = {
           emitido_por?: string | null
           id?: string
           invoice_id?: string | null
+          is_active?: boolean
           iss_retido?: boolean | null
           mensagem_retorno?: string | null
           motivo_cancelamento?: string | null
