@@ -1835,19 +1835,31 @@ Deno.serve(async (req) => {
         );
       }
 
-      case "delete_record": {
-        const { nfse_history_id, force } = params;
+      // Compat: "delete_record" foi DEPRECADO por conformidade fiscal.
+      // NFS-e não é mais apagada fisicamente — apenas arquivada (is_active=false),
+      // preservando histórico, logs de cancelamento e auditoria.
+      case "delete_record":
+      case "archive_record": {
+        const { nfse_history_id, reason } = params;
 
-        log(correlationId, "info", "Iniciando exclusão de registro", { nfse_history_id, force });
+        log(correlationId, "info", "Arquivando registro de NFS-e", { nfse_history_id });
 
         if (!nfse_history_id) {
           throw new AsaasApiError("ID do registro é obrigatório", 400, "MISSING_HISTORY_ID");
         }
 
-        // Fetch record
+        const trimmedReason = (reason || "").toString().trim();
+        if (trimmedReason.length < 5) {
+          throw new AsaasApiError(
+            "Motivo do arquivamento é obrigatório (mínimo 5 caracteres)",
+            400,
+            "MISSING_REASON"
+          );
+        }
+
         const { data: record, error: findError } = await supabase
           .from("nfse_history")
-          .select("id, status, asaas_invoice_id, numero_nfse")
+          .select("id, status, asaas_invoice_id, numero_nfse, is_active")
           .eq("id", nfse_history_id)
           .single();
 
@@ -1855,40 +1867,76 @@ Deno.serve(async (req) => {
           throw new AsaasApiError(ERROR_CODES.RECORD_NOT_FOUND, 404, "RECORD_NOT_FOUND");
         }
 
-        // Only allow deletion of pending/error records unless forced
-        if (!force && record.status === "autorizada") {
-          throw new AsaasApiError(
-            "Não é possível excluir NFS-e autorizada. Cancele primeiro ou use force=true.",
-            400,
-            "DELETE_NOT_ALLOWED",
-            { current_status: record.status }
+        if (record.is_active === false) {
+          return new Response(
+            JSON.stringify({ success: true, already_archived: true, archived_id: nfse_history_id, correlation_id: correlationId }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        // If authorized and has Asaas ID, try to cancel first
-        if (record.asaas_invoice_id && record.status === "autorizada") {
-          log(correlationId, "info", "Cancelando NFS-e no Asaas antes de excluir", { asaas_id: record.asaas_invoice_id });
-          try {
-            await asaasRequest(settings, `/invoices/${record.asaas_invoice_id}`, "DELETE", undefined, correlationId);
-          } catch (e) {
-            log(correlationId, "warn", "Erro ao cancelar no Asaas (continuando exclusão local)", { error: String(e) });
-          }
-        }
-
-        // Delete from database
-        const { error: deleteError } = await supabase
+        const { error: archiveError } = await supabase
           .from("nfse_history")
-          .delete()
+          .update({
+            is_active: false,
+            archived_at: new Date().toISOString(),
+            archived_reason: trimmedReason,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", nfse_history_id);
 
-        if (deleteError) {
-          throw new AsaasApiError("Erro ao excluir registro do banco", 500, "DELETE_FAILED", { db_error: deleteError.message });
+        if (archiveError) {
+          throw new AsaasApiError("Erro ao arquivar registro", 500, "ARCHIVE_FAILED", { db_error: archiveError.message });
         }
 
-        log(correlationId, "info", "Registro excluído com sucesso", { nfse_history_id });
+        await logNfseEvent(supabase, nfse_history_id, "archived", "info",
+          `Registro arquivado. Motivo: ${trimmedReason.slice(0, 200)}`,
+          correlationId, { numero_nfse: record.numero_nfse, status_at_archive: record.status });
+
+        log(correlationId, "info", "Registro arquivado com sucesso", { nfse_history_id });
 
         return new Response(
-          JSON.stringify({ success: true, deleted_id: nfse_history_id, correlation_id: correlationId }),
+          JSON.stringify({ success: true, archived_id: nfse_history_id, correlation_id: correlationId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "restore_record": {
+        const { nfse_history_id } = params;
+
+        if (!nfse_history_id) {
+          throw new AsaasApiError("ID do registro é obrigatório", 400, "MISSING_HISTORY_ID");
+        }
+
+        const { data: record, error: findError } = await supabase
+          .from("nfse_history")
+          .select("id, is_active, numero_nfse")
+          .eq("id", nfse_history_id)
+          .single();
+
+        if (findError || !record) {
+          throw new AsaasApiError(ERROR_CODES.RECORD_NOT_FOUND, 404, "RECORD_NOT_FOUND");
+        }
+
+        const { error: restoreError } = await supabase
+          .from("nfse_history")
+          .update({
+            is_active: true,
+            archived_at: null,
+            archived_reason: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", nfse_history_id);
+
+        if (restoreError) {
+          throw new AsaasApiError("Erro ao restaurar registro", 500, "RESTORE_FAILED", { db_error: restoreError.message });
+        }
+
+        await logNfseEvent(supabase, nfse_history_id, "restored", "info",
+          "Registro restaurado (desarquivado)", correlationId,
+          { numero_nfse: record.numero_nfse });
+
+        return new Response(
+          JSON.stringify({ success: true, restored_id: nfse_history_id, correlation_id: correlationId }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

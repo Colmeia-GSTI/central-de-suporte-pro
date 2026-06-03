@@ -114,6 +114,7 @@ export function BillingNfseTab() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [competenciaFilter, setCompetenciaFilter] = useState<string>("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(1);
 
   const [avulsaOpen, setAvulsaOpen] = useState(false);
@@ -156,13 +157,15 @@ export function BillingNfseTab() {
 
 
   const { data: nfseData, isLoading } = useQuery({
-    queryKey: ["nfse-history", search, statusFilter, competenciaFilter, page],
+    queryKey: ["nfse-history", search, statusFilter, competenciaFilter, showArchived, page],
     queryFn: async () => {
       let q = supabase
         .from("nfse_history")
         .select("*, clients(name, document, email, financial_email, whatsapp), contracts(name)", { count: "exact" })
         .order("created_at", { ascending: false });
 
+      // Conformidade fiscal: por padrão escondemos registros arquivados (is_active=false).
+      if (!showArchived) q = q.or("is_active.is.null,is_active.eq.true");
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
       if (competenciaFilter !== "all") q = q.eq("competencia", competenciaFilter);
       if (search.trim()) {
@@ -489,6 +492,19 @@ export function BillingNfseTab() {
                 ))}
               </SelectContent>
             </Select>
+
+            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground select-none cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 accent-primary"
+                checked={showArchived}
+                onChange={(e) => {
+                  setShowArchived(e.target.checked);
+                  setPage(1);
+                }}
+              />
+              Mostrar arquivadas
+            </label>
           </div>
 
           <div className="rounded-lg border bg-card overflow-hidden">

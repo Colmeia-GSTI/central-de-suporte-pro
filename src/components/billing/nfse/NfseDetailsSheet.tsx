@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 import {
   AlertTriangle,
+  Archive,
+  ArchiveRestore,
   Ban,
   CheckCircle2,
   FileCode,
@@ -25,7 +27,6 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
-  Trash2,
   XCircle,
 } from "lucide-react";
 
@@ -39,8 +40,7 @@ import { NfseShareMenu } from "./NfseShareMenu";
 import { NfseLinkExternalDialog } from "./NfseLinkExternalDialog";
 import { type TributacaoData } from "./NfseTributacaoSection";
 import { NfseCancelDialog } from "./details/NfseCancelDialog";
-import { NfseDeleteDialog } from "./details/NfseDeleteDialog";
-import { NfseCancelDeleteDialog } from "./details/NfseCancelDeleteDialog";
+import { NfseArchiveDialog } from "./details/NfseArchiveDialog";
 import { NfseEditForm } from "./details/NfseEditForm";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
@@ -140,10 +140,10 @@ export function NfseDetailsSheet(props: {
   const [validationOpen, setValidationOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [cancelAndDeleteConfirmOpen, setCancelAndDeleteConfirmOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [linkExternalOpen, setLinkExternalOpen] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [motivoArquivamento, setMotivoArquivamento] = useState("");
   const [numeroExterno, setNumeroExterno] = useState("");
 
   const [valor, setValor] = useState<number>(nfse?.valor_servico ?? 0);
@@ -164,7 +164,9 @@ export function NfseDetailsSheet(props: {
   const canEdit = nfse ? ["pendente", "rejeitada", "erro"].includes(nfse.status) : false;
   const canResend = canEdit;
   const canCancel = nfse ? nfse.status === "autorizada" && !!nfse.asaas_invoice_id : false;
-  const canDelete = nfse ? ["pendente", "erro", "rejeitada", "processando", "cancelada"].includes(nfse.status) : false;
+  // Arquivar (soft-delete) só faz sentido para registros não ativos no fluxo fiscal
+  const isArchived = nfse ? (nfse as { is_active?: boolean }).is_active === false : false;
+  const canArchive = nfse ? !isArchived && ["pendente", "erro", "rejeitada", "cancelada"].includes(nfse.status) : false;
   const canAbortProcessing = nfse ? nfse.status === "processando" : false;
   const isE0014 = nfse ? isE0014Error(nfse.mensagem_retorno) : false;
 
@@ -418,80 +420,64 @@ export function NfseDetailsSheet(props: {
     },
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
+  // Archive mutation (soft-delete — conformidade fiscal: nunca apaga do banco)
+  const archiveMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
-      
+      if (motivoArquivamento.trim().length < 5) {
+        throw new Error("Informe um motivo de arquivamento (mínimo 5 caracteres)");
+      }
+
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
-          action: "delete_record",
+          action: "archive_record",
           nfse_history_id: nfse.id,
+          reason: motivoArquivamento.trim(),
         },
       });
-      
+
       if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Erro ao excluir registro");
+      if (!data.success) throw new Error(data.error || "Erro ao arquivar registro");
       return data;
     },
     onSuccess: () => {
-      toast.success("Registro excluído com sucesso");
+      toast.success("Registro arquivado", {
+        description: "A NFS-e foi ocultada da listagem. O histórico fiscal foi preservado.",
+      });
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-      setDeleteConfirmOpen(false);
+      setArchiveConfirmOpen(false);
+      setMotivoArquivamento("");
       props.onOpenChange(false);
       props.onChanged?.();
     },
     onError: (e: Error) => {
-      toast.error("Erro ao excluir registro", { description: e.message });
-      setDeleteConfirmOpen(false);
+      toast.error("Não foi possível arquivar", { description: e.message });
     },
   });
 
-  // Cancel and Delete mutation
-  const cancelAndDeleteMutation = useMutation({
+  // Restore mutation
+  const restoreMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
-      if (!nfse.asaas_invoice_id) throw new Error("NFS-e não possui ID no Asaas");
-      
-      // First cancel
-      const { data: cancelData, error: cancelError } = await supabase.functions.invoke("asaas-nfse", {
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
-          action: "cancel",
-          invoice_id: nfse.asaas_invoice_id,
+          action: "restore_record",
           nfse_history_id: nfse.id,
-          justification: "Cancelamento e exclusão solicitada pelo usuário",
         },
       });
-      
-      if (cancelError) throw cancelError;
-      if (!cancelData.success) throw new Error(cancelData.error || "Erro ao cancelar NFS-e");
-      
-      // Then delete
-      const { data: deleteData, error: deleteError } = await supabase.functions.invoke("asaas-nfse", {
-        body: {
-          action: "delete_record",
-          nfse_history_id: nfse.id,
-          force: true,
-        },
-      });
-      
-      if (deleteError) throw deleteError;
-      if (!deleteData.success) throw new Error(deleteData.error || "Erro ao excluir registro");
-      
-      return deleteData;
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao restaurar registro");
+      return data;
     },
     onSuccess: () => {
-      toast.success("NFS-e cancelada e registro excluído com sucesso");
+      toast.success("Registro restaurado");
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-      setCancelAndDeleteConfirmOpen(false);
-      props.onOpenChange(false);
       props.onChanged?.();
     },
     onError: (e: Error) => {
-      toast.error("Erro ao cancelar e excluir", { description: e.message });
-      setCancelAndDeleteConfirmOpen(false);
+      toast.error("Não foi possível restaurar", { description: e.message });
     },
   });
 
@@ -610,58 +596,109 @@ export function NfseDetailsSheet(props: {
             </Button>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => setEditOpen(true)} disabled={!canEdit}>
-              Editar
-            </Button>
-            <Button onClick={() => setValidationOpen(true)} disabled={!canResend}>
-              <ShieldCheck className="h-4 w-4 mr-2" />
-              Validar e reenviar
-            </Button>
-            <Button variant="outline" onClick={() => setStatusOpen(true)}>
-              Alterar status
-            </Button>
-            {canAbortProcessing && (
-              <Button
-                variant="outline"
-                className="text-orange-600 border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/30"
-                onClick={() => updateStatusMutation.mutate("pendente")}
-                disabled={updateStatusMutation.isPending}
-              >
-                {updateStatusMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
-                Cancelar processamento
+          {/* Ação principal — uma única CTA por estado */}
+          <div className="mt-4 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Ação principal
+            </p>
+            {canResend ? (
+              <Button className="w-full h-9" onClick={() => setValidationOpen(true)}>
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                Validar e reenviar
               </Button>
-            )}
-            {canCancel && (
+            ) : canCancel ? (
               <Button
                 variant="outline"
-                className="text-destructive border-destructive hover:bg-destructive/10"
+                className="w-full h-9 text-destructive border-destructive hover:bg-destructive/10"
                 onClick={() => setCancelConfirmOpen(true)}
               >
                 <Ban className="h-4 w-4 mr-2" />
                 Cancelar NFS-e
               </Button>
-            )}
-            {canCancel && (
+            ) : canAbortProcessing ? (
               <Button
                 variant="outline"
-                className="text-destructive border-destructive hover:bg-destructive/10"
-                onClick={() => setCancelAndDeleteConfirmOpen(true)}
+                className="w-full h-9 text-orange-600 border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                onClick={() => updateStatusMutation.mutate("pendente")}
+                disabled={updateStatusMutation.isPending}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Cancelar e Excluir
+                {updateStatusMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <XCircle className="h-4 w-4 mr-2" />
+                )}
+                Cancelar processamento
+              </Button>
+            ) : (
+              <Button variant="outline" className="w-full h-9" disabled>
+                Nenhuma ação principal disponível
               </Button>
             )}
-            {canDelete && (
+          </div>
+
+          {/* Ajustes operacionais */}
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Ajustes operacionais
+            </p>
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
-                className="text-destructive border-destructive hover:bg-destructive/10"
-                onClick={() => setDeleteConfirmOpen(true)}
+                className="h-9"
+                onClick={() => setEditOpen(true)}
+                disabled={!canEdit}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Excluir Registro
+                Editar
+              </Button>
+              <Button
+                variant="outline"
+                className="h-9"
+                onClick={() => setStatusOpen(true)}
+              >
+                Alterar status
+              </Button>
+            </div>
+          </div>
+
+          {/* Conformidade fiscal — arquivar (soft) ou restaurar */}
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Conformidade e arquivo
+            </p>
+            {isArchived ? (
+              <Button
+                variant="outline"
+                className="w-full h-9"
+                onClick={() => restoreMutation.mutate()}
+                disabled={restoreMutation.isPending}
+              >
+                {restoreMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <ArchiveRestore className="h-4 w-4 mr-2" />
+                )}
+                Restaurar registro
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full h-9 text-muted-foreground"
+                onClick={() => setArchiveConfirmOpen(true)}
+                disabled={!canArchive}
+                title={
+                  canArchive
+                    ? "Oculta da listagem. Não apaga nem cancela fiscalmente."
+                    : "Apenas notas pendentes, com erro, rejeitadas ou já canceladas podem ser arquivadas."
+                }
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                Arquivar registro
               </Button>
             )}
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Arquivar apenas oculta o registro. O histórico fiscal e logs ficam
+              preservados por 7 anos para auditoria.
+            </p>
           </div>
 
           <Separator className="my-4" />
@@ -953,21 +990,15 @@ export function NfseDetailsSheet(props: {
         isLoading={cancelMutation.isPending}
       />
 
-      {/* Delete Confirmation */}
-      <NfseDeleteDialog
-        open={deleteConfirmOpen}
-        onOpenChange={setDeleteConfirmOpen}
-        onConfirm={() => deleteMutation.mutate()}
-        isLoading={deleteMutation.isPending}
-      />
-
-      {/* Cancel and Delete Confirmation */}
-      <NfseCancelDeleteDialog
-        open={cancelAndDeleteConfirmOpen}
-        onOpenChange={setCancelAndDeleteConfirmOpen}
+      {/* Archive Confirmation (substitui exclusão física para conformidade fiscal) */}
+      <NfseArchiveDialog
+        open={archiveConfirmOpen}
+        onOpenChange={setArchiveConfirmOpen}
         numeroNfse={nfse.numero_nfse}
-        onConfirm={() => cancelAndDeleteMutation.mutate()}
-        isLoading={cancelAndDeleteMutation.isPending}
+        reason={motivoArquivamento}
+        setReason={setMotivoArquivamento}
+        onConfirm={() => archiveMutation.mutate()}
+        isLoading={archiveMutation.isPending}
       />
 
       {/* Link External NFS-e Dialog */}
