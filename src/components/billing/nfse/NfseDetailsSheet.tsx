@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 import {
   AlertTriangle,
+  Archive,
+  ArchiveRestore,
   Ban,
   CheckCircle2,
   FileCode,
@@ -23,9 +25,9 @@ import {
   Link2,
   Loader2,
   RefreshCw,
+  RotateCw,
   ShieldAlert,
   ShieldCheck,
-  Trash2,
   XCircle,
 } from "lucide-react";
 
