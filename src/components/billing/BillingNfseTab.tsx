@@ -157,13 +157,15 @@ export function BillingNfseTab() {
 
 
   const { data: nfseData, isLoading } = useQuery({
-    queryKey: ["nfse-history", search, statusFilter, competenciaFilter, page],
+    queryKey: ["nfse-history", search, statusFilter, competenciaFilter, showArchived, page],
     queryFn: async () => {
       let q = supabase
         .from("nfse_history")
         .select("*, clients(name, document, email, financial_email, whatsapp), contracts(name)", { count: "exact" })
         .order("created_at", { ascending: false });
 
+      // Conformidade fiscal: por padrão escondemos registros arquivados (is_active=false).
+      if (!showArchived) q = q.or("is_active.is.null,is_active.eq.true");
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
       if (competenciaFilter !== "all") q = q.eq("competencia", competenciaFilter);
       if (search.trim()) {
