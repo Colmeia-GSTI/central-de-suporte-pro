@@ -316,6 +316,14 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       }
 
       if (isUpdate) {
+        // Detecta mudança de CNPJ/endereço para propagar ao Asaas e invalidar boletos antigos
+        const oldDocNorm = (client.document || "").replace(/\D/g, "");
+        const newDocNorm = (data.document || "").replace(/\D/g, "");
+        const fiscalChanged =
+          oldDocNorm !== newDocNorm ||
+          (client.address || "") !== (data.address || "") ||
+          (client.zip_code || "").replace(/\D/g, "") !== (data.zip_code || "").replace(/\D/g, "");
+
         const { error } = await supabase
           .from("clients")
           .update(payload)
@@ -337,7 +345,25 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
             comment: `Alterações: ${changesSummary}`,
           });
         }
+
+        // Se dados fiscais mudaram: sincroniza no Asaas + sinaliza boletos para regenerar.
+        // Boletos no Asaas têm o PDF congelado na emissão — sem isso, ficariam com dados antigos.
+        if (fiscalChanged) {
+          try {
+            await supabase.functions.invoke("asaas-nfse", {
+              body: { action: "sync_customer", client_id: client.id },
+            });
+          } catch (syncErr) {
+            console.warn("[ClientForm] Falha ao sincronizar com Asaas:", syncErr);
+          }
+          await supabase
+            .from("invoices")
+            .update({ asaas_payment_deleted_at: new Date().toISOString() })
+            .eq("client_id", client.id)
+            .in("status", ["pending", "overdue"]);
+        }
       } else {
+
         const { data: newClient, error } = await supabase
           .from("clients")
           .insert(payload)
