@@ -991,21 +991,15 @@ export function NfseDetailsSheet(props: {
         isLoading={cancelMutation.isPending}
       />
 
-      {/* Delete Confirmation */}
-      <NfseDeleteDialog
-        open={deleteConfirmOpen}
-        onOpenChange={setDeleteConfirmOpen}
-        onConfirm={() => deleteMutation.mutate()}
-        isLoading={deleteMutation.isPending}
-      />
-
-      {/* Cancel and Delete Confirmation */}
-      <NfseCancelDeleteDialog
-        open={cancelAndDeleteConfirmOpen}
-        onOpenChange={setCancelAndDeleteConfirmOpen}
+      {/* Archive Confirmation (substitui exclusão física para conformidade fiscal) */}
+      <NfseArchiveDialog
+        open={archiveConfirmOpen}
+        onOpenChange={setArchiveConfirmOpen}
         numeroNfse={nfse.numero_nfse}
-        onConfirm={() => cancelAndDeleteMutation.mutate()}
-        isLoading={cancelAndDeleteMutation.isPending}
+        reason={motivoArquivamento}
+        setReason={setMotivoArquivamento}
+        onConfirm={() => archiveMutation.mutate()}
+        isLoading={archiveMutation.isPending}
       />
 
       {/* Link External NFS-e Dialog */}
