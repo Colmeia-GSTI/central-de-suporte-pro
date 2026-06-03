@@ -141,10 +141,10 @@ export function NfseDetailsSheet(props: {
   const [validationOpen, setValidationOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [cancelAndDeleteConfirmOpen, setCancelAndDeleteConfirmOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [linkExternalOpen, setLinkExternalOpen] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [motivoArquivamento, setMotivoArquivamento] = useState("");
   const [numeroExterno, setNumeroExterno] = useState("");
 
   const [valor, setValor] = useState<number>(nfse?.valor_servico ?? 0);
