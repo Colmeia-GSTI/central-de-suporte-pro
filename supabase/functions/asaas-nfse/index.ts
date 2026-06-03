@@ -462,11 +462,32 @@ async function asaasRequest(
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await response.json();
+  const responseText = await response.text();
+  let data: Record<string, unknown> = {};
+
+  if (responseText.trim()) {
+    try {
+      data = JSON.parse(responseText) as Record<string, unknown>;
+    } catch (parseError) {
+      if (correlationId) {
+        log(correlationId, "error", "Resposta inválida da API Asaas", {
+          status: response.status,
+          endpoint,
+          parse_error: parseError instanceof Error ? parseError.message : String(parseError),
+          response_preview: responseText.slice(0, 300),
+        });
+      }
+      throw new AsaasApiError("Resposta inválida da API Asaas", 502, "ASAAS_INVALID_RESPONSE", {
+        status: response.status,
+        endpoint,
+      });
+    }
+  }
 
   if (!response.ok) {
-    const message = data.errors?.[0]?.description || data.message || "Erro na API Asaas";
-    const code = data.errors?.[0]?.code || "ASAAS_API_ERROR";
+    const errors = Array.isArray(data.errors) ? data.errors as Array<{ description?: string; code?: string }> : [];
+    const message = errors[0]?.description || (typeof data.message === "string" ? data.message : null) || "Erro na API Asaas";
+    const code = errors[0]?.code || "ASAAS_API_ERROR";
     if (correlationId) {
       log(correlationId, "error", `API Error: ${message}`, { status: response.status, errors: data.errors });
     }
