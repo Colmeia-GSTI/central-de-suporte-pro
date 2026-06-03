@@ -39,8 +39,7 @@ import { NfseShareMenu } from "./NfseShareMenu";
 import { NfseLinkExternalDialog } from "./NfseLinkExternalDialog";
 import { type TributacaoData } from "./NfseTributacaoSection";
 import { NfseCancelDialog } from "./details/NfseCancelDialog";
-import { NfseDeleteDialog } from "./details/NfseDeleteDialog";
-import { NfseCancelDeleteDialog } from "./details/NfseCancelDeleteDialog";
+import { NfseArchiveDialog } from "./details/NfseArchiveDialog";
 import { NfseEditForm } from "./details/NfseEditForm";
 
 export type NfseWithRelations = Tables<"nfse_history"> & {
