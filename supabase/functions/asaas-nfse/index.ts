@@ -2556,7 +2556,111 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "regenerate_payment": {
+        // Força regeneração do boleto/PIX: cancela o payment antigo no Asaas,
+        // limpa todos os campos locais (asaas_payment_id, boleto_url, etc.),
+        // remove o PDF do Storage e chama o create_payment internamente.
+        // Usado quando o CNPJ/dados cadastrais mudaram e o boleto antigo
+        // permanece com dados desatualizados (PDF é congelado pelo Asaas).
+        const { invoice_id: regInvId, billing_type: regBT, reason: regReason } = params;
+        if (!regInvId) {
+          throw new AsaasApiError("invoice_id é obrigatório", 400, "MISSING_PARAM");
+        }
+        if (!regReason || String(regReason).trim().length < 5) {
+          throw new AsaasApiError(
+            "Motivo é obrigatório (mínimo 5 caracteres)",
+            400, "MISSING_REASON",
+          );
+        }
+
+        const { data: regInv, error: regInvErr } = await supabase
+          .from("invoices")
+          .select("id, invoice_number, asaas_payment_id, status, client_id")
+          .eq("id", regInvId)
+          .single();
+        if (regInvErr || !regInv) {
+          throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
+        }
+        if (regInv.status === "paid") {
+          throw new AsaasApiError("Fatura já paga não pode regenerar boleto", 400, "ALREADY_PAID");
+        }
+
+        const oldPaymentId = regInv.asaas_payment_id;
+        log(correlationId, "info", "Regenerando boleto", {
+          invoice_id: regInvId, old_payment_id: oldPaymentId, reason: regReason,
+        });
+
+        // 1. Cancela payment antigo (se existir e não estiver já deletado)
+        if (oldPaymentId) {
+          try {
+            await asaasRequest(settings, `/payments/${oldPaymentId}`, "DELETE", undefined, correlationId);
+          } catch (e) {
+            log(correlationId, "warn", "Falha ao cancelar payment antigo (pode já estar deletado)", {
+              error: e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
+
+        // 2. Limpa campos locais
+        await supabase.from("invoices").update({
+          asaas_payment_id: null,
+          asaas_invoice_url: null,
+          boleto_url: null,
+          boleto_barcode: null,
+          boleto_status: "pendente",
+          pix_code: null,
+          asaas_payment_deleted_at: null,
+          auto_payment_generated: false,
+          updated_at: new Date().toISOString(),
+        }).eq("id", regInvId);
+
+        // 3. Remove PDF antigo
+        try {
+          await supabase.storage.from("invoice-documents")
+            .remove([`boletos/${regInvId}/boleto.pdf`]);
+        } catch (_) { /* ignora */ }
+        await supabase.from("invoice_documents")
+          .delete().eq("invoice_id", regInvId).eq("document_type", "boleto_pdf");
+
+        // 4. Audit
+        await supabase.from("audit_logs").insert({
+          action: "boleto_regenerated",
+          table_name: "invoices",
+          record_id: regInvId,
+          new_data: {
+            reason: regReason,
+            old_asaas_payment_id: oldPaymentId,
+            requested_by: "user",
+            correlation_id: correlationId,
+          },
+        });
+
+        // 5. Chama o create_payment recursivamente via fetch interno
+        const regResp = await fetch(req.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "create_payment",
+            invoice_id: regInvId,
+            billing_type: regBT || "BOLETO",
+          }),
+        });
+        const regJson = await regResp.json();
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Boleto da fatura #${regInv.invoice_number} regenerado`,
+            old_payment_id: oldPaymentId,
+            new_payment: regJson,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
+
 
         log(correlationId, "warn", `Ação desconhecida: ${action}`);
         return new Response(
