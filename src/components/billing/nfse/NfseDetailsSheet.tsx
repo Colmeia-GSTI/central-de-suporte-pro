@@ -421,80 +421,64 @@ export function NfseDetailsSheet(props: {
     },
   });
 
-  // Delete mutation
-  const deleteMutation = useMutation({
+  // Archive mutation (soft-delete — conformidade fiscal: nunca apaga do banco)
+  const archiveMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
-      
+      if (motivoArquivamento.trim().length < 5) {
+        throw new Error("Informe um motivo de arquivamento (mínimo 5 caracteres)");
+      }
+
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
-          action: "delete_record",
+          action: "archive_record",
           nfse_history_id: nfse.id,
+          reason: motivoArquivamento.trim(),
         },
       });
-      
+
       if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Erro ao excluir registro");
+      if (!data.success) throw new Error(data.error || "Erro ao arquivar registro");
       return data;
     },
     onSuccess: () => {
-      toast.success("Registro excluído com sucesso");
+      toast.success("Registro arquivado", {
+        description: "A NFS-e foi ocultada da listagem. O histórico fiscal foi preservado.",
+      });
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-      setDeleteConfirmOpen(false);
+      setArchiveConfirmOpen(false);
+      setMotivoArquivamento("");
       props.onOpenChange(false);
       props.onChanged?.();
     },
     onError: (e: Error) => {
-      toast.error("Erro ao excluir registro", { description: e.message });
-      setDeleteConfirmOpen(false);
+      toast.error("Não foi possível arquivar", { description: e.message });
     },
   });
 
-  // Cancel and Delete mutation
-  const cancelAndDeleteMutation = useMutation({
+  // Restore mutation
+  const restoreMutation = useMutation({
     mutationFn: async () => {
       if (!nfse) throw new Error("NFS-e não selecionada");
-      if (!nfse.asaas_invoice_id) throw new Error("NFS-e não possui ID no Asaas");
-      
-      // First cancel
-      const { data: cancelData, error: cancelError } = await supabase.functions.invoke("asaas-nfse", {
+      const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
-          action: "cancel",
-          invoice_id: nfse.asaas_invoice_id,
+          action: "restore_record",
           nfse_history_id: nfse.id,
-          justification: "Cancelamento e exclusão solicitada pelo usuário",
         },
       });
-      
-      if (cancelError) throw cancelError;
-      if (!cancelData.success) throw new Error(cancelData.error || "Erro ao cancelar NFS-e");
-      
-      // Then delete
-      const { data: deleteData, error: deleteError } = await supabase.functions.invoke("asaas-nfse", {
-        body: {
-          action: "delete_record",
-          nfse_history_id: nfse.id,
-          force: true,
-        },
-      });
-      
-      if (deleteError) throw deleteError;
-      if (!deleteData.success) throw new Error(deleteData.error || "Erro ao excluir registro");
-      
-      return deleteData;
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao restaurar registro");
+      return data;
     },
     onSuccess: () => {
-      toast.success("NFS-e cancelada e registro excluído com sucesso");
+      toast.success("Registro restaurado");
       queryClient.invalidateQueries({ queryKey: ["nfse-history"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-      setCancelAndDeleteConfirmOpen(false);
-      props.onOpenChange(false);
       props.onChanged?.();
     },
     onError: (e: Error) => {
-      toast.error("Erro ao cancelar e excluir", { description: e.message });
-      setCancelAndDeleteConfirmOpen(false);
+      toast.error("Não foi possível restaurar", { description: e.message });
     },
   });
 
