@@ -2635,24 +2635,13 @@ Deno.serve(async (req) => {
           },
         });
 
-        // 5. Chama o create_payment recursivamente via fetch interno
-        const regResp = await fetch(req.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "create_payment",
-            invoice_id: regInvId,
-            billing_type: regBT || "BOLETO",
-          }),
-        });
-        const regJson = await regResp.json();
-
+        // 5. Retorna sucesso — UI deve chamar create_payment em seguida para gerar novo
         return new Response(
           JSON.stringify({
             success: true,
-            message: `Boleto da fatura #${regInv.invoice_number} regenerado`,
+            message: `Boleto da fatura #${regInv.invoice_number} pronto para regeneração`,
             old_payment_id: oldPaymentId,
-            new_payment: regJson,
+            cleared: true,
             correlation_id: correlationId,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -2660,6 +2649,7 @@ Deno.serve(async (req) => {
       }
 
       default:
+
 
 
         log(correlationId, "warn", `Ação desconhecida: ${action}`);
