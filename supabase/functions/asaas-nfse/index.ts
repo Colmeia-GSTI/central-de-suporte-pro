@@ -2171,6 +2171,30 @@ Deno.serve(async (req) => {
             log(correlationId, "info", "Regenerando boleto: condição detectada", {
               reason: regenerateReason, old_payment_id: invoice.asaas_payment_id,
             });
+            // CANCELA payment antigo no Asaas ANTES de limpar local — evita
+            // que o cliente fique com 2 cobranças ativas (duplicação).
+            // Se já estiver deletado (404), apenas loga e segue.
+            if (regenerateReason !== "payment_deleted_by_webhook"
+                && regenerateReason !== "payment_deleted_on_asaas"
+                && regenerateReason !== "payment_not_found_on_asaas") {
+              try {
+                await asaasRequest(
+                  settings,
+                  `/payments/${invoice.asaas_payment_id}`,
+                  "DELETE",
+                  undefined,
+                  correlationId,
+                );
+                log(correlationId, "info", "Payment antigo cancelado no Asaas", {
+                  old_payment_id: invoice.asaas_payment_id,
+                });
+              } catch (e) {
+                log(correlationId, "warn", "Falha ao cancelar payment antigo no Asaas (seguindo)", {
+                  error: e instanceof Error ? e.message : String(e),
+                  old_payment_id: invoice.asaas_payment_id,
+                });
+              }
+            }
             // Limpa campos e cai no fluxo de criação nova abaixo
             await supabase.from("invoices").update({
               asaas_payment_id: null,
@@ -2190,7 +2214,7 @@ Deno.serve(async (req) => {
             await supabase.from("invoice_documents")
               .delete().eq("invoice_id", invoice_id).eq("document_type", "boleto_pdf");
             await supabase.from("audit_logs").insert({
-              action: "boleto_auto_regenerated",
+              action: "asaas_payment_auto_cancelled",
               table_name: "invoices",
               record_id: invoice_id,
               new_data: {
@@ -2199,6 +2223,7 @@ Deno.serve(async (req) => {
                 correlation_id: correlationId,
               },
             });
+
             // segue para criação nova
             invoice.asaas_payment_id = null;
           } else {

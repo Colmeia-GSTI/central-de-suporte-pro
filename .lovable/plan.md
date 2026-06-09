@@ -1,78 +1,61 @@
-# Correção: Boleto Blend permanece com CNPJ antigo
 
-## O que aconteceu (causa raiz)
+## Investigação concluída — duas causas raiz distintas
 
-Investiguei a fatura #389 da Blend (`pay_kn7v6jd2jv5oudws`) e encontrei **três falhas encadeadas** no fluxo `asaas-nfse → create_payment`:
+### Problema 1 — Boletos duplicados no Asaas
 
-1. **Reuso cego do boleto antigo.** Quando a fatura já tem `asaas_payment_id`, o código entra no bloco de "idempotência" (linha 2104) e retorna o `boleto_url` salvo no Storage **sem checar se os dados do cliente no Asaas mudaram**. O PDF do boleto é congelado no momento da emissão — alterar o CNPJ no cadastro local NÃO regenera o PDF. Resultado: o boleto continua com o CNPJ antigo.
+**Causa raiz:** Quando o CNPJ ou endereço de um cliente é alterado, o `ClientForm.tsx` (linhas 351‑364) marca `asaas_payment_deleted_at = now()` em todas as faturas pendentes/atrasadas, **mas não cancela o boleto antigo no Asaas**. Em seguida, o bloco de "drift detection" do `asaas-nfse/create_payment` (linhas 2109‑2203) detecta a marcação, limpa os campos locais e cria um boleto novo no Asaas — também **sem deletar o boleto antigo no Asaas**. Resultado: o cliente continua com 2+ cobranças ativas em Asaas para a mesma fatura, recebe boleto/PIX duplicados por e‑mail/SMS.
 
-2. **Não há sincronização do customer no reuso.** O `ensureCustomerForPayment` (PUT no Asaas) só roda quando vai criar boleto novo. No reuso, nem o customer é atualizado.
+A única rota que cancela corretamente é o `regenerate_payment` manual (linhas 2594‑2602), porque ele chama `DELETE /payments/{id}` antes de limpar. O caminho automático (drift) está incompleto.
 
-3. **Pagamento foi DELETADO no Asaas mas ficou registrado no banco.** Os logs mostram `PAYMENT_DELETED` para `pay_kn7v6jd2jv5oudws` (00:46) e depois `O QR Code para cobrança 824548961 está deletado. Restaure a cobrança` (00:48). A fatura ficou apontando para um pagamento morto, mas o banco não foi limpo — então o sistema continua devolvendo a URL velha.
+### Problema 2 — E‑mail do cliente não salva no cadastro
 
-Além disso, **não existe ferramenta de admin** para "regenerar boleto" após mudança de cadastro. O usuário precisa abrir o banco para destravar.
+**Causa raiz:** A tabela `public.clients` não tem nenhuma policy de UPDATE para a role `technician`. As policies atuais permitem UPDATE apenas para:
+- `is_financial_admin` (admin / financial / manager)
+- o próprio cliente dono do registro (client / client_master)
 
-## O que vou corrigir
+Quando um técnico (ex.: `suporte02@colmeiagsti.com.br`) edita um cliente, o `supabase.from("clients").update(...)` retorna `error = null` mas afeta 0 linhas (comportamento padrão do PostgREST com RLS). O `ClientForm` interpreta isso como sucesso e mostra o toast "Cliente atualizado" — porém nada foi persistido.
 
-### 1. Edge Function `asaas-nfse` — bloco `create_payment`
-- Antes de reusar, fazer `GET /customers/:id` no Asaas e comparar `cpfCnpj` com `clients.document` local. Se divergir → tratar como drift: cancela o payment antigo, limpa `asaas_payment_id/boleto_url/boleto_barcode/pix_code` e cai no fluxo de criação nova (que já roda o PUT do customer).
-- Capturar o webhook `PAYMENT_DELETED` no estado da fatura: se o `GET /payments/:id` devolver 404 ou status `DELETED`, mesmo tratamento (limpa e recria).
-- Cobrir o erro `O QR Code ... está deletado` (já aparecendo nos logs) com o mesmo caminho de regeneração em vez de só logar warn.
+Adicionalmente, o código não verifica `count` nem confere o registro depois do UPDATE, o que mascarou o bug.
 
-### 2. Nova action `regenerate_payment`
-- Recebe `invoice_id` + `billing_type` + `reason`.
-- Cancela `asaas_payment_id` atual via `DELETE /payments/:id` (ignora se já estiver deletado).
-- Limpa colunas: `asaas_payment_id`, `asaas_invoice_url`, `boleto_url`, `boleto_barcode`, `pix_code`, `auto_payment_generated=false`.
-- Remove o PDF antigo do Storage (`invoice-documents/boletos/{invoice_id}/boleto.pdf`) e a linha em `invoice_documents`.
-- Chama o fluxo normal `create_payment` (que vai rodar `ensureCustomerForPayment` → PUT com CNPJ novo → criar boleto novo).
-- Audita em `audit_logs` (`action='boleto_regenerated'`, `new_data` com motivo, payment antigo, payment novo).
+---
 
-### 3. Webhook `webhook-asaas-nfse`
-- No evento `PAYMENT_DELETED`, além de logar, atualizar a fatura: `boleto_status='cancelado'`, **manter** `asaas_payment_id` para auditoria mas adicionar coluna `asaas_payment_deleted_at` (migration) para o `create_payment` saber que precisa recriar em vez de reutilizar.
+## Plano de correção
 
-### 4. Migration
-```sql
-ALTER TABLE public.invoices
-ADD COLUMN IF NOT EXISTS asaas_payment_deleted_at timestamptz;
-```
-(Sem `GRANT` extra — herda permissões existentes da tabela.)
+### Backend / Banco
 
-### 5. UI — botão "Regerar boleto"
-- No `BillingNfseTab` / detalhes da fatura (área de boleto), adicionar botão **"Regerar boleto"** (variant destructive-secondary, com ícone `RefreshCw`).
-- Confirmação obrigatória (`AlertDialog`) com campo "Motivo" (≥5 caracteres) — segue padrão do `NfseArchiveDialog`.
-- Chama `supabase.functions.invoke('asaas-nfse', { body: { action: 'regenerate_payment', invoice_id, billing_type: 'BOLETO', reason } })`.
-- Toast de sucesso e refetch.
+1. **Nova policy UPDATE para técnicos em `public.clients`** (migration):
+   - `USING (is_technician_only(auth.uid()))`
+   - `WITH CHECK` que impede técnico de alterar `document`, `normalized_document` e `state_registration` (mantém a memória `clients/management-and-permissions` — CNPJ/IE read‑only para técnicos após criação). Tudo o resto (nome, e‑mail, telefone, endereço, observações) fica liberado.
 
-### 6. Sincronização proativa quando CNPJ muda
-- No componente de edição de cliente (`ClientForm` / hook que faz update do `document`), detectar mudança de `document` e: chamar `asaas-nfse` action `sync_customer` (já existe) para empurrar o PUT imediato; marcar `invoices` em status `pending`/`overdue` do cliente com `asaas_payment_deleted_at = now()` para forçar regeneração na próxima emissão/segunda via. (Sem deletar nada — só sinaliza.)
+2. **`asaas-nfse/index.ts` — drift detection deve cancelar antes de regenerar** (linhas 2170‑2203):
+   - Antes do `update` que limpa os campos locais, chamar `DELETE /payments/{old_payment_id}` no Asaas (tolerando 404 / já deletado, igual ao `regenerate_payment`).
+   - Registrar o cancelamento em `audit_logs` (`asaas_payment_auto_cancelled` com `reason` e `correlation_id`).
 
-### 7. Correção pontual do registro atual (Blend #389)
-Insert manual para destravar a fatura atual:
-```sql
-UPDATE invoices SET asaas_payment_id=NULL, boleto_url=NULL, boleto_barcode=NULL,
-  pix_code=NULL, auto_payment_generated=false, boleto_status='pendente'
-WHERE id='18f0cba4-eb29-4d74-b30b-3480ab16951c';
-```
-Depois disparar `create_payment` para gerar boleto novo com CNPJ correto. (Vou rodar via insert tool após aprovação.)
+3. **`ClientForm.tsx` — usar `regenerate_payment` em vez de marcar `asaas_payment_deleted_at`** (linhas 351‑364):
+   - Buscar as faturas pendentes/atrasadas do cliente.
+   - Para cada uma, invocar `asaas-nfse` action `regenerate_payment` com `reason: "Dados cadastrais alterados (CNPJ/endereço)"`. Isso garante cancelamento no Asaas + limpeza local + audit.
+   - Em paralelo (limite de concorrência 3) para não travar a UI; toast informando "X boletos serão regenerados".
 
-### 8. CHANGELOG.md
-Documentar: detecção de drift de CNPJ, action `regenerate_payment`, botão na UI, tratamento de `PAYMENT_DELETED`.
+4. **Validar UPDATE no `ClientForm`** (linhas 327‑331):
+   - Trocar para `.update(payload).eq("id", client.id).select("id")` e verificar se retornou ao menos 1 linha. Se 0, lançar erro "Sem permissão para alterar este cliente" → toast destrutivo. Isso impede que qualquer regressão futura de RLS volte a mascarar o bug.
 
-## Teste end-to-end que vou executar após implementar
-1. Verificar que `GET /customers/cus_000174038336` retorna o CNPJ correto (46.381.469/0001-19) — se não, o PUT vai sincronizar.
-2. Rodar `regenerate_payment` para a fatura #389.
-3. Confirmar: novo `asaas_payment_id`, novo PDF no Storage, novo `boleto_url`, CNPJ correto no PDF (validação visual via download do PDF gerado).
-4. Confirmar `audit_logs` com o evento.
-5. Rodar `bunx vitest run` nos testes afetados.
+### Reconciliação dos boletos já duplicados
 
-## Arquivos a alterar
-- `supabase/functions/asaas-nfse/index.ts` (bloco `create_payment` + nova action `regenerate_payment`)
-- `supabase/functions/webhook-asaas-nfse/index.ts` (handler `PAYMENT_DELETED`)
-- Nova migration `add_asaas_payment_deleted_at.sql`
-- `src/components/billing/BillingNfseTab.tsx` ou componente de detalhes do boleto (botão + dialog)
-- Novo `src/components/billing/RegenerateBoletoDialog.tsx`
-- Hook/componente de edição de cliente (gatilho ao mudar CNPJ)
+5. Script único de auditoria (executado pelo agente após aprovação):
+   - Listar todas as faturas `pending`/`overdue` cujo cliente sofreu update de CNPJ recente.
+   - Para cada uma, listar os payments do `customer_id` no Asaas e cancelar os que não correspondem ao `asaas_payment_id` atual da fatura.
+   - Output: relatório em `/mnt/documents/duplicate-boletos-reconciliation.csv`.
+
+### Verificação
+
+- Testar: alterar e‑mail de cliente logado como técnico → deve salvar e refletir no banco.
+- Testar: alterar CNPJ de um cliente de teste → confirmar via `audit_logs` que o payment antigo foi cancelado no Asaas e que apenas um novo permanece ativo.
+- `tsc --noEmit`, vitest run dos testes relacionados (`client-form`, `asaas-nfse`).
+
+### Arquivos afetados
+
+- nova migration em `supabase/migrations/`
+- `supabase/functions/asaas-nfse/index.ts` (drift cancela no Asaas)
+- `src/components/clients/ClientForm.tsx` (regenerate_payment + validar UPDATE)
 - `CHANGELOG.md`
-
-## Skill usada
-`/skill:ui-ux-pro-max` para o botão "Regerar boleto" (regras: `destructive-emphasis`, `confirmation-dialogs`, `error-clarity`).
+- (apenas leitura/insert via script): nenhum arquivo permanente

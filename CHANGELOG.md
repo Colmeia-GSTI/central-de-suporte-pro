@@ -1,5 +1,18 @@
 # Changelog
 
+## [Não publicado] - Anti-duplicação de boletos + edição de cliente por técnicos
+
+### Corrigido
+- **Boletos duplicados no Asaas após alteração de CNPJ/endereço.** Causa raiz: `ClientForm` apenas marcava `asaas_payment_deleted_at`, e o caminho de drift em `create_payment` criava um boleto novo no Asaas sem cancelar o antigo, deixando 2+ cobranças ativas. Agora: (a) o drift detection em `asaas-nfse/create_payment` executa `DELETE /payments/{id}` no Asaas antes de limpar os campos locais, e (b) `ClientForm` chama `regenerate_payment` (que já cancela corretamente) para cada fatura pendente/atrasada do cliente, com concorrência limitada a 3.
+- **Edição de e-mail/telefone/endereço de cliente por técnicos falhava silenciosamente.** Causa raiz: a tabela `public.clients` não tinha policy de UPDATE para a role `technician`, então `supabase.update()` retornava `error=null` mas afetava 0 linhas e o toast mostrava "Cliente atualizado" enganosamente. Correções: (1) nova policy `Technicians can update clients (except fiscal fields)` permitindo alterar todos os campos exceto `document` e `state_registration`; (2) `ClientForm` agora usa `.select("id")` no UPDATE e levanta erro explícito se nenhuma linha for retornada, prevenindo qualquer regressão futura de RLS.
+
+### Auditoria
+- Novo evento `asaas_payment_auto_cancelled` em `audit_logs` registra cada boleto cancelado pelo drift detection (motivo + correlation_id + payment_id antigo).
+
+---
+
+
+
 ## [Não publicado] - Boleto Asaas: regeneração automática quando cadastro muda
 
 ### Corrigido
