@@ -324,11 +324,17 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
           (client.address || "") !== (data.address || "") ||
           (client.zip_code || "").replace(/\D/g, "") !== (data.zip_code || "").replace(/\D/g, "");
 
-        const { error } = await supabase
+        const { data: updatedRows, error } = await supabase
           .from("clients")
           .update(payload)
-          .eq("id", client.id);
+          .eq("id", client.id)
+          .select("id");
         if (error) throw error;
+        if (!updatedRows || updatedRows.length === 0) {
+          throw new Error(
+            "Sem permissão para alterar este cliente. Verifique seu perfil de acesso ou contate um administrador.",
+          );
+        }
         clientId = client.id;
 
         // Registrar no histórico se houve mudanças
@@ -346,8 +352,10 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
           });
         }
 
-        // Se dados fiscais mudaram: sincroniza no Asaas + sinaliza boletos para regenerar.
-        // Boletos no Asaas têm o PDF congelado na emissão — sem isso, ficariam com dados antigos.
+        // Se dados fiscais mudaram: sincroniza no Asaas E regenera boletos
+        // pendentes/atrasados de forma segura (cancelando o antigo no Asaas).
+        // Apenas marcar `asaas_payment_deleted_at` deixava o boleto antigo
+        // ativo no Asaas e gerava cobrança DUPLICADA ao recriar.
         if (fiscalChanged) {
           try {
             await supabase.functions.invoke("asaas-nfse", {
@@ -356,12 +364,43 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
           } catch (syncErr) {
             console.warn("[ClientForm] Falha ao sincronizar com Asaas:", syncErr);
           }
-          await supabase
+          const { data: pendingInvoices } = await supabase
             .from("invoices")
-            .update({ asaas_payment_deleted_at: new Date().toISOString() })
+            .select("id, invoice_number")
             .eq("client_id", client.id)
             .in("status", ["pending", "overdue"]);
+
+          if (pendingInvoices && pendingInvoices.length > 0) {
+            // Concorrência limitada a 3 para não travar a UI
+            const queue = [...pendingInvoices];
+            const worker = async () => {
+              while (queue.length) {
+                const inv = queue.shift();
+                if (!inv) break;
+                try {
+                  await supabase.functions.invoke("asaas-nfse", {
+                    body: {
+                      action: "regenerate_payment",
+                      invoice_id: inv.id,
+                      reason: "Dados cadastrais alterados (CNPJ/endereço)",
+                    },
+                  });
+                } catch (regErr) {
+                  console.warn(
+                    `[ClientForm] Falha ao regenerar boleto da fatura #${inv.invoice_number}:`,
+                    regErr,
+                  );
+                }
+              }
+            };
+            await Promise.all([worker(), worker(), worker()]);
+            toast({
+              title: "Boletos em regeneração",
+              description: `${pendingInvoices.length} boleto(s) pendente(s) serão recriado(s) com os novos dados.`,
+            });
+          }
         }
+
       } else {
 
         const { data: newClient, error } = await supabase
