@@ -1,6 +1,11 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
+const ASAAS_URLS: Record<string, string> = {
+  production: 'https://api.asaas.com/v3',
+  sandbox: 'https://api-sandbox.asaas.com/v3',
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -12,18 +17,31 @@ Deno.serve(async (req) => {
       })
     }
 
-    const API_KEY = Deno.env.get('ASAAS_API_KEY')!
-    const BASE = Deno.env.get('ASAAS_BASE_URL') || 'https://api.asaas.com/v3'
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
+    const { data: cfg } = await supabase
+      .from('integration_settings')
+      .select('settings')
+      .eq('integration_type', 'asaas')
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (!cfg?.settings?.api_key) {
+      return new Response(JSON.stringify({ error: 'asaas integration not configured' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const BASE = ASAAS_URLS[cfg.settings.environment] || ASAAS_URLS.production
+    const API_KEY = cfg.settings.api_key as string
+
     const results: any[] = []
     for (const id of payment_ids) {
       const r = await fetch(`${BASE}/payments/${id}`, {
         method: 'DELETE',
-        headers: { access_token: API_KEY, 'Content-Type': 'application/json' },
+        headers: { access_token: API_KEY, 'Content-Type': 'application/json', 'User-Agent': 'Colmeia-Helpdesk/1.0' },
       })
       const body = await r.text().catch(() => '')
       results.push({ id, status: r.status, body })
