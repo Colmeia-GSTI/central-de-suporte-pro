@@ -1,61 +1,36 @@
 
-## Investigação concluída — duas causas raiz distintas
+## Reconciliação completa de cobranças no Asaas
 
-### Problema 1 — Boletos duplicados no Asaas
+Objetivo: confirmar que não há cobranças duplicadas e que todo `asaas_payment_id` antigo registrado em `audit_logs` foi de fato cancelado no Asaas.
 
-**Causa raiz:** Quando o CNPJ ou endereço de um cliente é alterado, o `ClientForm.tsx` (linhas 351‑364) marca `asaas_payment_deleted_at = now()` em todas as faturas pendentes/atrasadas, **mas não cancela o boleto antigo no Asaas**. Em seguida, o bloco de "drift detection" do `asaas-nfse/create_payment` (linhas 2109‑2203) detecta a marcação, limpa os campos locais e cria um boleto novo no Asaas — também **sem deletar o boleto antigo no Asaas**. Resultado: o cliente continua com 2+ cobranças ativas em Asaas para a mesma fatura, recebe boleto/PIX duplicados por e‑mail/SMS.
+### Etapas (somente leitura no banco; só cancela no Asaas após sua confirmação)
 
-A única rota que cancela corretamente é o `regenerate_payment` manual (linhas 2594‑2602), porque ele chama `DELETE /payments/{id}` antes de limpar. O caminho automático (drift) está incompleto.
+1. **Levantar o universo de clientes ativos** com `asaas_customer_id` definido.
 
-### Problema 2 — E‑mail do cliente não salva no cadastro
+2. **Para cada cliente, consultar `GET /payments?customer={id}&limit=100`** na API do Asaas (já configurada) e listar todas as cobranças `status IN (PENDING, OVERDUE, AWAITING_RISK_ANALYSIS)`.
 
-**Causa raiz:** A tabela `public.clients` não tem nenhuma policy de UPDATE para a role `technician`. As policies atuais permitem UPDATE apenas para:
-- `is_financial_admin` (admin / financial / manager)
-- o próprio cliente dono do registro (client / client_master)
+3. **Cruzar com `public.invoices`**:
+   - Marcar como **órfã no Asaas** qualquer payment do Asaas que **não** corresponda ao `asaas_payment_id` atual de nenhuma fatura local desse cliente.
+   - Marcar como **duplicata** quando 2+ payments ativos no Asaas apontam para a mesma `externalReference` ou o mesmo valor/vencimento de uma fatura local.
 
-Quando um técnico (ex.: `suporte02@colmeiagsti.com.br`) edita um cliente, o `supabase.from("clients").update(...)` retorna `error = null` mas afeta 0 linhas (comportamento padrão do PostgREST com RLS). O `ClientForm` interpreta isso como sucesso e mostra o toast "Cliente atualizado" — porém nada foi persistido.
+4. **Cruzar com `audit_logs`** (`boleto_regenerated`, `boleto_auto_regenerated`, `asaas_payment_auto_cancelled`): para cada `old_asaas_payment_id` registrado, fazer `GET /payments/{id}` e confirmar `deleted=true` ou status `DELETED`. Listar os que ainda estão ativos.
 
-Adicionalmente, o código não verifica `count` nem confere o registro depois do UPDATE, o que mascarou o bug.
+5. **Relatório CSV** em `/mnt/documents/asaas-reconciliation-YYYYMMDD.csv` com colunas: `client_name`, `client_document`, `asaas_payment_id`, `valor`, `vencimento`, `status_asaas`, `classificacao` (orfa / duplicata / regenerado_nao_cancelado / ok), `invoice_id_local` (se houver), `acao_sugerida`.
 
----
+6. **Apresentar resumo no chat** (totais por classificação) **antes** de qualquer cancelamento. Nenhum `DELETE` no Asaas será executado nesta primeira passada.
 
-## Plano de correção
+7. **Após você revisar e aprovar**, executar segundo passo (fora deste plano) que itera o CSV e chama `DELETE /payments/{id}` apenas para os marcados como duplicata/órfã/regenerado_nao_cancelado, registrando cada cancelamento em `audit_logs` como `asaas_payment_reconciliation_cancelled`.
 
-### Backend / Banco
+### Implementação técnica
 
-1. **Nova policy UPDATE para técnicos em `public.clients`** (migration):
-   - `USING (is_technician_only(auth.uid()))`
-   - `WITH CHECK` que impede técnico de alterar `document`, `normalized_document` e `state_registration` (mantém a memória `clients/management-and-permissions` — CNPJ/IE read‑only para técnicos após criação). Tudo o resto (nome, e‑mail, telefone, endereço, observações) fica liberado.
+- Script Deno standalone executado uma vez como tarefa de manutenção (não fica como edge function permanente).
+- Lê `ASAAS_API_KEY` e `ASAAS_BASE_URL` direto dos secrets já existentes.
+- Usa `PG*` da sandbox para leitura do banco. Nenhuma migration, nenhum schema novo.
+- Rate limit: 1 requisição a cada 250 ms para respeitar a API do Asaas.
 
-2. **`asaas-nfse/index.ts` — drift detection deve cancelar antes de regenerar** (linhas 2170‑2203):
-   - Antes do `update` que limpa os campos locais, chamar `DELETE /payments/{old_payment_id}` no Asaas (tolerando 404 / já deletado, igual ao `regenerate_payment`).
-   - Registrar o cancelamento em `audit_logs` (`asaas_payment_auto_cancelled` com `reason` e `correlation_id`).
+### Arquivos gerados
 
-3. **`ClientForm.tsx` — usar `regenerate_payment` em vez de marcar `asaas_payment_deleted_at`** (linhas 351‑364):
-   - Buscar as faturas pendentes/atrasadas do cliente.
-   - Para cada uma, invocar `asaas-nfse` action `regenerate_payment` com `reason: "Dados cadastrais alterados (CNPJ/endereço)"`. Isso garante cancelamento no Asaas + limpeza local + audit.
-   - Em paralelo (limite de concorrência 3) para não travar a UI; toast informando "X boletos serão regenerados".
+- `/mnt/documents/asaas-reconciliation-YYYYMMDD.csv` (relatório)
+- `/mnt/documents/asaas-reconciliation-YYYYMMDD.log` (trace de chamadas)
 
-4. **Validar UPDATE no `ClientForm`** (linhas 327‑331):
-   - Trocar para `.update(payload).eq("id", client.id).select("id")` e verificar se retornou ao menos 1 linha. Se 0, lançar erro "Sem permissão para alterar este cliente" → toast destrutivo. Isso impede que qualquer regressão futura de RLS volte a mascarar o bug.
-
-### Reconciliação dos boletos já duplicados
-
-5. Script único de auditoria (executado pelo agente após aprovação):
-   - Listar todas as faturas `pending`/`overdue` cujo cliente sofreu update de CNPJ recente.
-   - Para cada uma, listar os payments do `customer_id` no Asaas e cancelar os que não correspondem ao `asaas_payment_id` atual da fatura.
-   - Output: relatório em `/mnt/documents/duplicate-boletos-reconciliation.csv`.
-
-### Verificação
-
-- Testar: alterar e‑mail de cliente logado como técnico → deve salvar e refletir no banco.
-- Testar: alterar CNPJ de um cliente de teste → confirmar via `audit_logs` que o payment antigo foi cancelado no Asaas e que apenas um novo permanece ativo.
-- `tsc --noEmit`, vitest run dos testes relacionados (`client-form`, `asaas-nfse`).
-
-### Arquivos afetados
-
-- nova migration em `supabase/migrations/`
-- `supabase/functions/asaas-nfse/index.ts` (drift cancela no Asaas)
-- `src/components/clients/ClientForm.tsx` (regenerate_payment + validar UPDATE)
-- `CHANGELOG.md`
-- (apenas leitura/insert via script): nenhum arquivo permanente
+Nenhum arquivo do projeto será alterado.
