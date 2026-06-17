@@ -1,6 +1,20 @@
 # Changelog
 
-## [Não publicado] - Anti-duplicação de boletos + edição de cliente por técnicos
+## [Não publicado] - Retry automático de boletos com falha
+
+### Corrigido
+- **Boleto QUAZA TECNOLOGIA #511 (junho/2026) nunca foi criado no Asaas.** Causa raiz: na geração mensal de 09/06 a chamada `asaas-nfse/create_payment` retornou non-2xx; a fatura ficou com `boleto_status='erro'` e nenhum mecanismo automático reabria o caso — só aparecia no Painel de Saúde. Ação manual: vencimento reagendado para 20/06, boleto regerado (`pay_tw9hp8udg4y1pipi`) e evento `boleto_manual_recovered` gravado em `audit_logs`. Varredura confirmou que **nenhum outro cliente** foi afetado.
+
+### Adicionado
+- **Edge function `auto-retry-failed-boletos`**: busca faturas com `boleto_status='erro'`, sem `asaas_payment_id`, criadas há mais de 30 min e com `processing_attempts < 3`. Para cada uma, reagenda `due_date` se já passou (hoje + 3 dias úteis) e re-invoca o provedor correto (`asaas-nfse` ou `banco-inter`).
+- **Agendamento pg_cron** `auto-retry-failed-boletos`: roda 4×/dia (08h, 12h, 16h, 20h America/Sao_Paulo).
+- **Alerta proativo**: na 3ª falha consecutiva o sistema cria uma notificação `error` na categoria `billing` apontando para o Painel de Saúde, evitando que casos travados passem batido.
+- Eventos novos em `audit_logs`: `boleto_manual_recovered`, `boleto_auto_recovered`.
+
+---
+
+## [Anterior] - Anti-duplicação de boletos + edição de cliente por técnicos
+
 
 ### Corrigido
 - **Boletos duplicados no Asaas após alteração de CNPJ/endereço.** Causa raiz: `ClientForm` apenas marcava `asaas_payment_deleted_at`, e o caminho de drift em `create_payment` criava um boleto novo no Asaas sem cancelar o antigo, deixando 2+ cobranças ativas. Agora: (a) o drift detection em `asaas-nfse/create_payment` executa `DELETE /payments/{id}` no Asaas antes de limpar os campos locais, e (b) `ClientForm` chama `regenerate_payment` (que já cancela corretamente) para cada fatura pendente/atrasada do cliente, com concorrência limitada a 3.
