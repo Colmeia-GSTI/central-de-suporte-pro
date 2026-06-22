@@ -1,5 +1,16 @@
 # Changelog
 
+## [Não publicado] - Limpeza: Hermes Bot setup e usuários E2E
+
+### Removido
+- **Card temporário "Configurar Hermes Bot"** em `/settings`: removido card, handler `handleSetupHermes`, state e imports órfãos (`Card`, `Bot`, `supabase`, `toast`) de `SettingsPage.tsx`.
+- **Edge function `setup-hermes-bot`**: removida do código e do projeto Cloud (já não era necessária — o usuário bot `hermes@colmeiagsti.com.br` permanece ativo para a integração relay UniFi).
+- **Usuários E2E de teste** purgados completamente do banco: `e2e-test@colmeiagsti.com.br` e `e2e-test-2@colmeiagsti.com.br`. Cascata: 2 chamados de teste, comentários, histórico, sessões e perfis. Ação registrada em `audit_logs` como `e2e_users_purged`.
+
+---
+
+
+
 ## [Não publicado] - Retry automático de boletos com falha
 
 ### Corrigido

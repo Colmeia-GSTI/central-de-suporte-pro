@@ -1,36 +1,33 @@
+## Remover completamente o card "Configurar Hermes Bot (temporário)" e os usuários [E2E]
 
-## Reconciliação completa de cobranças no Asaas
+### 1. Frontend — `src/pages/settings/SettingsPage.tsx`
+- Remover o bloco `<Card>` "Configurar Hermes Bot (temporário)" (linhas 212-233).
+- Remover o handler `handleSetupHermes`, o state `isSettingUpHermes` e o import `Bot` do lucide-react.
+- Remover imports não usados após a limpeza: `Card/CardContent/CardHeader/CardTitle`, `supabase`, `toast` (verificar se ainda são usados em outro lugar do arquivo; remover só os que ficarem órfãos).
 
-Objetivo: confirmar que não há cobranças duplicadas e que todo `asaas_payment_id` antigo registrado em `audit_logs` foi de fato cancelado no Asaas.
+### 2. Edge Function — apagar definitivamente
+- Deletar `supabase/functions/setup-hermes-bot/` (a função e o diretório). Como o "hermes bot" já foi configurado em produção (usuário `hermes@colmeiagsti.com.br` existe e está em uso pelo relay UniFi), a função de setup não é mais necessária.
+- **Não** mexer no usuário `hermes@colmeiagsti.com.br` — ele é o bot real do relay UniFi (ver `relay-unifi/RUNBOOK_HERMES.md`) e continua ativo.
 
-### Etapas (somente leitura no banco; só cancela no Asaas após sua confirmação)
+### 3. Banco de dados — remover os 2 usuários E2E
+Excluir completamente os dois usuários de teste:
+- `e2e-test@colmeiagsti.com.br` (id `a200c343-0a79-444e-a939-0e32f5567606`)
+- `e2e-test-2@colmeiagsti.com.br` (id `e5f1264f-a374-4ca6-87b7-459ba4d7be4e`)
 
-1. **Levantar o universo de clientes ativos** com `asaas_customer_id` definido.
+Antes de deletar do `auth.users`, checar e limpar referências em tabelas relacionadas (profiles, user_roles, user_clients, audit_logs como ator, tickets criados, etc.). Estratégia:
+1. Rodar uma query de auditoria listando todas as referências aos 2 IDs.
+2. Para tabelas operacionais sem impacto (profiles, user_roles, user_clients, notification_preferences, push_subscriptions, sessões) → DELETE direto.
+3. Para tabelas com histórico financeiro/auditoria (audit_logs, ticket_history) → manter o registro histórico mas, se houver FK, anonimizar o nome (regra do projeto: não apagar registros financeiros). Esses usuários nunca tiveram chamados/faturamento reais, então a expectativa é que não haja nada relevante — confirmar antes.
+4. `DELETE FROM auth.users WHERE id IN (...)` (cascata cuidará do resto).
+5. Registrar em `audit_logs` a ação `e2e_users_purged` com lista dos IDs removidos.
 
-2. **Para cada cliente, consultar `GET /payments?customer={id}&limit=100`** na API do Asaas (já configurada) e listar todas as cobranças `status IN (PENDING, OVERDUE, AWAITING_RISK_ANALYSIS)`.
+### 4. Documentação
+- `CHANGELOG.md`: nova entrada documentando (a) remoção do card temporário Hermes Bot + função `setup-hermes-bot`, (b) purga dos usuários E2E.
 
-3. **Cruzar com `public.invoices`**:
-   - Marcar como **órfã no Asaas** qualquer payment do Asaas que **não** corresponda ao `asaas_payment_id` atual de nenhuma fatura local desse cliente.
-   - Marcar como **duplicata** quando 2+ payments ativos no Asaas apontam para a mesma `externalReference` ou o mesmo valor/vencimento de uma fatura local.
+### Verificação final
+- Recarregar `/settings` e confirmar que o card amarelo sumiu.
+- Recarregar aba "Usuários" e confirmar que `[E2E] Usuario de Teste` e `[E2E] Usuario Teste 2` desapareceram.
+- `SELECT count(*) FROM auth.users WHERE email ILIKE 'e2e-test%'` deve retornar 0.
 
-4. **Cruzar com `audit_logs`** (`boleto_regenerated`, `boleto_auto_regenerated`, `asaas_payment_auto_cancelled`): para cada `old_asaas_payment_id` registrado, fazer `GET /payments/{id}` e confirmar `deleted=true` ou status `DELETED`. Listar os que ainda estão ativos.
-
-5. **Relatório CSV** em `/mnt/documents/asaas-reconciliation-YYYYMMDD.csv` com colunas: `client_name`, `client_document`, `asaas_payment_id`, `valor`, `vencimento`, `status_asaas`, `classificacao` (orfa / duplicata / regenerado_nao_cancelado / ok), `invoice_id_local` (se houver), `acao_sugerida`.
-
-6. **Apresentar resumo no chat** (totais por classificação) **antes** de qualquer cancelamento. Nenhum `DELETE` no Asaas será executado nesta primeira passada.
-
-7. **Após você revisar e aprovar**, executar segundo passo (fora deste plano) que itera o CSV e chama `DELETE /payments/{id}` apenas para os marcados como duplicata/órfã/regenerado_nao_cancelado, registrando cada cancelamento em `audit_logs` como `asaas_payment_reconciliation_cancelled`.
-
-### Implementação técnica
-
-- Script Deno standalone executado uma vez como tarefa de manutenção (não fica como edge function permanente).
-- Lê `ASAAS_API_KEY` e `ASAAS_BASE_URL` direto dos secrets já existentes.
-- Usa `PG*` da sandbox para leitura do banco. Nenhuma migration, nenhum schema novo.
-- Rate limit: 1 requisição a cada 250 ms para respeitar a API do Asaas.
-
-### Arquivos gerados
-
-- `/mnt/documents/asaas-reconciliation-YYYYMMDD.csv` (relatório)
-- `/mnt/documents/asaas-reconciliation-YYYYMMDD.log` (trace de chamadas)
-
-Nenhum arquivo do projeto será alterado.
+### Pergunta de confirmação
+Confirma que devo **manter** o usuário `hermes@colmeiagsti.com.br` (bot real do relay UniFi) e apagar apenas o **card de setup** + os **dois usuários E2E**? Se quiser remover também o bot Hermes, me avise — isso quebra a integração UniFi.
