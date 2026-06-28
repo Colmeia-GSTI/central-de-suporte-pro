@@ -171,6 +171,5 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 - `SECURITY.md` — práticas de segurança
 - `TESTING.md` — estratégia de testes
 - `FEATURE_FLAGS.md` — feature flags
-- `REFACTORING_ROADMAP.md` — roadmap de refatoração
 - `relay-unifi/RUNBOOK_HERMES.md` — operação do relay UniFi (bot `hermes@colmeiagsti.com.br` — **não remover**, quebra a integração UniFi)
 - `CHANGELOG.md` — histórico de mudanças (mantenha atualizado em mudanças relevantes)

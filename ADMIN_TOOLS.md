@@ -69,7 +69,7 @@ Todas aplicam: validação via `requireRole` (helper `_shared/auth-helpers.ts`),
 
 ---
 
-> Próximas seções deste catálogo serão adicionadas conforme novos itens do `REFACTORING_ROADMAP.md` forem implementados.
+> Próximas seções deste catálogo serão adicionadas conforme novos itens forem implementados.
 
 ## Auditoria
 
@@ -97,4 +97,4 @@ Todas aplicam: validação via `requireRole` (helper `_shared/auth-helpers.ts`),
 - RLS de `audit_logs`: append-only (INSERT permitido por `audit_changes`, SELECT admin-only, UPDATE/DELETE bloqueados).
 
 ### TODO operacional
-- **Política de retenção**: hoje a tabela `audit_logs` cresce indefinidamente. Definir TTL (sugestão 12 meses) + job `pg_cron` de purge e/ou export para storage frio. Registrado em `REFACTORING_ROADMAP.md` Seção 7.
+- **Política de retenção**: hoje a tabela `audit_logs` cresce indefinidamente. Definir TTL (sugestão 12 meses) + job `pg_cron` de purge e/ou export para storage frio.
