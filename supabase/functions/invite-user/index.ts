@@ -148,11 +148,11 @@ Deno.serve(async (req) => {
       // Convite criado mas email falhou — admin pode reenviar
       console.error("[invite-user] send-email-resend failed:", sendErr?.message);
       await logAudit(admin, {
-        actor_id: auth.userId!,
+        user_id: auth.userId!,
         action: "invite_created_email_failed",
-        target_table: "pending_invites",
-        target_id: invite.id,
-        diff: { email: normalizedEmail, role, client_id, error: sendErr?.message },
+        table_name: "pending_invites",
+        record_id: invite.id,
+        new_data: { email: normalizedEmail, role, client_id, error: sendErr?.message },
       });
       return jsonResponse({
         warning: "Convite criado mas email falhou. Use o botão 'Reenviar' na lista.",
@@ -162,11 +162,11 @@ Deno.serve(async (req) => {
     }
 
     await logAudit(admin, {
-      actor_id: auth.userId!,
+      user_id: auth.userId!,
       action: "invite_created",
-      target_table: "pending_invites",
-      target_id: invite.id,
-      diff: { email: normalizedEmail, role, client_id },
+      table_name: "pending_invites",
+      record_id: invite.id,
+      new_data: { email: normalizedEmail, role, client_id },
     });
 
     return jsonResponse({

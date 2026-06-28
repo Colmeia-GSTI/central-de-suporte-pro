@@ -106,11 +106,11 @@ Deno.serve(async (req) => {
     }
 
     await logAudit(admin, {
-      actor_id: auth.userId!,
+      user_id: auth.userId!,
       action: "invite_resent",
-      target_table: "pending_invites",
-      target_id: invite.id,
-      diff: { new_expires_at: newExpires },
+      table_name: "pending_invites",
+      record_id: invite.id,
+      new_data: { new_expires_at: newExpires },
     });
 
     return jsonResponse({ success: true, expires_at: newExpires });

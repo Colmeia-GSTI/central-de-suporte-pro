@@ -88,11 +88,11 @@ Deno.serve(async (req) => {
     }
 
     await logAudit(admin, {
-      actor_id: auth.userId!,
+      user_id: auth.userId!,
       action: "invite_activated_manually",
-      target_table: "pending_invites",
-      target_id: invite.id,
-      diff: { email: invite.email, role: invite.role, target_user_id: userId },
+      table_name: "pending_invites",
+      record_id: invite.id,
+      new_data: { email: invite.email, role: invite.role, target_user_id: userId },
     });
 
     return jsonResponse({

@@ -49,11 +49,11 @@ Deno.serve(async (req) => {
     }
 
     await logAudit(admin, {
-      actor_id: auth.userId!,
+      user_id: auth.userId!,
       action: "invite_revoked",
-      target_table: "pending_invites",
-      target_id: invite.id,
-      diff: { email: invite.email },
+      table_name: "pending_invites",
+      record_id: invite.id,
+      old_data: { email: invite.email },
     });
 
     return jsonResponse({ success: true });
