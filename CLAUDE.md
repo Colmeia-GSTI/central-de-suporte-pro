@@ -111,6 +111,14 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 
 ## 6. Convenções de Código
 
+### 6.0 Princípios de Engenharia (valem para TODA mudança)
+
+1. **Reutilizar antes de criar** — procure função/hook/componente existente (`src/lib`, `src/hooks`, `src/components/ui`, `supabase/functions/_shared`) antes de escrever algo novo. Não reimplemente o que já existe.
+2. **Evitar redundância** — uma única fonte de verdade por regra de negócio; nada de caminhos paralelos que fazem a mesma coisa (ex.: duas telas para a mesma gestão, dois fluxos de e-mail).
+3. **Otimizar com critério** — código eficiente e legível; extraia lógica pura testável (`logic.ts` nas edges, libs em `src/lib`); otimização de performance só com evidência (sem _premature optimization_).
+4. **Limpar ao passar** — remova código morto, imports/variáveis sem uso, comentários obsoletos e arquivos órfãos no escopo que tocar (regra do escoteiro: deixe melhor do que encontrou).
+5. **Manter organizado** — arquivos pequenos e focados (<150–200 linhas), agrupados por domínio, com nomes claros e estrutura consistente com o resto do projeto.
+
 ### 6.1 Componentes
 - Pequenos e focados. Se um componente passar de ~150–200 linhas, refatore em subcomponentes.
 - **Sempre cheque `src/components/ui/` antes de criar UI nova.** Se faltar um primitivo, instale via shadcn CLI ou siga o padrão existente.

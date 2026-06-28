@@ -32,6 +32,7 @@ import {
 import { Plus, Search, FileText, Edit, Trash2, Calendar, DollarSign, Receipt, TrendingUp, History, Loader2, PackagePlus, CheckCircle2, AlertTriangle, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { PermissionGate } from "@/components/auth/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ContractAdjustmentDialog } from "@/components/contracts/ContractAdjustmentDialog";
 import { ContractHistorySheet } from "@/components/contracts/ContractHistorySheet";
@@ -66,6 +67,7 @@ const supportModelLabels: Record<Enums<"support_model">, string> = {
 
 export default function ContractsPage() {
   const navigate = useNavigate();
+  const { isTechnicianOnly } = usePermissions();
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; contract: ContractWithClient | null }>({
     open: false,
@@ -101,7 +103,7 @@ export default function ContractsPage() {
         .from("contracts")
         .select(`
           *,
-          clients(id, name)
+          clients(id, name, document, nickname)
         `)
         .order("created_at", { ascending: false });
 
@@ -342,11 +344,27 @@ export default function ContractsPage() {
                         <p className="font-medium max-w-[180px] truncate" title={contract.name}>{contract.name}</p>
                       </TableCell>
                       <TableCell>
-                        <span className="max-w-[180px] truncate block" title={contract.clients?.name || ""}>
-                          {contract.clients?.name || (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </span>
+                        {contract.clients ? (
+                          <div className="max-w-[200px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium truncate" title={contract.clients.name}>
+                                {contract.clients.name}
+                              </span>
+                              {contract.clients.nickname && (
+                                <Badge variant="outline" className="text-xs font-normal shrink-0">
+                                  {contract.clients.nickname}
+                                </Badge>
+                              )}
+                            </div>
+                            {!isTechnicianOnly && contract.clients.document && (
+                              <p className="text-xs text-muted-foreground truncate" title={contract.clients.document}>
+                                {contract.clients.document}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">

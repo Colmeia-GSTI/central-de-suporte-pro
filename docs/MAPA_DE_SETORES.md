@@ -38,6 +38,40 @@ A Central de Suporte Pro (codinome Colmeia) e uma plataforma MSP (Managed Servic
 | Banco de Dados, Migrations e Schema | Schema versionado, RLS, RPCs, Vault | solido | Supabase Auth, Vault, todas as integracoes (schema) |
 | Infraestrutura, Build, PWA e Testes | Build, PWA, shell de UI, cliente Supabase, testes | parcial | Supabase, Web Push, Workbox, Lovable |
 
+> **Este é o painel de progresso.** A coluna **Maturidade** acima é a fonte de verdade do status de cada setor — atualize-a conforme avançamos. Critérios e ordem abaixo.
+
+---
+
+## 2.1 Processo de Evolução dos Setores
+
+Objetivo: deixar **todos os setores `🟢 sólidos`**, um de cada vez, sem regredir os já estáveis.
+
+### Escada de maturidade
+`🔴 precisa-revisão` → `🟡 parcial` → `🔵 em progresso` → `🟢 sólido`
+
+> Ao começar a trabalhar um setor, marque a Maturidade dele como `em progresso` na tabela acima; ao concluir os critérios, promova para `solido`.
+
+### Definição de "Sólido" (checklist de graduação)
+Um setor só vira `🟢 sólido` quando **todos** os itens abaixo estiverem verdadeiros:
+- [ ] Checklist de verificação do setor (seção 3) 100% resolvido
+- [ ] Sem bugs conhecidos; contratos de payload (caller ↔ edge function) corretos
+- [ ] RLS das tabelas do setor revisada e correta
+- [ ] Integrações do setor testadas ponta a ponta
+- [ ] Sem código morto/redundância; lógica testável extraída (`logic.ts`/libs) + testes
+- [ ] Segredos fora do frontend / texto plano (quando aplicável)
+- [ ] Crons relevantes versionados e confirmados ativos
+- [ ] Seção do setor neste mapa atualizada (incluindo correções descobertas)
+
+### Princípios (ver `CLAUDE.md` §6.0)
+Reutilizar antes de criar · evitar redundância · otimizar com critério · limpar ao passar · manter organizado.
+
+### Ordem de ataque acordada
+0. **Ajuste rápido — Contratos**: na listagem, exibir CNPJ e apelido ao lado do nome do cliente. ✅ _(feito)_
+1. **Fundação** — Autenticação/Usuários → Banco de Dados/Schema → Infraestrutura.
+2. **Dinheiro** — Faturamento/Cobrança → NFS-e/Certificados.
+3. **Riscos transversais** — crons versionados, `verify_jwt` dos webhooks, segredos em texto plano.
+4. **Maturidade** — Inventário e Gamificação (subir o piso), depois os demais setores `parcial` restantes.
+
 ---
 
 ## 3. Setores
