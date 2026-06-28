@@ -11,7 +11,7 @@
  * 1. Frontend permissions are for UI control ONLY - never trust client-side checks
  * 2. All data access is protected by Supabase RLS policies
  * 3. Override permissions are stored in role_permission_overrides table
- * 4. Use PermissionGate component for UI, useSecureAction for mutations
+ * 4. Use PermissionGate component / usePermissions hook for UI guards
  */
 
 export type ModuleAction = "view" | "create" | "edit" | "delete" | "export" | "manage";
