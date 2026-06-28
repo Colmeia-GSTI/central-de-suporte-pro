@@ -98,6 +98,13 @@ Deno.serve(async (req) => {
       console.error("[create-user] roles error:", rolesError.message);
     }
 
+    // O trigger handle_new_user insere o papel 'client' em todo novo auth.users.
+    // Para usuario de equipe (client nao solicitado), remove o residual para
+    // evitar papel duplicado (mesmo padrao usado em accept_invite).
+    if (!roles.includes("client")) {
+      await admin.from("user_roles").delete().eq("user_id", userId).eq("role", "client");
+    }
+
     await logAudit(admin, {
       table_name: "auth.users",
       record_id: userId,

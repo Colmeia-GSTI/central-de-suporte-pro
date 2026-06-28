@@ -2,8 +2,7 @@ import { forwardRef } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2, RefreshCw } from "lucide-react";
-
-type AppRole = "admin" | "manager" | "technician" | "financial" | "client" | "client_master";
+import type { AppRole } from "@/lib/permissions";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
