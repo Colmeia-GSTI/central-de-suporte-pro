@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Resolve username -> e-mail (mesma fonte do resolve-username: client_contacts)
+    // Resolve username -> e-mail (fonte: client_contacts)
     const { data: contact } = await admin
       .from("client_contacts")
       .select("user_id, email, is_active")

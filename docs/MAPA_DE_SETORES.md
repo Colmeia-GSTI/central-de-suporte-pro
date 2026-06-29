@@ -110,7 +110,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - ✅ PARCIAL (A2): ProfilePage aba Permissoes agora usa `getActions`/`can` (reflete overrides). Pendente: avatar upload e edicao de email nao implementados na UI (ver C3).
 - `usePermissionOverrides` usa cache global em modulo (risco de leitura stale ao trocar de usuario).
 - `verify_jwt=false` em forgot-password/resolve-username/resend-confirmation/bootstrap-admin/update-user-email/auth-email-hook; rate limiters in-memory (nao distribuidos).
-- resolve-username expoe email real sem autenticacao (vetor de enumeracao).
+- ✅ RESOLVIDO (B1): login por username agora e server-side via edge `login-with-username` (resolve + autentica no servidor, devolve so os tokens; erro generico contra enumeracao). `resolve-username` (que expunha o e-mail) foi REMOVIDO. Caminho de e-mail (staff/admin) inalterado. Pendente: teste de entrega/login real; reenvio de confirmacao por username (caso raro) ficou como polimento.
 - ✅ RESOLVIDO (B2): recovery de senha estava QUEBRADO — `forgot-password` usava `generateLink` (gera link, nao envia) e o `auth-email-hook` nativo esta desligado (CHANGELOG:782), entao nenhum e-mail saia. Agora `forgot-password` envia pelo pipeline unico `send-email-resend` (logado em message_logs). Pendente: confirmar entrega com teste real; o `auth-email-hook` segue silencioso (candidato a remocao em cleanup proprio, fora do escopo de recovery).
 - ✅ RESOLVIDO (B3): `change_user_role` agora tem guarda contra remover o ULTIMO admin (aplicado no banco via Lovable MCP em 2026-06-29; sistema tinha apenas 1 admin — risco era real). Continua destrutiva por design (DELETE all + INSERT um — papel unico por usuario).
 - ✅ RESOLVIDO (A3): tipo `AppRole` unificado em `src/lib/permissions.ts`; `ProtectedRoute` e `useAuth` importam de la.
@@ -123,7 +123,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - [x] Corrigir `logAudit` nas edges de convite (assinatura alinhada). Falta testar o registro em `audit_logs` após deploy.
 - [ ] Conferir RLS de application_logs (SELECT admin) para o AnomaliesBanner.
 - [x] aba Permissoes do ProfilePage usa `can`/`getActions` (overrides). [ ] Falta validar a RLS de `role_permission_overrides`.
-- [ ] Testar login por username e avaliar exposicao de email (captcha/rate-limit mais forte).
+- [x] Login por username sem expor e-mail (server-side; resolve-username removido). [ ] Teste de login real por username pos-deploy.
 - [ ] Testar reset de senha por admin nos dois modos e o fluxo forcado em ResetPassword.tsx.
 - [x] Recovery consolidado no `send-email-resend` (forgot-password). [ ] Teste real de entrega pos-deploy.
 - [ ] Testar enforce_invite_on_signup (signup sem convite deve falhar; bootstrap/service_role passa).
