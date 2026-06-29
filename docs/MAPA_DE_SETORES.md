@@ -72,6 +72,13 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 3. **Riscos transversais** — crons versionados, `verify_jwt` dos webhooks, segredos em texto plano.
 4. **Maturidade** — Inventário e Gamificação (subir o piso), depois os demais setores `parcial` restantes.
 
+### Registro de alterações no banco (via Lovable MCP)
+> Como mudanças de banco são aplicadas via Lovable MCP (não pelo git), registre aqui cada alteração para manter auditável.
+
+| Data | Objeto | Alteração | Setor |
+|---|---|---|---|
+| 2026-06-29 | `change_user_role()` | Guarda contra remover o último admin (evita lockout) | 1 - Auth |
+
 ---
 
 ## 3. Setores
@@ -105,7 +112,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - `verify_jwt=false` em forgot-password/resolve-username/resend-confirmation/bootstrap-admin/update-user-email/auth-email-hook; rate limiters in-memory (nao distribuidos).
 - resolve-username expoe email real sem autenticacao (vetor de enumeracao).
 - Dois caminhos de email de recovery (Resend custom vs auth-email-hook nativo) - risco de duplicidade.
-- `change_user_role` e destrutiva (DELETE all + INSERT um) e sem guard de "ultimo admin".
+- ✅ RESOLVIDO (B3): `change_user_role` agora tem guarda contra remover o ULTIMO admin (aplicado no banco via Lovable MCP em 2026-06-29; sistema tinha apenas 1 admin — risco era real). Continua destrutiva por design (DELETE all + INSERT um — papel unico por usuario).
 - ✅ RESOLVIDO (A3): tipo `AppRole` unificado em `src/lib/permissions.ts`; `ProtectedRoute` e `useAuth` importam de la.
 
 **Checklist de verificacao**
@@ -121,7 +128,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - [ ] Determinar qual caminho envia email de recovery em producao (forgot-password vs auth-email-hook).
 - [ ] Testar enforce_invite_on_signup (signup sem convite deve falhar; bootstrap/service_role passa).
 - [ ] Verificar try_bootstrap_admin sob concorrencia e cleanup do perdedor.
-- [ ] Adicionar guard contra remocao do ultimo admin em change_user_role e UsersTab.
+- [x] Guarda contra remocao do ultimo admin em `change_user_role` (banco, via Lovable MCP). [ ] Opcional: refletir o erro de forma amigavel na UI (UsersTab/ChangeRoleDialog).
 - [ ] Validar token refresh do useAuth (margem, safety timeout, revalidacao de aba).
 - [ ] Garantir tratamento de email sintetico `.internal` em forgot/reset.
 
