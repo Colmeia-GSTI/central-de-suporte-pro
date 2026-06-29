@@ -79,6 +79,21 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 |---|---|---|---|
 | 2026-06-29 | `change_user_role()` | Guarda contra remover o último admin (evita lockout) | 1 - Auth |
 
+### Snapshot de crons ativos (pg_cron) — fonte da verdade é o banco (modelo MCP)
+> Verificado em 2026-06-29 via `SELECT * FROM cron.job`. Reproduzível via Lovable MCP se necessário.
+
+| jobname | schedule | função |
+|---|---|---|
+| generate-invoices-daily | `0 11 * * *` | generate-monthly-invoices |
+| check-adjustments-daily | `0 10 * * *` | check-contract-adjustments |
+| check-doc-expiries-daily | `0 9 * * *` | check-doc-expiries |
+| detect-auth-anomalies-daily | `0 11 * * *` | detect-auth-anomalies |
+| notify-due-invoices-daily | `0 12 * * *` | notify-due-invoices |
+| poll-services-6h | `0 */6 * * *` | poll-services |
+| unifi-sync-hourly | `0 * * * *` | unifi-sync |
+| auto-retry-failed-boletos | `0 11,15,19,23 * * *` | auto-retry-failed-boletos |
+| update-overdue-status | `0 3 * * *` | (UPDATE invoices overdue) |
+
 ---
 
 ## 3. Setores
@@ -105,7 +120,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 **Observacoes / Riscos**
 - ✅ RESOLVIDO (C1): gestao de usuarios consolidada na pagina dedicada `/settings/users`. [Fase 1] reset de senha — [Fase 2] convites (Tabs + `PendingInvitesTab`) — [Fase 3] vinculo (`LinkClientDialog` reusa `ClientSearchCombobox`) — [Fase 4] aba "Usuarios" do `/settings` agora navega para `/settings/users`; `UsersTab.tsx` (750 ln) e `UserProfileSheet.tsx` (orfao) REMOVIDOS. Acesso: rota `/settings/users` e item de menu reabertos para `admin + manager` (decisao 1b, restaura o acesso que o UsersTab dava); acoes sensiveis (criar/excluir/reset/papel) seguem admin-only enforced no backend.
 - ✅ RESOLVIDO: Bug de assinatura de `logAudit` nas edges de convite (invite/resend/revoke/activate) — alinhado a `{ table_name, record_id, action, user_id, old_data/new_data }`; auditoria de convites volta a gravar corretamente.
-- Cron `detect-auth-anomalies-daily` CONFIRMADO ATIVO (`SELECT * FROM cron.job`, 0 11 * * *) — porém NÃO versionado em migrations (so existe no painel); risco de perda em reprovisionamento. Versionar.
+- ✅ RESOLVIDO (item 3): Cron `detect-auth-anomalies-daily` ATIVO (`0 11 * * *`) e registrado no "Snapshot de crons ativos" (§2.1). Sob o modelo DB-via-MCP, a fonte da verdade é o banco ao vivo; a migration que apenas faz `unschedule` é inocua (migrations nao sao replayadas neste modelo).
 - ✅ RESOLVIDO (A4): `create-user` agora remove o papel 'client' residual (inserido pelo trigger `handle_new_user`) quando nao solicitado, espelhando `accept_invite`. Raiz (trigger sempre insere 'client') registrada para eventual ajuste no banco via Lovable MCP.
 - ✅ RESOLVIDO (A2 + C3): ProfilePage aba Permissoes usa `getActions`/`can` (overrides). C3: removido o botao de camera morto (upload de avatar nao implementado) e o texto enganoso do e-mail trocado por "contate um administrador" (admins alteram via /settings/users). Upload de avatar fica como feature futura, se desejado.
 - ✅ RESOLVIDO (C2): `usePermissionOverrides` deixou de usar cache global mutavel de modulo — agora deriva o Map com `useMemo` a partir dos dados do React Query (reativo, sem stale). Removido o export morto `getPermissionOverrideSync`.
@@ -122,7 +137,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - [x] Confirmar existencia do cron `detect-auth-anomalies-daily` (`SELECT * FROM cron.job`) — ATIVO; falta versionar em migration.
 - [x] Corrigir `logAudit` nas edges de convite (assinatura alinhada). Falta testar o registro em `audit_logs` após deploy.
 - [ ] Conferir RLS de application_logs (SELECT admin) para o AnomaliesBanner.
-- [x] aba Permissoes do ProfilePage usa `can`/`getActions` (overrides). [ ] Falta validar a RLS de `role_permission_overrides`.
+- [x] aba Permissoes do ProfilePage usa `can`/`getActions` (overrides). RLS de `role_permission_overrides` validada via MCP: RLS on, admins gerenciam (ALL), staff leem (SELECT). Nota: clients nao leem (overrides de papel client nao refletem na UI do portal — protecao real e RLS/edges).
 - [x] Login por username sem expor e-mail (server-side; resolve-username removido). [ ] Teste de login real por username pos-deploy.
 - [ ] Testar reset de senha por admin nos dois modos e o fluxo forcado em ResetPassword.tsx.
 - [x] Recovery consolidado no `send-email-resend` (forgot-password). [ ] Teste real de entrega pos-deploy.
