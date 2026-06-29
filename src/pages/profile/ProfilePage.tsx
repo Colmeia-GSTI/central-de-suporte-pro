@@ -14,12 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationSettings, NotificationPreferences, defaultLocalPrefs } from "@/components/profile/NotificationSettings";
 import { ChangePasswordCard } from "@/components/profile/ChangePasswordCard";
 import { User, Bell, Shield, Loader2, Save, Camera, Lock } from "lucide-react";
-import { ROLE_METADATA, MODULE_METADATA, AppRole, Module, PERMISSIONS_CONFIG } from "@/lib/permissions";
+import { ROLE_METADATA, MODULE_METADATA, AppRole, Module } from "@/lib/permissions";
 import { usePermissions } from "@/hooks/usePermissions";
 
 export default function ProfilePage() {
   const { user, profile, roles } = useAuth();
-  const { can } = usePermissions();
+  const { getActions } = usePermissions();
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -120,13 +120,9 @@ export default function ProfilePage() {
 
   // Permissions summary
   const permissionsSummary = Object.entries(MODULE_METADATA).map(([module, meta]) => {
-    const modulePermissions = PERMISSIONS_CONFIG[module as Module];
-    const allowedActions = Object.entries(modulePermissions || {})
-      .filter(([_, allowedRoles]) =>
-        (roles as AppRole[]).some((role) => allowedRoles.includes(role))
-      )
-      .map(([action]) => action);
-
+    // Usa getActions (aplica overrides de role_permission_overrides), refletindo
+    // o comportamento real de permissao — nao apenas o default por papel.
+    const allowedActions = getActions(module as Module);
     return {
       module: module as Module,
       label: meta.label,

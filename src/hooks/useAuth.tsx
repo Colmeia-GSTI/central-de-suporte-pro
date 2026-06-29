@@ -2,14 +2,13 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, Re
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import type { AppRole } from "@/lib/permissions";
 
 // Refresh token 5 minutes before expiration
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 // Session storage key to track if user was already logged in this browser session
 const AUTH_ACTIVE_KEY = "colmeia_auth_active";
-
-type AppRole = "admin" | "manager" | "technician" | "financial" | "client" | "client_master";
 
 interface Profile {
   id: string;

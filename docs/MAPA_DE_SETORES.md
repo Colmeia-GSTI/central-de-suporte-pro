@@ -19,7 +19,7 @@ A Central de Suporte Pro (codinome Colmeia) e uma plataforma MSP (Managed Servic
 
 | Setor | Responsabilidade resumida | Maturidade | Integracoes |
 |---|---|---|---|
-| Autenticacao, Usuarios e Permissoes | Identidade, login, convites, RBAC granular, deteccao de anomalias | parcial | Supabase Auth, Resend, Lovable Email, pg_cron |
+| Autenticacao, Usuarios e Permissoes | Identidade, login, convites, RBAC granular, deteccao de anomalias | em progresso | Supabase Auth, Resend, Lovable Email, pg_cron |
 | Chamados / Tickets e SLA | Ciclo de vida de chamados, atendimento, SLA, notificacao multicanal | parcial | Resend/SMTP, Evolution, Telegram, Web Push, Postgres |
 | Clientes e Documentacao Tecnica | CRUD de clientes, dossie tecnico em 14 secoes, sync de dispositivos | parcial | ReceitaWS, Tactical RMM, UniFi, validate-whatsapp |
 | Contratos e Reajustes | Reajuste anual, indices economicos, renegociacao | parcial | BCB SGS, Asaas (indireto), pg_cron |
@@ -97,25 +97,25 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 
 **Observacoes / Riscos**
 - Duplicacao de surfaces de gestao de usuarios: `/settings` (UsersTab, admin+manager) vs `/settings/users` (UsersPage, admin-only) com UIs e queries divergentes.
-- Bug de assinatura de `logAudit` nas edges de convite (invite/resend/revoke/activate): auditoria de convites quebrada e silenciada.
-- Cron de `detect-auth-anomalies` ausente nas migrations (so unschedule); AnomaliesBanner tende a "stale" permanente.
-- `handle_new_user` insere role 'client' default; create-user pode deixar usuario staff com role 'client' residual.
-- ProfilePage aba Permissoes ignora overrides; avatar upload e edicao de email nao implementados na UI.
+- ✅ RESOLVIDO: Bug de assinatura de `logAudit` nas edges de convite (invite/resend/revoke/activate) — alinhado a `{ table_name, record_id, action, user_id, old_data/new_data }`; auditoria de convites volta a gravar corretamente.
+- Cron `detect-auth-anomalies-daily` CONFIRMADO ATIVO (`SELECT * FROM cron.job`, 0 11 * * *) — porém NÃO versionado em migrations (so existe no painel); risco de perda em reprovisionamento. Versionar.
+- ✅ RESOLVIDO (A4): `create-user` agora remove o papel 'client' residual (inserido pelo trigger `handle_new_user`) quando nao solicitado, espelhando `accept_invite`. Raiz (trigger sempre insere 'client') registrada para eventual ajuste no banco via Lovable MCP.
+- ✅ PARCIAL (A2): ProfilePage aba Permissoes agora usa `getActions`/`can` (reflete overrides). Pendente: avatar upload e edicao de email nao implementados na UI (ver C3).
 - `usePermissionOverrides` usa cache global em modulo (risco de leitura stale ao trocar de usuario).
 - `verify_jwt=false` em forgot-password/resolve-username/resend-confirmation/bootstrap-admin/update-user-email/auth-email-hook; rate limiters in-memory (nao distribuidos).
 - resolve-username expoe email real sem autenticacao (vetor de enumeracao).
 - Dois caminhos de email de recovery (Resend custom vs auth-email-hook nativo) - risco de duplicidade.
 - `change_user_role` e destrutiva (DELETE all + INSERT um) e sem guard de "ultimo admin".
-- Tipo `AppRole` declarado em 3 lugares (drift).
+- ✅ RESOLVIDO (A3): tipo `AppRole` unificado em `src/lib/permissions.ts`; `ProtectedRoute` e `useAuth` importam de la.
 
 **Checklist de verificacao**
 - [ ] Definir surface oficial de gestao de usuarios e consolidar a duplicada; alinhar permissoes de acesso.
 - [ ] Testar fluxo completo de convite staff e cliente (invite-user -> accept_invite -> role/redirect corretos).
-- [ ] Validar que create-user nao deixa role 'client' residual; adicionar limpeza se necessario.
-- [ ] Confirmar existencia do cron `detect-auth-anomalies-daily` (`SELECT * FROM cron.job`); agendar se ausente.
-- [ ] Corrigir e testar `logAudit` nas edges de convite.
+- [x] create-user nao deixa role 'client' residual (limpeza adicionada, espelhando accept_invite).
+- [x] Confirmar existencia do cron `detect-auth-anomalies-daily` (`SELECT * FROM cron.job`) — ATIVO; falta versionar em migration.
+- [x] Corrigir `logAudit` nas edges de convite (assinatura alinhada). Falta testar o registro em `audit_logs` após deploy.
 - [ ] Conferir RLS de application_logs (SELECT admin) para o AnomaliesBanner.
-- [ ] Validar RLS de role_permission_overrides e alinhar aba Permissoes do ProfilePage para usar `can`.
+- [x] aba Permissoes do ProfilePage usa `can`/`getActions` (overrides). [ ] Falta validar a RLS de `role_permission_overrides`.
 - [ ] Testar login por username e avaliar exposicao de email (captcha/rate-limit mais forte).
 - [ ] Testar reset de senha por admin nos dois modos e o fluxo forcado em ResetPassword.tsx.
 - [ ] Determinar qual caminho envia email de recovery em producao (forgot-password vs auth-email-hook).

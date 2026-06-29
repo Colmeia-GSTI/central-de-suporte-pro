@@ -66,17 +66,19 @@ Cloud na sincronização.
 
 ### Regras de trabalho (custo é prioridade)
 
-1. **Gastar o mínimo possível.** Prefira sempre o caminho mais barato e otimize ao
-   máximo (mudanças mínimas, sem retrabalho, sem operações desnecessárias que
-   consumam créditos do Lovable).
-2. **Commit direto no Git sempre que possível** (frontend, edge functions e
-   migrations): é a forma mais econômica. O Lovable Cloud sincroniza o repositório
-   e aplica as mudanças. Commitar direto na branch principal (`main`) quando for
-   apropriado para a tarefa.
-3. **Use as ferramentas do Lovable (MCP do Lovable) apenas quando não der para
-   fazer por commit direto** — por exemplo, ações de provisionamento/deploy que só
-   o Lovable Cloud executa, ou quando o commit direto não estiver disponível.
-   Nesses casos, use o MCP do Lovable para aplicar a mudança/commit.
+1. **Gastar o mínimo possível.** Otimize créditos do Lovable: mudanças mínimas, sem
+   retrabalho, sem operações desnecessárias.
+2. **Código → Git.** Toda alteração de **código** (frontend, edge functions, correção
+   de caminho, documentação) é feita por **commit direto no GitHub/Git** — é a forma
+   mais econômica. O Lovable Cloud sincroniza o repositório e aplica/deploya.
+3. **Banco de dados → Lovable MCP (sempre).** Qualquer alteração que envolva o banco
+   — **schema E dados** (DDL, DML, correção de dados, qualquer SQL que grava) — é feita
+   **exclusivamente pelo MCP do Lovable** (`query_database` / aplicação de migration
+   pelo Lovable). **Nunca** use o Supabase MCP nem conexão direta para operar no banco.
+4. **Inspeção do banco** (somente leitura) também pelo MCP do Lovable (`query_database`
+   com `SELECT`).
+5. **Auditar antes, nunca presumir** (ver §6.0): audite o fluxo/dados afetados antes de
+   mudar; em caso de dúvida, pergunte.
 
 ### Configuração
 
@@ -118,6 +120,9 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 3. **Otimizar com critério** — código eficiente e legível; extraia lógica pura testável (`logic.ts` nas edges, libs em `src/lib`); otimização de performance só com evidência (sem _premature optimization_).
 4. **Limpar ao passar** — remova código morto, imports/variáveis sem uso, comentários obsoletos e arquivos órfãos no escopo que tocar (regra do escoteiro: deixe melhor do que encontrou).
 5. **Manter organizado** — arquivos pequenos e focados (<150–200 linhas), agrupados por domínio, com nomes claros e estrutura consistente com o resto do projeto.
+6. **Auditar antes de alterar** — antes de QUALQUER mudança, audite o código e os dados afetados (leia, faça grep das referências, confirme contratos/assinaturas, cheque o banco quando relevante). Nunca edite "no escuro".
+7. **Nunca presumir; na dúvida, perguntar** — se faltar certeza sobre intenção, dado, contrato ou impacto, **pergunte antes de agir**. Não invente comportamento nem valores.
+8. **Verificar todos os fluxos** — mapeie e valide TODOS os caminhos afetados (callers, edge ↔ frontend, webhooks, crons, RLS, casos de erro), não só o caminho feliz.
 
 ### 6.1 Componentes
 - Pequenos e focados. Se um componente passar de ~150–200 linhas, refatore em subcomponentes.
@@ -166,7 +171,7 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 - **Não** apague registros financeiros ou de auditoria. Quando precisar remover um usuário/cliente referenciado nesses registros, **anonimize** em vez de deletar (regra do projeto).
 - **Não** manipule o DOM manualmente — use estado/refs do React.
 - **Não** crie arquivos grandes/monolíticos — refatore em subcomponentes.
-- **Não** gaste créditos do Lovable à toa: prefira commit direto no Git e só recorra ao MCP do Lovable quando o commit direto não resolver.
+- **Não** gaste créditos do Lovable à toa: **código** via commit direto no Git; **banco de dados** (schema/dados) **sempre** via MCP do Lovable (ver §4).
 
 ---
 
