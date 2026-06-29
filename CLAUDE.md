@@ -86,6 +86,13 @@ Cloud na sincronização.
 - Segredos de backend (API keys, certificados, tokens) **nunca** ficam no frontend — ficam em secrets do Lovable Cloud / Supabase e são lidos dentro das edge functions.
 - `supabase/config.toml` controla `verify_jwt` por função (webhooks externos precisam de `verify_jwt = false`).
 
+### Operação (deploy / banco)
+
+- **Lovable project_id** (para o MCP do Lovable): `182f97df-9e8a-4a60-88d3-f5a8ac716937` (ou redescubra via `mcp__Lovable__get_me` → `list_projects`). O ref do Supabase é `silefpsayliwqtoskkdz`.
+- **Aplicar código**: `git push origin HEAD:main` (fast-forward, sem PR) — o Lovable Cloud sincroniza e aplica edge functions/migrations. Para publicar o frontend, `mcp__Lovable__deploy_project`. Mantenha a branch de trabalho em sincronia com um `git push` adicional para ela.
+- **Banco (schema/dados/inspeção)**: `mcp__Lovable__query_database` (mesmo project_id) — nunca Supabase MCP/conexão direta.
+- **Tracker de progresso por setor**: `docs/MAPA_DE_SETORES.md` (§2 índice + maturidade, §2.1 Definição de "Sólido" + ordem de ataque + registro de alterações de banco, §3 setores com checklist, §7 riscos transversais).
+
 ---
 
 ## 5. Estrutura de Diretórios
