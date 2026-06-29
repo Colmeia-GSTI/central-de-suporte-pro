@@ -45,7 +45,7 @@ interface SettingsMenuItem {
 
 const SETTINGS_MENU: SettingsMenuItem[] = [
   // Gestão
-  { id: "users", label: "Usuários", icon: Users, category: "Gestão", requiresAdmin: true },
+  { id: "users", label: "Usuários", icon: Users, category: "Gestão", requiresManage: true },
   { id: "permissions", label: "Permissões", icon: KeyRound, category: "Gestão", requiresManage: true },
   { id: "departments", label: "Departamentos", icon: Layers, category: "Gestão", requiresManage: true },
   // Operações
