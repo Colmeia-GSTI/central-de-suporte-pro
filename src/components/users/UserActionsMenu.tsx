@@ -7,12 +7,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UserListRow } from "@/hooks/useUsers";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
+import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export function UserActionsMenu({ user }: { user: UserListRow }) {
   const qc = useQueryClient();
   const [roleOpen, setRoleOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   const resendMutation = useMutation({
     mutationFn: async () => {
@@ -50,8 +52,8 @@ export function UserActionsMenu({ user }: { user: UserListRow }) {
           <DropdownMenuItem onClick={() => resendMutation.mutate()} disabled={!user.email}>
             <Mail className="h-4 w-4 mr-2" /> Reenviar confirmação
           </DropdownMenuItem>
-          <DropdownMenuItem disabled>
-            <KeyRound className="h-4 w-4 mr-2" /> Reset senha (em breve)
+          <DropdownMenuItem onClick={() => setResetOpen(true)} disabled={!user.user_id}>
+            <KeyRound className="h-4 w-4 mr-2" /> Reset senha
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setConfirmDelete(true)} className="text-destructive">
@@ -61,6 +63,15 @@ export function UserActionsMenu({ user }: { user: UserListRow }) {
       </DropdownMenu>
 
       <ChangeRoleDialog user={user} open={roleOpen} onOpenChange={setRoleOpen} />
+
+      <ResetPasswordDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        userId={user.user_id}
+        userName={user.full_name ?? undefined}
+        userEmail={user.email ?? undefined}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ["users"] })}
+      />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
