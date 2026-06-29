@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -18,7 +19,6 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 
 
 // Lazy-loaded tab content
-const UsersTab = lazy(() => import("@/components/settings/UsersTab").then(m => ({ default: m.UsersTab })));
 const CategoriesTab = lazy(() => import("@/components/settings/CategoriesTab").then(m => ({ default: m.CategoriesTab })));
 const TagsTab = lazy(() => import("@/components/settings/TagsTab").then(m => ({ default: m.TagsTab })));
 const SLATab = lazy(() => import("@/components/settings/SLATab").then(m => ({ default: m.SLATab })));
@@ -45,7 +45,7 @@ interface SettingsMenuItem {
 
 const SETTINGS_MENU: SettingsMenuItem[] = [
   // Gestão
-  { id: "users", label: "Usuários", icon: Users, category: "Gestão", requiresManage: true },
+  { id: "users", label: "Usuários", icon: Users, category: "Gestão", requiresAdmin: true },
   { id: "permissions", label: "Permissões", icon: KeyRound, category: "Gestão", requiresManage: true },
   { id: "departments", label: "Departamentos", icon: Layers, category: "Gestão", requiresManage: true },
   // Operações
@@ -83,12 +83,14 @@ export default function SettingsPage() {
   const { can } = usePermissions();
   const { roles } = useAuth();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   const isAdmin = roles.includes("admin");
   const canManage = can("settings", "manage");
   const departmentsEnabled = useFeatureFlag("departments_enabled");
 
-  const defaultTab = canManage ? "users" : "categories";
+  // "users" deixou de ser conteudo interno: a aba navega para a pagina dedicada /settings/users
+  const defaultTab = "categories";
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -104,9 +106,14 @@ export default function SettingsPage() {
   const categories = [...new Set(filteredMenu.map((m) => m.category))];
 
   const handleSelectTab = useCallback((id: string) => {
-    setActiveTab(id);
     setMobileMenuOpen(false);
-  }, []);
+    if (id === "users") {
+      // Gestao de usuarios foi consolidada na pagina dedicada
+      navigate("/settings/users");
+      return;
+    }
+    setActiveTab(id);
+  }, [navigate]);
 
   const renderNavContent = () => (
     <nav className="space-y-4 py-2">
@@ -147,7 +154,6 @@ export default function SettingsPage() {
 
   const renderContent = () => {
     const contentMap: Record<string, React.ReactNode> = {
-      users: <UsersTab />,
       permissions: <RolePermissionsTab />,
       departments: <DepartmentsTab />,
       categories: <CategoriesTab />,

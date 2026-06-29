@@ -103,7 +103,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 **Dependencias internas**: Clientes (client_contacts/clients), Notificacoes/Email, Auditoria/Logs, Layout/Navegacao (isStaff/isAdmin/roles), Portal do Cliente (redirect /portal apos accept_invite).
 
 **Observacoes / Riscos**
-- 🔵 EM PROGRESSO (C1): consolidando em `/settings/users` (dedicada) como oficial; removendo `UsersTab`. Faseado: [✅ Fase 1] reset de senha (reusa `ResetPasswordDialog`) — [✅ Fase 2] convites (Tabs + `PendingInvitesTab`) — [✅ Fase 3] vinculo usuario↔empresa (novo `LinkClientDialog` reusando `ClientSearchCombobox`, ligado no `UserActionsMenu`) — [ ] Fase 4 remover UsersTab + redirect. Apos fase 3, `/settings/users` tem paridade com `UsersTab`.
+- ✅ RESOLVIDO (C1): gestao de usuarios consolidada na pagina dedicada `/settings/users`. [Fase 1] reset de senha — [Fase 2] convites (Tabs + `PendingInvitesTab`) — [Fase 3] vinculo (`LinkClientDialog` reusa `ClientSearchCombobox`) — [Fase 4] aba "Usuarios" do `/settings` agora navega para `/settings/users`; `UsersTab.tsx` (750 ln) e `UserProfileSheet.tsx` (orfao) REMOVIDOS. ATENCAO: a pagina dedicada e admin-only, entao o item de menu virou `requiresAdmin` — managers perdem acesso a gestao de usuarios (antes tinham via UsersTab). Reverter se managers devem manter acesso.
 - ✅ RESOLVIDO: Bug de assinatura de `logAudit` nas edges de convite (invite/resend/revoke/activate) — alinhado a `{ table_name, record_id, action, user_id, old_data/new_data }`; auditoria de convites volta a gravar corretamente.
 - Cron `detect-auth-anomalies-daily` CONFIRMADO ATIVO (`SELECT * FROM cron.job`, 0 11 * * *) — porém NÃO versionado em migrations (so existe no painel); risco de perda em reprovisionamento. Versionar.
 - ✅ RESOLVIDO (A4): `create-user` agora remove o papel 'client' residual (inserido pelo trigger `handle_new_user`) quando nao solicitado, espelhando `accept_invite`. Raiz (trigger sempre insere 'client') registrada para eventual ajuste no banco via Lovable MCP.
@@ -116,7 +116,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - ✅ RESOLVIDO (A3): tipo `AppRole` unificado em `src/lib/permissions.ts`; `ProtectedRoute` e `useAuth` importam de la.
 
 **Checklist de verificacao**
-- [ ] Definir surface oficial de gestao de usuarios e consolidar a duplicada; alinhar permissoes de acesso.
+- [x] Surface oficial de gestao de usuarios: `/settings/users` (UsersTab removido). Acesso admin-only (confirmar se managers deveriam manter).
 - [ ] Testar fluxo completo de convite staff e cliente (invite-user -> accept_invite -> role/redirect corretos).
 - [x] create-user nao deixa role 'client' residual (limpeza adicionada, espelhando accept_invite).
 - [x] Confirmar existencia do cron `detect-auth-anomalies-daily` (`SELECT * FROM cron.job`) — ATIVO; falta versionar em migration.
