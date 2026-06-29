@@ -35,6 +35,28 @@ interface ForgotPasswordRequest {
   identifier: string; // username or email
 }
 
+// HTML do email de recuperacao (espelha o branding de _shared/email-templates/recovery.tsx)
+function buildRecoveryEmailHtml(actionLink: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Montserrat,Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;">
+    <div style="background:#E8A914;padding:24px 25px;text-align:center;border-radius:12px 12px 0 0;">
+      <p style="font-size:22px;font-weight:bold;color:#1a1d21;margin:0;letter-spacing:1px;">⬡ Colmeia</p>
+      <p style="font-size:11px;color:#1a1d21;margin:2px 0 0;text-transform:uppercase;letter-spacing:2px;opacity:0.7;">Central de Atendimento</p>
+    </div>
+    <div style="padding:32px 25px 20px;">
+      <h1 style="font-size:22px;font-weight:bold;color:#212529;margin:0 0 20px;">Redefinir sua senha</h1>
+      <p style="font-size:14px;color:#6B7280;line-height:1.6;margin:0 0 20px;">Recebemos uma solicitação para redefinir a senha da sua conta na Colmeia. Clique no botão abaixo para escolher uma nova senha.</p>
+      <a href="${actionLink}" style="display:inline-block;background:#E8A914;color:#1a1d21;font-size:14px;font-weight:bold;border-radius:12px;padding:12px 24px;text-decoration:none;">Redefinir Senha</a>
+      <p style="font-size:12px;color:#9CA3AF;margin:30px 0 0;">Se você não solicitou a redefinição, pode ignorar este e-mail. Sua senha permanecerá a mesma.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -142,32 +164,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Enviar email de recuperação
-    console.log(`Sending recovery email to: ${realEmail}`);
-    
-    const { error: resetError } = await adminClient.auth.admin.generateLink({
+    // generateLink apenas GERA o link de recuperação (não envia e-mail por si só).
+    console.log(`Generating recovery link for: ${realEmail}`);
+
+    const redirectTo = `${req.headers.get("origin") || supabaseUrl}/reset-password`;
+    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: realEmail,
-      options: {
-        redirectTo: `${req.headers.get("origin") || supabaseUrl}/reset-password`,
+      options: { redirectTo },
+    });
+
+    const actionLink = linkData?.properties?.action_link;
+    if (linkError || !actionLink) {
+      console.error("Error generating recovery link:", linkError);
+      return new Response(
+        JSON.stringify({ error: "Erro ao enviar email de recuperação. Tente novamente." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Envia o e-mail pelo pipeline único (send-email-resend) — registra em message_logs.
+    const { error: sendError } = await adminClient.functions.invoke("send-email-resend", {
+      body: {
+        to: realEmail,
+        subject: "Redefinição de senha — Colmeia",
+        html: buildRecoveryEmailHtml(actionLink),
+        related_type: "recovery",
+        user_id: userId,
       },
     });
 
-    if (resetError) {
-      console.error("Error generating recovery link:", resetError);
-      
-      // Tentar método alternativo
-      const { error: altError } = await adminClient.auth.resetPasswordForEmail(realEmail, {
-        redirectTo: `${req.headers.get("origin") || supabaseUrl}/reset-password`,
-      });
-
-      if (altError) {
-        console.error("Alternative reset also failed:", altError);
-        return new Response(
-          JSON.stringify({ error: "Erro ao enviar email de recuperação. Tente novamente." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    if (sendError) {
+      console.error("Error sending recovery email via send-email-resend:", sendError);
+      return new Response(
+        JSON.stringify({ error: "Erro ao enviar email de recuperação. Tente novamente." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`Recovery email sent successfully to ${realEmail}`);
