@@ -60,17 +60,24 @@ bun run test:coverage  # cobertura
 
 Este projeto vive no **Lovable** e usa **Lovable Cloud** como backend. **O
 Supabase é o Lovable Cloud** — não é um projeto Supabase independente/self-hosted.
-O repositório GitHub é sincronizado com o Lovable; o que está em
-`supabase/migrations/` e `supabase/functions/` é aplicado/deployado pelo Lovable
-Cloud na sincronização.
+O repositório GitHub é sincronizado com o Lovable. **Atenção (verificado nesta
+base):** o push ao GitHub sincroniza o **código-fonte** e o Lovable buildá/deploya
+o **frontend**, mas **NÃO redeploya sozinho as Edge Functions Deno** de
+`supabase/functions/`. O deploy delas (e qualquer publish) é disparado via
+`mcp__Lovable__send_message` ao agente do Lovable. Banco (schema/dados) é via
+Lovable MCP `query_database`.
 
 ### Regras de trabalho (custo é prioridade)
 
 1. **Gastar o mínimo possível.** Otimize créditos do Lovable: mudanças mínimas, sem
    retrabalho, sem operações desnecessárias.
-2. **Código → Git.** Toda alteração de **código** (frontend, edge functions, correção
-   de caminho, documentação) é feita por **commit direto no GitHub/Git** — é a forma
-   mais econômica. O Lovable Cloud sincroniza o repositório e aplica/deploya.
+2. **Código → Git; deploy de edge via mensagem.** Toda alteração de **código**
+   (frontend, edge functions, correção de caminho, documentação) é feita por **commit
+   direto no GitHub/Git** — forma mais econômica. O **frontend** é buildado/deployado
+   pelo Lovable na sincronização. **Mas as Edge Functions Deno NÃO sobem sozinhas no
+   push**: o deploy delas (e qualquer publish) é disparado via
+   `mcp__Lovable__send_message` ao agente do Lovable (peça **apenas o deploy**, sem
+   reescrever código).
 3. **Banco de dados → Lovable MCP (sempre).** Qualquer alteração que envolva o banco
    — **schema E dados** (DDL, DML, correção de dados, qualquer SQL que grava) — é feita
    **exclusivamente pelo MCP do Lovable** (`query_database` / aplicação de migration
@@ -89,7 +96,8 @@ Cloud na sincronização.
 ### Operação (deploy / banco)
 
 - **Lovable project_id** (para o MCP do Lovable): `182f97df-9e8a-4a60-88d3-f5a8ac716937` (ou redescubra via `mcp__Lovable__get_me` → `list_projects`). O ref do Supabase é `silefpsayliwqtoskkdz`.
-- **Aplicar código**: `git push origin HEAD:main` (fast-forward, sem PR) — o Lovable Cloud sincroniza e aplica edge functions/migrations. Para publicar o frontend, `mcp__Lovable__deploy_project`. Mantenha a branch de trabalho em sincronia com um `git push` adicional para ela.
+- **Aplicar código (frontend)**: `git push origin HEAD:main` (fast-forward, sem PR) — o Lovable sincroniza e buildá/deploya o frontend. Mantenha a branch de trabalho em sincronia com um `git push` adicional para ela.
+- **Deploy de Edge Functions / publish**: `git push` (sincroniza o fonte) **+** `mcp__Lovable__send_message` ao agente do Lovable pedindo o deploy das funções alteradas (ex.: "sincronize com o GitHub `main` e faça deploy das Edge Functions X, Y; **não modifique código**"). O push sozinho **não** redeploya as funções Deno (verificado nesta sessão: `forgot-password` B2 ficou ~9h no `main` sem deploy).
 - **Banco (schema/dados/inspeção)**: `mcp__Lovable__query_database` (mesmo project_id) — nunca Supabase MCP/conexão direta.
 - **Tracker de progresso por setor**: `docs/MAPA_DE_SETORES.md` (§2 índice + maturidade, §2.1 Definição de "Sólido" + ordem de ataque + registro de alterações de banco, §3 setores com checklist, §7 riscos transversais).
 
