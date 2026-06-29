@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Mail, KeyRound, Trash2, Shield } from "lucide-react";
+import { MoreHorizontal, Mail, KeyRound, Trash2, Shield, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { UserListRow } from "@/hooks/useUsers";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
 import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
+import { LinkClientDialog } from "./LinkClientDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export function UserActionsMenu({ user }: { user: UserListRow }) {
@@ -15,6 +16,7 @@ export function UserActionsMenu({ user }: { user: UserListRow }) {
   const [roleOpen, setRoleOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const resendMutation = useMutation({
     mutationFn: async () => {
@@ -55,6 +57,9 @@ export function UserActionsMenu({ user }: { user: UserListRow }) {
           <DropdownMenuItem onClick={() => setResetOpen(true)} disabled={!user.user_id}>
             <KeyRound className="h-4 w-4 mr-2" /> Reset senha
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setLinkOpen(true)}>
+            <Building2 className="h-4 w-4 mr-2" /> Vincular à empresa
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setConfirmDelete(true)} className="text-destructive">
             <Trash2 className="h-4 w-4 mr-2" /> Excluir
@@ -70,6 +75,14 @@ export function UserActionsMenu({ user }: { user: UserListRow }) {
         userId={user.user_id}
         userName={user.full_name ?? undefined}
         userEmail={user.email ?? undefined}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ["users"] })}
+      />
+
+      <LinkClientDialog
+        open={linkOpen}
+        onOpenChange={setLinkOpen}
+        userId={user.user_id}
+        userName={user.full_name ?? user.email ?? ""}
         onSuccess={() => qc.invalidateQueries({ queryKey: ["users"] })}
       />
 
