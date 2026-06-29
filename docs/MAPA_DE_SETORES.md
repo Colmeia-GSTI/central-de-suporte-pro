@@ -111,7 +111,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - `usePermissionOverrides` usa cache global em modulo (risco de leitura stale ao trocar de usuario).
 - `verify_jwt=false` em forgot-password/resolve-username/resend-confirmation/bootstrap-admin/update-user-email/auth-email-hook; rate limiters in-memory (nao distribuidos).
 - resolve-username expoe email real sem autenticacao (vetor de enumeracao).
-- Dois caminhos de email de recovery (Resend custom vs auth-email-hook nativo) - risco de duplicidade.
+- ✅ RESOLVIDO (B2): recovery de senha estava QUEBRADO — `forgot-password` usava `generateLink` (gera link, nao envia) e o `auth-email-hook` nativo esta desligado (CHANGELOG:782), entao nenhum e-mail saia. Agora `forgot-password` envia pelo pipeline unico `send-email-resend` (logado em message_logs). Pendente: confirmar entrega com teste real; o `auth-email-hook` segue silencioso (candidato a remocao em cleanup proprio, fora do escopo de recovery).
 - ✅ RESOLVIDO (B3): `change_user_role` agora tem guarda contra remover o ULTIMO admin (aplicado no banco via Lovable MCP em 2026-06-29; sistema tinha apenas 1 admin — risco era real). Continua destrutiva por design (DELETE all + INSERT um — papel unico por usuario).
 - ✅ RESOLVIDO (A3): tipo `AppRole` unificado em `src/lib/permissions.ts`; `ProtectedRoute` e `useAuth` importam de la.
 
@@ -125,7 +125,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - [x] aba Permissoes do ProfilePage usa `can`/`getActions` (overrides). [ ] Falta validar a RLS de `role_permission_overrides`.
 - [ ] Testar login por username e avaliar exposicao de email (captcha/rate-limit mais forte).
 - [ ] Testar reset de senha por admin nos dois modos e o fluxo forcado em ResetPassword.tsx.
-- [ ] Determinar qual caminho envia email de recovery em producao (forgot-password vs auth-email-hook).
+- [x] Recovery consolidado no `send-email-resend` (forgot-password). [ ] Teste real de entrega pos-deploy.
 - [ ] Testar enforce_invite_on_signup (signup sem convite deve falhar; bootstrap/service_role passa).
 - [ ] Verificar try_bootstrap_admin sob concorrencia e cleanup do perdedor.
 - [x] Guarda contra remocao do ultimo admin em `change_user_role` (banco, via Lovable MCP). [ ] Opcional: refletir o erro de forma amigavel na UI (UsersTab/ChangeRoleDialog).
