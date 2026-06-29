@@ -17,6 +17,8 @@ project_id = "silefpsayliwqtoskkdz"
     verify_jwt = false
   [functions.fetch-economic-indices]
     verify_jwt = false
+  [functions.forgot-password]
+    verify_jwt = false
   [functions.generate-second-copy]
     verify_jwt = false
   [functions.manual-payment]

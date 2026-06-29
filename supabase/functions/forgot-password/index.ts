@@ -63,110 +63,104 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  // Resposta neutra (anti-enumeracao) — identica para "nao existe" e "enviado".
+  const genericSuccess = () =>
+    json({
+      success: true,
+      message: "Se o usuário existir e tiver um email cadastrado, enviaremos instruções de recuperação.",
+    });
+
   try {
     // Rate limit by IP
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
-    const { allowed, remaining } = checkRateLimit(`forgot-password:${clientIp}`);
+    const { allowed } = checkRateLimit(`forgot-password:${clientIp}`);
     if (!allowed) {
       console.warn(`[forgot-password] Rate limit exceeded for IP: ${clientIp}`);
-      return new Response(
-        JSON.stringify({ error: "Muitas requisições. Tente novamente em instantes." }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "1", "X-RateLimit-Remaining": "0" } }
-      );
+      return json({ error: "Muitas requisições. Tente novamente em instantes." }, 429);
     }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const body: ForgotPasswordRequest = await req.json();
-    const { identifier } = body;
+    const identifier = (body.identifier || "").trim();
 
     if (!identifier) {
-      return new Response(
-        JSON.stringify({ error: "Informe seu email ou username" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "Informe seu email ou username" }, 400);
     }
 
     console.log(`Password recovery requested for: ${identifier}`);
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-    
+
     const isEmail = identifier.includes("@");
+    const lowered = identifier.toLowerCase();
     let realEmail: string | null = null;
     let userId: string | null = null;
 
     if (isEmail) {
-      // Buscar por email real em client_contacts
+      // O e-mail digitado e o proprio alvo da recuperacao; auth.users e a fonte
+      // da verdade (validado pelo generateLink abaixo). So descarta e-mails
+      // sinteticos .internal. O user_id e best-effort, apenas para o log.
+      if (!lowered.endsWith(".internal")) realEmail = identifier;
+
       const { data: contact } = await adminClient
         .from("client_contacts")
-        .select("user_id, email")
+        .select("user_id")
         .eq("email", identifier)
         .not("user_id", "is", null)
         .maybeSingle();
-
-      if (contact) {
+      if (contact?.user_id) {
         userId = contact.user_id;
-        realEmail = contact.email;
       } else {
-        // Talvez seja um usuário staff - buscar em profiles
         const { data: profile } = await adminClient
           .from("profiles")
-          .select("user_id, email")
+          .select("user_id")
           .eq("email", identifier)
           .maybeSingle();
-
-        if (profile) {
-          // Verificar se não é um email sintético
-          if (!profile.email.endsWith(".internal")) {
-            userId = profile.user_id;
-            realEmail = profile.email;
-          }
-        }
+        if (profile?.user_id) userId = profile.user_id;
       }
     } else {
-      // Buscar por username
+      // Username -> resolve user_id em client_contacts.
       const { data: contact } = await adminClient
         .from("client_contacts")
         .select("user_id, email")
-        .eq("username", identifier.toLowerCase())
+        .eq("username", lowered)
         .not("user_id", "is", null)
         .maybeSingle();
-
-      if (contact) {
+      if (contact?.user_id) {
         userId = contact.user_id;
-        // Usar apenas se tiver email real cadastrado
-        if (contact.email && !contact.email.endsWith(".internal")) {
-          realEmail = contact.email;
-        }
+        if (contact.email && !contact.email.endsWith(".internal")) realEmail = contact.email;
       }
     }
 
-    if (!userId) {
-      console.log(`User not found: ${identifier}`);
-      // Retornamos sucesso mesmo se não encontrar para não revelar se o usuário existe
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: "Se o usuário existir e tiver um email cadastrado, enviaremos instruções de recuperação." 
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Fallback: muitos clientes tem client_contacts.email NULL e o e-mail real
+    // mora em auth.users. Se ja temos o user mas nenhum e-mail real, busca la.
+    if (userId && !realEmail) {
+      const { data: authData } = await adminClient.auth.admin.getUserById(userId);
+      const authEmail = authData?.user?.email ?? null;
+      if (authEmail && !authEmail.endsWith(".internal")) realEmail = authEmail;
     }
 
+    // Sem e-mail real para enviar.
     if (!realEmail) {
+      if (isEmail) {
+        // anti-enumeracao: nao revela se o e-mail existe.
+        console.log(`No deliverable email resolved for: ${identifier}`);
+        return genericSuccess();
+      }
       console.log(`User ${identifier} has no real email for recovery`);
-      return new Response(
-        JSON.stringify({ 
-          error: "Este usuário não possui email cadastrado para recuperação. Entre em contato com o suporte.",
-          noEmail: true
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({
+        error: "Este usuário não possui email cadastrado para recuperação. Entre em contato com o suporte.",
+        noEmail: true,
+      }, 400);
     }
 
-    // generateLink apenas GERA o link de recuperação (não envia e-mail por si só).
+    // generateLink apenas GERA o link (nao envia) e valida o e-mail contra auth.users.
     console.log(`Generating recovery link for: ${realEmail}`);
-
     const redirectTo = `${req.headers.get("origin") || supabaseUrl}/reset-password`;
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
       type: "recovery",
@@ -176,14 +170,15 @@ Deno.serve(async (req) => {
 
     const actionLink = linkData?.properties?.action_link;
     if (linkError || !actionLink) {
+      // E-mail nao corresponde a um usuario real do Auth (ou erro de geracao).
       console.error("Error generating recovery link:", linkError);
-      return new Response(
-        JSON.stringify({ error: "Erro ao enviar email de recuperação. Tente novamente." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (isEmail) return genericSuccess(); // anti-enumeracao
+      return json({ error: "Erro ao enviar email de recuperação. Tente novamente." }, 500);
     }
 
-    // Envia o e-mail pelo pipeline único (send-email-resend) — registra em message_logs.
+    if (!userId) userId = linkData.user?.id ?? null;
+
+    // Envia pelo pipeline unico (send-email-resend) — registra em message_logs.
     const { error: sendError } = await adminClient.functions.invoke("send-email-resend", {
       body: {
         to: realEmail,
@@ -196,26 +191,16 @@ Deno.serve(async (req) => {
 
     if (sendError) {
       console.error("Error sending recovery email via send-email-resend:", sendError);
-      return new Response(
-        JSON.stringify({ error: "Erro ao enviar email de recuperação. Tente novamente." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json({ error: "Erro ao enviar email de recuperação. Tente novamente." }, 500);
     }
 
     console.log(`Recovery email sent successfully to ${realEmail}`);
-
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: "Instruções de recuperação enviadas para seu email cadastrado."
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({
+      success: true,
+      message: "Instruções de recuperação enviadas para seu email cadastrado.",
+    });
   } catch (error) {
     console.error("Unexpected error:", error);
-    return new Response(
-      JSON.stringify({ error: "Erro interno do servidor" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({ error: "Erro interno do servidor" }, 500);
   }
 });
