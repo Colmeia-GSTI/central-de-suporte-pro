@@ -29,16 +29,17 @@ vi.mock("@/integrations/supabase/client", async () => {
   const { createSupabaseMock } = await import("../mocks/supabase");
   const { client } = createSupabaseMock({
     functions: {
-      "resolve-username": (body: { username?: string } = {}) =>
+      "login-with-username": (body: { username?: string } = {}) =>
         body?.username === "knownuser"
-          ? { data: { email: "known@test.com" }, error: null }
-          : { data: { error: "Usuário não encontrado" }, error: null },
+          ? { data: { access_token: "access-tok", refresh_token: "refresh-tok" }, error: null }
+          : { data: { error: "invalid_credentials" }, error: null },
     },
   });
   return { supabase: client };
 });
 
 import Login from "@/pages/Login";
+import { supabase } from "@/integrations/supabase/client";
 
 describe("Login flow", () => {
   beforeEach(() => {
@@ -62,7 +63,25 @@ describe("Login flow", () => {
     });
   });
 
-  it("input error: shows toast when username cannot be resolved", async () => {
+  it("happy path: signs in with username via server-side edge", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Login />);
+
+    await user.type(screen.getByLabelText(/email ou username/i), "knownuser");
+    await user.type(screen.getByLabelText(/senha/i), "password123");
+    await user.click(screen.getByRole("button", { name: /entrar na colmeia/i }));
+
+    await waitFor(() => {
+      expect(supabase.auth.setSession).toHaveBeenCalledWith({
+        access_token: "access-tok",
+        refresh_token: "refresh-tok",
+      });
+      expect(navigateMock).toHaveBeenCalledWith("/", { replace: true });
+      expect(signInMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it("input error: shows toast when username login fails", async () => {
     const user = userEvent.setup();
     renderWithProviders(<Login />);
 

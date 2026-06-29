@@ -27,6 +27,8 @@ export interface MockConfig {
   functions?: Record<string, FunctionResponse>;
   /** auth.signInWithPassword response */
   signInResponse?: { data: unknown; error: unknown };
+  /** auth.setSession response */
+  setSessionResponse?: { data: unknown; error: unknown };
   /** auth.admin.listUsers response */
   listUsersResponse?: { data: unknown; error: unknown };
   /** auth.admin.generateLink response */
@@ -112,6 +114,9 @@ export function createSupabaseMock(config: MockConfig = {}) {
     auth: {
       signInWithPassword: vi.fn(async () =>
         config.signInResponse ?? { data: { user: null, session: null }, error: null },
+      ),
+      setSession: vi.fn(async () =>
+        config.setSessionResponse ?? { data: { session: {} }, error: null },
       ),
       signOut: vi.fn(async () => ({ error: null })),
       getSession: vi.fn(async () => ({ data: { session: null }, error: null })),

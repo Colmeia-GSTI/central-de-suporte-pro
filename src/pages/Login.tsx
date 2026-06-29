@@ -29,52 +29,65 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      let emailToUse = loginIdentifier;
-      
-      // Verificar se é um username (não contém @)
       const isEmail = loginIdentifier.includes("@");
-      
-      if (!isEmail) {
-        // Resolver username para email via edge function
-        const { data, error: resolveError } = await supabase.functions.invoke("resolve-username", {
-          body: { username: loginIdentifier.toLowerCase() },
+
+      if (isEmail) {
+        // Login por e-mail: autentica direto no cliente.
+        const { error } = await signIn(loginIdentifier, password);
+        if (error) {
+          if (error.message === "Email not confirmed") {
+            setPendingConfirmEmail(loginIdentifier);
+            toast({
+              title: "Confirme seu email",
+              description: "Seu email ainda não foi confirmado. Use o botão abaixo para reenviar o link.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Erro ao entrar",
+              description: error.message === "Invalid login credentials" ? "Usuário ou senha incorretos" : error.message,
+              variant: "destructive",
+            });
+          }
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        // Login por username: autentica NO SERVIDOR — o e-mail nunca é exposto.
+        const { data, error } = await supabase.functions.invoke("login-with-username", {
+          body: { username: loginIdentifier.toLowerCase(), password },
         });
 
-        if (resolveError || data?.error) {
-          const errorMessage = data?.error || "Usuário não encontrado";
-          toast({
-            title: "Erro ao entrar",
-            description: errorMessage,
-            variant: "destructive",
-          });
+        if (error || data?.error) {
+          const code = data?.error;
+          if (code === "email_not_confirmed") {
+            toast({
+              title: "Confirme seu email",
+              description: "Seu email ainda não foi confirmado. Entre pelo seu e-mail para reenviar o link, ou contate o suporte.",
+              variant: "destructive",
+            });
+          } else if (code === "rate_limited") {
+            toast({
+              title: "Muitas tentativas",
+              description: "Aguarde alguns minutos antes de tentar novamente.",
+              variant: "destructive",
+            });
+          } else {
+            toast({ title: "Erro ao entrar", description: "Usuário ou senha incorretos", variant: "destructive" });
+          }
           setIsLoading(false);
           return;
         }
 
-        emailToUse = data.email;
-      }
-
-      const { error } = await signIn(emailToUse, password);
-
-      if (error) {
-        if (error.message === "Email not confirmed") {
-          setPendingConfirmEmail(emailToUse);
-          toast({
-            title: "Confirme seu email",
-            description: "Seu email ainda não foi confirmado. Use o botão abaixo para reenviar o link.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Erro ao entrar",
-            description: error.message === "Invalid login credentials"
-              ? "Usuário ou senha incorretos"
-              : error.message,
-            variant: "destructive",
-          });
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        });
+        if (sessionError) {
+          toast({ title: "Erro ao entrar", description: "Não foi possível iniciar a sessão. Tente novamente.", variant: "destructive" });
+          setIsLoading(false);
+          return;
         }
-        setIsLoading(false);
-        return;
       }
 
       toast({ title: "Bem-vindo à Colmeia!", description: "Login realizado com sucesso." });
