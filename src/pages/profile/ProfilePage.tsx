@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NotificationSettings, NotificationPreferences, defaultLocalPrefs } from "@/components/profile/NotificationSettings";
 import { ChangePasswordCard } from "@/components/profile/ChangePasswordCard";
-import { User, Bell, Shield, Loader2, Save, Camera, Lock } from "lucide-react";
+import { User, Bell, Shield, Loader2, Save, Lock } from "lucide-react";
 import { ROLE_METADATA, MODULE_METADATA, AppRole, Module } from "@/lib/permissions";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -138,22 +138,12 @@ export default function ProfilePage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-start gap-6">
-              <div className="relative">
-                <Avatar className="h-24 w-24">
-                  <AvatarImage src={profile?.avatar_url || undefined} />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                    {getInitials(profile?.full_name || "U")}
-                  </AvatarFallback>
-                </Avatar>
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
-                  disabled
-                >
-                  <Camera className="h-4 w-4" />
-                </Button>
-              </div>
+              <Avatar className="h-24 w-24">
+                <AvatarImage src={profile?.avatar_url || undefined} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                  {getInitials(profile?.full_name || "U")}
+                </AvatarFallback>
+              </Avatar>
               <div className="flex-1">
                 <h2 className="text-2xl font-bold">{profile?.full_name}</h2>
                 <p className="text-muted-foreground">{profile?.email}</p>
@@ -222,7 +212,7 @@ export default function ProfilePage() {
                       className="bg-muted"
                     />
                     <p className="text-xs text-muted-foreground">
-                      O email não pode ser alterado
+                      Para alterar seu e-mail, contate um administrador.
                     </p>
                   </div>
                   <div className="space-y-2">
