@@ -103,7 +103,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 **Dependencias internas**: Clientes (client_contacts/clients), Notificacoes/Email, Auditoria/Logs, Layout/Navegacao (isStaff/isAdmin/roles), Portal do Cliente (redirect /portal apos accept_invite).
 
 **Observacoes / Riscos**
-- 🔵 EM PROGRESSO (C1): consolidando em `/settings/users` (dedicada) como oficial; removendo `UsersTab`. Faseado: [✅ Fase 1] reset de senha ligado no `UserActionsMenu` (reusa `ResetPasswordDialog`) — [ ] Fase 2 convites — [ ] Fase 3 vinculo usuario↔empresa — [ ] Fase 4 remover UsersTab + redirect.
+- 🔵 EM PROGRESSO (C1): consolidando em `/settings/users` (dedicada) como oficial; removendo `UsersTab`. Faseado: [✅ Fase 1] reset de senha (reusa `ResetPasswordDialog`) — [✅ Fase 2] convites: `UsersPage` ganhou Tabs (Usuários | Convites pendentes) reusando `PendingInvitesTab` — [ ] Fase 3 vinculo usuario↔empresa — [ ] Fase 4 remover UsersTab + redirect.
 - ✅ RESOLVIDO: Bug de assinatura de `logAudit` nas edges de convite (invite/resend/revoke/activate) — alinhado a `{ table_name, record_id, action, user_id, old_data/new_data }`; auditoria de convites volta a gravar corretamente.
 - Cron `detect-auth-anomalies-daily` CONFIRMADO ATIVO (`SELECT * FROM cron.job`, 0 11 * * *) — porém NÃO versionado em migrations (so existe no painel); risco de perda em reprovisionamento. Versionar.
 - ✅ RESOLVIDO (A4): `create-user` agora remove o papel 'client' residual (inserido pelo trigger `handle_new_user`) quando nao solicitado, espelhando `accept_invite`. Raiz (trigger sempre insere 'client') registrada para eventual ajuste no banco via Lovable MCP.
