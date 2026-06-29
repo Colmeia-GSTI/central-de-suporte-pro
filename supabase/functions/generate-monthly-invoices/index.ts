@@ -818,7 +818,7 @@ Deno.serve(async (req) => {
               await supabase
                 .from("invoices")
                 .update({
-                  nfse_status: nfseSuccess ? "processando" : "erro",
+                  nfse_status: nfseSuccess ? "pendente" : "erro",
                   nfse_error_msg: nfseSuccess ? null : (nfseResult?.error || "Resposta inesperada da API NFS-e"),
                 })
                 .eq("id", newInvoice.id);
@@ -1147,7 +1147,7 @@ Deno.serve(async (req) => {
             if (!retryError) {
               await supabase
                 .from("invoices")
-                .update({ nfse_status: "processando", nfse_error_msg: null })
+                .update({ nfse_status: "pendente", nfse_error_msg: null })
                 .eq("id", inv.id);
               nfseRetried++;
               console.log(`[GEN-INVOICES] RETRY: NFS-e reemitida para fatura #${inv.invoice_number}${inv.contract_id ? '' : ' (avulsa)'}`);

@@ -1114,7 +1114,9 @@ Deno.serve(async (req) => {
         // ============ SYNC nfse_status TO invoices TABLE ============
         const targetInvoiceId = invoice_id || null;
         if (targetInvoiceId) {
-          const nfseStatus = invoice.status === "AUTHORIZED" ? "gerada" : "processando";
+          // invoices.nfse_status e enum (pendente|gerada|erro); o detalhe "processando"
+          // vive em nfse_history.status (text). Em voo => pendente; webhook seta gerada/erro.
+          const nfseStatus = invoice.status === "AUTHORIZED" ? "gerada" : "pendente";
           const invoiceUpdate: Record<string, unknown> = {
             nfse_status: nfseStatus,
             nfse_error_msg: null,
@@ -1392,7 +1394,9 @@ Deno.serve(async (req) => {
         // ============ SYNC nfse_status TO invoices TABLE (standalone) ============
         const standaloneInvoiceId = invoice_id || null;
         if (standaloneInvoiceId) {
-          const nfseStatus = invoice.status === "AUTHORIZED" ? "gerada" : "processando";
+          // invoices.nfse_status e enum (pendente|gerada|erro); o detalhe "processando"
+          // vive em nfse_history.status (text). Em voo => pendente; webhook seta gerada/erro.
+          const nfseStatus = invoice.status === "AUTHORIZED" ? "gerada" : "pendente";
           const invoiceUpdate: Record<string, unknown> = {
             nfse_status: nfseStatus,
             nfse_error_msg: null,
@@ -2534,7 +2538,8 @@ Deno.serve(async (req) => {
             asaas_invoice_url: null,
             boleto_url: null,
             boleto_barcode: null,
-            boleto_status: "cancelado",
+            // boleto removido no Asaas => volta a "pendente" (enum nao tem "cancelado")
+            boleto_status: "pendente",
             pix_code: null,
             updated_at: new Date().toISOString(),
           })

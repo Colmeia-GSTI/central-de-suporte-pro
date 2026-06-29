@@ -23,8 +23,8 @@ A Central de Suporte Pro (codinome Colmeia) e uma plataforma MSP (Managed Servic
 | Chamados / Tickets e SLA | Ciclo de vida de chamados, atendimento, SLA, notificacao multicanal | parcial | Resend/SMTP, Evolution, Telegram, Web Push, Postgres |
 | Clientes e Documentacao Tecnica | CRUD de clientes, dossie tecnico em 14 secoes, sync de dispositivos | parcial | ReceitaWS, Tactical RMM, UniFi, validate-whatsapp |
 | Contratos e Reajustes | Reajuste anual, indices economicos, renegociacao | parcial | BCB SGS, Asaas (indireto), pg_cron |
-| Faturamento e Cobranca | Geracao de faturas, boleto/PIX, NFS-e, inadimplencia | parcial | Asaas, Banco Inter, Resend, WhatsApp, poll-services |
-| NFS-e e Certificados Digitais | Emissao/cancelamento de NFS-e, certificados A1 | parcial | Asaas API, Resend, WhatsApp, Supabase Storage, node-forge |
+| Faturamento e Cobranca | Geracao de faturas, boleto/PIX, NFS-e, inadimplencia | em progresso | Asaas, Banco Inter, Resend, WhatsApp, poll-services |
+| NFS-e e Certificados Digitais | Emissao/cancelamento de NFS-e, certificados A1 | em progresso | Asaas API, Resend, WhatsApp, Supabase Storage, node-forge |
 | Monitoramento e Servicos (RMM/UniFi/CheckMK) | Agregacao de devices/alertas de 3 fontes externas | parcial | Tactical RMM, CheckMK, UniFi, Evolution, Telegram, Resend |
 | Notificacoes e Comunicacao | Entrega multicanal e rastreamento de status | parcial | Resend, Evolution, Telegram, Web Push, Svix |
 | Calendario e Agendamento | Agenda interna da equipe, OAuth Google (desconectado do CRUD) | parcial | Google Calendar API v3 |
@@ -68,7 +68,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 ### Ordem de ataque acordada
 0. **Ajuste rápido — Contratos**: na listagem, exibir CNPJ e apelido ao lado do nome do cliente. ✅ _(feito)_
 1. **Fundação** — Autenticação/Usuários → Banco de Dados/Schema → Infraestrutura.
-2. **Dinheiro** — Faturamento/Cobrança → NFS-e/Certificados.
+2. **Dinheiro** — Faturamento/Cobrança → NFS-e/Certificados. _(em progresso — Fase 1: enum vs código ✅)_
 3. **Riscos transversais** — crons versionados, `verify_jwt` dos webhooks, segredos em texto plano.
 4. **Maturidade** — Inventário e Gamificação (subir o piso), depois os demais setores `parcial` restantes.
 
@@ -311,8 +311,8 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 **Dependencias internas**: Contratos (fonte da geracao), Clientes, NFS-e, Integracoes/Settings, Notificacoes/Email/WhatsApp, Financeiro, Permissoes, Conciliacao bancaria.
 
 **Observacoes / Riscos**
-- **INCONSISTENCIA DE ENUM (bug real)**: enum `nfse_processing_status` = pendente|gerada|erro, mas generate-monthly-invoices grava `nfse_status='processando'` (fora do enum) -> UPDATE falha; FSM tambem assume valores inexistentes.
-- FSM (`billing-fsm.ts`) divergente do schema (testa 'gerado'/'enviado'/'autorizada' que nao existem no enum real).
+- ✅ RESOLVIDO (Fase 1 — enum vs codigo): writes com valor fora do enum faziam o UPDATE inteiro falhar **silenciosamente** (resultado nunca conferido). Corrigido em 6 sites: `nfse_status:'processando'`→`'pendente'` (asaas-nfse emit + standalone; generate-monthly emit + retry) e `boleto_status:'cancelado'`→`'pendente'` (asaas-nfse cancel; webhook-asaas-nfse PAYMENT_DELETED). O detalhe "processando"/"autorizada" continua em `nfse_history.status` (text, lido pelo `NfseProcessingIndicator`); a invoice usa o enum de 3 estados. Impacto grave sanado: cancelar boleto agora limpa `boleto_url`/`asaas_payment_id`; PAYMENT_DELETED agora grava `asaas_payment_deleted_at` (regeneracao volta a funcionar). Verificado via MCP: nenhum dado invalido no banco (writes eram rejeitados) — sem DML.
+- ✅ Nota stale corrigida: a FSM (`billing-fsm.ts`) **nao** diverge do enum — usa apenas valores validos (`pendente|gerado|enviado|erro` p/ boleto; `erro` p/ nfse). Restam apenas **leituras mortas** (`=== "processando"`/`"registrado"`) em useInvoiceActions, InvoiceProcessingHistory, resend-payment-notification e batch-process-invoices — inofensivas; candidatas a limpeza num passo proprio.
 - Duplicacao de logica de geracao de pagamento em 3 lugares (generate-monthly, generate-invoice-payments, useInvoiceActions.handleEmitComplete).
 - Dead code de provider Inter (branch inalcancavel, sub-menu Inter, defaults 'banco_inter') contradiz a decisao Asaas-only.
 - auto-retry-failed-boletos e admin-cancel-asaas-payment sem referencia no frontend (so cron/reconciliacao); crons nao versionados.
@@ -327,8 +327,8 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - invoices e "tabela-deus" (48 colunas) sem sincronizacao garantida entre status macro/granular.
 
 **Checklist de verificacao**
-- [ ] Confirmar enum nfse_processing_status no DB e auditar writes a nfse_status (provar falha de :821/:1150).
-- [ ] Verificar enums boleto/email_processing_status e validar writes.
+- [x] Confirmar enum nfse_processing_status no DB e auditar writes a nfse_status — enum=`pendente|gerada|erro`; coluna e enum (UPDATE falhava). 6 writes invalidos corrigidos (`processando`/`cancelado`→`pendente`). Sem dado invalido no banco (MCP).
+- [x] Verificar enums boleto/email_processing_status e validar writes — boleto=`pendente|gerado|enviado|erro`, email=`pendente|enviado|erro`. Writes de `boleto_status:'cancelado'` corrigidos; demais writes (enviado/gerado/erro/pendente) validos. email_status sem write invalido.
 - [ ] Testar geracao mensal end-to-end (manual e cron).
 - [ ] Validar logica de frequencia (intervalos, multiplicacao do recorrente, charges nao multiplicados).
 - [ ] Conferir existencia/agendamento de todos os crons de billing.
@@ -1435,7 +1435,7 @@ Vários callers passam payloads incompativeis com as functions: Web Push (notify
 
 ### 7.7 Enums vs codigo (Faturamento/NFS-e)
 
-`nfse_processing_status` (pendente|gerada|erro) diverge de writes que usam 'processando'/'autorizada'; a FSM em billing-fsm.ts assume valores inexistentes. **Proximo passo**: alinhar enum <-> codigo <-> FSM e auditar todos os writes de nfse/boleto/email_status.
+✅ RESOLVIDO (2026-06-29, Fase 1 do setor Dinheiro). Os writes de subprocesso (nfse/boleto/email_status) foram auditados contra os enums reais e os 6 sites invalidos corrigidos (`processando`/`cancelado`→`pendente`) — ver §3.5. A FSM (`billing-fsm.ts`) ja estava alinhada (a nota anterior era stale). Resta apenas limpeza de **leituras mortas** (`=== "processando"`/`"registrado"`) em 4 arquivos — cosmetico.
 
 ### 7.8 RLS de RPCs SECURITY DEFINER
 

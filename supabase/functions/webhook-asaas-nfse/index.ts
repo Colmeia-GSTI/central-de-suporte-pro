@@ -429,7 +429,8 @@ async function processPaymentWebhook(
       .from("invoices")
       .update({
         asaas_payment_deleted_at: new Date().toISOString(),
-        boleto_status: "cancelado",
+        // boleto deletado => aguardando regeneracao (enum nao tem "cancelado")
+        boleto_status: "pendente",
       })
       .eq("id", externalReference)
       .in("status", ["pending", "overdue"]);
