@@ -22,7 +22,10 @@ export default function Login() {
   const location = useLocation();
   const { toast } = useToast();
 
-  const from = location.state?.from?.pathname || "/";
+  // Consume `?next=` (used by the OAuth consent flow) or fall back to router state.
+  const rawNext = new URLSearchParams(location.search).get("next");
+  const safeNext = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : null;
+  const from = safeNext || location.state?.from?.pathname || "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
