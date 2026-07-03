@@ -37,6 +37,7 @@ const SetupAccount = lazyWithRetry(() => import("@/pages/SetupAccount"));
 const Unauthorized = lazyWithRetry(() => import("@/pages/Unauthorized"));
 const NotFound = lazyWithRetry(() => import("@/pages/NotFound"));
 const Setup = lazyWithRetry(() => import("@/pages/Setup"));
+const OAuthConsent = lazyWithRetry(() => import("@/pages/OAuthConsent"));
 const ClientsPage = lazyWithRetry(() => import("@/pages/clients/ClientsPage"));
 const NewTicketPage = lazyWithRetry(() => import("@/pages/tickets/NewTicketPage"));
 const ClientDetailPage = lazyWithRetry(() => import("@/pages/clients/ClientDetailPage"));
@@ -140,6 +141,8 @@ export function AnimatedRoutes() {
       <Route path="/setup-account" element={<LazyPage><SetupAccount /></LazyPage>} />
       <Route path="/unauthorized" element={<LazyPage><Unauthorized /></LazyPage>} />
       <Route path="/setup" element={<LazyPage><Setup /></LazyPage>} />
+      <Route path="/.lovable/oauth/consent" element={<LazyPage><OAuthConsent /></LazyPage>} />
+      
       
       {/* TV Dashboard - protected */}
       <Route path="/tv-dashboard" element={<ProtectedRoute allowedRoles={["admin", "manager"]}><LazyPage><TVDashboardPage /></LazyPage></ProtectedRoute>} />
