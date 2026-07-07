@@ -46,9 +46,20 @@ Deno.serve(async (req) => {
 
     const admin = makeAdminClient();
 
-    // 1. Bloqueia se já existe auth.users com esse email
-    const { data: existingUser } = await admin.auth.admin.listUsers({ perPage: 1 });
-    const userExists = existingUser?.users?.some((u) => u.email?.toLowerCase() === normalizedEmail);
+    // 1. Bloqueia se já existe auth.users com esse email (paginação real)
+    let userExists = false;
+    for (let page = 1; page <= 20 && !userExists; page++) {
+      const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+      if (listErr) {
+        console.error("[invite-user] listUsers error:", listErr.message);
+        return jsonResponse({ error: `Falha ao verificar usuários existentes: ${listErr.message}` }, 500);
+      }
+      if (list.users.some((u) => (u.email ?? "").toLowerCase() === normalizedEmail)) {
+        userExists = true;
+        break;
+      }
+      if (list.users.length < 200) break;
+    }
     if (userExists) {
       return jsonResponse({ error: "Já existe um usuário com esse email." }, 409);
     }
