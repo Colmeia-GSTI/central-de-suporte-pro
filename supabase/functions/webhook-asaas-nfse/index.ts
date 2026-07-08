@@ -376,6 +376,32 @@ async function processInvoiceWebhook(
 
   console.log(`[WEBHOOK-ASAAS] NFS-e ${nfseRecord.id} atualizada com sucesso`);
 
+  // Enviar NFS-e por e-mail ao cliente na PRIMEIRA autorização.
+  // Idempotência: só dispara se o status anterior não era "autorizada" (re-entregas do
+  // mesmo evento já são bloqueadas por webhook_events; eventos AUTHORIZED repetidos caem
+  // aqui com oldStatus === "autorizada" e não reenviam). send-nfse-notification exige
+  // pdf_url E xml_url (bloqueia 400 sem eles), por isso só chamamos com ambos gravados.
+  if (
+    invoiceStatus === "AUTHORIZED" &&
+    oldStatus !== "autorizada" &&
+    updateData.pdf_url &&
+    updateData.xml_url
+  ) {
+    try {
+      await supabase.functions.invoke("send-nfse-notification", {
+        body: { nfse_history_id: nfseRecord.id, channels: ["email"] },
+      });
+      await logNfseEvent(supabase, nfseRecord.id, "notification", "info",
+        "E-mail da NFS-e disparado ao cliente (primeira autorização)", correlationId,
+        { channels: ["email"] });
+    } catch (notifyErr) {
+      console.error("[WEBHOOK-ASAAS] Erro ao enviar NFS-e por e-mail:", notifyErr);
+      await logNfseEvent(supabase, nfseRecord.id, "notification", "error",
+        "Falha ao disparar e-mail da NFS-e ao cliente", correlationId,
+        { error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr) });
+    }
+  }
+
   // Sincronizar invoices.nfse_status
   if (nfseRecord.invoice_id) {
     const invoiceUpdate: Record<string, unknown> = {};

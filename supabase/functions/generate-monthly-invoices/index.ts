@@ -1,10 +1,28 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { formatCurrencyBRL } from "../_shared/email-helpers.ts";
+import {
+  formatCurrencyBRL,
+  getEmailSettings,
+  wrapInEmailLayout,
+  applyNotificationMessage,
+} from "../_shared/email-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Extrai a causa real de um erro de supabase.functions.invoke. Em erros non-2xx,
+// FunctionsHttpError expõe `context` (a Response) — lê o corpo para achar a msg real,
+// em vez de "Edge Function returned a non-2xx status code".
+// deno-lint-ignore no-explicit-any
+async function extractInvokeErrorMsg(error: any, fallback: string): Promise<string> {
+  try {
+    const body = await error?.context?.json();
+    const real = body?.error || body?.message;
+    if (real) return String(real);
+  } catch { /* corpo indisponível/não-JSON: usa fallback */ }
+  return error?.message || fallback;
+}
 
 interface Contract {
   id: string;
@@ -721,8 +739,12 @@ Deno.serve(async (req) => {
                   });
 
               if (invokeResult.error) {
+                const realMsg = await extractInvokeErrorMsg(
+                  invokeResult.error,
+                  invokeResult.error.message || JSON.stringify(invokeResult.error),
+                );
                 throw new Error(
-                  `Erro ao gerar ${paymentType} via ${provider}: ${invokeResult.error.message || JSON.stringify(invokeResult.error)}`
+                  `Erro ao gerar ${paymentType} via ${provider}: ${realMsg}`
                 );
               }
 
@@ -835,12 +857,14 @@ Deno.serve(async (req) => {
             if (nfseError) {
               console.error(`[GEN-INVOICES] Erro ao emitir NFS-e para ${contract.name}:`, nfseError);
 
+              const nfseRealMsg = await extractInvokeErrorMsg(nfseError, "Erro ao emitir NFS-e");
+
               // Record NFS-e error in invoice status
               await supabase
                 .from("invoices")
                 .update({
                   nfse_status: "erro",
-                  nfse_error_msg: nfseError.message || "Erro ao emitir NFS-e",
+                  nfse_error_msg: nfseRealMsg,
                 })
                 .eq("id", newInvoice.id);
             } else {
@@ -882,9 +906,17 @@ Deno.serve(async (req) => {
               .from("integration_settings")
               .select("is_active")
               .eq("integration_type", "resend")
-              .single();
+              .maybeSingle();
 
-            if (resendSettings?.is_active) {
+            if (!resendSettings?.is_active) {
+              // Fail-loud: sem Resend ativo, dar visibilidade em vez de pular em silêncio.
+              console.error(`[GEN-INVOICES] Integração Resend inativa/ausente — e-mail pulado para ${clientEmail}`);
+              await supabase.from("invoices").update({
+                email_status: "erro",
+                email_error_msg: "Integração Resend inativa/ausente",
+              }).eq("id", newInvoice.id);
+            } else {
+              const emailSettings = await getEmailSettings(supabase);
               // Re-fetch invoice to get boleto data (may have been set by banco-inter/asaas)
               const { data: updatedInvoice } = await supabase
                 .from("invoices")
@@ -910,11 +942,9 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Build custom message if available
-              let customSection = "";
+              // Fetch NFS-e number for {nota} variable (only if contract has a custom message)
+              let nfseNumber = "Pendente";
               if (contract.notification_message) {
-                // Fetch NFS-e number if available
-                let nfseNumber = "Pendente";
                 try {
                   const { data: nfseData } = await supabase
                     .from("nfse_history")
@@ -930,19 +960,6 @@ Deno.serve(async (req) => {
                 } catch (nfseQueryErr) {
                   console.error("[GEN-INVOICES] Erro ao buscar NFS-e para variável {nota}:", nfseQueryErr);
                 }
-
-                customSection = contract.notification_message
-                  .replace(/{cliente}/g, contract.clients?.name || "Cliente")
-                  .replace(/{valor}/g, formatCurrencyBRL(totalAmount))
-                  .replace(/{vencimento}/g, new Date(dueDate).toLocaleDateString("pt-BR"))
-                  .replace(/{fatura}/g, `#${newInvoice.invoice_number}`)
-                  .replace(/{contrato}/g, contract.name)
-                  .replace(/{competencia}/g, referenceMonth)
-                  .replace(/{nota}/g, nfseNumber)
-                  .replace(/{boleto}/g, boletoSignedUrl || "Não disponível")
-                  .replace(/{pix}/g, updatedInvoice?.pix_code || "Não disponível");
-
-                customSection = `<div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">${customSection}</div>`;
               }
 
               // Build payment section for email
@@ -967,14 +984,7 @@ Deno.serve(async (req) => {
                   </div>`;
               }
 
-              const { data: emailRes, error: emailErr } = await supabase.functions.invoke("send-email-resend", {
-                body: {
-                  to: clientEmail,
-                  subject: `Nova Fatura #${newInvoice.invoice_number} - ${referenceMonth}`,
-                  related_type: "invoice",
-                  related_id: newInvoice.id,
-                  user_id: contract.client_id,
-                  html: `
+              const contentHtml = `
                     <h2>Nova Fatura Disponível</h2>
                     <p>Olá,</p>
                     <p>Uma nova fatura foi gerada para o contrato <strong>${contract.name}</strong>.</p>
@@ -996,13 +1006,34 @@ Deno.serve(async (req) => {
                         <td style="padding: 8px; border: 1px solid #ddd;">${new Date(dueDate).toLocaleDateString("pt-BR")}</td>
                       </tr>
                     </table>
-                    ${customSection}
                     ${paymentSection || "<p>Em breve você receberá os dados para pagamento.</p>"}
-                    <hr>
-                    <p style="color: #666; font-size: 12px;">
-                      Este é um email automático. Em caso de dúvidas, entre em contato conosco.
-                    </p>
-                  `,
+                  `;
+
+              // Envolve com o layout da empresa (logo/cores/footer). {competencia} não é
+              // suportado por applyNotificationMessage, então é pré-substituído aqui.
+              let emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
+              const notifMsg = contract.notification_message
+                ? contract.notification_message.replace(/{competencia}/g, referenceMonth)
+                : null;
+              emailHtml = applyNotificationMessage(emailHtml, notifMsg, {
+                cliente: contract.clients?.name || "Cliente",
+                valor: formatCurrencyBRL(totalAmount),
+                vencimento: new Date(dueDate).toLocaleDateString("pt-BR"),
+                fatura: `#${newInvoice.invoice_number}`,
+                contrato: contract.name,
+                nota: nfseNumber,
+                boleto: boletoSignedUrl || "",
+                pix: updatedInvoice?.pix_code || "",
+              });
+
+              const { data: emailRes, error: emailErr } = await supabase.functions.invoke("send-email-resend", {
+                body: {
+                  to: clientEmail,
+                  subject: `Nova Fatura #${newInvoice.invoice_number} - ${referenceMonth}`,
+                  related_type: "invoice",
+                  related_id: newInvoice.id,
+                  user_id: contract.client_id,
+                  html: emailHtml,
                 },
               });
 
