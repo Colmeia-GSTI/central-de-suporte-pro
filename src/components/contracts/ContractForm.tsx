@@ -338,8 +338,9 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         });
       }
 
-      // Save contract services
-      if (contractIdValue && contractServices.length > 0) {
+      // Save contract services. Delete e insert separados: em update, apagar
+      // sempre (remover TODOS os serviços precisa persistir) e inserir só se houver.
+      if (contractIdValue) {
         if (isUpdate) {
           await supabase
             .from("contract_services")
@@ -347,19 +348,21 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
             .eq("contract_id", contractIdValue);
         }
 
-        const servicesToInsert = contractServices.map((s) => ({
-          contract_id: contractIdValue,
-          service_id: s.service_id,
-          name: s.service_name,
-          quantity: s.quantity,
-          unit_value: s.unit_value,
-          value: s.subtotal,
-        }));
+        if (contractServices.length > 0) {
+          const servicesToInsert = contractServices.map((s) => ({
+            contract_id: contractIdValue,
+            service_id: s.service_id,
+            name: s.service_name,
+            quantity: s.quantity,
+            unit_value: s.unit_value,
+            value: s.subtotal,
+          }));
 
-        const { error: servicesError } = await supabase
-          .from("contract_services")
-          .insert(servicesToInsert);
-        if (servicesError) throw servicesError;
+          const { error: servicesError } = await supabase
+            .from("contract_services")
+            .insert(servicesToInsert);
+          if (servicesError) throw servicesError;
+        }
       }
 
       // Generate initial invoice if requested (only for new contracts)
@@ -425,15 +428,33 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           
           if (data.nfse_enabled) {
             try {
-              await supabase.functions.invoke("asaas-nfse", {
+              const { data: nfseResult, error: nfseError } = await supabase.functions.invoke("asaas-nfse", {
                 body: {
-                  action: "emit_nfse",
+                  action: "emit",
+                  client_id: data.client_id,
                   invoice_id: invoice.id,
                   contract_id: contractIdValue,
+                  value: invoiceAmount,
+                  service_description:
+                    data.nfse_descricao_customizada || `Prestação de serviços - ${data.name}`,
+                  municipal_service_code: data.nfse_service_code || undefined,
                 },
               });
+              if (nfseError) throw nfseError;
+              if (nfseResult && nfseResult.success === false) {
+                toast({
+                  title: "Contrato criado, mas a NFS-e não foi emitida",
+                  description: nfseResult.error || "Emita a nota manualmente na aba Faturas.",
+                  variant: "destructive",
+                });
+              }
             } catch (nfseError) {
               console.error("[ContractForm] Erro ao gerar NFS-e:", nfseError);
+              toast({
+                title: "Contrato criado, mas a NFS-e não foi emitida",
+                description: "Emita a nota manualmente na aba Faturas.",
+                variant: "destructive",
+              });
             }
           }
           

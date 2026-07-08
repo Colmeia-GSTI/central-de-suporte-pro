@@ -321,7 +321,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         const newDocNorm = (data.document || "").replace(/\D/g, "");
         const fiscalChanged =
           oldDocNorm !== newDocNorm ||
+          (client.name || "") !== (data.name || "") ||
           (client.address || "") !== (data.address || "") ||
+          (client.city || "") !== (data.city || "") ||
           (client.zip_code || "").replace(/\D/g, "") !== (data.zip_code || "").replace(/\D/g, "");
 
         const { data: updatedRows, error } = await supabase

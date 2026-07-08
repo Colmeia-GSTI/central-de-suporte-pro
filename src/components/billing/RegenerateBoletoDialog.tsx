@@ -45,7 +45,7 @@ export function RegenerateBoletoDialog({
   const [submitting, setSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
-  const isAsaas = (billingProvider ?? "banco_inter") === "asaas";
+  const isAsaas = (billingProvider ?? "asaas") === "asaas";
 
   const handleConfirm = async () => {
     if (reason.trim().length < 5) {

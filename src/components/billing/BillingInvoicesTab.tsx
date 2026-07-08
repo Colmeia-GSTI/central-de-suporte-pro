@@ -308,12 +308,26 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   };
 
   const handleBatchNotification = async () => {
+    if (selectedInvoicesData.length === 0) {
+      toast.error("Selecione ao menos uma fatura");
+      return;
+    }
     setIsBatchNotifying(true);
     try {
-      const { data, error } = await supabase.functions.invoke("batch-collection-notification", { body: { status: "pending" } });
+      const { data, error } = await supabase.functions.invoke("batch-collection-notification", {
+        body: { invoice_ids: selectedInvoicesData.map((inv) => inv.id), channels: ["email"] },
+      });
       if (error) throw error;
-      if (data.success) toast.success("Notificações enviadas em lote!", { description: `${data.sent || 0} cobranças enviadas` });
-      else toast.error(data.error || "Erro ao enviar notificações");
+      const sent = data?.email?.sent ?? 0;
+      const failed = data?.email?.failed ?? 0;
+      if (sent > 0)
+        toast.success("Cobranças enviadas em lote!", {
+          description: `${sent} enviada(s)${failed ? `, ${failed} falha(s)` : ""}`,
+        });
+      else
+        toast.error("Nenhuma cobrança enviada", {
+          description: failed ? `${failed} falha(s)` : "Verifique os e-mails dos clientes selecionados",
+        });
     } catch (error: unknown) {
       toast.error("Erro ao enviar notificações em lote", { description: getErrorMessage(error) });
     } finally {
@@ -716,7 +730,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                               }
                               setIsCancellingBoleto(true);
                               try {
-                                const provider = invoice.billing_provider ?? "banco_inter";
+                                const provider = invoice.billing_provider ?? "asaas";
                                 const { data, error } =
                                   provider === "asaas"
                                     ? await supabase.functions.invoke("asaas-nfse", {
@@ -860,7 +874,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
               let errorCount = 0;
               for (const inv of withBoleto) {
                 try {
-                  const provider = inv.billing_provider ?? "banco_inter";
+                  const provider = inv.billing_provider ?? "asaas";
                   const { data, error } =
                     provider === "asaas"
                       ? await supabase.functions.invoke("asaas-nfse", {

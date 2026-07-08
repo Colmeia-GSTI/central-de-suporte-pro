@@ -60,7 +60,7 @@ export function useInvoiceActions() {
   const handleGeneratePayment = async (
     invoiceId: string,
     paymentType: "boleto" | "pix",
-    provider: "banco_inter" | "asaas" = "banco_inter"
+    provider: "banco_inter" | "asaas" = "asaas"
   ) => {
     setGeneratingPayment(`${invoiceId}-${paymentType}-${provider}`);
     try {
@@ -216,7 +216,7 @@ export function useInvoiceActions() {
   ) => {
     setProcessingComplete(invoice.id);
     const steps: string[] = [];
-    const provider = invoice.billing_provider || "banco_inter";
+    const provider = invoice.billing_provider || "asaas";
 
     try {
       // 1. Boleto

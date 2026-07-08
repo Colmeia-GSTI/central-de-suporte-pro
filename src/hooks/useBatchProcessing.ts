@@ -15,7 +15,7 @@ export function useBatchProcessing({ onComplete }: UseBatchProcessingOptions = {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async ({ invoiceIds, billingProvider = "banco_inter" }: BatchProcessingParams) => {
+    mutationFn: async ({ invoiceIds, billingProvider = "asaas" }: BatchProcessingParams) => {
       if (invoiceIds.length === 0) {
         throw new Error("Nenhuma fatura selecionada");
       }
