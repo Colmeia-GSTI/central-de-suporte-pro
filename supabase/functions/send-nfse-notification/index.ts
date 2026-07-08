@@ -6,6 +6,7 @@ import {
   replaceVariables,
   formatCurrencyBRL,
   getEmailTemplate,
+  buildPaymentSectionHtml,
 } from "../_shared/email-helpers.ts";
 
 interface NfseNotificationRequest {
@@ -18,6 +19,9 @@ interface NfseNotificationRequest {
 function resolveStoragePathBackend(storedPath: string): { bucket: string; path: string } | null {
   if (!storedPath) return null;
   if (storedPath.startsWith("http://") || storedPath.startsWith("https://")) return null;
+  if (storedPath.startsWith("invoice-documents/")) {
+    return { bucket: "invoice-documents", path: storedPath.replace("invoice-documents/", "") };
+  }
   if (storedPath.startsWith("nfse-files/")) {
     return { bucket: "nfse-files", path: storedPath.replace("nfse-files/", "") };
   }
@@ -169,6 +173,27 @@ Deno.serve(async (req) => {
       competenciaFormatted = `${months[parseInt(month, 10) - 1]}/${year}`;
     }
 
+    // Consolidação: buscar cobrança da fatura para enviar UM e-mail (boleto/PIX + nota)
+    // quando a NFS-e autoriza. Fonte única do bloco: buildPaymentSectionHtml.
+    let boletoSignedUrl = "";
+    let boletoBarcode = "";
+    let pixCode = "";
+    let invoiceNumber = "";
+    if (nfse.invoice_id) {
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("invoice_number, boleto_url, boleto_barcode, pix_code")
+        .eq("id", nfse.invoice_id)
+        .maybeSingle();
+      if (inv) {
+        invoiceNumber = inv.invoice_number ? String(inv.invoice_number) : "";
+        boletoBarcode = inv.boleto_barcode || "";
+        pixCode = inv.pix_code || "";
+        if (inv.boleto_url) boletoSignedUrl = await resolveToSignedUrl(supabase, inv.boleto_url, SIGNED_URL_EXPIRY);
+      }
+    }
+    const paymentSectionHtml = buildPaymentSectionHtml({ boletoUrl: boletoSignedUrl, boletoBarcode, pixCode });
+
     const templateVars: Record<string, string> = {
       client_name: clientName,
       nfse_number: String(nfseNumber),
@@ -177,6 +202,9 @@ Deno.serve(async (req) => {
       pdf_url: pdfSignedUrl,
       xml_url: xmlSignedUrl,
       company_name: companyName,
+      invoice_number: invoiceNumber,
+      boleto_url: boletoSignedUrl,
+      pix: pixCode,
     };
 
     const results: { channel: string; success: boolean; error?: string }[] = [];
@@ -193,7 +221,8 @@ Deno.serve(async (req) => {
 
         if (emailTemplate) {
           emailSubject = replaceVariables(emailTemplate.subject_template, templateVars);
-          const contentHtml = replaceVariables(emailTemplate.html_template, templateVars);
+          // Consolida boleto/PIX ao final do conteúdo da nota (um e-mail só).
+          const contentHtml = replaceVariables(emailTemplate.html_template, templateVars) + paymentSectionHtml;
           emailHtml = wrapInEmailLayout(contentHtml, emailSettings);
         } else {
           emailSubject = `NFS-e #${nfseNumber} - ${clientName} - ${valorFormatted}`;
@@ -219,6 +248,7 @@ Deno.serve(async (req) => {
               <a href="${xmlSignedUrl}" style="color: #6b7280; font-size: 13px;">📋 Baixar XML da NFS-e</a>
             </p>
             ` : ""}
+            ${paymentSectionHtml}
             <p style="color: #666; font-size: 12px; margin-top: 30px;">
               Sua Nota Fiscal de Serviços referente ao mês de ${competenciaFormatted} está disponível. Os links expiram em 7 dias.
             </p>
@@ -275,6 +305,12 @@ Deno.serve(async (req) => {
               details: { channel: "email", recipient: emailTo, sent_at: new Date().toISOString() },
             });
             if (nfse.invoice_id) {
+              // Consolidação: fatura enviada (libera do estado aguardando_nfse).
+              await supabase.from("invoices").update({
+                email_status: "enviado",
+                email_sent_at: new Date().toISOString(),
+                email_error_msg: null,
+              }).eq("id", nfse.invoice_id);
               await supabase.from("invoice_notification_logs").insert({
                 invoice_id: nfse.invoice_id,
                 notification_type: "nfse",

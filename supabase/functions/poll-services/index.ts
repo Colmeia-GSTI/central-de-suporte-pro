@@ -605,10 +605,60 @@ async function pollAsaasNfse(supabase: SupabaseClient): Promise<{ processed: num
         }
       }
 
+      // Consolidação/consistência: enviar e-mail (boleto + nota) ao autorizar também
+      // pelo poll — cobre o caso do webhook-asaas-nfse ter falhado. Como o poll só
+      // processa registros ainda 'processando', não há envio duplicado com o webhook.
+      if (newStatus === "autorizada") {
+        try {
+          await supabase.functions.invoke("send-nfse-notification", {
+            body: { nfse_history_id: record.id, channels: ["email"] },
+          });
+        } catch (mailErr) {
+          console.error(`[POLL-SERVICES] Falha ao enviar e-mail NFS-e ${record.id}:`, mailErr);
+        }
+      }
+
       updated++;
     } catch (e) {
       console.error(`[POLL-SERVICES] Erro NFS-e Asaas ${record.id}:`, e);
     }
+  }
+
+  // ── Fallback de cobrança: liberar o boleto de faturas presas em 'aguardando_nfse'
+  // (e-mail retido na geração aguardando o envio consolidado) quando a NFS-e falhou
+  // ('erro') ou está demorando (> 6h). Assim a cobrança não fica refém da nota.
+  // Reusa resend-payment-notification (mesma fonte do e-mail de boleto). ──
+  try {
+    // Sem milissegundos: o "." de ".000Z" quebraria o parser do filtro .or() do PostgREST.
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const { data: heldInvoices } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("email_status", "aguardando_nfse")
+      .neq("nfse_status", "gerada")
+      .or(`nfse_status.eq.erro,created_at.lt.${sixHoursAgo}`)
+      .limit(25);
+
+    for (const inv of heldInvoices || []) {
+      try {
+        const { data: mailData, error: mailErr } = await supabase.functions.invoke("resend-payment-notification", {
+          body: { invoice_id: inv.id, channels: ["email"] },
+        });
+        const ok = !mailErr && mailData?.success !== false;
+        await supabase.from("invoices").update(
+          ok
+            ? { email_status: "enviado", email_sent_at: new Date().toISOString(), email_error_msg: null }
+            : { email_status: "erro", email_error_msg: ("Fallback boleto (NFS-e presa): " + (mailErr?.message || mailData?.error || "falha ao enviar")).slice(0, 500) }
+        ).eq("id", inv.id);
+      } catch (e) {
+        console.error(`[POLL-SERVICES] Falha no fallback de boleto p/ fatura ${inv.id}:`, e);
+      }
+    }
+    if (heldInvoices?.length) {
+      console.log(`[POLL-SERVICES] Fallback boleto: ${heldInvoices.length} fatura(s) liberada(s) de aguardando_nfse`);
+    }
+  } catch (e) {
+    console.error("[POLL-SERVICES] Erro no fallback de cobrança aguardando_nfse:", e);
   }
 
   console.log(`[POLL-SERVICES] NFS-e Asaas: ${processed} verificados, ${updated} atualizados`);

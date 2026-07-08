@@ -4,6 +4,7 @@ import {
   getEmailSettings,
   wrapInEmailLayout,
   applyNotificationMessage,
+  buildPaymentSectionHtml,
 } from "../_shared/email-helpers.ts";
 
 const corsHeaders = {
@@ -809,7 +810,12 @@ Deno.serve(async (req) => {
             .eq("id", newInvoice.id);
         }
 
-        // Auto-emit NFS-e if contract has nfse_enabled
+        // Auto-emit NFS-e if contract has nfse_enabled.
+        // holdForNfse: quando a NFS-e é emitida OK (agendada no Asaas), o e-mail de
+        // fatura NÃO é enviado agora — sai UM e-mail consolidado (boleto + nota) quando
+        // a NFS-e autorizar (via webhook-asaas-nfse ou poll-services). Fallback: se a
+        // nota falhar/demorar, poll-services libera o boleto por resend-payment-notification.
+        let holdForNfse = false;
         if (contract.nfse_enabled) {
           // ── Validar alíquota ISS antes de emitir NFS-e ──
           if (!contract.nfse_aliquota || contract.nfse_aliquota <= 0) {
@@ -871,6 +877,9 @@ Deno.serve(async (req) => {
               const nfseSuccess = nfseResult?.success === true;
               console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}:`, nfseSuccess ? "OK" : nfseResult?.error || "sem resposta");
 
+              // NFS-e agendada com sucesso → segurar o e-mail para envio consolidado.
+              if (nfseSuccess) holdForNfse = true;
+
               // Só gravar em erro. Em sucesso NÃO reescrever: o asaas-nfse já pode
               // ter avançado nfse_status (ex.: 'gerada'); "pendente" rebaixaria.
               if (!nfseSuccess) {
@@ -900,7 +909,15 @@ Deno.serve(async (req) => {
 
         // Send notification to client if email is available
         const clientEmail = contract.clients?.financial_email || contract.clients?.email;
-        if (clientEmail) {
+        if (clientEmail && holdForNfse) {
+          // E-mail retido: sairá UM e-mail consolidado (boleto + nota) quando a NFS-e
+          // autorizar (webhook-asaas-nfse / poll-services). Evita 2 e-mails separados.
+          await supabase.from("invoices").update({
+            email_status: "aguardando_nfse",
+            email_error_msg: null,
+          }).eq("id", newInvoice.id);
+          console.log(`[GEN-INVOICES] E-mail retido (aguardando NFS-e) p/ fatura #${newInvoice.invoice_number}`);
+        } else if (clientEmail) {
           try {
             const { data: resendSettings } = await supabase
               .from("integration_settings")
@@ -962,27 +979,12 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Build payment section for email
-              let paymentSection = "";
-              if (boletoSignedUrl || updatedInvoice?.boleto_barcode) {
-                paymentSection += `
-                  <div style="margin: 20px 0;">
-                    <h3>📋 Boleto Bancário</h3>
-                    ${boletoSignedUrl ? `<p><a href="${boletoSignedUrl}" style="display: inline-block; padding: 12px 24px; background: #f59e0b; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Boleto PDF</a></p>` : ""}
-                    ${updatedInvoice?.boleto_barcode ? `
-                      <p style="margin-top: 15px;"><strong>Linha Digitável:</strong></p>
-                      <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; border-radius: 4px;">${updatedInvoice.boleto_barcode}</code>
-                    ` : ""}
-                  </div>`;
-              }
-              if (updatedInvoice?.pix_code) {
-                paymentSection += `
-                  <div style="margin: 20px 0;">
-                    <h3>📱 PIX Copia e Cola</h3>
-                    <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 11px; word-break: break-all; border-radius: 4px;">${updatedInvoice.pix_code}</code>
-                    <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Copie o código acima e cole no app do seu banco na opção "PIX Copia e Cola".</p>
-                  </div>`;
-              }
+              // Build payment section for email (fonte única: buildPaymentSectionHtml)
+              const paymentSection = buildPaymentSectionHtml({
+                boletoUrl: boletoSignedUrl,
+                boletoBarcode: updatedInvoice?.boleto_barcode,
+                pixCode: updatedInvoice?.pix_code,
+              });
 
               const contentHtml = `
                     <h2>Nova Fatura Disponível</h2>

@@ -201,6 +201,42 @@ export function applyNotificationMessage(
   return baseHtml + personalizedSection;
 }
 
+/**
+ * Builds the boleto/PIX payment section HTML. Single source of truth shared pelo
+ * e-mail de fatura mensal (generate-monthly-invoices) e pelo e-mail consolidado
+ * de NFS-e (send-nfse-notification). Retorna "" quando não há nada a mostrar.
+ */
+export function buildPaymentSectionHtml(opts: {
+  boletoUrl?: string | null;
+  boletoBarcode?: string | null;
+  pixCode?: string | null;
+}): string {
+  const boletoUrl = opts.boletoUrl || "";
+  const boletoBarcode = opts.boletoBarcode || "";
+  const pixCode = opts.pixCode || "";
+  let section = "";
+  if (boletoUrl || boletoBarcode) {
+    section += `
+                  <div style="margin: 20px 0;">
+                    <h3>📋 Boleto Bancário</h3>
+                    ${boletoUrl ? `<p><a href="${boletoUrl}" style="display: inline-block; padding: 12px 24px; background: #f59e0b; color: white; text-decoration: none; border-radius: 6px;">📄 Visualizar Boleto PDF</a></p>` : ""}
+                    ${boletoBarcode ? `
+                      <p style="margin-top: 15px;"><strong>Linha Digitável:</strong></p>
+                      <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 12px; word-break: break-all; border-radius: 4px;">${boletoBarcode}</code>
+                    ` : ""}
+                  </div>`;
+  }
+  if (pixCode) {
+    section += `
+                  <div style="margin: 20px 0;">
+                    <h3>📱 PIX Copia e Cola</h3>
+                    <code style="display: block; background: #f3f4f6; padding: 12px; font-family: monospace; font-size: 11px; word-break: break-all; border-radius: 4px;">${pixCode}</code>
+                    <p style="font-size: 12px; color: #6b7280; margin-top: 10px;">Copie o código acima e cole no app do seu banco na opção "PIX Copia e Cola".</p>
+                  </div>`;
+  }
+  return section;
+}
+
 // ── Plain-text notification message (for WhatsApp) ──────────────
 
 /**
