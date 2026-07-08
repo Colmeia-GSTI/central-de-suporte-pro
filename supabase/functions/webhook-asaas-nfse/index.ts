@@ -464,7 +464,29 @@ async function processPaymentWebhook(
         console.error(`[WEBHOOK-ASAAS] Erro ao atualizar fatura:`, error);
       } else if (updatedInvoice) {
         console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como paga`);
-        
+
+        // Baixa no razão financeiro (idempotente por invoice_id — evita duplicar com
+        // manual-payment / poll-services). Sem isto o pagamento Asaas (provedor vivo)
+        // não alimenta financial_entries e a conciliação/receita fica subestimada.
+        const { data: existingFe } = await supabase
+          .from("financial_entries")
+          .select("id")
+          .eq("invoice_id", updatedInvoice.id)
+          .eq("type", "receita")
+          .limit(1);
+        if (!existingFe || existingFe.length === 0) {
+          const { error: feError } = await supabase.from("financial_entries").insert({
+            client_id: updatedInvoice.client_id,
+            invoice_id: updatedInvoice.id,
+            type: "receita",
+            amount: (payment.value as number) ?? updatedInvoice.amount,
+            description: `Pagamento confirmado via Asaas - Fatura ${externalReference}`,
+            date: paymentDate,
+            category: "pagamento_automatico",
+          });
+          if (feError) console.error("[WEBHOOK-ASAAS] Erro ao criar financial_entry:", feError);
+        }
+
         // Auto-emit NFS-e if invoice has a contract and hasn't been emitted yet
         if (updatedInvoice.contract_id && !updatedInvoice.auto_nfse_emitted) {
           try {

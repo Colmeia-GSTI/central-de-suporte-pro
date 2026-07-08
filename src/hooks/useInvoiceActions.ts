@@ -363,6 +363,27 @@ export function useInvoiceActions() {
 
   const cancelInvoiceMutation = useMutation({
     mutationFn: async ({ invoiceId, reason }: { invoiceId: string; reason: string }) => {
+      // Cancelar a cobrança no Asaas ANTES de marcar a fatura como cancelada.
+      // Sem isso o boleto/PIX segue pagável e, se pago, o webhook ignora a fatura
+      // cancelada -> dinheiro entra sem baixa nem conciliação. Fail-closed: se o
+      // Asaas não cancelar, a fatura NÃO é marcada como cancelada.
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("asaas_payment_id, billing_provider, status")
+        .eq("id", invoiceId)
+        .single();
+      if (
+        inv?.asaas_payment_id &&
+        inv.status !== "paid" &&
+        (inv.billing_provider ?? "asaas") === "asaas"
+      ) {
+        const { data: cancelRes, error: cancelErr } = await supabase.functions.invoke("asaas-nfse", {
+          body: { action: "cancel_payment", invoice_id: invoiceId, motivo: reason || "Fatura cancelada" },
+        });
+        if (cancelErr) throw new Error(`Não foi possível cancelar a cobrança no Asaas: ${cancelErr.message}`);
+        if (cancelRes?.success === false) throw new Error(cancelRes.error || "Falha ao cancelar a cobrança no Asaas");
+      }
+
       // Sanitize: cancel invoice + normalize orphan transient fields
       const { error } = await supabase
         .from("invoices")

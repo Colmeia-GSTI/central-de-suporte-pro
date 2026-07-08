@@ -46,6 +46,19 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Check role (admin or financial only) — baixa manual altera estado financeiro/fiscal
+    const { data: roles } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id);
+    const userRoles = (roles || []).map((r: { role: string }) => r.role);
+    if (!userRoles.includes("admin") && !userRoles.includes("financial")) {
+      return new Response(
+        JSON.stringify({ error: "Permissão negada. Requer admin ou financeiro." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Schema validation
     const ManualPaymentSchema = z.object({
       invoice_id: z.string().uuid("invoice_id deve ser um UUID válido"),

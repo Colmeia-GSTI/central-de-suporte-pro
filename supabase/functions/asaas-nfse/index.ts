@@ -1706,44 +1706,66 @@ Deno.serve(async (req) => {
         const cancellationLogId = cancellationLog.id;
 
         try {
+          // Cancelamento de NFS-e AUTORIZADA usa POST /invoices/{id}/cancel.
+          // O DELETE só remove nota AGENDADA e falha em nota autorizada (deixando-a
+          // ativa na prefeitura). O resultado pode ser síncrono (CANCELED) ou
+          // assíncrono (PROCESSING_CANCELLATION -> o município confirma via webhook
+          // INVOICE_CANCELED / CANCELLATION_DENIED).
+          let cancelResult: any;
           try {
-            await asaasRequest(settings, `/invoices/${invoice_id}`, "DELETE", undefined, correlationId);
+            cancelResult = await asaasRequest(settings, `/invoices/${invoice_id}/cancel`, "POST", undefined, correlationId);
           } catch (delErr) {
             // Se Asaas devolve 404, a invoice já não existe lá — tratamos como cancelada
             if (delErr instanceof AsaasApiError && delErr.status === 404) {
               log(correlationId, "warn", "Invoice não existe mais no Asaas (404) — tratando como já cancelada", { invoice_id });
+              cancelResult = { status: "CANCELED" };
             } else {
               throw delErr;
             }
           }
 
-          // Success: update audit log to CANCELLED
-          await supabase
-            .from("nfse_cancellation_log")
-            .update({ status: "CANCELLED" })
-            .eq("id", cancellationLogId);
+          const asaasStatus = String(cancelResult?.status ?? "").toUpperCase();
+          if (asaasStatus.includes("DENIED")) {
+            throw new AsaasApiError(
+              `Cancelamento negado pela prefeitura (status: ${cancelResult?.status})`,
+              422,
+              "CANCELLATION_DENIED",
+            );
+          }
+          // "" = 404 tratado acima. CANCELED/CANCELLED = síncrono. Demais estados
+          // (PROCESSING_CANCELLATION, etc.) seguem assíncronos até o webhook confirmar.
+          const isSyncCancelled = asaasStatus === "" || asaasStatus === "CANCELED" || asaasStatus === "CANCELLED";
+
+          // cancellation_log: CANCELLED só no cancelamento síncrono; senão fica
+          // REQUESTED (o webhook promove a CANCELLED quando a prefeitura confirmar).
+          if (isSyncCancelled) {
+            await supabase
+              .from("nfse_cancellation_log")
+              .update({ status: "CANCELLED" })
+              .eq("id", cancellationLogId);
+          }
 
           // Update local nfse_history record
           if (nfse_history_id) {
             await supabase
               .from("nfse_history")
               .update({
-                status: "cancelada",
+                status: isSyncCancelled ? "cancelada" : "processando",
                 motivo_cancelamento: trimmedJustification,
-                data_cancelamento: new Date().toISOString(),
+                data_cancelamento: isSyncCancelled ? new Date().toISOString() : null,
                 updated_at: new Date().toISOString(),
               })
               .eq("id", nfse_history_id);
 
             await logNfseEvent(supabase, nfse_history_id, "cancelled", "info",
-              `NFS-e cancelada. Justificativa: ${trimmedJustification.slice(0, 100)}`,
-              correlationId, { asaas_invoice_id: invoice_id });
+              `Cancelamento de NFS-e ${isSyncCancelled ? "confirmado" : "solicitado"} (Asaas: ${cancelResult?.status ?? "404"}). Justificativa: ${trimmedJustification.slice(0, 100)}`,
+              correlationId, { asaas_invoice_id: invoice_id, asaas_status: cancelResult?.status });
           }
 
-          log(correlationId, "info", "NFS-e cancelada com sucesso", { invoice_id });
+          log(correlationId, "info", `Cancelamento de NFS-e ${isSyncCancelled ? "concluído" : "solicitado"}`, { invoice_id, asaas_status: cancelResult?.status });
 
           return new Response(
-            JSON.stringify({ success: true, correlation_id: correlationId }),
+            JSON.stringify({ success: true, pending: !isSyncCancelled, asaas_status: cancelResult?.status ?? null, correlation_id: correlationId }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
 
