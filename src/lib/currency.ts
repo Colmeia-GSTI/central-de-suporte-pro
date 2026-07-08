@@ -24,11 +24,20 @@ export function formatCurrencyBRLWithSymbol(value: number): string {
 export const formatCurrency = formatCurrencyBRLWithSymbol;
 
 /**
- * Converte string formatada para número: "1.234,56" -> 1234.56
+ * Converte string formatada para número. Aceita entrada colada em formatos mistos:
+ *   "1.234,56" (pt-BR)   -> 1234.56  (ponto = milhar, vírgula = decimal)
+ *   "1234,56"            -> 1234.56  (vírgula = decimal)
+ *   "1234.56"            -> 1234.56  (só ponto, sem vírgula -> ponto é decimal)
+ *   "1.234"              -> 1.234    (só ponto, sem vírgula -> ponto é decimal)
  */
 export function parseCurrencyBRL(value: string): number {
-  const cleaned = value.replace(/[^\d,]/g, "").replace(",", ".");
-  return parseFloat(cleaned) || 0;
+  const cleaned = value.replace(/[^\d.,-]/g, "");
+  // Tem vírgula: vírgula é o decimal; qualquer ponto é separador de milhar.
+  // Sem vírgula: mantém o ponto como decimal.
+  const normalized = cleaned.includes(",")
+    ? cleaned.replace(/\./g, "").replace(",", ".")
+    : cleaned;
+  return parseFloat(normalized) || 0;
 }
 
 /**

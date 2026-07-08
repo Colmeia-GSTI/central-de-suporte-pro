@@ -44,16 +44,22 @@ export function useInvoiceActions() {
   };
 
   const markAsPaidMutation = useMutation({
-    mutationFn: async (invoiceId: string) => {
-      const { error } = await supabase
-        .from("invoices")
-        .update({ status: "paid", paid_date: new Date().toISOString() })
-        .eq("id", invoiceId);
+    mutationFn: async ({ invoiceId, amount }: { invoiceId: string; amount: number }) => {
+      // Rota pela edge manual-payment: grava paid_amount E cria financial_entries
+      // (baixa no razão), com guard de papel. Antes o update direto deixava
+      // paid_amount nulo e sem lançamento financeiro (markpaid-noamount).
+      const { data, error } = await supabase.functions.invoke("manual-payment", {
+        body: { invoice_id: invoiceId, paid_amount: amount, payment_method: "manual" },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       invalidateAll();
       toast.success("Fatura marcada como paga");
+    },
+    onError: (e: unknown) => {
+      toast.error("Erro ao marcar como paga", { description: getErrorMessage(e) });
     },
   });
 

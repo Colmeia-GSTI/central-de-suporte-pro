@@ -3,17 +3,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { canCancelBoleto, canMarkAsPaid } from "@/lib/billing-fsm";
 import {
   Barcode, QrCode, MoreHorizontal, Loader2, FileText, Mail, MessageCircle,
-  Send, Zap, XCircle, Building2, HandCoins, Ban, CheckCircle2, Clock, Trash2,
-  RefreshCw,
+  Send, Zap, XCircle, HandCoins, Ban, CheckCircle2, Clock, Trash2,
+  RefreshCw, Pencil,
 } from "lucide-react";
 
 interface InvoiceForActions {
@@ -55,6 +52,7 @@ interface InvoiceActionsPopoverProps {
   onViewHistory: () => void;
   onCheckPayment: () => void;
   onRegenerateBoleto?: () => void;
+  onEditInvoice?: () => void;
 }
 
 
@@ -79,6 +77,7 @@ export function InvoiceActionsPopover({
   onViewHistory,
   onCheckPayment,
   onRegenerateBoleto,
+  onEditInvoice,
 }: InvoiceActionsPopoverProps) {
 
   const isPendingOrOverdue = invoice.status === "pending" || invoice.status === "overdue";
@@ -123,56 +122,26 @@ export function InvoiceActionsPopover({
           </>
         )}
 
-        {/* Gerar Boleto - Sub-menu com seleção de provedor */}
+        {/* Gerar Boleto (Asaas) */}
         {isPendingOrOverdue && !invoice.boleto_url && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Barcode className="mr-2 h-4 w-4" />
-              Gerar Boleto
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                onClick={() => onGeneratePayment(invoice.id, "boleto", "banco_inter")}
-                disabled={generatingPayment !== null}
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                Banco Inter
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onGeneratePayment(invoice.id, "boleto", "asaas")}
-                disabled={generatingPayment !== null}
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                Asaas
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <DropdownMenuItem
+            onClick={() => onGeneratePayment(invoice.id, "boleto", "asaas")}
+            disabled={generatingPayment !== null}
+          >
+            <Barcode className="mr-2 h-4 w-4" />
+            Gerar Boleto
+          </DropdownMenuItem>
         )}
 
-        {/* Gerar PIX - Sub-menu com seleção de provedor */}
+        {/* Gerar PIX (Asaas) */}
         {isPendingOrOverdue && !invoice.pix_code && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <QrCode className="mr-2 h-4 w-4" />
-              Gerar PIX
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem
-                onClick={() => onGeneratePayment(invoice.id, "pix", "banco_inter")}
-                disabled={generatingPayment !== null}
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                Banco Inter
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onGeneratePayment(invoice.id, "pix", "asaas")}
-                disabled={generatingPayment !== null}
-              >
-                <Building2 className="mr-2 h-4 w-4" />
-                Asaas
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          <DropdownMenuItem
+            onClick={() => onGeneratePayment(invoice.id, "pix", "asaas")}
+            disabled={generatingPayment !== null}
+          >
+            <QrCode className="mr-2 h-4 w-4" />
+            Gerar PIX
+          </DropdownMenuItem>
         )}
 
         {/* Verificar Pagamento no Banco */}
@@ -253,6 +222,17 @@ export function InvoiceActionsPopover({
             <DropdownMenuItem onClick={onEmitNfse}>
               <FileText className="mr-2 h-4 w-4" />
               Emitir NFS-e Manual
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {/* Editar Fatura (vencimento / valor) */}
+        {isPendingOrOverdue && onEditInvoice && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onEditInvoice}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar Fatura
             </DropdownMenuItem>
           </>
         )}

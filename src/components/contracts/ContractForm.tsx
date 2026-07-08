@@ -247,16 +247,22 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
     },
   });
 
+  // A seção de serviços governa o valor mensal quando o contrato tem serviços
+  // carregados (edição) ou o usuário adicionou serviços (novo). Nesse caso usamos
+  // sempre calculatedTotal — inclusive 0 — para permitir zerar ao remover TODOS.
+  const servicesInUse = existingServices.length > 0 || contractServices.length > 0;
+
   const mutation = useMutation({
     mutationFn: async (data: ContractFormData) => {
       // Derive auto_renew and end_date from term_type
       const autoRenew = data.term_type !== "fixed";
       const endDate = data.term_type === "indefinite" ? null : (data.end_date || null);
+      const effectiveMonthlyValue = servicesInUse ? calculatedTotal : data.monthly_value;
 
       const payload = {
         name: data.name,
         client_id: data.client_id,
-        monthly_value: calculatedTotal > 0 ? calculatedTotal : data.monthly_value,
+        monthly_value: effectiveMonthlyValue,
         start_date: data.start_date,
         end_date: endDate,
         support_model: data.support_model as Enums<"support_model">,
@@ -295,8 +301,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       if (isUpdate) {
         if (data.name !== contractData.name) changes.name = { old: contractData.name, new: data.name };
         if (data.status !== contractData.status) changes.status = { old: contractData.status, new: data.status };
-        if ((calculatedTotal > 0 ? calculatedTotal : data.monthly_value) !== contractData.monthly_value) {
-          changes.monthly_value = { old: contractData.monthly_value, new: calculatedTotal > 0 ? calculatedTotal : data.monthly_value };
+        if (effectiveMonthlyValue !== contractData.monthly_value) {
+          changes.monthly_value = { old: contractData.monthly_value, new: effectiveMonthlyValue };
         }
         if (data.support_model !== contractData.support_model) changes.support_model = { old: contractData.support_model, new: data.support_model };
       }
@@ -391,7 +397,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, yearly: 12,
         };
         const initialIntervalMonths = FREQUENCY_INTERVAL_MONTHS[data.billing_frequency ?? "monthly"] ?? 1;
-        const baseValue = calculatedTotal > 0 ? calculatedTotal : data.monthly_value;
+        const baseValue = effectiveMonthlyValue;
         const invoiceAmount = baseValue * initialIntervalMonths;
         const initialNotes = initialIntervalMonths > 1
           ? `Primeira fatura (${initialIntervalMonths} meses - ${data.billing_frequency}) - ${data.name}`
@@ -503,9 +509,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
   const handleServicesChange = useCallback((services: ContractService[], total: number) => {
     setContractServices(services);
     setCalculatedTotal(total);
-    if (total > 0) {
-      form.setValue("monthly_value", total);
-    }
+    // Incondicional (inclusive 0): remover TODOS os serviços deve zerar o valor mensal.
+    form.setValue("monthly_value", total);
   }, [form]);
 
   const supportModel = form.watch("support_model");
@@ -528,7 +533,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           {/* ===== Aba GERAL ===== */}
           <TabsContent value="geral" className="space-y-4 mt-4">
             <p className="text-xs text-muted-foreground">Identificação do contrato, cliente vinculado, modelo de suporte e vigência.</p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -727,7 +732,7 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           <TabsContent value="faturamento" className="space-y-4 mt-4">
             <p className="text-xs text-muted-foreground">Dia do vencimento, periodicidade e provedor de cobrança. O valor mensal só pode ser alterado na aba Reajuste.</p>
 
-            {contractData && (calculatedTotal > 0 ? calculatedTotal : form.watch("monthly_value")) !== contractData.monthly_value && (
+            {contractData && (servicesInUse ? calculatedTotal : form.watch("monthly_value")) !== contractData.monthly_value && (
               <Alert className="border-yellow-500/50 bg-yellow-500/10">
                 <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 <AlertTitle className="text-yellow-700 dark:text-yellow-400">Você está alterando o valor mensal direto</AlertTitle>

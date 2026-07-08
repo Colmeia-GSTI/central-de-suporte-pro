@@ -46,7 +46,7 @@ export function ContractBillingSection({ form, calculatedTotal, isNewContract }:
               <FormItem>
                 <FormLabel>Dia do Vencimento</FormLabel>
                 <FormControl>
-                  <Input type="number" min="1" max="28" {...field} />
+                  <Input type="number" inputMode="numeric" min="1" max="28" {...field} />
                 </FormControl>
                 <FormDescription>Dia 1 a 28</FormDescription>
                 <FormMessage />
@@ -61,7 +61,7 @@ export function ContractBillingSection({ form, calculatedTotal, isNewContract }:
               <FormItem>
                 <FormLabel>Dias de Antecedência</FormLabel>
                 <FormControl>
-                  <Input type="number" min="1" max="30" {...field} />
+                  <Input type="number" inputMode="numeric" min="1" max="30" {...field} />
                 </FormControl>
                 <FormDescription>Para geração automática</FormDescription>
                 <FormMessage />

@@ -30,6 +30,8 @@ const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
         </span>
         <Input
           ref={ref}
+          inputMode="decimal"
+          autoComplete="off"
           {...props}
           value={displayValue}
           onChange={handleChange}

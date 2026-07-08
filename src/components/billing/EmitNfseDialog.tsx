@@ -188,6 +188,13 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
 
       const isStandalone = isStandaloneNfse || !invoice.contract_id;
 
+      // A data de emissão não pode ser anterior a hoje (Asaas rejeita).
+      // A competência mostrada na UI pode ser de um mês passado; ao enviar,
+      // usamos o 1º dia da competência ou hoje, o que for mais recente.
+      const hoje = new Date().toISOString().split("T")[0];
+      const competenciaDia = competencia + "-01";
+      const effectiveDate = competenciaDia < hoje ? hoje : competenciaDia;
+
       const { data, error } = await supabase.functions.invoke("asaas-nfse", {
         body: {
           action: isStandalone ? "emit_standalone" : "emit",
@@ -200,7 +207,7 @@ export function EmitNfseDialog({ open, onOpenChange, invoice }: EmitNfseDialogPr
           municipal_service_code: !isStandalone ? contract?.nfse_service_code : undefined,
           cnae: isStandalone ? effectiveCnae : undefined,
           aliquota: isStandalone ? aliquotaIss : undefined,
-          effective_date: competencia + "-01",
+          effective_date: effectiveDate,
           competencia,
           // Tributos
           retain_iss: tributacao.issRetido,

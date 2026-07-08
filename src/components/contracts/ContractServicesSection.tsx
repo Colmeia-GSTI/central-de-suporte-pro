@@ -168,6 +168,14 @@ export function ContractServicesSection({
     setUnitValue(0);
   };
 
+  const handleAddKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && selectedServiceId) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleAddService();
+    }
+  };
+
   const handleRemoveService = (serviceId: string) => {
     setServices(services.filter((s) => s.service_id !== serviceId));
   };
@@ -216,9 +224,14 @@ export function ContractServicesSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-lg font-semibold">
-          <Package className="h-5 w-5 text-primary" />
-          Serviços do Contrato
+        <div>
+          <div className="flex items-center gap-2 text-lg font-semibold">
+            <Package className="h-5 w-5 text-primary" />
+            Serviços do Contrato
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Valores em R$ · vencimento e ISS conforme o contrato
+          </p>
         </div>
         {contractId && serviceHistory.length > 0 && (
           <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen} modal={true}>
@@ -294,7 +307,7 @@ export function ContractServicesSection({
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0" align="start">
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command>
                   <CommandInput placeholder="Buscar serviço..." />
                   <CommandList className="max-h-[200px]">
@@ -346,6 +359,7 @@ export function ContractServicesSection({
             min="1"
             value={quantity}
             onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+            onKeyDown={handleAddKeyDown}
           />
         </div>
         <div className="w-36">
@@ -353,6 +367,7 @@ export function ContractServicesSection({
           <CurrencyInput
             value={unitValue}
             onChange={setUnitValue}
+            onKeyDown={handleAddKeyDown}
             disabled={!selectedServiceId}
           />
         </div>

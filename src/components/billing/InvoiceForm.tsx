@@ -24,13 +24,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
+import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
 
 const invoiceSchema = z.object({
   client_id: z.string().min(1, "Selecione um cliente"),
   contract_id: z.string().optional(),
   amount: z.coerce.number().min(0.01, "Valor deve ser maior que zero"),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
-  billing_provider: z.enum(["default", "banco_inter", "asaas"]).optional(),
+  billing_provider: z.enum(["default", "asaas"]).optional(),
   notes: z.string().optional(),
 });
 
@@ -183,7 +184,7 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                   <SelectContent>
                     {contracts.map((contract) => (
                       <SelectItem key={contract.id} value={contract.id}>
-                        {contract.name} - R$ {contract.monthly_value.toFixed(2)}
+                        {contract.name} - {formatCurrencyBRLWithSymbol(contract.monthly_value)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -194,7 +195,7 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
           />
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField
             control={form.control}
             name="amount"
@@ -238,7 +239,6 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="default">Padrão do contrato</SelectItem>
-                  <SelectItem value="banco_inter">Banco Inter</SelectItem>
                   <SelectItem value="asaas">Asaas</SelectItem>
                 </SelectContent>
               </Select>

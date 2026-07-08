@@ -24,8 +24,13 @@ export function getErrorMessage(error: unknown): string {
  */
 export function formatPhone(value: string | null | undefined): string {
   if (!value) return "";
-  const numbers = value.replace(/\D/g, "");
-  
+  let numbers = value.replace(/\D/g, "");
+
+  // Remove DDI do Brasil (55) quando vier com 12-13 dígitos, para não truncar errado
+  if ((numbers.length === 12 || numbers.length === 13) && numbers.startsWith("55")) {
+    numbers = numbers.slice(2);
+  }
+
   if (numbers.length === 0) return "";
   if (numbers.length <= 2) return `(${numbers}`;
   if (numbers.length <= 6) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;

@@ -30,7 +30,16 @@ import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import type { Tables } from "@/integrations/supabase/types";
 
 const clientSchema = z.object({
-  document: z.string().optional(),
+  document: z
+    .string()
+    .optional()
+    .refine(
+      (v) => {
+        const d = (v || "").replace(/\D/g, "");
+        return d.length === 0 || d.length === 11 || d.length === 14;
+      },
+      { message: "CNPJ deve ter 14 dígitos ou CPF 11" },
+    ),
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   trade_name: z.string().optional(),
   nickname: z.string().optional(),
@@ -293,7 +302,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         phone: data.phone?.replace(/\D/g, "") || null,
         whatsapp: data.whatsapp?.replace(/\D/g, "") || null,
         whatsapp_validated: data.whatsapp_validated,
-        whatsapp_validated_at: data.whatsapp_validated ? new Date().toISOString() : null,
+        whatsapp_validated_at: data.whatsapp_validated ? ((client as any)?.whatsapp_validated_at || new Date().toISOString()) : null,
         address: data.address || null,
         city: data.city || null,
         state: data.state || null,
@@ -310,7 +319,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       if (isUpdate) {
         if (data.name !== client.name) changes.name = { old: client.name, new: data.name };
         if (data.email !== (client.email || "")) changes.email = { old: client.email, new: data.email };
-        if (data.phone !== (client.phone || "")) changes.phone = { old: client.phone, new: data.phone };
+        if ((data.phone?.replace(/\D/g, "") || "") !== (client.phone || "")) changes.phone = { old: client.phone, new: payload.phone };
         if (data.is_active !== client.is_active) changes.is_active = { old: client.is_active, new: data.is_active };
         if (data.nickname !== ((client as any)?.nickname || "")) changes.nickname = { old: (client as any)?.nickname, new: data.nickname };
       }
@@ -497,7 +506,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         />
       )}
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* CNPJ field - hidden for technicians on edit, visible on create */}
           {(!isTechnicianOnly || !client) && (
             <FormField
@@ -508,8 +517,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                   <FormLabel>CNPJ/CPF</FormLabel>
                   <div className="flex gap-2">
                     <FormControl>
-                      <Input 
-                        placeholder="00.000.000/0000-00" 
+                      <Input
+                        placeholder="00.000.000/0000-00"
+                        inputMode="numeric"
                         {...field}
                         onChange={(e) => handleDocumentChange(e, field.onChange)}
                         onBlur={() => { void checkDuplicateDocument(); }}
@@ -613,8 +623,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                   Telefone
                 </FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder="(00) 00000-0000" 
+                  <Input
+                    placeholder="(00) 00000-0000"
+                    inputMode="tel"
                     {...field}
                     onChange={(e) => {
                       const formatted = formatPhone(e.target.value);
@@ -644,8 +655,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                 </FormLabel>
                 <div className="flex gap-2">
                   <FormControl>
-                    <Input 
-                      placeholder="(00) 00000-0000" 
+                    <Input
+                      placeholder="(00) 00000-0000"
+                      inputMode="tel"
                       {...field}
                       onChange={(e) => handleWhatsAppChange(e.target.value, field.onChange)}
                       className={cn(
@@ -754,8 +766,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
               <FormItem>
                 <FormLabel>CEP</FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder="00000-000" 
+                  <Input
+                    placeholder="00000-000"
+                    inputMode="numeric"
                     maxLength={9}
                     {...field}
                     onChange={(e) => {

@@ -51,6 +51,7 @@ import { RenegotiateInvoiceDialog } from "@/components/billing/RenegotiateInvoic
 import { CancelNfseDialog } from "@/components/billing/CancelNfseDialog";
 import { NewInvoiceDialog } from "@/components/billing/NewInvoiceDialog";
 import { CancelInvoiceAlertDialog } from "@/components/billing/CancelInvoiceAlertDialog";
+import { EditInvoiceDialog } from "@/components/billing/EditInvoiceDialog";
 import { useInvoiceFilters, ITEMS_PER_PAGE, PERIOD_OPTIONS } from "@/components/billing/hooks/useInvoiceFilters";
 import { useInvoiceActions } from "@/hooks/useInvoiceActions";
 import { formatDate } from "@/lib/date";
@@ -91,6 +92,7 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
   const [cancelInvoiceReason, setCancelInvoiceReason] = useState("");
   const [isCancellingBoleto, setIsCancellingBoleto] = useState(false);
   const [regenerateInvoice, setRegenerateInvoice] = useState<InvoiceWithClient | null>(null);
+  const [editInvoice, setEditInvoice] = useState<InvoiceWithClient | null>(null);
 
   const [isGeneratingMonthly, setIsGeneratingMonthly] = useState(false);
   const [isBatchNotifying, setIsBatchNotifying] = useState(false);
@@ -335,6 +337,36 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
     }
   };
 
+  // Cancela o boleto/PIX no provedor (reusado no desktop e no card mobile).
+  const handleCancelBoleto = async (invoice: InvoiceWithClient) => {
+    if (!invoice.boleto_barcode && !invoice.boleto_url && !invoice.asaas_payment_id) {
+      toast.error("Nenhum boleto gerado para cancelar");
+      return;
+    }
+    setIsCancellingBoleto(true);
+    try {
+      const provider = invoice.billing_provider ?? "asaas";
+      const { data, error } =
+        provider === "asaas"
+          ? await supabase.functions.invoke("asaas-nfse", {
+              body: { action: "cancel_payment", invoice_id: invoice.id, motivo: "ACERTOS" },
+            })
+          : await supabase.functions.invoke("banco-inter", {
+              body: { action: "cancel", invoice_id: invoice.id, motivo_cancelamento: "ACERTOS" },
+            });
+      if (error || data?.error || data?.success === false) {
+        throw new Error(data?.error || error?.message || "Erro ao cancelar");
+      }
+      toast.success(`Boleto #${invoice.invoice_number} cancelado`);
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+    } catch (e: unknown) {
+      toast.error("Erro ao cancelar boleto", { description: getErrorMessage(e) });
+    } finally {
+      setIsCancellingBoleto(false);
+    }
+  };
+
   const hasSelected = selectedInvoices.size > 0;
 
   return (
@@ -530,17 +562,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                         onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                         onGeneratePayment={handleGeneratePayment}
                         onManualPayment={() => setManualPaymentInvoice(invoice)}
-                        onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                        onMarkAsPaid={() => markAsPaidMutation.mutate({ invoiceId: invoice.id, amount: invoice.amount })}
                         onSecondCopy={() => setSecondCopyInvoice(invoice)}
                         onRenegotiate={() => setRenegotiateInvoice(invoice)}
                         onResendNotification={handleResendNotification}
                         onEmitNfse={() => setNfseInvoice(invoice)}
-                        onCancelBoleto={() => setIsCancellingBoleto(true)}
+                        onCancelBoleto={() => handleCancelBoleto(invoice)}
                         onCancelNfse={() => setCancelNfseInvoice(invoice)}
                         onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                         onViewHistory={() => setHistoryInvoice(invoice)}
                         onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                         onRegenerateBoleto={() => setRegenerateInvoice(invoice)}
+                        onEditInvoice={() => setEditInvoice(invoice)}
 
                       />
                     </div>
@@ -718,45 +751,18 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
                             onEmitComplete={() => handleEmitComplete(invoice, nfseByInvoice)}
                             onGeneratePayment={handleGeneratePayment}
                             onManualPayment={() => setManualPaymentInvoice(invoice)}
-                            onMarkAsPaid={() => markAsPaidMutation.mutate(invoice.id)}
+                            onMarkAsPaid={() => markAsPaidMutation.mutate({ invoiceId: invoice.id, amount: invoice.amount })}
                             onSecondCopy={() => setSecondCopyInvoice(invoice)}
                             onRenegotiate={() => setRenegotiateInvoice(invoice)}
                             onResendNotification={handleResendNotification}
                             onEmitNfse={() => setNfseInvoice(invoice)}
-                            onCancelBoleto={async () => {
-                              if (!invoice.boleto_barcode && !invoice.boleto_url && !invoice.asaas_payment_id) {
-                                toast.error("Nenhum boleto gerado para cancelar");
-                                return;
-                              }
-                              setIsCancellingBoleto(true);
-                              try {
-                                const provider = invoice.billing_provider ?? "asaas";
-                                const { data, error } =
-                                  provider === "asaas"
-                                    ? await supabase.functions.invoke("asaas-nfse", {
-                                        body: { action: "cancel_payment", invoice_id: invoice.id, motivo: "ACERTOS" },
-                                      })
-                                    : await supabase.functions.invoke("banco-inter", {
-                                        body: { action: "cancel", invoice_id: invoice.id, motivo_cancelamento: "ACERTOS" },
-                                      });
-                                if (error || data?.error || data?.success === false) {
-                                  throw new Error(data?.error || error?.message || "Erro ao cancelar");
-                                }
-                                toast.success(`Boleto #${invoice.invoice_number} cancelado`);
-                                queryClient.invalidateQueries({ queryKey: ["invoices"] });
-                                queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-                              } catch (e: unknown) {
-                                toast.error("Erro ao cancelar boleto", { description: getErrorMessage(e) });
-                              } finally {
-                                setIsCancellingBoleto(false);
-                              }
-                            }}
-
+                            onCancelBoleto={() => handleCancelBoleto(invoice)}
                             onCancelNfse={() => setCancelNfseInvoice(invoice)}
                             onCancelInvoice={() => setCancelInvoiceTarget(invoice)}
                             onViewHistory={() => setHistoryInvoice(invoice)}
                             onCheckPayment={() => handleCheckPaymentStatus(invoice.id)}
                             onRegenerateBoleto={() => setRegenerateInvoice(invoice)}
+                            onEditInvoice={() => setEditInvoice(invoice)}
 
                           />
                         }
@@ -839,20 +845,17 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
             size="sm"
             disabled={!hasSelected}
             onClick={() => {
-              const withNfse = selectedInvoicesData.some(
+              const withNfse = selectedInvoicesData.filter(
                 (inv) => nfseByInvoice[inv.id]?.status === "autorizada"
               );
-              if (withNfse) {
-                toast.info("Cancelando NFS-e das faturas selecionadas...");
-                for (const inv of selectedInvoicesData) {
-                  if (nfseByInvoice[inv.id]?.status === "autorizada") {
-                    setCancelNfseInvoice(inv);
-                    break;
-                  }
-                }
-              } else {
+              if (withNfse.length === 0) {
                 toast.error("Nenhuma NFS-e autorizada para cancelar");
+                return;
               }
+              if (withNfse.length > 1) {
+                toast.info(`${withNfse.length} NFS-e selecionadas — o cancelamento é individual; cancele uma de cada vez.`);
+              }
+              setCancelNfseInvoice(withNfse[0]);
             }}
           >
             <Ban className="mr-1.5 h-4 w-4" />
@@ -1061,6 +1064,14 @@ export function BillingInvoicesTab({ autoOpenNew, onAutoOpenConsumed }: BillingI
           invoiceId={regenerateInvoice.id}
           invoiceNumber={regenerateInvoice.invoice_number}
           billingProvider={regenerateInvoice.billing_provider}
+        />
+      )}
+
+      {editInvoice && (
+        <EditInvoiceDialog
+          invoice={editInvoice}
+          open={!!editInvoice}
+          onOpenChange={(open) => { if (!open) setEditInvoice(null); }}
         />
       )}
 

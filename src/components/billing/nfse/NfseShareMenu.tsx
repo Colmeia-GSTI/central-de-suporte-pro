@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { getErrorMessage } from "@/lib/utils";
+import { getSignedUrl } from "@/lib/storage-utils";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -95,18 +96,10 @@ export function NfseShareMenu({ nfse, variant = "icon" }: NfseShareMenuProps) {
     }
 
     try {
-      // Generate signed URL for clipboard
-      if (nfse.pdf_url.startsWith("nfse-files/")) {
-        const path = nfse.pdf_url.replace("nfse-files/", "");
-        const { data, error } = await supabase.storage
-          .from("nfse-files")
-          .createSignedUrl(path, 86400); // 24 hours
-
-        if (error) throw error;
-        await navigator.clipboard.writeText(data.signedUrl);
-      } else {
-        await navigator.clipboard.writeText(nfse.pdf_url);
-      }
+      // Resolve o path armazenado ("nfse/...", "nfse-files/...", ou URL externa)
+      // e gera URL assinada válida por 24h.
+      const signedUrl = await getSignedUrl(nfse.pdf_url, 86400);
+      await navigator.clipboard.writeText(signedUrl);
 
       toast.success("Link copiado!", {
         description: "O link do PDF é válido por 24 horas.",
