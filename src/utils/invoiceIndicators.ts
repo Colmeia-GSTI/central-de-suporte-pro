@@ -100,6 +100,11 @@ export function getEmailIndicator(input: EmailIndicatorInput): IndicatorResult {
     return { color: "text-emerald-500", tooltip: "Email enviado", level: "success" };
   }
 
+  // E-mail retido: sai consolidado (boleto + nota) quando a NFS-e autorizar.
+  if (input.email_status === "aguardando_nfse") {
+    return { color: "text-amber-500", tooltip: "Aguardando NFS-e para envio consolidado (boleto + nota)", level: "pending" };
+  }
+
   return { color: "text-muted-foreground", tooltip: "Enviar email", level: "pending" };
 }
 
