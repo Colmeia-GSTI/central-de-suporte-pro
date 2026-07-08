@@ -68,10 +68,13 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
         .eq("id", invoice.id);
       if (updErr) throw updErr;
 
-      // 2. Se há cobrança Asaas, regenera com os novos dados (propaga vencimento/valor)
+      // 2. Se há cobrança Asaas, regenera com os novos dados (propaga vencimento/valor).
+      //    regenerate_payment apenas CANCELA/limpa o boleto antigo; é preciso chamar
+      //    create_payment em seguida para gerar o novo com a data/valor atualizados.
       let regenerated = false;
       if (invoice.asaas_payment_id && (invoice.billing_provider ?? "asaas") === "asaas") {
-        const { data, error } = await supabase.functions.invoke("asaas-nfse", {
+        // 2a. Cancela e limpa o boleto antigo no Asaas
+        const { data: regData, error: regErr } = await supabase.functions.invoke("asaas-nfse", {
           body: {
             action: "regenerate_payment",
             invoice_id: invoice.id,
@@ -79,8 +82,15 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
             reason: "Edição de vencimento/valor da fatura",
           },
         });
-        if (error) throw error;
-        if (data?.success === false) throw new Error(data.error || "Falha ao regenerar o boleto no Asaas");
+        if (regErr) throw regErr;
+        if (regData?.success === false) throw new Error(regData.error || "Falha ao cancelar o boleto antigo no Asaas");
+
+        // 2b. Cria o novo boleto já com os dados atualizados da fatura
+        const { data: createData, error: createErr } = await supabase.functions.invoke("asaas-nfse", {
+          body: { action: "create_payment", invoice_id: invoice.id, billing_type: "BOLETO" },
+        });
+        if (createErr) throw createErr;
+        if (createData?.success === false) throw new Error(createData.error || "Falha ao gerar o novo boleto no Asaas");
         regenerated = true;
       }
       return { regenerated };
