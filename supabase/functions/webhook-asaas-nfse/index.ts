@@ -551,12 +551,78 @@ async function processPaymentWebhook(
       }
     } else if (newStatus === "vencida") {
       console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} marcada como vencida`);
-      
+
       await supabase
         .from("invoices")
         .update({ status: "overdue" })
         .eq("id", externalReference)
         .in("status", ["pending"]);
+    } else if (newStatus === "estornada") {
+      // asaas-03: PAYMENT_REFUNDED / estorno — reverter a baixa feita no ramo "pago".
+      // Idempotente: só reverte fatura que ainda está "paid" (estorno repetido não faz nada).
+      console.log(`[WEBHOOK-ASAAS] Fatura ${externalReference} estornada/reembolsada`);
+
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("id, client_id, amount, due_date, status")
+        .eq("id", externalReference)
+        .maybeSingle();
+
+      if (inv && inv.status === "paid") {
+        const today = new Date().toISOString().split("T")[0];
+        const revertStatus = inv.due_date && (inv.due_date as string) < today ? "overdue" : "pending";
+
+        await supabase
+          .from("invoices")
+          .update({ status: revertStatus, paid_date: null, payment_method: null })
+          .eq("id", externalReference)
+          .eq("status", "paid");
+
+        // Estorno no razão financeiro: lançamento negativo tipo "estorno", idempotente por
+        // invoice_id. Não deletamos a receita original (§7: não apagar registro financeiro).
+        const { data: existingEstorno } = await supabase
+          .from("financial_entries")
+          .select("id")
+          .eq("invoice_id", externalReference)
+          .eq("type", "estorno")
+          .limit(1);
+        if (!existingEstorno || existingEstorno.length === 0) {
+          const estornoAmount = (payment.value as number) ?? inv.amount ?? 0;
+          const { error: feError } = await supabase.from("financial_entries").insert({
+            client_id: inv.client_id,
+            invoice_id: externalReference,
+            type: "estorno",
+            amount: -Math.abs(estornoAmount),
+            description: `Estorno de pagamento via Asaas - Fatura ${externalReference}`,
+            date: (payment.paymentDate as string) || today,
+            category: "estorno_automatico",
+          });
+          if (feError) console.error("[WEBHOOK-ASAAS] Erro ao criar estorno financial_entry:", feError);
+        }
+
+        await supabase.from("audit_logs").insert({
+          action: "payment_refunded",
+          table_name: "invoices",
+          record_id: externalReference,
+          old_data: { status: "paid" },
+          new_data: {
+            status: revertStatus,
+            refund_value: (payment.value as number) ?? null,
+            asaas_payment_id: payment.id ?? null,
+          },
+        });
+
+        await createNotification(
+          supabase,
+          "Pagamento Estornado via Asaas",
+          `Fatura teve o pagamento estornado. Valor: R$ ${(((payment.value as number) ?? inv.amount) ?? 0).toFixed(2)}`,
+          "warning",
+          "invoice",
+          externalReference
+        );
+      } else {
+        console.log(`[WEBHOOK-ASAAS] Estorno ignorado: fatura ${externalReference} não estava paga (status: ${inv?.status ?? "não encontrada"})`);
+      }
     }
   }
 }

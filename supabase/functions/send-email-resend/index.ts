@@ -172,12 +172,48 @@ Deno.serve(async (req) => {
       if (!senderEmail) senderEmail = resendConfig?.default_from_email || "noreply@suporte.colmeiagsti.com";
     }
 
+    // email-02: descartar placeholders sintéticos (.internal) — não têm caixa real
+    // email-01: descartar endereços suprimidos (hard bounce / reclamação de spam) — protege reputação do domínio
+    let recipients = emailValidation.emails.filter((e) => !e.endsWith(".internal"));
+
+    if (recipients.length > 0) {
+      const { data: suppressedRows } = await supabase
+        .from("suppressed_emails")
+        .select("email, reason")
+        .in("email", recipients);
+      const suppressed = new Map(
+        (suppressedRows ?? []).map((r: { email: string; reason: string }) => [r.email, r.reason] as [string, string])
+      );
+      if (suppressed.size > 0) {
+        const blocked = recipients.filter((e) => suppressed.has(e));
+        recipients = recipients.filter((e) => !suppressed.has(e));
+        // ponytail: constraint message_logs_status_check não inclui 'suppressed'; registra como 'failed' com motivo. Upgrade: adicionar valor 'suppressed' à constraint.
+        await logBatch(supabase, blocked.map((recipient) => ({
+          channel: "email",
+          recipient,
+          message: sanitizedHtml.slice(0, 500),
+          status: "failed",
+          error_message: `suppressed: ${suppressed.get(recipient) || "bounce/complaint"}`,
+          related_type: related_type ?? null,
+          related_id: related_id ?? null,
+          user_id: user_id ?? null,
+        })));
+      }
+    }
+
+    if (recipients.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, message: "Nenhum destinatário elegível (suprimido ou placeholder .internal)" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const fromValue = `${senderName} <${senderEmail}>`;
-    console.log(`[send-email-resend] Sending to ${emailValidation.emails.length} recipient(s) from ${fromValue}`);
+    console.log(`[send-email-resend] Sending to ${recipients.length} recipient(s) from ${fromValue}`);
 
     const resendBody: Record<string, unknown> = {
       from: fromValue,
-      to: emailValidation.emails,
+      to: recipients,
       subject: sanitizedSubject,
       html: sanitizedHtml,
       text: sanitizedText,
@@ -215,7 +251,7 @@ Deno.serve(async (req) => {
       const errMsg = resendData?.message || resendData?.error || `Resend API error: ${resendResponse.status}`;
       console.error(`[send-email-resend] Resend error:`, errMsg);
 
-      await logBatch(supabase, emailValidation.emails.map((recipient) => ({
+      await logBatch(supabase, recipients.map((recipient) => ({
         channel: "email",
         recipient,
         message: messagePreview,
@@ -235,7 +271,7 @@ Deno.serve(async (req) => {
     const providerId = resendData?.id ?? null;
     console.log(`[send-email-resend] Email sent successfully. ID: ${providerId}`);
 
-    await logBatch(supabase, emailValidation.emails.map((recipient) => ({
+    await logBatch(supabase, recipients.map((recipient) => ({
       channel: "email",
       recipient,
       message: messagePreview,

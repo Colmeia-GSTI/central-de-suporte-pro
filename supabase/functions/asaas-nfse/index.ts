@@ -1531,7 +1531,7 @@ Deno.serve(async (req) => {
           AUTHORIZED: "autorizada",
           CANCELED: "cancelada",
           CANCELLATION_PENDING: "processando",
-          CANCELLATION_DENIED: "autorizada",
+          CANCELLATION_DENIED: "erro",
           ERROR: "erro",
         };
         
@@ -2087,9 +2087,14 @@ Deno.serve(async (req) => {
       }
 
       case "create_payment": {
-        const { invoice_id, billing_type } = params;
+        const { invoice_id, billing_type, override_value, override_due_date } = params;
 
-        log(correlationId, "info", "Criando cobrança via Asaas", { invoice_id, billing_type });
+        // Segunda-via pode enviar valor/vencimento sobrescritos (ex.: com acréscimos
+        // já calculados ou nova data). Quando ausentes, usa os da fatura.
+        const overrideValue = override_value != null ? Number(override_value) : null;
+        const overrideDueDate = override_due_date || null;
+
+        log(correlationId, "info", "Criando cobrança via Asaas", { invoice_id, billing_type, has_override_value: overrideValue != null, has_override_due_date: !!overrideDueDate });
 
         // 1. Buscar dados da fatura
         const { data: invoice, error: invoiceError } = await supabase
@@ -2135,6 +2140,7 @@ Deno.serve(async (req) => {
         if (invoice.asaas_payment_id) {
           let needsRegenerate = false;
           let regenerateReason = "";
+          let existingPaymentValue: number | null = null;
 
           // (a) Webhook PAYMENT_DELETED já marcou
           if (invoice.asaas_payment_deleted_at) {
@@ -2155,6 +2161,8 @@ Deno.serve(async (req) => {
               if (!existingPayment || existingPayment.deleted === true || existingPayment.status === "DELETED") {
                 needsRegenerate = true;
                 regenerateReason = "payment_deleted_on_asaas";
+              } else if (existingPayment.value != null) {
+                existingPaymentValue = Number(existingPayment.value);
               }
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
@@ -2191,6 +2199,17 @@ Deno.serve(async (req) => {
                 error: e instanceof Error ? e.message : String(e),
               });
             }
+          }
+
+          // (d) Segunda-via com valor sobrescrito diferente da cobrança existente:
+          // não reusa o boleto antigo (valor congelado no PDF) — regenera.
+          if (!needsRegenerate && overrideValue != null && existingPaymentValue != null
+              && Math.abs(overrideValue - existingPaymentValue) >= 0.01) {
+            needsRegenerate = true;
+            regenerateReason = `override_value_drift (existing=${existingPaymentValue}, override=${overrideValue})`;
+            log(correlationId, "info", "Valor sobrescrito diverge da cobrança existente — regenerando", {
+              invoice_id, existing: existingPaymentValue, override: overrideValue,
+            });
           }
 
           if (needsRegenerate) {
@@ -2278,6 +2297,25 @@ Deno.serve(async (req) => {
               }
             }
 
+            // BOLETO reusado sem linha digitável persistida: busca via endpoint
+            // separado (POST /payments não retorna identificationField). Análogo ao PIX.
+            if ((requestedType === "BOLETO" || requestedType === "UNDEFINED") && !invoice.boleto_barcode) {
+              try {
+                const idFieldData = await asaasRequest(
+                  settings,
+                  `/payments/${invoice.asaas_payment_id}/identificationField`,
+                  "GET",
+                  undefined,
+                  correlationId,
+                );
+                if (idFieldData?.identificationField) {
+                  updateData.boleto_barcode = idFieldData.identificationField;
+                }
+              } catch (e) {
+                log(correlationId, "warn", "Falha ao buscar linha digitável do boleto existente", { error: String(e) });
+              }
+            }
+
             if (Object.keys(updateData).length > 0) {
               await supabase.from("invoices").update(updateData).eq("id", invoice_id);
             }
@@ -2316,10 +2354,14 @@ Deno.serve(async (req) => {
         const paymentData = {
           customer: customerId,
           billingType: paymentType,
-          value: invoice.amount,
-          dueDate: invoice.due_date,
+          value: overrideValue != null ? overrideValue : invoice.amount,
+          dueDate: overrideDueDate || invoice.due_date,
           description: invoice.description || `Fatura #${invoice.invoice_number}`,
           externalReference: invoice.id,
+          // Acréscimos padrão brasileiros: o Asaas calcula nativamente após o
+          // vencimento (multa 2% + juros 1% a.m.), igual ao generate-second-copy.
+          fine: { value: 2, type: "PERCENTAGE" },
+          interest: { value: 1 },
         };
 
 

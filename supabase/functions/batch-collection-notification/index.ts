@@ -159,7 +159,6 @@ Deno.serve(async (req) => {
                 html: emailHtml,
                 related_type: "invoice",
                 related_id: invoice.id,
-                user_id: client.id,
               },
             });
 

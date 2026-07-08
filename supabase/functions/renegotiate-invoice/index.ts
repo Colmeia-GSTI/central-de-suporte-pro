@@ -103,6 +103,8 @@ Deno.serve(async (req) => {
     const newInvoices = [];
 
     // Get next invoice number
+    // ponytail: MAX+1 tem race sob concorrência (dois renegocia simultâneos → invoice_number duplicado);
+    // upgrade path: sequence/serial no banco. Não corrigido aqui (tratado separadamente).
     const { data: lastInvoice } = await supabase
       .from("invoices")
       .select("invoice_number")
@@ -168,6 +170,17 @@ Deno.serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Cancelar o boleto original no Asaas para que não continue pagável.
+    // Idempotente: só invoca se houver cobrança; falhas não revertem a renegociação já commitada.
+    if (invoice.asaas_payment_id) {
+      const { data: cancelData, error: cancelInvokeError } = await supabase.functions.invoke("asaas-nfse", {
+        body: { action: "cancel_payment", invoice_id, motivo: "Fatura renegociada" },
+      });
+      if (cancelInvokeError || cancelData?.error) {
+        console.error("[renegotiate-invoice] Falha ao cancelar boleto original no Asaas:", cancelInvokeError || cancelData?.error);
+      }
     }
 
     // Audit log

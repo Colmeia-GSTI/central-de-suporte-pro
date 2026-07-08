@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     }
 
     // Determine provider and generate new boleto
-    const provider = invoice.billing_provider || "banco_inter";
+    const provider = invoice.billing_provider || "asaas";
     let boletoUrl = null;
     let boletoBarcode = null;
 

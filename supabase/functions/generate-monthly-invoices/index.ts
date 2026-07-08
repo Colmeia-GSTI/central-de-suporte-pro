@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { formatCurrencyBRL } from "../_shared/email-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -111,6 +112,30 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Role guard: só barra usuários autenticados NÃO admin/financial.
+    // Cron/service role não resolve para um user real (getUser retorna vazio) → PERMITE.
+    // Nunca bloquear o cron.
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) {
+        // Token resolve para um usuário real → exigir admin/financial
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+        const userRoles = (roles || []).map((r: { role: string }) => r.role);
+        if (!userRoles.includes("admin") && !userRoles.includes("financial")) {
+          return new Response(
+            JSON.stringify({ error: "Permissão negada. Requer admin ou financeiro." }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      // Sem user resolvível (service role/cron) → segue sem bloquear.
+    }
 
     // Allow manual trigger with specific month/year or use current
     const body = await req.json().catch(() => ({}));
@@ -752,6 +777,14 @@ Deno.serve(async (req) => {
               console.warn(`[GEN-INVOICES] PIX falhou para fatura #${newInvoice.invoice_number}, boleto preservado: ${errMsg}`);
             }
           }
+        } else if (!providerActive && contract.payment_preference) {
+          // Asaas inativo mas contrato pede cobrança: dar visibilidade em vez de fatura "muda".
+          const inactiveMsg = "Provedor de cobrança (Asaas) inativo — nenhum boleto/PIX foi gerado. Ative a integração Asaas e regenere a cobrança.";
+          console.warn(`[GEN-INVOICES] ${inactiveMsg} (fatura #${newInvoice.invoice_number})`);
+          await supabase
+            .from("invoices")
+            .update({ boleto_status: "erro", boleto_error_msg: inactiveMsg })
+            .eq("id", newInvoice.id);
         }
 
         // Auto-emit NFS-e if contract has nfse_enabled
@@ -814,14 +847,17 @@ Deno.serve(async (req) => {
               const nfseSuccess = nfseResult?.success === true;
               console.log(`[GEN-INVOICES] NFS-e emitida para fatura #${newInvoice.invoice_number}:`, nfseSuccess ? "OK" : nfseResult?.error || "sem resposta");
 
-              // Record NFS-e status based on result
-              await supabase
-                .from("invoices")
-                .update({
-                  nfse_status: nfseSuccess ? "pendente" : "erro",
-                  nfse_error_msg: nfseSuccess ? null : (nfseResult?.error || "Resposta inesperada da API NFS-e"),
-                })
-                .eq("id", newInvoice.id);
+              // Só gravar em erro. Em sucesso NÃO reescrever: o asaas-nfse já pode
+              // ter avançado nfse_status (ex.: 'gerada'); "pendente" rebaixaria.
+              if (!nfseSuccess) {
+                await supabase
+                  .from("invoices")
+                  .update({
+                    nfse_status: "erro",
+                    nfse_error_msg: nfseResult?.error || "Resposta inesperada da API NFS-e",
+                  })
+                  .eq("id", newInvoice.id);
+              }
             }
           } catch (nfseErr) {
             console.error(`[GEN-INVOICES] Exceção ao emitir NFS-e para ${contract.name}:`, nfseErr);
@@ -842,13 +878,13 @@ Deno.serve(async (req) => {
         const clientEmail = contract.clients?.financial_email || contract.clients?.email;
         if (clientEmail) {
           try {
-            const { data: smtpSettings } = await supabase
+            const { data: resendSettings } = await supabase
               .from("integration_settings")
               .select("is_active")
-              .eq("integration_type", "smtp")
+              .eq("integration_type", "resend")
               .single();
 
-            if (smtpSettings?.is_active) {
+            if (resendSettings?.is_active) {
               // Re-fetch invoice to get boleto data (may have been set by banco-inter/asaas)
               const { data: updatedInvoice } = await supabase
                 .from("invoices")
@@ -897,7 +933,7 @@ Deno.serve(async (req) => {
 
                 customSection = contract.notification_message
                   .replace(/{cliente}/g, contract.clients?.name || "Cliente")
-                  .replace(/{valor}/g, `R$ ${totalAmount.toFixed(2)}`)
+                  .replace(/{valor}/g, formatCurrencyBRL(totalAmount))
                   .replace(/{vencimento}/g, new Date(dueDate).toLocaleDateString("pt-BR"))
                   .replace(/{fatura}/g, `#${newInvoice.invoice_number}`)
                   .replace(/{contrato}/g, contract.name)
@@ -953,7 +989,7 @@ Deno.serve(async (req) => {
                       </tr>
                       <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Valor:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">R$ ${totalAmount.toFixed(2)}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">${formatCurrencyBRL(totalAmount)}</td>
                       </tr>
                       <tr>
                         <td style="padding: 8px; border: 1px solid #ddd;"><strong>Vencimento:</strong></td>

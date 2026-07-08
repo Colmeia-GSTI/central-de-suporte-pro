@@ -14,7 +14,7 @@ const corsHeaders = {
 };
 
 interface PollRequest {
-  services?: ("boleto" | "asaas_nfse" | "boleto_payments")[];
+  services?: ("boleto" | "asaas_nfse" | "boleto_payments" | "asaas_payments")[];
   invoice_id?: string; // Optional: check a specific invoice
 }
 
@@ -532,7 +532,7 @@ async function pollAsaasNfse(supabase: SupabaseClient): Promise<{ processed: num
 
   const { data: pendingRecords } = await supabase
     .from("nfse_history")
-    .select("id, asaas_invoice_id, status, valor_servico")
+    .select("id, asaas_invoice_id, status, valor_servico, invoice_id")
     .eq("provider", "asaas")
     .eq("status", "processando")
     .not("asaas_invoice_id", "is", null)
@@ -583,11 +583,28 @@ async function pollAsaasNfse(supabase: SupabaseClient): Promise<{ processed: num
       }
 
       if (invoice.status === "ERROR") {
-        updateData.mensagem_erro = invoice.statusDescription;
+        updateData.mensagem_retorno = invoice.statusDescription;
         await notifyAdmins(supabase, "Erro NFS-e", invoice.statusDescription || "Erro no processamento", "error");
       }
 
       await supabase.from("nfse_history").update(updateData).eq("id", record.id);
+
+      // Espelhar em invoices.nfse_status (mesmo comportamento do webhook-asaas-nfse)
+      if (record.invoice_id && (newStatus === "autorizada" || newStatus === "erro")) {
+        const invoiceUpdate: Record<string, unknown> =
+          newStatus === "autorizada"
+            ? { nfse_status: "gerada", nfse_error_msg: null, nfse_generated_at: new Date().toISOString() }
+            : { nfse_status: "erro", nfse_error_msg: invoice.statusDescription || "Erro no processamento da NFS-e" };
+
+        const { error: invError } = await supabase
+          .from("invoices")
+          .update(invoiceUpdate)
+          .eq("id", record.invoice_id);
+        if (invError) {
+          console.error(`[POLL-SERVICES] Erro ao sincronizar invoices.nfse_status ${record.invoice_id}:`, invError);
+        }
+      }
+
       updated++;
     } catch (e) {
       console.error(`[POLL-SERVICES] Erro NFS-e Asaas ${record.id}:`, e);
@@ -595,6 +612,127 @@ async function pollAsaasNfse(supabase: SupabaseClient): Promise<{ processed: num
   }
 
   console.log(`[POLL-SERVICES] NFS-e Asaas: ${processed} verificados, ${updated} atualizados`);
+  return { processed, updated };
+}
+
+// ============ ASAAS PAYMENT STATUS POLLING ============
+
+// Fallback: confirma pagamentos Asaas perdidos pelo webhook. Aplica a MESMA baixa
+// do webhook-asaas-nfse (status=paid + financial_entries idempotente por invoice_id).
+const ASAAS_PAID_STATUSES = new Set(["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"]);
+
+async function pollAsaasPayments(
+  supabase: SupabaseClient,
+  specificInvoiceId?: string
+): Promise<{ processed: number; updated: number }> {
+  console.log("[POLL-SERVICES] Verificando pagamentos Asaas...");
+
+  const { data: integrationData } = await supabase
+    .from("integration_settings")
+    .select("settings, is_active")
+    .eq("integration_type", "asaas")
+    .maybeSingle();
+
+  if (!integrationData?.is_active) {
+    console.log("[POLL-SERVICES] Asaas não configurado");
+    return { processed: 0, updated: 0 };
+  }
+
+  const settings = integrationData.settings as AsaasSettings;
+  const baseUrl = ASAAS_URLS[settings.environment];
+
+  let query = supabase
+    .from("invoices")
+    .select("id, invoice_number, amount, client_id, asaas_payment_id")
+    .not("asaas_payment_id", "is", null)
+    .in("status", ["pending", "overdue"]);
+
+  if (specificInvoiceId) {
+    query = query.eq("id", specificInvoiceId);
+  } else {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    query = query.lt("created_at", twoHoursAgo);
+  }
+
+  const { data: pendingInvoices } = await query.limit(20);
+
+  if (!pendingInvoices?.length) {
+    console.log("[POLL-SERVICES] Nenhum pagamento Asaas pendente de verificação");
+    return { processed: 0, updated: 0 };
+  }
+
+  let processed = 0, updated = 0;
+
+  for (const invoice of pendingInvoices) {
+    processed++;
+    try {
+      const response = await fetch(`${baseUrl}/payments/${invoice.asaas_payment_id}`, {
+        headers: { "Content-Type": "application/json", "access_token": settings.api_key },
+      });
+      if (!response.ok) continue;
+
+      const payment = await response.json();
+      if (!ASAAS_PAID_STATUSES.has(payment.status)) continue;
+
+      const paidAmount = payment.value ?? invoice.amount;
+      const paidDate = payment.paymentDate || new Date().toISOString().split("T")[0];
+
+      // Baixa idempotente por (id, status pending/overdue) — evita corrida com o webhook
+      const { data: updatedInvoice, error: updateError } = await supabase
+        .from("invoices")
+        .update({
+          status: "paid",
+          paid_date: paidDate,
+          paid_amount: paidAmount,
+          payment_method: payment.billingType || undefined,
+        })
+        .eq("id", invoice.id)
+        .in("status", ["pending", "overdue"])
+        .select("id")
+        .maybeSingle();
+
+      if (updateError || !updatedInvoice) continue;
+
+      // financial_entries idempotente por invoice_id (mesmo guard do webhook)
+      const { data: existingFe } = await supabase
+        .from("financial_entries")
+        .select("id")
+        .eq("invoice_id", invoice.id)
+        .eq("type", "receita")
+        .limit(1);
+
+      if (!existingFe?.length) {
+        const { error: feError } = await supabase.from("financial_entries").insert({
+          client_id: invoice.client_id,
+          invoice_id: invoice.id,
+          type: "receita",
+          amount: paidAmount,
+          description: `Pagamento confirmado via Asaas - Fatura #${invoice.invoice_number}`,
+          date: paidDate,
+          category: "pagamento_automatico",
+        });
+        if (feError) console.error(`[POLL-SERVICES] Erro financial_entry ${invoice.id}:`, feError);
+      }
+
+      await notifyAdmins(
+        supabase,
+        "Pagamento Confirmado",
+        `Fatura #${invoice.invoice_number} paga via Asaas (R$ ${paidAmount})`,
+        "success",
+        "invoice",
+        invoice.id
+      );
+
+      updated++;
+      console.log(`[POLL-SERVICES] Fatura #${invoice.invoice_number} PAGA via Asaas`);
+    } catch (e) {
+      console.error(`[POLL-SERVICES] Erro pagamento Asaas ${invoice.id}:`, e);
+    }
+  }
+
+  // ponytail: sem auto-emissão de NFS-e nem e-mail ao cliente aqui (o webhook faz).
+  // Este é o fallback de baixa; se webhooks caírem cronicamente, portar esses passos.
+  console.log(`[POLL-SERVICES] Pagamentos Asaas: ${processed} verificados, ${updated} confirmados`);
   return { processed, updated };
 }
 
@@ -618,22 +756,24 @@ Deno.serve(async (req) => {
       // Default to all services
     }
 
-    const services = body.services || ["boleto", "asaas_nfse", "boleto_payments"];
+    const services = body.services || ["boleto", "asaas_nfse", "boleto_payments", "asaas_payments"];
     const specificInvoiceId = body.invoice_id;
     console.log(`[POLL-SERVICES] Iniciando polling: ${services.join(", ")}${specificInvoiceId ? ` (invoice: ${specificInvoiceId})` : ""}`);
 
     const results: Record<string, { processed: number; updated: number }> = {};
 
     // Run all services in parallel
-    const [boletoResult, asaasResult, paymentResult] = await Promise.all([
+    const [boletoResult, asaasResult, paymentResult, asaasPaymentResult] = await Promise.all([
       services.includes("boleto") ? pollBoletos(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
       services.includes("asaas_nfse") ? pollAsaasNfse(supabase) : Promise.resolve({ processed: 0, updated: 0 }),
       services.includes("boleto_payments") ? pollBoletoPayments(supabase, specificInvoiceId) : Promise.resolve({ processed: 0, updated: 0 }),
+      services.includes("asaas_payments") ? pollAsaasPayments(supabase, specificInvoiceId) : Promise.resolve({ processed: 0, updated: 0 }),
     ]);
 
     results.boleto = boletoResult;
     results.asaas_nfse = asaasResult;
     results.boleto_payments = paymentResult;
+    results.asaas_payments = asaasPaymentResult;
 
     const totalProcessed = Object.values(results).reduce((a, b) => a + b.processed, 0);
     const totalUpdated = Object.values(results).reduce((a, b) => a + b.updated, 0);

@@ -13,6 +13,33 @@ interface NfseNotificationRequest {
   channels: ("email" | "whatsapp")[];
 }
 
+// Resolve caminho armazenado (nfse-files/... ou nfse/...) para o bucket nfse-files.
+// Mesma lógica de resend-payment-notification para manter uma única fonte de verdade.
+function resolveStoragePathBackend(storedPath: string): { bucket: string; path: string } | null {
+  if (!storedPath) return null;
+  if (storedPath.startsWith("http://") || storedPath.startsWith("https://")) return null;
+  if (storedPath.startsWith("nfse-files/")) {
+    return { bucket: "nfse-files", path: storedPath.replace("nfse-files/", "") };
+  }
+  if (storedPath.startsWith("nfse/")) {
+    return { bucket: "nfse-files", path: storedPath };
+  }
+  return { bucket: "nfse-files", path: storedPath };
+}
+
+// deno-lint-ignore no-explicit-any
+async function resolveToSignedUrl(supabase: any, storedPath: string, expiresIn: number): Promise<string> {
+  if (!storedPath) return "";
+  const resolved = resolveStoragePathBackend(storedPath);
+  if (!resolved) return storedPath; // Já é uma URL externa
+  const { data, error } = await supabase.storage.from(resolved.bucket).createSignedUrl(resolved.path, expiresIn);
+  if (error || !data?.signedUrl) {
+    console.error(`[send-nfse-notification] Erro ao gerar signed URL para ${storedPath}:`, error);
+    return "";
+  }
+  return data.signedUrl;
+}
+
 async function readInvokeError(err: unknown): Promise<string> {
   const fallback = err instanceof Error ? err.message : "Erro desconhecido";
   const anyErr = err as { context?: Response };
@@ -118,34 +145,15 @@ Deno.serve(async (req) => {
     // Generate signed URLs (7 days)
     const SIGNED_URL_EXPIRY = 604800;
 
-    let pdfSignedUrl = nfse.pdf_url;
-    if (nfse.pdf_url.startsWith("nfse-files/")) {
-      const path = nfse.pdf_url.replace("nfse-files/", "");
-      const { data: signedData, error: signError } = await supabase.storage
-        .from("nfse-files")
-        .createSignedUrl(path, SIGNED_URL_EXPIRY);
-      if (signError) {
-        console.error("[send-nfse-notification] Error creating PDF signed URL:", signError);
-        return new Response(
-          JSON.stringify({ error: "Erro ao gerar link do PDF" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      pdfSignedUrl = signedData.signedUrl;
+    const pdfSignedUrl = await resolveToSignedUrl(supabase, nfse.pdf_url, SIGNED_URL_EXPIRY);
+    if (!pdfSignedUrl) {
+      return new Response(
+        JSON.stringify({ error: "Erro ao gerar link do PDF" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    let xmlSignedUrl = "";
-    if (nfse.xml_url) {
-      if (nfse.xml_url.startsWith("nfse-files/")) {
-        const xmlPath = nfse.xml_url.replace("nfse-files/", "");
-        const { data: xmlSigned } = await supabase.storage
-          .from("nfse-files")
-          .createSignedUrl(xmlPath, SIGNED_URL_EXPIRY);
-        xmlSignedUrl = xmlSigned?.signedUrl || "";
-      } else {
-        xmlSignedUrl = nfse.xml_url;
-      }
-    }
+    const xmlSignedUrl = nfse.xml_url ? await resolveToSignedUrl(supabase, nfse.xml_url, SIGNED_URL_EXPIRY) : "";
 
     const clientData = nfse.clients;
     const client = (Array.isArray(clientData) ? clientData[0] : clientData) as { name: string; email: string | null; whatsapp: string | null; financial_email: string | null } | null | undefined;
@@ -175,7 +183,7 @@ Deno.serve(async (req) => {
 
     // Send via Email
     if (channels.includes("email")) {
-      const emailTo = client?.email || client?.financial_email;
+      const emailTo = client?.financial_email || client?.email;
 
       if (!emailTo) {
         results.push({ channel: "email", success: false, error: "Cliente não possui email cadastrado" });
