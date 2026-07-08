@@ -416,8 +416,16 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
           })
           .select("id, invoice_number")
           .single();
-        
-        if (!invoiceError && invoice) {
+
+        if (invoiceError || !invoice) {
+          // Antes o erro era engolido em silêncio (contrato criado, fatura some
+          // sem aviso). Agora avisa; o contrato em si já foi criado com sucesso.
+          toast({
+            title: "Contrato criado, mas a primeira fatura não foi gerada",
+            description: invoiceError?.message || "Gere a fatura manualmente na aba Faturas.",
+            variant: "destructive",
+          });
+        } else {
           if (data.generate_payment) {
             try {
               await supabase.functions.invoke("asaas-nfse", {
