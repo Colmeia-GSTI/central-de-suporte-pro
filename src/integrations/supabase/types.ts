@@ -4697,6 +4697,7 @@ export type Database = {
           pdf_url: string | null
           protocolo: string | null
           provider: string | null
+          reissue_pending: boolean
           serie: string | null
           status: string
           updated_at: string | null
@@ -4752,6 +4753,7 @@ export type Database = {
           pdf_url?: string | null
           protocolo?: string | null
           provider?: string | null
+          reissue_pending?: boolean
           serie?: string | null
           status?: string
           updated_at?: string | null
@@ -4807,6 +4809,7 @@ export type Database = {
           pdf_url?: string | null
           protocolo?: string | null
           provider?: string | null
+          reissue_pending?: boolean
           serie?: string | null
           status?: string
           updated_at?: string | null
@@ -7178,7 +7181,11 @@ export type Database = {
         | "cancelled"
         | "pending"
         | "suspended"
-      email_processing_status: "pendente" | "enviado" | "erro"
+      email_processing_status:
+        | "pendente"
+        | "enviado"
+        | "erro"
+        | "aguardando_nfse"
       event_type:
         | "visit"
         | "meeting"
@@ -7376,7 +7383,12 @@ export const Constants = {
         "pending",
         "suspended",
       ],
-      email_processing_status: ["pendente", "enviado", "erro"],
+      email_processing_status: [
+        "pendente",
+        "enviado",
+        "erro",
+        "aguardando_nfse",
+      ],
       event_type: [
         "visit",
         "meeting",
