@@ -1,5 +1,22 @@
 # Changelog
 
+## [Não publicado] - Faturamento: e-mail consolidado, ajuste de valor/desconto e reflexo na NFS-e
+
+### Adicionado
+- **E-mail consolidado boleto + NFS-e.** Quando a fatura tem NFS-e, o e-mail é retido na geração (`invoices.email_status='aguardando_nfse'`) e sai **um único** e-mail (boleto/PIX + nota) quando a NFS-e autoriza. Fallback em `poll-services`: se a nota falhar ou demorar (>6h), o boleto é liberado via `resend-payment-notification` para a cobrança não travar. Novo helper `buildPaymentSectionHtml` em `_shared/email-helpers.ts` (fonte única do bloco boleto/PIX). Indicador âmbar próprio na UI para o estado retido.
+- **Ajuste de valor / desconto de fatura com auditoria.** `EditInvoiceDialog` ganhou campo **Motivo** (obrigatório) + referência do valor original; a mudança de valor/vencimento é registrada em `audit_logs` (`invoice_value_adjusted`, old→new + motivo). O dialog bloqueia vencimento no passado quando há boleto (o Asaas recusa).
+- **Reflexo do novo valor na NFS-e (cancelar + reemitir).** Nova action `cancel_and_reissue_nfse` (+ `reissue_nfse` e helper `doReissue`) em `asaas-nfse`: cancela a nota autorizada e reemite com o novo valor, clonando os campos fiscais e ligando `nfse_history.nfse_substituta_id`. Trata cancelamento síncrono (reemite já) e **assíncrono** (via webhook `INVOICE_CANCELED` + flag `nfse_history.reissue_pending`). "Janela de cancelamento" = autoridade do Asaas/prefeitura (`CANCELLATION_DENIED` → nota mantida). UI: checkbox opcional no `EditInvoiceDialog`.
+- **NFS-e autorizada dispara e-mail automaticamente** (webhook e `poll-services`), com marca/logo (`wrapInEmailLayout`) — antes só era manual.
+
+### Corrigido
+- **9 NFS-e de jun/jul que falhavam** ("non-2xx" genérico): causa raiz = clientes sem endereço/CEP (`CLIENT_INCOMPLETE_DATA`). 7 cadastros completados (dados da Receita) e notas re-emitidas.
+- `webhook-asaas-nfse`: no cancelamento assíncrono confirmado, agora promove `nfse_cancellation_log` REQUESTED→CANCELLED (antes ficava preso em REQUESTED).
+
+### Banco
+- `nfse_history.reissue_pending` (boolean, default false); `email_processing_status += 'aguardando_nfse'`; backfill de endereço/CEP de 7 clientes.
+
+---
+
 ## [Não publicado] - Limpeza: Hermes Bot setup e usuários E2E
 
 ### Removido

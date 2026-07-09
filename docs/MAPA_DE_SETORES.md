@@ -78,6 +78,10 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 | Data | Objeto | Alteração | Setor |
 |---|---|---|---|
 | 2026-06-29 | `change_user_role()` | Guarda contra remover o último admin (evita lockout) | 1 - Auth |
+| 2026-07-08 | `clients` (7 registros) | Backfill de `address`/`zip_code` (dados da Receita) — CVR, RUARO, CALHERRÃO matriz+filial, BLEND, FSB, JG DISTRIBUIDORA; corrige falha `CLIENT_INCOMPLETE_DATA` na emissão de NFS-e | Faturamento/NFS-e |
+| 2026-07-08 | enum `email_processing_status` | `+ 'aguardando_nfse'` (estado do e-mail retido para envio consolidado boleto+nota) | Faturamento |
+| 2026-07-09 | `nfse_history.reissue_pending` | Nova coluna `boolean NOT NULL DEFAULT false` (gatilho da reemissão assíncrona de NFS-e por ajuste de valor) | Faturamento/NFS-e |
+| 2026-07-09 | `invoices` #663 (TOPOMEN) | Correção de valor `1500 → 750` (contrato revertido) + `nfse_status = NULL` (contrato sem NFS-e); auditado em `audit_logs` (`invoice_value_adjusted`) | Faturamento |
 
 ### Snapshot de crons ativos (pg_cron) — fonte da verdade é o banco (modelo MCP)
 > Verificado em 2026-06-29 via `SELECT * FROM cron.job`. Reproduzível via Lovable MCP se necessário.
