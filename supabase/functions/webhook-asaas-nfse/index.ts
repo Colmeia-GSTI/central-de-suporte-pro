@@ -243,7 +243,7 @@ async function processInvoiceWebhook(
 
   const { data: nfseRecord, error: findError } = await supabase
     .from("nfse_history")
-    .select("id, status, valor_servico, client_id, invoice_id, numero_nfse")
+    .select("id, status, valor_servico, client_id, invoice_id, numero_nfse, reissue_pending")
     .eq("asaas_invoice_id", invoice.id)
     .maybeSingle();
 
@@ -362,6 +362,13 @@ async function processInvoiceWebhook(
       "nfse",
       nfseRecord.id
     );
+
+    // Fecha o log de cancelamento assíncrono (REQUESTED -> CANCELLED): o webhook é a
+    // confirmação da prefeitura (antes ficava preso em REQUESTED).
+    await supabase.from("nfse_cancellation_log")
+      .update({ status: "CANCELLED" })
+      .eq("nfse_history_id", nfseRecord.id)
+      .eq("status", "REQUESTED");
   }
 
   const { error: updateError } = await supabase
@@ -429,6 +436,32 @@ async function processInvoiceWebhook(
       } else {
         console.log(`[WEBHOOK-ASAAS] invoices.nfse_status sincronizado para fatura ${nfseRecord.invoice_id}`);
       }
+    }
+  }
+
+  // Reemissão automática (ajuste de valor da nota): se o cancelamento veio de um pedido
+  // de reemissão (reissue_pending), emitir a nova nota com o valor ATUAL da fatura.
+  // Roda DEPOIS do sync acima (que zera invoices.nfse_status) para o emit definir o
+  // estado final. reissue_pending é limpo ANTES de invocar, evitando reemissão dupla em
+  // re-entregas do webhook.
+  if (invoiceStatus === "CANCELED" && nfseRecord.reissue_pending && nfseRecord.invoice_id) {
+    await supabase.from("nfse_history").update({ reissue_pending: false }).eq("id", nfseRecord.id);
+    try {
+      const { data: invForReissue } = await supabase
+        .from("invoices").select("amount").eq("id", nfseRecord.invoice_id).maybeSingle();
+      if (invForReissue) {
+        await supabase.functions.invoke("asaas-nfse", {
+          body: { action: "reissue_nfse", old_nfse_history_id: nfseRecord.id, value: invForReissue.amount },
+        });
+        await logNfseEvent(supabase, nfseRecord.id, "reissue", "info",
+          "Reemissão automática disparada após confirmação do cancelamento", correlationId,
+          { value: invForReissue.amount });
+      }
+    } catch (reissueErr) {
+      console.error("[WEBHOOK-ASAAS] Erro na reemissão automática:", reissueErr);
+      await logNfseEvent(supabase, nfseRecord.id, "reissue", "error",
+        "Falha na reemissão automática após cancelamento", correlationId,
+        { error: reissueErr instanceof Error ? reissueErr.message : String(reissueErr) });
     }
   }
 }

@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import { getErrorMessage } from "@/lib/utils";
+import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
 
 interface EditInvoiceInput {
   id: string;
@@ -42,15 +45,36 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
   const queryClient = useQueryClient();
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState(0);
+  const [motivo, setMotivo] = useState("");
+  const [reissueNfse, setReissueNfse] = useState(false);
 
   useEffect(() => {
     if (invoice) {
       setDueDate(invoice.due_date?.slice(0, 10) || "");
       setAmount(invoice.amount || 0);
+      setMotivo("");
+      setReissueNfse(false);
     }
   }, [invoice]);
 
   const hasBoleto = !!invoice?.asaas_payment_id;
+
+  // Nota fiscal autorizada vinculada (para oferecer o reflexo do novo valor na NFS-e).
+  const { data: authorizedNote } = useQuery({
+    queryKey: ["edit-invoice-nfse", invoice?.id],
+    enabled: open && !!invoice?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("nfse_history")
+        .select("id, numero_nfse")
+        .eq("invoice_id", invoice!.id)
+        .eq("status", "autorizada")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -60,6 +84,13 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
 
       const unchanged = dueDate === invoice.due_date?.slice(0, 10) && amount === invoice.amount;
       if (unchanged) return { regenerated: false };
+
+      if (motivo.trim().length < 10) {
+        throw new Error("Informe o motivo do ajuste (mínimo 10 caracteres)");
+      }
+
+      const oldDue = invoice.due_date?.slice(0, 10) || null;
+      const oldAmount = invoice.amount;
 
       // 1. Atualiza a fatura (RLS restringe a admin/financeiro no servidor)
       const { error: updErr } = await supabase
@@ -79,7 +110,11 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
             action: "regenerate_payment",
             invoice_id: invoice.id,
             billing_type: "BOLETO",
-            reason: "Edição de vencimento/valor da fatura",
+            reason: motivo.trim(),
+            old_amount: oldAmount,
+            new_amount: amount,
+            old_due_date: oldDue,
+            new_due_date: dueDate,
           },
         });
         if (regErr) throw regErr;
@@ -93,15 +128,36 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
         if (createData?.success === false) throw new Error(createData.error || "Falha ao gerar o novo boleto no Asaas");
         regenerated = true;
       }
-      return { regenerated };
+
+      // 3. Reflexo na NFS-e (opcional): se marcado, houver nota autorizada e o valor
+      //    mudou, cancela a nota atual e reemite com o novo valor (janela = Asaas/prefeitura).
+      let nfseResult: "reissued" | "pending" | "denied" | null = null;
+      if (reissueNfse && authorizedNote && amount !== invoice.amount) {
+        const { data: crData, error: crErr } = await supabase.functions.invoke("asaas-nfse", {
+          body: {
+            action: "cancel_and_reissue_nfse",
+            invoice_id: invoice.id,
+            justification: "Reemissão por ajuste de valor da fatura: " + motivo.trim(),
+          },
+        });
+        if (crErr) throw crErr;
+        if (crData?.success === false) throw new Error(crData.error || "Falha ao reemitir a NFS-e");
+        nfseResult = crData?.denied ? "denied" : crData?.pending ? "pending" : "reissued";
+      }
+      return { regenerated, nfseResult };
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
+      queryClient.invalidateQueries({ queryKey: ["edit-invoice-nfse"] });
+      const boletoMsg = res?.regenerated ? "Boleto regenerado no Asaas com a nova data/valor." : "";
+      const nfseMsg =
+        res?.nfseResult === "reissued" ? "NFS-e reemitida com o novo valor."
+        : res?.nfseResult === "pending" ? "NFS-e: cancelamento em andamento; a nova nota sai quando a prefeitura confirmar."
+        : res?.nfseResult === "denied" ? "NFS-e mantida: a prefeitura recusou o cancelamento (fora da janela)."
+        : "";
       toast.success("Fatura atualizada", {
-        description: res?.regenerated
-          ? "Boleto regenerado no Asaas com a nova data/valor."
-          : undefined,
+        description: [boletoMsg, nfseMsg].filter(Boolean).join(" ") || undefined,
       });
       onOpenChange(false);
     },
@@ -134,7 +190,44 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
           <div className="grid gap-2">
             <Label htmlFor="edit-invoice-amount">Valor (R$)</Label>
             <CurrencyInput value={amount} onChange={setAmount} />
+            {invoice && amount !== invoice.amount && (
+              <p className="text-xs text-muted-foreground">
+                De {formatCurrencyBRLWithSymbol(invoice.amount)} para {formatCurrencyBRLWithSymbol(amount)}
+                {amount < invoice.amount
+                  ? ` — desconto de ${formatCurrencyBRLWithSymbol(invoice.amount - amount)}`
+                  : ""}
+              </p>
+            )}
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit-invoice-motivo">Motivo do ajuste/desconto</Label>
+            <Textarea
+              id="edit-invoice-motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ex.: desconto comercial acordado; correção de valor do contrato…"
+              rows={2}
+            />
+          </div>
+          {authorizedNote && (
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <Checkbox
+                id="reissue-nfse"
+                checked={reissueNfse}
+                onCheckedChange={(v) => setReissueNfse(v === true)}
+                className="mt-0.5"
+              />
+              <div className="grid gap-1">
+                <Label htmlFor="reissue-nfse" className="cursor-pointer">
+                  Atualizar também a NFS-e (nº {authorizedNote.numero_nfse})
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Cancela a nota atual e reemite com o novo valor. Depende da janela de
+                  cancelamento da prefeitura — se recusada, a nota é mantida.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

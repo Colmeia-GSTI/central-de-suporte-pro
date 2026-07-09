@@ -523,6 +523,73 @@ function buildErrorResponse(
   );
 }
 
+/**
+ * Reemite uma NFS-e cancelada com um NOVO valor, clonando os campos fiscais da
+ * nota antiga (descrição, código de serviço, alíquota, ISS retido) e trocando
+ * apenas o valor — retenções federais escalam proporcionalmente. Liga a nota nova
+ * à antiga via nfse_substituta_id (rastreabilidade da substituição). Usada pela
+ * action cancel_and_reissue_nfse (síncrono) e pelo webhook-asaas-nfse (assíncrono).
+ */
+async function doReissue(
+  supabase: SupabaseClient,
+  oldNoteId: string,
+  newValue: number,
+  correlationId: string,
+): Promise<{ success: boolean; history_id?: string; number?: string; error?: string }> {
+  const { data: old, error: oldErr } = await supabase
+    .from("nfse_history")
+    .select("client_id, invoice_id, contract_id, valor_servico, descricao_servico, codigo_tributacao, aliquota, iss_retido, valor_pis, valor_cofins, valor_csll, valor_irrf, valor_inss, competencia")
+    .eq("id", oldNoteId)
+    .maybeSingle();
+  if (oldErr || !old) return { success: false, error: "Nota original não encontrada para reemissão" };
+
+  const oldValue = Number(old.valor_servico) || 0;
+  const scale = oldValue > 0 ? newValue / oldValue : 1;
+  const scaleRet = (v: unknown) => Math.round(Number(v || 0) * scale * 100) / 100;
+  const pis = scaleRet(old.valor_pis), cofins = scaleRet(old.valor_cofins),
+    csll = scaleRet(old.valor_csll), irrf = scaleRet(old.valor_irrf), inss = scaleRet(old.valor_inss);
+  const valorLiquido = Math.round((newValue - (pis + cofins + csll + irrf + inss)) * 100) / 100;
+
+  // effective_date = max(hoje, 1º dia da competência) — mesmo fix N1 da emissão.
+  const hoje = new Date().toISOString().split("T")[0];
+  const comp = old.competencia ? String(old.competencia).slice(0, 7) : hoje.slice(0, 7);
+  const compDia = comp + "-01";
+  const effectiveDate = compDia < hoje ? hoje : compDia;
+
+  log(correlationId, "info", "Reemitindo NFS-e com novo valor", { oldNoteId, oldValue, newValue });
+
+  const { data: emitRes, error: emitErr } = await supabase.functions.invoke("asaas-nfse", {
+    body: {
+      action: "emit",
+      client_id: old.client_id,
+      invoice_id: old.invoice_id,
+      contract_id: old.contract_id,
+      value: String(newValue),
+      service_description: old.descricao_servico,
+      municipal_service_code: old.codigo_tributacao || undefined,
+      iss_rate: old.aliquota || 0,
+      retain_iss: old.iss_retido || false,
+      competencia: comp,
+      effective_date: effectiveDate,
+      pis_value: pis, cofins_value: cofins, csll_value: csll, irrf_value: irrf, inss_value: inss,
+      valor_liquido: valorLiquido,
+      force_new_emission: true,
+    },
+  });
+
+  if (emitErr || (emitRes && emitRes.success === false)) {
+    return { success: false, error: emitErr?.message || emitRes?.error || "Falha ao reemitir NFS-e" };
+  }
+
+  // Liga a nota nova à cancelada (substituição rastreável).
+  if (emitRes?.history_id) {
+    await supabase.from("nfse_history")
+      .update({ nfse_substituta_id: oldNoteId, updated_at: new Date().toISOString() })
+      .eq("id", emitRes.history_id);
+  }
+  return { success: true, history_id: emitRes?.history_id, number: emitRes?.number };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1794,6 +1861,110 @@ Deno.serve(async (req) => {
         }
       }
 
+      case "reissue_nfse": {
+        // Reemite uma NFS-e (já cancelada) com um novo valor. Chamado pelo webhook
+        // quando o cancelamento assíncrono confirma (INVOICE_CANCELED + reissue_pending).
+        const { old_nfse_history_id, value: reissueValue } = params;
+        if (!old_nfse_history_id || reissueValue == null) {
+          throw new AsaasApiError("old_nfse_history_id e value são obrigatórios", 400, "MISSING_PARAM");
+        }
+        const rr = await doReissue(supabase, old_nfse_history_id, Number(reissueValue), correlationId);
+        if (!rr.success) {
+          throw new AsaasApiError(rr.error || "Falha ao reemitir NFS-e", 502, "REISSUE_FAILED");
+        }
+        return new Response(
+          JSON.stringify({ success: true, history_id: rr.history_id, number: rr.number, correlation_id: correlationId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "cancel_and_reissue_nfse": {
+        // Ajuste de valor da NOTA: cancela a NFS-e autorizada da fatura e reemite com o
+        // valor ATUAL da fatura. Janela = prefeitura via Asaas (CANCELLATION_DENIED =>
+        // fora da janela, nota mantida). Cancelamento síncrono => reemite já; assíncrono
+        // => marca reissue_pending e o webhook-asaas-nfse reemite ao confirmar.
+        const { invoice_id: crInvId, justification: crJust } = params;
+        if (!crInvId) throw new AsaasApiError("invoice_id é obrigatório", 400, "MISSING_PARAM");
+        const crTrim = String(crJust || "").trim();
+        if (crTrim.length < 15 || crTrim.length > 500) {
+          throw new AsaasApiError("Justificativa deve ter entre 15 e 500 caracteres", 400, "INVALID_JUSTIFICATION");
+        }
+
+        const { data: crInv } = await supabase
+          .from("invoices").select("id, amount").eq("id", crInvId).maybeSingle();
+        if (!crInv) throw new AsaasApiError("Fatura não encontrada", 404, "INVOICE_NOT_FOUND");
+
+        const { data: crNote } = await supabase
+          .from("nfse_history")
+          .select("id, asaas_invoice_id")
+          .eq("invoice_id", crInvId).eq("status", "autorizada")
+          .order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (!crNote || !crNote.asaas_invoice_id) {
+          throw new AsaasApiError("Fatura não possui NFS-e autorizada para reemitir", 400, "NO_AUTHORIZED_NFSE");
+        }
+
+        // Auditoria: registra a solicitação ANTES da chamada (espelha a action cancel)
+        const { data: crLog } = await supabase.from("nfse_cancellation_log").insert({
+          user_id: null, nfse_history_id: crNote.id, invoice_id: crInvId,
+          asaas_invoice_id: crNote.asaas_invoice_id, justification: crTrim,
+          status: "REQUESTED", request_id: correlationId,
+        }).select("id").maybeSingle();
+
+        // Cancela no Asaas (mesma rota da action cancel)
+        let crStatus: string;
+        try {
+          const cr = await asaasRequest(settings, `/invoices/${crNote.asaas_invoice_id}/cancel`, "POST", undefined, correlationId);
+          crStatus = String(cr?.status ?? "").toUpperCase();
+        } catch (delErr) {
+          if (delErr instanceof AsaasApiError && delErr.status === 404) crStatus = "CANCELED";
+          else {
+            if (crLog?.id) await supabase.from("nfse_cancellation_log").update({ status: "FAILED", error_payload: { message: delErr instanceof Error ? delErr.message : String(delErr) } }).eq("id", crLog.id);
+            throw delErr;
+          }
+        }
+
+        // Fora da janela (prefeitura recusou) — mantém a nota
+        if (crStatus.includes("DENIED")) {
+          if (crLog?.id) await supabase.from("nfse_cancellation_log").update({ status: "FAILED", error_payload: { asaas_status: crStatus, motivo: "CANCELLATION_DENIED" } }).eq("id", crLog.id);
+          return new Response(
+            JSON.stringify({ success: true, denied: true, message: "Cancelamento recusado pela prefeitura (fora da janela). Nota mantida.", correlation_id: correlationId }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const crSync = crStatus === "" || crStatus === "CANCELED" || crStatus === "CANCELLED";
+
+        await supabase.from("nfse_history").update({
+          status: crSync ? "cancelada" : "processando",
+          motivo_cancelamento: crTrim,
+          data_cancelamento: crSync ? new Date().toISOString() : null,
+          reissue_pending: !crSync, // webhook reemite ao confirmar o cancelamento
+          updated_at: new Date().toISOString(),
+        }).eq("id", crNote.id);
+        if (crSync && crLog?.id) {
+          await supabase.from("nfse_cancellation_log").update({ status: "CANCELLED" }).eq("id", crLog.id);
+        }
+        await logNfseEvent(supabase, crNote.id, "cancelled", "info",
+          `Cancelamento p/ reemissão (${crSync ? "síncrono" : "assíncrono"}). ${crTrim.slice(0, 100)}`,
+          correlationId, { asaas_invoice_id: crNote.asaas_invoice_id, asaas_status: crStatus });
+
+        if (crSync) {
+          const r = await doReissue(supabase, crNote.id, Number(crInv.amount), correlationId);
+          if (!r.success) {
+            throw new AsaasApiError(`Nota cancelada, mas falha ao reemitir: ${r.error}`, 502, "REISSUE_FAILED");
+          }
+          return new Response(
+            JSON.stringify({ success: true, reissued: true, history_id: r.history_id, number: r.number, correlation_id: correlationId }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, pending: true, message: "Cancelamento em andamento; a nova nota será emitida quando a prefeitura confirmar.", correlation_id: correlationId }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "link_external": {
         // Link an externally emitted NFS-e to a local record with audit trail
         const { nfse_history_id, numero_nfse, data_autorizacao, codigo_verificacao, justificativa, rps_numero } = params;
@@ -2656,7 +2827,11 @@ Deno.serve(async (req) => {
         // remove o PDF do Storage e chama o create_payment internamente.
         // Usado quando o CNPJ/dados cadastrais mudaram e o boleto antigo
         // permanece com dados desatualizados (PDF é congelado pelo Asaas).
-        const { invoice_id: regInvId, billing_type: regBT, reason: regReason } = params;
+        const {
+          invoice_id: regInvId, billing_type: regBT, reason: regReason,
+          old_amount: regOldAmount, new_amount: regNewAmount,
+          old_due_date: regOldDue, new_due_date: regNewDue,
+        } = params;
         if (!regInvId) {
           throw new AsaasApiError("invoice_id é obrigatório", 400, "MISSING_PARAM");
         }
@@ -2716,16 +2891,23 @@ Deno.serve(async (req) => {
         await supabase.from("invoice_documents")
           .delete().eq("invoice_id", regInvId).eq("document_type", "boleto_pdf");
 
-        // 4. Audit
+        // 4. Audit — inclui a mudança de valor/vencimento quando informada (ajuste/desconto),
+        //    para o desconto ficar rastreável por fatura (old_data -> new_data).
+        const valorMudou = regOldAmount != null && regNewAmount != null && Number(regOldAmount) !== Number(regNewAmount);
         await supabase.from("audit_logs").insert({
-          action: "boleto_regenerated",
+          action: valorMudou ? "invoice_value_adjusted" : "boleto_regenerated",
           table_name: "invoices",
           record_id: regInvId,
+          old_data: (regOldAmount != null || regOldDue)
+            ? { amount: regOldAmount ?? null, due_date: regOldDue ?? null }
+            : null,
           new_data: {
             reason: regReason,
             old_asaas_payment_id: oldPaymentId,
             requested_by: "user",
             correlation_id: correlationId,
+            ...(regNewAmount != null ? { amount: regNewAmount } : {}),
+            ...(regNewDue ? { due_date: regNewDue } : {}),
           },
         });
 
