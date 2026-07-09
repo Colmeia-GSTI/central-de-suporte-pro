@@ -2005,9 +2005,9 @@
     "semantic_hash": "6ae5541942265cc49547463161a4d42f"
   },
   "src/utils/invoiceIndicators.ts": {
-    "mtime": 1783468074.4544833,
-    "ast_hash": "0e93afde6cab0f9813db35015a5db4d1",
-    "semantic_hash": "0e93afde6cab0f9813db35015a5db4d1"
+    "mtime": 1783553999.333951,
+    "ast_hash": "7817667d73fb19d7d07a814b8fc13bc6",
+    "semantic_hash": ""
   },
   "src/vite-env.d.ts": {
     "mtime": 1783468074.4554894,
@@ -2020,9 +2020,9 @@
     "semantic_hash": "3f5722403aa0a5b837dee6eb928cbde2"
   },
   "supabase/functions/_shared/email-helpers.ts": {
-    "mtime": 1783468074.457488,
-    "ast_hash": "383e49d74872e9fba666b9bbc9c8c995",
-    "semantic_hash": "383e49d74872e9fba666b9bbc9c8c995"
+    "mtime": 1783548358.4408092,
+    "ast_hash": "0c4dd83c019fcc5e1dcea4cc29506749",
+    "semantic_hash": ""
   },
   "supabase/functions/_shared/email-templates/email-change.tsx": {
     "mtime": 1783468074.4584894,
@@ -2195,8 +2195,8 @@
     "semantic_hash": "7dc4feb21018b8623b776d935a0e6189"
   },
   "supabase/functions/generate-monthly-invoices/index.ts": {
-    "mtime": 1783533246.0451887,
-    "ast_hash": "baa3745483ce8d01687986d285ef44dd",
+    "mtime": 1783548358.4442532,
+    "ast_hash": "fbd415769c91b63a398072612380d581",
     "semantic_hash": ""
   },
   "supabase/functions/generate-monthly-invoices/logic.ts": {
@@ -2230,8 +2230,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/mcp/index.ts": {
-    "mtime": 1783525594.2140784,
-    "ast_hash": "c12f87d30e1dd15367a5b2526a88a0cc",
+    "mtime": 1783548358.124342,
+    "ast_hash": "eac8512f70aaa1a0a4a5fbb0caefcdb6",
     "semantic_hash": ""
   },
   "supabase/functions/notify-due-invoices/index.ts": {
@@ -2255,8 +2255,8 @@
     "semantic_hash": "a7ae30b7b34baa2ff912ee54bd8cd205"
   },
   "supabase/functions/poll-services/index.ts": {
-    "mtime": 1783533269.621351,
-    "ast_hash": "200a665de477d5a20eef2c78c34feb37",
+    "mtime": 1783548358.4464042,
+    "ast_hash": "1187b8e85eb469a46f5d894df74bffa1",
     "semantic_hash": ""
   },
   "supabase/functions/renegotiate-invoice/index.ts": {
@@ -2305,8 +2305,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/send-nfse-notification/index.ts": {
-    "mtime": 1783533390.2266831,
-    "ast_hash": "85bf9ab53dc640c62350079276a61924",
+    "mtime": 1783548358.4518223,
+    "ast_hash": "0b4473c2d2e6eba5fb2a3bca5c38974b",
     "semantic_hash": ""
   },
   "supabase/functions/send-push-notification/index.ts": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": "4582b23c2b38fc30d03d9b94d71cfb8c"
   },
   "supabase/functions/webhook-asaas-nfse/index.ts": {
-    "mtime": 1783533247.8427243,
-    "ast_hash": "1f2302d51b3a135b9bd5a69efefe292a",
+    "mtime": 1783540781.8735967,
+    "ast_hash": "b67beaaa1154a72623f11ec46a6f130c",
     "semantic_hash": ""
   },
   "supabase/functions/webhook-banco-inter/index.ts": {
@@ -3802,6 +3802,11 @@
   ".playwright-mcp/page-2026-07-08T18-43-55-643Z.yml": {
     "mtime": 1783536235.6473918,
     "ast_hash": "0cd2aece77d45728e8af87f43103c975",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_shared/email-helpers_test.ts": {
+    "mtime": 1783548358.4420247,
+    "ast_hash": "a359d99558eee46068e67b1b3f849f0e",
     "semantic_hash": ""
   }
 }

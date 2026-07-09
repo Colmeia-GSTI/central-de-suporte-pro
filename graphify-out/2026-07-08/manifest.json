@@ -565,8 +565,8 @@
     "semantic_hash": "60f46befd70c146daac725aa37083d0d"
   },
   "src/components/contracts/ContractForm.tsx": {
-    "mtime": 1783532584.9603603,
-    "ast_hash": "6d7e92b2ae19c73e17abf7167f4b2d69",
+    "mtime": 1783536313.2241359,
+    "ast_hash": "7ad4988faca5f87e322bfb6be241c3f0",
     "semantic_hash": ""
   },
   "src/components/contracts/ContractHistorySheet.tsx": {
@@ -2020,9 +2020,9 @@
     "semantic_hash": "3f5722403aa0a5b837dee6eb928cbde2"
   },
   "supabase/functions/_shared/email-helpers.ts": {
-    "mtime": 1783468074.457488,
-    "ast_hash": "383e49d74872e9fba666b9bbc9c8c995",
-    "semantic_hash": "383e49d74872e9fba666b9bbc9c8c995"
+    "mtime": 1783547779.2936032,
+    "ast_hash": "0c4dd83c019fcc5e1dcea4cc29506749",
+    "semantic_hash": ""
   },
   "supabase/functions/_shared/email-templates/email-change.tsx": {
     "mtime": 1783468074.4584894,
@@ -2195,8 +2195,8 @@
     "semantic_hash": "7dc4feb21018b8623b776d935a0e6189"
   },
   "supabase/functions/generate-monthly-invoices/index.ts": {
-    "mtime": 1783533246.0451887,
-    "ast_hash": "baa3745483ce8d01687986d285ef44dd",
+    "mtime": 1783547878.0704594,
+    "ast_hash": "fbd415769c91b63a398072612380d581",
     "semantic_hash": ""
   },
   "supabase/functions/generate-monthly-invoices/logic.ts": {
@@ -2255,8 +2255,8 @@
     "semantic_hash": "a7ae30b7b34baa2ff912ee54bd8cd205"
   },
   "supabase/functions/poll-services/index.ts": {
-    "mtime": 1783533269.621351,
-    "ast_hash": "200a665de477d5a20eef2c78c34feb37",
+    "mtime": 1783548236.295496,
+    "ast_hash": "1187b8e85eb469a46f5d894df74bffa1",
     "semantic_hash": ""
   },
   "supabase/functions/renegotiate-invoice/index.ts": {
@@ -2305,8 +2305,8 @@
     "semantic_hash": ""
   },
   "supabase/functions/send-nfse-notification/index.ts": {
-    "mtime": 1783533390.2266831,
-    "ast_hash": "85bf9ab53dc640c62350079276a61924",
+    "mtime": 1783547982.2320704,
+    "ast_hash": "0b4473c2d2e6eba5fb2a3bca5c38974b",
     "semantic_hash": ""
   },
   "supabase/functions/send-push-notification/index.ts": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": "4582b23c2b38fc30d03d9b94d71cfb8c"
   },
   "supabase/functions/webhook-asaas-nfse/index.ts": {
-    "mtime": 1783533247.8427243,
-    "ast_hash": "1f2302d51b3a135b9bd5a69efefe292a",
+    "mtime": 1783540781.8735967,
+    "ast_hash": "b67beaaa1154a72623f11ec46a6f130c",
     "semantic_hash": ""
   },
   "supabase/functions/webhook-banco-inter/index.ts": {
@@ -3777,6 +3777,36 @@
   "mobile-360-clients.png": {
     "mtime": 1783535369.4175322,
     "ast_hash": "904e77ef7b73338adf25111ffc95a88f",
+    "semantic_hash": ""
+  },
+  ".playwright-mcp/page-2026-07-08T18-40-54-446Z.yml": {
+    "mtime": 1783536054.450617,
+    "ast_hash": "0e47958031ab37ac555a9b034d0dc1b1",
+    "semantic_hash": ""
+  },
+  ".playwright-mcp/page-2026-07-08T18-41-34-932Z.yml": {
+    "mtime": 1783536094.934267,
+    "ast_hash": "04f08a5c40f98ab300e0f3d18025c6d0",
+    "semantic_hash": ""
+  },
+  ".playwright-mcp/page-2026-07-08T18-42-07-305Z.yml": {
+    "mtime": 1783536127.3088212,
+    "ast_hash": "5208fa8c520c0d24b26fb807c42499fe",
+    "semantic_hash": ""
+  },
+  ".playwright-mcp/page-2026-07-08T18-43-31-515Z.yml": {
+    "mtime": 1783536211.5185962,
+    "ast_hash": "64cad6854ad5461510447f101421450f",
+    "semantic_hash": ""
+  },
+  ".playwright-mcp/page-2026-07-08T18-43-55-643Z.yml": {
+    "mtime": 1783536235.6473918,
+    "ast_hash": "0cd2aece77d45728e8af87f43103c975",
+    "semantic_hash": ""
+  },
+  "supabase/functions/_shared/email-helpers_test.ts": {
+    "mtime": 1783548165.843577,
+    "ast_hash": "6379ff5e9f096837afe63f8bc0ad33c5",
     "semantic_hash": ""
   }
 }

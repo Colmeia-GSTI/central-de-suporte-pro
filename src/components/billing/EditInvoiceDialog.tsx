@@ -58,6 +58,7 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
   }, [invoice]);
 
   const hasBoleto = !!invoice?.asaas_payment_id;
+  const today = new Date().toISOString().slice(0, 10);
 
   // Nota fiscal autorizada vinculada (para oferecer o reflexo do novo valor na NFS-e).
   const { data: authorizedNote } = useQuery({
@@ -87,6 +88,10 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
 
       if (motivo.trim().length < 10) {
         throw new Error("Informe o motivo do ajuste (mínimo 10 caracteres)");
+      }
+      // Asaas recusa boleto com vencimento no passado — evita "data inferior a hoje".
+      if (hasBoleto && dueDate < today) {
+        throw new Error("Fatura com boleto no Asaas não pode ter vencimento no passado. Escolha uma data a partir de hoje.");
       }
 
       const oldDue = invoice.due_date?.slice(0, 10) || null;
@@ -184,6 +189,7 @@ export function EditInvoiceDialog({ invoice, open, onOpenChange }: EditInvoiceDi
               id="edit-invoice-due"
               type="date"
               value={dueDate}
+              min={hasBoleto ? today : undefined}
               onChange={(e) => setDueDate(e.target.value)}
             />
           </div>
