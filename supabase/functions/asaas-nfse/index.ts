@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { NFSE_BLOCKING_STATUSES, shouldBlockNewEmission } from "./logic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -725,11 +726,67 @@ Deno.serve(async (req) => {
 
         log(correlationId, "info", "Iniciando emissão de NFS-e", { client_id, value, contract_id });
 
+        const force_new_emission = params.force_new_emission === true;
+
+        // ============ IDEMPOTÊNCIA POR FATURA ============
+        // Todos os fluxos automáticos (geração de fatura, webhook de pagamento,
+        // batch, UI) chamam emit sem nfse_history_id. Se a fatura já tem nota
+        // viva, devolve a existente em vez de emitir de novo (bug das notas
+        // duplicadas de mai-jul/2026). Bypasses: nfse_history_id (reemissão/
+        // retry E0014) e force_new_emission (substituição pós-cancelamento).
+        const findActiveNote = async () => {
+          const { data } = await supabase
+            .from("nfse_history")
+            .select("id, status, numero_nfse, asaas_invoice_id")
+            .eq("invoice_id", invoice_id)
+            .eq("is_active", true)
+            .in("status", [...NFSE_BLOCKING_STATUSES])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          return data;
+        };
+        const alreadyExistsResponse = async (note: {
+          id: string; status: string; numero_nfse: string | null; asaas_invoice_id: string | null;
+        }) => {
+          // Converge a flag: quem re-perguntar (webhook de pagamento) já encontra true.
+          await supabase
+            .from("invoices")
+            .update({ auto_nfse_emitted: true, updated_at: new Date().toISOString() })
+            .eq("id", invoice_id);
+          log(correlationId, "info", "Emissão bloqueada: fatura já possui NFS-e ativa", {
+            invoice_id, existing_history_id: note.id, existing_status: note.status,
+          });
+          await logNfseEvent(supabase, note.id, "duplicate_blocked", "info",
+            `Nova emissão bloqueada — fatura já possui NFS-e ${note.status}`,
+            correlationId, { invoice_id });
+          return new Response(
+            JSON.stringify({
+              success: true,
+              already_exists: true,
+              already_authorized: note.status === "autorizada",
+              status: note.status,
+              number: note.numero_nfse,
+              invoice_id: note.asaas_invoice_id,
+              history_id: note.id,
+              correlation_id: correlationId,
+              message: `Fatura já possui NFS-e ${note.status}`,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        };
+        if (invoice_id && !nfse_history_id && !force_new_emission) {
+          const existingNote = await findActiveNote();
+          if (existingNote &&
+              shouldBlockNewEmission({ invoice_id, nfse_history_id, force_new_emission }, existingNote.status)) {
+            return await alreadyExistsResponse(existingNote);
+          }
+        }
+
         // ============ PRE-EMISSION VALIDATION FOR RE-EMISSION ============
         // If nfse_history_id provided, check if it already has an asaas_invoice_id
         // This prevents E0014 (DPS duplicada) errors when re-emitting
         // Skip this check if force_new_emission is set (used after retry_failed)
-        const force_new_emission = params.force_new_emission === true;
         if (nfse_history_id && !force_new_emission) {
           const { data: existing, error: existingError } = await supabase
             .from("nfse_history")
@@ -1042,6 +1099,12 @@ Deno.serve(async (req) => {
             .single();
 
           if (historyError) {
+            // Corrida entre emissores (cron × webhook): o índice único
+            // uq_nfse_history_active_per_invoice barrou — devolve a nota vencedora.
+            if (historyError.code === "23505" && invoice_id) {
+              const winner = await findActiveNote();
+              if (winner) return await alreadyExistsResponse(winner);
+            }
             log(correlationId, "error", "Erro ao criar registro de histórico", { error: historyError.message });
             throw new AsaasApiError("Erro ao registrar NFS-e no histórico", 500, "HISTORY_CREATE_FAILED");
           }
@@ -1187,6 +1250,9 @@ Deno.serve(async (req) => {
           const invoiceUpdate: Record<string, unknown> = {
             nfse_status: nfseStatus,
             nfse_error_msg: null,
+            // Fonte única da flag: emissão tratada para esta fatura (marcações
+            // dos callers são redundantes/idempotentes).
+            auto_nfse_emitted: true,
             updated_at: new Date().toISOString(),
           };
           if (nfseStatus === "gerada") {
@@ -1467,6 +1533,9 @@ Deno.serve(async (req) => {
           const invoiceUpdate: Record<string, unknown> = {
             nfse_status: nfseStatus,
             nfse_error_msg: null,
+            // Fonte única da flag: emissão tratada para esta fatura (marcações
+            // dos callers são redundantes/idempotentes).
+            auto_nfse_emitted: true,
             updated_at: new Date().toISOString(),
           };
           if (nfseStatus === "gerada") {
