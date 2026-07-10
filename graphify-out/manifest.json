@@ -3240,8 +3240,8 @@
     "semantic_hash": "e4e0445cfbd8a3b9ffcdc3d72878f302"
   },
   "CHANGELOG.md": {
-    "mtime": 1783618826.9597635,
-    "ast_hash": "218f1b58759769334d50a999ce7e333a",
+    "mtime": 1783720067.5012808,
+    "ast_hash": "3e349a4514d026a8a9cc994e747fa4ff",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -3290,8 +3290,8 @@
     "semantic_hash": "ca2b661f2073e130897333fcee0e070c"
   },
   "docs/MAPA_DE_SETORES.md": {
-    "mtime": 1783618860.2373466,
-    "ast_hash": "c14ff96bdebd9325bff13db53ad40dc2",
+    "mtime": 1783720063.9820669,
+    "ast_hash": "9c2fec9e36dd180450d4ebba377513cd",
     "semantic_hash": ""
   },
   "index.html": {
@@ -3817,6 +3817,11 @@
   "supabase/functions/asaas-nfse/logic_test.ts": {
     "mtime": 1783718547.5366454,
     "ast_hash": "5555ce014fe1fbccee964d8da27f7409",
+    "semantic_hash": ""
+  },
+  "supabase/migrations/20260710210000_uq_nfse_history_active_per_invoice.sql": {
+    "mtime": 1783719493.5930462,
+    "ast_hash": "21871ecabf3840790cd7ea2650e39d30",
     "semantic_hash": ""
   }
 }
