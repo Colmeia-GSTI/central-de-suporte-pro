@@ -1,16 +1,16 @@
 # Graph Report - central-de-suporte-pro  (2026-07-10)
 
 ## Corpus Check
-- 668 files · ~458,709 words
+- 669 files · ~459,543 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3340 nodes · 10073 edges · 259 communities (193 shown, 66 thin omitted)
+- 3349 nodes · 10089 edges · 251 communities (184 shown, 67 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 110 edges (avg confidence: 0.79)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e0218b8c`
+- Built from commit: `cfbae316`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -122,9 +122,7 @@
 - [[_COMMUNITY_Diálogo Reset de Senha & Usuários|Diálogo Reset de Senha & Usuários]]
 - [[_COMMUNITY_useInvoices hook|useInvoices hook]]
 - [[_COMMUNITY_Diálogo de Reajuste de Contrato|Diálogo de Reajuste de Contrato]]
-- [[_COMMUNITY_ContractFormData|ContractFormData]]
 - [[_COMMUNITY_Feature Flags (useFeatureFlag)|Feature Flags (useFeatureFlag)]]
-- [[_COMMUNITY_Utilitários de Storage|Utilitários de Storage]]
 - [[_COMMUNITY_useSavedViews.ts|useSavedViews.ts]]
 - [[_COMMUNITY_Edge Processar Invoices|Edge: Processar Invoices]]
 - [[_COMMUNITY_useUnifiedNetworkDevices.ts|useUnifiedNetworkDevices.ts]]
@@ -133,10 +131,8 @@
 - [[_COMMUNITY_Doc InfraBuildPWATestes|Doc: Infra/Build/PWA/Testes]]
 - [[_COMMUNITY_logic.ts|logic.ts]]
 - [[_COMMUNITY_DocTableLicenses|DocTableLicenses]]
-- [[_COMMUNITY_Não publicado - Faturamento e-mail consolidado, ajuste de valordesconto e reflexo na NFS-e|[Não publicado] - Faturamento: e-mail consolidado, ajuste de valor/desconto e reflexo na NFS-e]]
 - [[_COMMUNITY_Não publicado anterior - Correção emissão Asaas (caso Calherão)|[Não publicado anterior] - Correção emissão Asaas (caso Calherão)]]
 - [[_COMMUNITY_Aba de Convites Pendentes|Aba de Convites Pendentes]]
-- [[_COMMUNITY_OAuthConsent.tsx|OAuthConsent.tsx]]
 - [[_COMMUNITY_Edge Criptografia de Senha|Edge: Criptografia de Senha]]
 - [[_COMMUNITY_Edge Sync CheckMK|Edge: Sync CheckMK]]
 - [[_COMMUNITY_Edge WhatsApp (Evolution)|Edge: WhatsApp (Evolution)]]
@@ -149,9 +145,6 @@
 - [[_COMMUNITY_Edge Séries BCB (índices)|Edge: Séries BCB (índices)]]
 - [[_COMMUNITY_Edge Esqueci a Senha|Edge: Esqueci a Senha]]
 - [[_COMMUNITY_Doc Contratos & Reajustes|Doc: Contratos & Reajustes]]
-- [[_COMMUNITY_PendingInvitesTab.tsx|PendingInvitesTab.tsx]]
-- [[_COMMUNITY_TicketMobileCard.tsx|TicketMobileCard.tsx]]
-- [[_COMMUNITY_Setup.tsx|Setup.tsx]]
 - [[_COMMUNITY_deno.json|deno.json]]
 - [[_COMMUNITY_Edge Bootstrap Admin|Edge: Bootstrap Admin]]
 - [[_COMMUNITY_Edge Ticket (PauseProfile)|Edge: Ticket (Pause/Profile)]]
@@ -166,7 +159,6 @@
 - [[_COMMUNITY_Doc Feature Flags (FNV-1a)|Doc: Feature Flags (FNV-1a)]]
 - [[_COMMUNITY_Assets de Marca (og-imagePWAlogo)|Assets de Marca (og-image/PWA/logo)]]
 - [[_COMMUNITY_Exportação de Relatório Fiscal|Exportação de Relatório Fiscal]]
-- [[_COMMUNITY_MarkdownPreviewRenderer.tsx|MarkdownPreviewRenderer.tsx]]
 - [[_COMMUNITY_Edge Reajuste|Edge: Reajuste]]
 - [[_COMMUNITY_Edge Invoice|Edge: Invoice]]
 - [[_COMMUNITY_Edge Senha Temporária|Edge: Senha Temporária]]
@@ -275,6 +267,8 @@
 10. `CardHeader` - 88 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `RenegotiateInvoiceDialog()` --indirect_call--> `err()`  [INFERRED]
+  src/components/billing/RenegotiateInvoiceDialog.tsx → supabase/functions/sync-doc-devices/index.ts
 - `SecondCopyDialog()` --indirect_call--> `err()`  [INFERRED]
   src/components/billing/SecondCopyDialog.tsx → supabase/functions/sync-doc-devices/index.ts
 - `MergeClientsDialog()` --indirect_call--> `err()`  [INFERRED]
@@ -283,29 +277,27 @@
   supabase/functions/sync-doc-devices/index.ts → src/components/clients/documentation/DocPdfExport.tsx
 - `upsertUnifiVpns()` --indirect_call--> `v()`  [INFERRED]
   supabase/functions/sync-doc-devices/index.ts → src/components/clients/documentation/DocPdfExport.tsx
-- `PendingInvitesTab()` --indirect_call--> `err()`  [INFERRED]
-  src/components/settings/PendingInvitesTab.tsx → supabase/functions/sync-doc-devices/index.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (259 total, 66 thin omitted)
+## Communities (251 total, 67 thin omitted)
 
 ### Community 0 - "Diálogos de Pagamento & Contas Bancárias"
-Cohesion: 0.09
-Nodes (51): Mode, ResetPasswordDialogProps, BankAccount, BankAccountFormDialogProps, CancelNfseDialogProps, EditInvoiceDialogProps, EditInvoiceInput, AsaasSettings (+43 more)
+Cohesion: 0.06
+Nodes (64): PermissionGate, PermissionGateAll, PermissionGateAny, BankAccount, BankAccountFormDialogProps, CancelNfseDialogProps, EditInvoiceDialogProps, EditInvoiceInput (+56 more)
 
 ### Community 1 - "Error Boundaries & Forms de Config"
-Cohesion: 0.15
-Nodes (16): PushPermissionBlockedCardProps, AsaasSettings, defaultSettings, TestResult, AssetSelectionDialogProps, assetTypeIcons, assetTypeLabels, TicketFormData (+8 more)
+Cohesion: 0.24
+Nodes (10): DuplicateGroup, FIELD_LABELS, MergeClientsDialogProps, PushPermissionBlockedCardProps, Alert, AlertDescription, AlertTitle, alertVariants (+2 more)
 
 ### Community 2 - "Abas de Faturamento & Códigos Fiscais"
-Cohesion: 0.07
-Nodes (35): BillingInvoicesTab(), BillingInvoicesTabProps, NfseByInvoice, CancelInvoiceAlertDialog(), CancelNfseDialog(), getDateRangeForPreset(), PaymentMethodFilter, PERIOD_OPTIONS (+27 more)
+Cohesion: 0.06
+Nodes (39): BillingInvoicesTabProps, NfseByInvoice, CancelNfseDialog(), getDateRangeForPreset(), PaymentMethodFilter, PERIOD_OPTIONS, PeriodPreset, useInvoiceFilters() (+31 more)
 
 ### Community 3 - "Formulário de Contratos"
-Cohesion: 0.10
-Nodes (36): InvoiceFormData, InvoiceFormProps, invoiceSchema, EventFormData, EventFormProps, eventSchema, ClientFormData, clientSchema (+28 more)
+Cohesion: 0.11
+Nodes (22): InvoiceForm(), InvoiceFormData, InvoiceFormProps, invoiceSchema, EventFormData, EventFormProps, eventSchema, ClientFormData (+14 more)
 
 ### Community 4 - "Dependências npm (vendor)"
 Cohesion: 0.04
@@ -316,124 +308,128 @@ Cohesion: 0.06
 Nodes (35): makeClient(), makeContract(), makeInvoice(), makeUser(), ProviderProps, renderWithProviders(), baseInvoice, configureInvoicesResponse() (+27 more)
 
 ### Community 6 - "Documentação Técnica do Cliente"
-Cohesion: 0.14
-Nodes (34): Client, ClientDocumentation(), ClientDocumentationProps, renderSectionContent(), sections, v(), DocSectionInfrastructure(), FirewallTab() (+26 more)
+Cohesion: 0.10
+Nodes (43): Client, ClientDocumentationProps, sections, v(), DocSectionInfrastructure(), FirewallTab(), PoliciesTab(), VlansTab() (+35 more)
 
 ### Community 7 - "Formulários (Invoice/Event/Asset)"
-Cohesion: 0.08
-Nodes (33): NfseEditFormProps, NfseTributacaoSection(), NfseTributacaoSectionProps, TributacaoData, Client, DocSectionClientInfo(), formatCnpj(), Props (+25 more)
+Cohesion: 0.10
+Nodes (20): Client, DocSectionClientInfo(), formatCnpj(), Props, AD_OPTIONS, EMPTY, FILE_SERVER_OPTIONS, InfraData (+12 more)
 
 ### Community 8 - "Formulário de Ticket do Cliente"
-Cohesion: 0.10
+Cohesion: 0.09
 Nodes (31): CategoryOption, ClientTicketForm(), emptyDevice, FormValues, Props, schema, ContactBlock(), ContactBlockValue (+23 more)
 
 ### Community 9 - "Tabelas de Documentação (Domínios/Provedores)"
-Cohesion: 0.08
-Nodes (36): Service, Props, TYPE_LABEL, ClientPortalFinancialTab(), ClientPortalFinancialTabProps, statusConfig, statusLabels, alertLevelColors (+28 more)
+Cohesion: 0.10
+Nodes (41): BankAccountFormDialog(), statusConfig, BankAccount, Service, NfseServiceCode, FiscalReportExport(), FiscalReportExportProps, Props (+33 more)
 
 ### Community 10 - "Sidebar & Navegação"
-Cohesion: 0.07
-Nodes (36): adminMenuItems, AppSidebar(), clientMenuItems, financialMenuItems, mainMenuItems, MenuItemType, operationsMenuItems, pathToModule (+28 more)
+Cohesion: 0.06
+Nodes (39): AppLayoutProps, Theme, adminMenuItems, clientMenuItems, financialMenuItems, mainMenuItems, MenuItemType, operationsMenuItems (+31 more)
 
 ### Community 11 - "Widgets Financeiros (Aging/Índices)"
-Cohesion: 0.05
-Nodes (61): BillingServicesTab(), InvoiceForm(), EventDetailsSheet(), EventDetailsSheetProps, eventTypeColors, eventTypeLabels, EventWithClient, EventForm() (+53 more)
+Cohesion: 0.09
+Nodes (25): ClientTechniciansListProps, TechnicianAssignment, TechnicianMiniRankingProps, ChannelFormData, defaultLocalPrefs, NotificationPreferences, NotificationSettingsProps, PushPermissionBlockedCard() (+17 more)
 
 ### Community 12 - "Aba NFS-e & Status Asaas"
-Cohesion: 0.16
-Nodes (15): BillingNfseTab(), statusBadge(), ASAAS_STATUS_LABELS, ASAAS_STATUS_PROGRESS, asaasStatusLabel(), formatCompetenciaLabel(), formatDateTime(), formatElapsedTime() (+7 more)
+Cohesion: 0.05
+Nodes (66): BillingNfseTab(), statusBadge(), NfseArchiveDialog(), NfseCancelDialog(), NfseEditForm(), NfseDetailsSheet(), NfseWithRelations, statusBadgeVariant() (+58 more)
 
 ### Community 13 - "Seções de Documentação (Cliente/Infra)"
-Cohesion: 0.17
-Nodes (12): ERROR_MESSAGES, EventLogItem(), getEventIcon(), getLevelBadge(), NfseEventLog, NfseEventLogsDialog(), NfseEventLogsDialogProps, ArticleTableOfContents() (+4 more)
+Cohesion: 0.40
+Nodes (4): ArticleTableOfContentsProps, TOCItem, ScrollArea, ScrollBar
 
 ### Community 14 - "Inventário & Monitoramento"
-Cohesion: 0.07
-Nodes (34): ContractHistorySheetProps, HistoryEntry, InvoiceEntry, ServiceHistoryEntry, ContractInvoiceActionsMenu(), ContractInvoiceData, blockButtons, headingButtons (+26 more)
+Cohesion: 0.09
+Nodes (29): blockButtons, headingButtons, MarkdownEditor(), MarkdownEditorProps, ToolbarButton, toolbarButtons, SOURCE_COLORS, SOURCE_LABELS (+21 more)
 
 ### Community 15 - "Rotas (AnimatedRoutes/Pages)"
 Cohesion: 0.05
-Nodes (34): AuditLogsPage, BillingPage, CalendarPage, CertificateDashboardPage, ClientDetailPage, ClientPortalPage, ClientsPage, ContractsPage (+26 more)
+Nodes (35): AuditLogsPage, BillingPage, CalendarPage, CertificateDashboardPage, ClientDetailPage, ClientPortalPage, ClientsPage, ContractsPage (+27 more)
 
 ### Community 16 - "Edge: UniFi Sync (cloud/direct)"
 Cohesion: 0.16
 Nodes (35): asNumber(), asRecord(), asString(), cloudGetDevices(), cloudGetHosts(), cloudGetSites(), cloudHeaders(), corsHeaders (+27 more)
 
 ### Community 17 - "PermissionGate & RBAC UI"
-Cohesion: 0.12
-Nodes (18): ProtectedRoute, ProtectedRouteProps, IMPORTANT: never block UI during tab revalidation (preserves in-progress form st, mockUseAuth, PermissionOverride, AuthContextType, PermissionOverride, usePermissionOverrides() (+10 more)
+Cohesion: 0.10
+Nodes (27): PermissionGateAllProps, PermissionGateAnyProps, PermissionGateProps, ProtectedRoute, ProtectedRouteProps, IMPORTANT: never block UI during tab revalidation (preserves in-progress form st, mockUseAuth, ALL_ACTIONS (+19 more)
 
 ### Community 18 - "Dashboards & Gráficos"
 Cohesion: 0.04
 Nodes (54): Adicionado, Adicionado, Adicionado, Adicionado/Corrigido (PR-FIX-2 — Clientes sem cobrança + bug oculto cobrança avulsa — 2026-05-07), Adicionado (Fase 1 — Helpers + Status Badges Unificados — 2026-05-08), Adicionado (Fase 2 — Hooks Centralizados — 2026-05-08), Adicionado (Fase 3.A — Componentes Reusáveis para Tabs de Cobrança — 2026-05-08), Adicionado (Fase 3.B — Migração da tabela desktop do BillingInvoicesTab — 2026-05-08) (+46 more)
 
 ### Community 19 - "Diálogos de Emissão NFS-e"
-Cohesion: 0.08
-Nodes (33): AUDITED_ACTIONS, AUDITED_TABLES, AuditLogFilters(), FiltersState, Props, BankAccountSelectorProps, InvoiceStatusFilterProps, STATUS_OPTIONS (+25 more)
+Cohesion: 0.11
+Nodes (23): InvoiceStatusFilterProps, STATUS_OPTIONS, categories, FormData, formSchema, ServiceCodeFormProps, priorityColors, priorityLabels (+15 more)
 
 ### Community 20 - "Tabelas Doc (CFTV/Credenciais) & Sheets"
-Cohesion: 0.10
-Nodes (21): EmitNfseDialogProps, ContractStatusBadge(), ClientFormProps, ContractEditHeader(), ContractEditHeaderProps, ContractQuickActionsProps, AssetFormProps, ArticleFormProps (+13 more)
+Cohesion: 0.09
+Nodes (30): EditInvoiceDialog(), EmitNfseDialogProps, ContractStatusBadge(), ClientFormProps, ContractAdditionalChargeDialog(), ContractAdjustmentDialog(), ContractEditHeader(), ContractEditHeaderProps (+22 more)
 
 ### Community 21 - "Edge Functions (Batch/Resend)"
-Cohesion: 0.09
-Nodes (23): AnimatedStatCard(), DashboardHeader(), DashboardHeaderProps, Period, periodLabels, containerVariants, itemVariants, priorityColors (+15 more)
+Cohesion: 0.05
+Nodes (36): ActivityFeed(), ActivityFeedProps, iconMap, statusLabels, AnimatedStatCard(), DashboardHeader(), DashboardHeaderProps, Period (+28 more)
 
 ### Community 22 - "Exportação PDF de Documentação"
 Cohesion: 0.09
 Nodes (19): C, CoverPage(), DataTable(), DocPdfData, DocPdfDocument(), Field(), formatDate(), now() (+11 more)
 
 ### Community 23 - "useAuth & Contexto de Autenticação"
-Cohesion: 0.23
-Nodes (18): BodySchema, CreateUserRequest, sanitizeString(), VALID_ROLES, validateRequest(), STAFF_ROLES, InviteSchema, adminClient() (+10 more)
+Cohesion: 0.21
+Nodes (19): BodySchema, CreateUserRequest, sanitizeString(), VALID_ROLES, validateRequest(), STAFF_ROLES, ADMIN_ROLES, InviteSchema (+11 more)
 
 ### Community 24 - "Aba de Invoices & Filtros"
-Cohesion: 0.13
-Nodes (14): canPauseStatuses, canResolveStatuses, statusColors, statusLabels, TicketDetails(), TicketDetailsProps, TicketWithRelations, KANBAN_COLUMNS (+6 more)
+Cohesion: 0.09
+Nodes (29): ClientForm(), formatCNPJ(), ClientUsersList(), DeleteClientButton(), DuplicatesBanner(), extractError(), InviteStaffDialog(), NoContactButton() (+21 more)
 
 ### Community 25 - "Comboboxes (Serviço/Cliente NFS-e)"
 Cohesion: 0.17
-Nodes (11): ClientTechniciansListProps, TechnicianAssignment, TechnicianMiniRankingProps, defaultLocalPrefs, NotificationPreferences, Avatar, AvatarFallback, AvatarImage (+3 more)
+Nodes (14): buildProcessingSteps(), InvoiceProcessingHistory(), InvoiceProcessingHistoryProps, InvoiceWithDetails, mapBoletoStatus(), mapEmailStatus(), mapNfseStatus(), ProcessingStep (+6 more)
 
 ### Community 26 - "Popovers de Ações & Histórico de Invoice"
-Cohesion: 0.23
-Nodes (12): ClientForm(), formatCNPJ(), DuplicateGroup, DuplicatesBanner(), usePermissions(), hasPermission(), formatPhone(), ClientDetailPage() (+4 more)
+Cohesion: 0.22
+Nodes (8): Pendências conhecidas (2026-07-10), R1 — Recorrência gera fatura interna, R2 — Fatura conforme os produtos contratados, R3/R4 — Um boleto por fatura, com as opções do Asaas, R5 — Uma NFS-e por fatura, dos serviços contratados, R6 — Frequências e datas alternadas, Regras de Cobrança Recorrente, Boleto e NFS-e, Verificação (executada em 2026-07-10)
 
 ### Community 27 - "Edge: Criação de Usuário (validação)"
 Cohesion: 0.14
 Nodes (27): BatchRequest, ClientInfo, Invoice, Invoice, RequestBody, ResendRequest, resolveStoragePathBackend(), resolveToSignedUrl() (+19 more)
 
 ### Community 28 - "Forms de Config de Integrações"
-Cohesion: 0.11
-Nodes (29): AsaasConfigForm(), generateWebhookToken(), BancoInterConfigForm(), defaultSettings, InterSettings, ScopeStatus, WebhookStatus, CheckMkConfigForm() (+21 more)
+Cohesion: 0.17
+Nodes (20): ManualPaymentDialog(), RegenerateBoletoDialog(), ClientTechniciansList(), AuditLogsTab(), AsaasConfigForm(), generateWebhookToken(), BancoInterConfigForm(), CheckMkConfigForm() (+12 more)
 
 ### Community 29 - "UI Diversos (Knowledge/Loader/Buttons)"
-Cohesion: 0.17
-Nodes (12): LicenseFieldCombobox(), KnowledgeCategoryGrid(), KnowledgeHero(), KnowledgeHeroProps, MarkdownEditor(), CommandShortcut(), HoneycombLoader(), HoneycombLoaderProps (+4 more)
+Cohesion: 0.29
+Nodes (5): HoneycombLoader(), HoneycombLoaderProps, HoneycombSkeleton(), InlineLoader(), PageLoaderProps
 
 ### Community 30 - "devDependencies (build tooling)"
 Cohesion: 0.08
 Nodes (24): devDependencies, autoprefixer, eslint, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, jsdom (+16 more)
 
 ### Community 31 - "Diálogos NFS-e (Arquivar/Cancelar) & Push"
-Cohesion: 0.19
-Nodes (14): NfseShareMenuProps, getNotificationIcon(), getNotificationRoute(), NotificationDropdown(), DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel (+6 more)
+Cohesion: 0.20
+Nodes (11): getNotificationIcon(), getNotificationRoute(), NotificationDropdown(), DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuRadioItem, DropdownMenuShortcut(), DropdownMenuSubContent (+3 more)
 
 ### Community 32 - "Cards de Reajuste de Contrato"
-Cohesion: 0.12
-Nodes (22): EditInvoiceDialog(), ContractAdditionalChargeDialog(), ContractAdjustmentCard(), ContractAdjustmentCardProps, FREQ_LABEL, humanizeDays(), INDEX_LABEL, ContractAdjustmentConfigSheet() (+14 more)
+Cohesion: 0.14
+Nodes (16): ContractAdjustmentCard(), ContractAdjustmentCardProps, FREQ_LABEL, humanizeDays(), INDEX_LABEL, ContractAdjustmentConfigSheet(), ContractAdjustmentHistoryList(), ContractAdjustmentHistoryListProps (+8 more)
 
 ### Community 33 - "Editor Markdown & Base de Conhecimento"
 Cohesion: 0.07
-Nodes (47): CftvRow, EMPTY, Props, ContactRow, EMPTY, Props, ROLES, ACCESS_TYPES (+39 more)
+Nodes (39): ContactRow, EMPTY, Props, ROLES, ACCESS_TYPES, CredRow, EMPTY, Props (+31 more)
+
+### Community 34 - "Lista de Artigos & Skeletons"
+Cohesion: 0.12
+Nodes (11): ArticleTableOfContents(), ArticleViewer(), ArticleViewerProps, ArticleWithCategory, calculateReadingTime(), formatInline(), MarkdownPreviewRenderer(), MarkdownPreviewRendererProps (+3 more)
 
 ### Community 35 - "Rede do Cliente & Topologia"
-Cohesion: 0.07
-Nodes (36): Asset, AssetFormData, assetSchema, assetTypeLabels, ClientAssetsList(), ClientAssetsListProps, DocDevice, getAssetIcon() (+28 more)
+Cohesion: 0.12
+Nodes (18): Asset, AssetFormData, assetSchema, assetTypeLabels, ClientAssetsList(), ClientAssetsListProps, DocDevice, getAssetIcon() (+10 more)
 
 ### Community 36 - "Doc: Segurança (Firewall/VLAN)"
-Cohesion: 0.07
-Nodes (47): AgingBucket, EconomicIndex, Props, State, ContractForm(), derivedTermType(), ContractQuickActions(), ActivityFeed() (+39 more)
+Cohesion: 0.06
+Nodes (64): AgingBucket, EMPTY, Props, SupportHoursData, Props, State, AnimatedStatCardProps, SLAComplianceChartProps (+56 more)
 
 ### Community 37 - "Forms de Config (Inter/RMM/Duplicatas)"
 Cohesion: 0.04
@@ -444,64 +440,64 @@ Cohesion: 0.09
 Nodes (22): compilerOptions, allowImportingTsExtensions, isolatedModules, jsx, lib, module, moduleDetection, moduleResolution (+14 more)
 
 ### Community 39 - "Alert Dialogs (Cancelar/Deletar Cliente)"
-Cohesion: 0.25
-Nodes (15): RegenerateBoletoDialogProps, BLOCKER_LABELS, DeleteClientButtonProps, PreviewResult, ContractInvoiceActionsMenuProps, AlertDialogAction, AlertDialogCancel, AlertDialogContent (+7 more)
+Cohesion: 0.18
+Nodes (21): CancelInvoiceAlertDialog(), RegenerateBoletoDialogProps, BLOCKER_LABELS, DeleteClientButtonProps, PreviewResult, ContractAdjustmentDialogProps, FREQ_MONTHS, INDEX_OPTIONS (+13 more)
 
 ### Community 40 - "Histórico de Processamento de Invoice"
 Cohesion: 0.20
 Nodes (14): ASAAS_PAID_STATUSES, ASAAS_STATUS_MAP, ASAAS_URLS, AsaasSettings, corsHeaders, createMtlsClient(), downloadAndStoreFile(), InterSettings (+6 more)
 
 ### Community 41 - "Abas Financeiras (Bancos/Portal)"
-Cohesion: 0.24
-Nodes (8): BillingTaxCodesTab(), NfseServiceCode, useBillingCounters(), BILLING_TABS, BillingPage(), TabBadge(), TabBadgeProps, TabId
+Cohesion: 0.22
+Nodes (7): alertLevelColors, alertLevelLabels, AlertWithDevice, GroupBy, GroupedAlerts, GroupedAlertsTable(), GroupedAlertsTableProps
 
 ### Community 42 - "Reconciliação & Utilitários"
-Cohesion: 0.32
-Nodes (6): eventTypeColors, eventTypeLabels, EventWithClient, FullCalendarWrapper(), FullCalendarWrapperProps, useIsMobile()
+Cohesion: 0.23
+Nodes (10): EventDetailsSheet(), EventForm(), eventTypeColors, eventTypeLabels, EventWithClient, FullCalendarWrapper(), FullCalendarWrapperProps, useIsMobile() (+2 more)
 
 ### Community 43 - "Ativos do Cliente (Assets)"
 Cohesion: 0.11
 Nodes (20): CONFIGURED_VIA, DocSectionSecurity(), FirewallRow, FW_EMPTY, POLICY_EMPTY, PolicyRow, Props, PROTOCOLS (+12 more)
 
 ### Community 44 - "Filiais & Formulário de Cliente"
-Cohesion: 0.11
-Nodes (17): AVAILABLE_VARIABLES, ContractNotificationMessageForm(), ContractNotificationMessageFormProps, ArticleWithCategory, highlightText(), KnowledgeArticleList(), KnowledgeArticleListProps, SortOption (+9 more)
+Cohesion: 0.06
+Nodes (34): EconomicIndex, ERROR_MESSAGES, NfseEventLog, NfseEventLogsDialogProps, AVAILABLE_VARIABLES, ContractNotificationMessageFormProps, ArticleWithCategory, highlightText() (+26 more)
 
 ### Community 45 - "Tabelas Doc (Dispositivos/Workstations)"
-Cohesion: 0.18
-Nodes (12): UserActionsMenu(), roleLabels, STATUS_LABEL, UserRow(), ROLE_OPTIONS, UsersList(), deriveStatus(), RawRow (+4 more)
+Cohesion: 0.36
+Nodes (7): Props, ClientTicketsList(), Props, PortalTicket, priorityLabels, statusColors, statusLabels
 
 ### Community 46 - "Aba SLA & use-toast"
-Cohesion: 0.12
-Nodes (19): priorityColors, priorityLabels, SLAFormData, slaSchema, SLATab(), SLAWithRelations, Action, ActionType (+11 more)
+Cohesion: 0.20
+Nodes (13): Action, ActionType, actionTypes, addToRemoveQueue(), dispatch(), genId(), listeners, memoryState (+5 more)
 
 ### Community 47 - "Detalhes de Ticket & Saved Views"
-Cohesion: 0.30
-Nodes (13): corsHeaders, fetchWithTimeout(), mapUnifiDeviceType(), mergeWithProtection(), ok(), PROTECTED_FIELDS, syncTrmm(), syncUnifi() (+5 more)
+Cohesion: 0.33
+Nodes (12): corsHeaders, fetchWithTimeout(), mapUnifiDeviceType(), mergeWithProtection(), PROTECTED_FIELDS, syncTrmm(), syncUnifi(), upsertUnifiDevices() (+4 more)
 
 ### Community 48 - "Tags & Aba de Detalhes de Ticket"
-Cohesion: 0.13
-Nodes (17): TagBadge(), TagBadgeProps, Tag, TagsInput(), TagsInputProps, priorityLabels, RequesterContactType, statusColors (+9 more)
+Cohesion: 0.11
+Nodes (20): formatPhoneForDisplay(), formatPhoneForWhatsApp(), RequesterContactCard(), TagBadge(), TagBadgeProps, Tag, TagsInput(), TagsInputProps (+12 more)
 
 ### Community 49 - "Página de Configurações (Tabs)"
-Cohesion: 0.13
-Nodes (15): PermissionGate, alertLevelColors, alertLevelLabels, InventoryOverview(), MonitoredDevice, MonitoringAlert, SoftwareLicense, EmailTemplateEditor() (+7 more)
+Cohesion: 0.33
+Nodes (5): ClientDocumentation(), renderSectionContent(), ALERT_TYPE_TO_SECTION, DocAlert, useDocAlerts()
 
 ### Community 50 - "Deno Runtime & Imports Externos"
 Cohesion: 0.10
 Nodes (14): Deno, EmailMessage, env, https://deno.land/std@0.168.0/http/server.ts, https://deno.land/std@0.190.0/http/server.ts, https://deno.land/x/denomailer@1.6.0/mod.ts, https://esm.sh/@supabase/supabase-js@2, SMTPClient (+6 more)
 
 ### Community 51 - "Máquina de Estados de Cobrança (billing-fsm)"
-Cohesion: 0.13
-Nodes (20): InvoiceActionsPopover(), InvoiceActionsPopoverProps, InvoiceForActions, NfseInfo, ActionPermission, ALLOWED, canCancelBoleto(), canCancelInvoice() (+12 more)
+Cohesion: 0.12
+Nodes (21): InvoiceActionsPopover(), InvoiceActionsPopoverProps, InvoiceForActions, NfseInfo, DropdownMenuSeparator, ActionPermission, ALLOWED, canCancelBoleto() (+13 more)
 
 ### Community 53 - "App Root & Providers (Realtime)"
-Cohesion: 0.12
-Nodes (13): sonner, queryClient, RealtimeProvider(), AnimatedRoutes(), Toaster(), ToasterProps, Toaster(), AuthProvider() (+5 more)
+Cohesion: 0.13
+Nodes (12): sonner, queryClient, RealtimeProvider(), AnimatedRoutes(), Toaster(), ToasterProps, AuthProvider(), NotificationPayload (+4 more)
 
 ### Community 54 - "Portal do Cliente (Pages/Nav)"
-Cohesion: 0.18
-Nodes (15): ClientPortalPage(), ClientPortalHeader(), Props, ClientPortalNav(), PortalSection, Props, ClientTicketDetailPanel(), Props (+7 more)
+Cohesion: 0.12
+Nodes (12): ClientPortalFinancialTab(), ClientPortalFinancialTabProps, statusConfig, statusLabels, ContractAdjustmentConfigSheetProps, ClientPortalHeader(), Props, ClientPortalNav() (+4 more)
 
 ### Community 55 - "components.json (shadcn)"
 Cohesion: 0.12
@@ -516,12 +512,12 @@ Cohesion: 0.15
 Nodes (9): mockFrom, mockGetSession, mockProfile, mockRefreshSession, mockSession, mockSignInWithPassword, mockSignOut, mockSignUp (+1 more)
 
 ### Community 58 - "Cliente HTTP Asaas & Logs"
-Cohesion: 0.14
-Nodes (13): react, ContractServicesSection(), ClientMappingsTab(), loadCacheFromStorage(), saveCacheToStorage(), LogsViewerTab(), useFormField(), Json (+5 more)
+Cohesion: 0.25
+Nodes (10): CacheData, CacheEntry, Client, ClientMapping, ClientMappingsTab(), ExternalClient, loadCacheFromStorage(), normalizeString() (+2 more)
 
 ### Community 59 - "Calculadora de SLA & Indicador"
-Cohesion: 0.23
-Nodes (10): AuditLogDiff(), formatValue(), Props, deepEqual(), DiffEntry, diffJsonb(), isPlainObject(), JsonbDiff (+2 more)
+Cohesion: 0.33
+Nodes (5): Device, NetworkTopologyMap(), NetworkTopologyMapProps, NodePosition, TopologyLink
 
 ### Community 60 - "Detalhes & Histórico de Ticket"
 Cohesion: 0.31
@@ -533,47 +529,47 @@ Nodes (16): compilerOptions, allowImportingTsExtensions, isolatedModules, lib, m
 
 ### Community 62 - "Logs de Auditoria (UI)"
 Cohesion: 0.10
-Nodes (22): AuditLogDetail(), Props, ACTION_VARIANT, AuditLogRow(), Props, AuditLogsList(), INITIAL, FREQ_MONTHS (+14 more)
+Nodes (25): AuditLogDetail(), Props, AuditLogDiff(), formatValue(), Props, AUDITED_ACTIONS, AUDITED_TABLES, AuditLogFilters() (+17 more)
 
 ### Community 63 - "Tipos Supabase Gerados"
-Cohesion: 0.27
-Nodes (9): BranchFormData, branchSchema, ClientBranchesList(), ClientBranchesListProps, EMPTY_FORM, isUniqueViolation(), toPayload(), CompanyTab() (+1 more)
+Cohesion: 0.22
+Nodes (12): BranchFormData, branchSchema, ClientBranchesList(), ClientBranchesListProps, EMPTY_FORM, isUniqueViolation(), toPayload(), CompanyTab() (+4 more)
 
 ### Community 64 - "Status Badges (Boleto/Contrato/NFS-e)"
-Cohesion: 0.15
-Nodes (13): BOLETO_STATUS_CONFIG, BoletoStatusBadgeProps, CONTRACT_STATUS_CONFIG, ContractStatusBadgeProps, EMAIL_STATUS_CONFIG, EmailStatusBadgeProps, INVOICE_STATUS_CONFIG, InvoiceStatusBadgeProps (+5 more)
+Cohesion: 0.08
+Nodes (25): BOLETO_STATUS_CONFIG, BoletoStatusBadgeProps, CONTRACT_STATUS_CONFIG, ContractStatusBadgeProps, EMAIL_STATUS_CONFIG, EmailStatusBadgeProps, INVOICE_STATUS_CONFIG, InvoiceStatusBadgeProps (+17 more)
 
 ### Community 65 - "AppLayout & Notificações Dropdown"
-Cohesion: 0.28
-Nodes (8): Certificate, CertificateInfo, CertificateManager(), CertificateManagerProps, CertificateStatus, getCertificateStatus(), getDaysRemaining(), statusConfig
+Cohesion: 0.67
+Nodes (3): CertificateManager(), getCertificateStatus(), getDaysRemaining()
 
 ### Community 66 - "Kanban & Card Mobile de Ticket"
-Cohesion: 0.27
-Nodes (9): Toast, ToastAction, ToastActionElement, ToastClose, ToastDescription, ToastProps, ToastTitle, toastVariants (+1 more)
+Cohesion: 0.24
+Nodes (10): Toast, ToastAction, ToastActionElement, ToastClose, ToastDescription, ToastProps, ToastTitle, toastVariants (+2 more)
 
 ### Community 67 - "Cliente API Asaas (edge)"
-Cohesion: 0.10
-Nodes (19): ASAAS_URLS, AsaasApiError, asaasRequest(), AsaasSettings, buildErrorResponse(), ClientData, corsHeaders, doReissue() (+11 more)
+Cohesion: 0.13
+Nodes (16): ASAAS_URLS, AsaasApiError, asaasRequest(), AsaasSettings, buildErrorResponse(), ClientData, corsHeaders, doReissue() (+8 more)
 
 ### Community 68 - "Doc: Faturamento/NFS-e/Certificados"
 Cohesion: 0.11
 Nodes (17): API Security, Backend (Edge Functions), Data Protection, Edge Functions, Error Handling, Frontend, Input Validation & Sanitization, Logging (+9 more)
 
 ### Community 69 - "Doc: Setores da Plataforma MSP"
-Cohesion: 0.21
-Nodes (13): AccordionContent, AccordionItem, AccordionTrigger, ButtonProps, buttonVariants, Pagination(), PaginationContent, PaginationEllipsis() (+5 more)
+Cohesion: 0.50
+Nodes (4): EmailPreview(), EmailPreviewProps, replaceVariables(), SAMPLE_DATA
 
 ### Community 70 - "Indicadores Inline de Invoice"
 Cohesion: 0.22
 Nodes (12): InvoiceInlineActions(), InvoiceInlineActionsProps, BoletoIndicatorInput, EmailIndicatorInput, getBoletoIndicator(), getEmailIndicator(), getNfseIndicator(), getSendBlockedStatus() (+4 more)
 
 ### Community 71 - "Editor de Templates de E-mail"
-Cohesion: 0.22
-Nodes (9): EmailPreview(), EmailPreviewProps, replaceVariables(), SAMPLE_DATA, EmailSettings, EmailTemplate, EmailTemplateEditorProps, FormData (+1 more)
+Cohesion: 0.14
+Nodes (12): EmailSettingsForm(), EmailSettings, EmailTemplate, EmailTemplateEditor(), EmailTemplateEditorProps, FormData, formSchema, TEMPLATE_VARIABLES (+4 more)
 
 ### Community 72 - "Edge: Webhook de Pagamento NFS-e"
-Cohesion: 0.26
-Nodes (12): SupabaseClient, corsHeaders, createNotification(), downloadAndStoreFile(), logNfseEvent(), notifyClientPaymentConfirmed(), parseStatusDescription(), PAYMENT_STATUS_MAP (+4 more)
+Cohesion: 0.22
+Nodes (14): getAsaasConfig(), logNfseEvent(), SupabaseClient, corsHeaders, createNotification(), downloadAndStoreFile(), logNfseEvent(), notifyClientPaymentConfirmed() (+6 more)
 
 ### Community 73 - "manifest.json (MCP server)"
 Cohesion: 0.14
@@ -588,16 +584,16 @@ Cohesion: 0.04
 Nodes (44): 10. SLA de Incidentes Financeiros, 1. Pré-requisitos, 2.1 Banco Inter (Boletos e PIX), 2.2 Asaas (NFS-e), 2.3 SMTP (E-mail), 2.4 Evolution API (WhatsApp), 2.5 Telegram, 2.6 CheckMK (+36 more)
 
 ### Community 76 - "Validação NFS-e"
-Cohesion: 0.40
-Nodes (8): ExportButton(), ExportButtonProps, downloadFile(), exportConfigs, exportToCSV(), exportToExcel(), exportToJSON(), formatters
+Cohesion: 0.21
+Nodes (13): ExportButton(), ExportButtonProps, ClientManagementReport(), ClientManagementReportProps, PRIORITY_COLORS, PRIORITY_LABELS, ReportData, downloadFile() (+5 more)
 
 ### Community 77 - "Mesclagem de Clientes"
-Cohesion: 0.26
-Nodes (11): DuplicateGroupClient, FIELD_LABELS, MergeClientsDialog(), MergeClientsDialogProps, FieldResolution, isEmpty(), MERGEABLE_FIELDS, MergeableClient (+3 more)
+Cohesion: 0.27
+Nodes (9): DuplicateGroupClient, MergeClientsDialog(), FieldResolution, isEmpty(), MERGEABLE_FIELDS, MergeableClient, MergeableField, previewMerge() (+1 more)
 
 ### Community 78 - "Atendimento & Tempo de Ticket"
-Cohesion: 0.15
-Nodes (21): formatDuration(), formatTimerDisplay(), ManualTimeSection(), statusConfig, TicketAttendancePanel(), TicketAttendancePanelProps, TicketStatus, formatDuration() (+13 more)
+Cohesion: 0.21
+Nodes (15): TicketAttendancePanel(), formatDuration(), TicketResolveDialog(), TicketStatus, useTicketAttendance(), UseTicketAttendanceOptions, AttendanceData, AttendancePause (+7 more)
 
 ### Community 79 - "Gestão de Usuários"
 Cohesion: 0.22
@@ -612,28 +608,28 @@ Cohesion: 0.14
 Nodes (13): brandName, brandSubtitle, button, container, content, footer, h1, header (+5 more)
 
 ### Community 82 - "E-mail: Cadastro"
-Cohesion: 0.15
-Nodes (12): brandName, brandSubtitle, button, container, content, footer, h1, header (+4 more)
+Cohesion: 0.14
+Nodes (13): brandName, brandSubtitle, button, container, content, footer, h1, header (+5 more)
 
 ### Community 83 - "Edge: Webhook Banco Inter & Diálogos"
-Cohesion: 0.15
-Nodes (12): RenegotiateInvoiceDialog(), DeleteClientButton(), extractError(), InviteClientDialog(), extractError(), InviteStaffDialog(), err(), corsHeaders (+4 more)
+Cohesion: 0.33
+Nodes (5): corsHeaders, InterWebhookPayload, notifyClientPaymentConfirmed(), processPayload(), IMPORTANT: O Banco Inter envia o payload como ARRAY de objetos, não objeto simpl
 
 ### Community 84 - "Testes useAuth"
 Cohesion: 0.22
 Nodes (9): scripts, build, build:dev, dev, lint, preview, test, test:coverage (+1 more)
 
 ### Community 85 - "Edge: Polling Asaas/Inter"
-Cohesion: 0.15
-Nodes (12): ManualPaymentDialog(), ServiceCodeForm(), AuditLogsTab(), NotificationRulesTab(), MonitoringPage(), AlertPayload, corsHeaders, logMessage() (+4 more)
+Cohesion: 0.12
+Nodes (16): EventLogItem(), getEventIcon(), getLevelBadge(), NoContactCheckConfigForm(), Json, mockFetchOnce(), jsonResponse(), AlertPayload (+8 more)
 
 ### Community 86 - "Edge: Web Push VAPID"
 Cohesion: 0.28
 Nodes (12): base64UrlDecode(), base64UrlEncode(), buildEncryptedBody(), corsHeaders, createVapidJwt(), derToRaw(), encryptPayload(), generateEncryptionKeys() (+4 more)
 
 ### Community 87 - "E-mail: Reautenticação"
-Cohesion: 0.17
-Nodes (11): brandName, brandSubtitle, codeStyle, container, content, footer, h1, header (+3 more)
+Cohesion: 0.15
+Nodes (12): brandName, brandSubtitle, codeStyle, container, content, footer, h1, header (+4 more)
 
 ### Community 88 - "E-mail: Recuperação de Senha"
 Cohesion: 0.15
@@ -644,36 +640,36 @@ Cohesion: 0.22
 Nodes (6): AdditionalCharge, Contract, ContractResult, corsHeaders, ExecutionError, GenerationResponse
 
 ### Community 90 - "Edge: E-mail Magic Link & Preview"
-Cohesion: 0.25
-Nodes (7): RFC-6761, corsHeaders, EMAIL_SUBJECTS, EMAIL_TEMPLATES, SAMPLE_DATA, ReauthenticationEmail(), SignupEmail()
+Cohesion: 0.18
+Nodes (11): RFC-6761, react, ContractServicesSection(), useFormField(), corsHeaders, EMAIL_SUBJECTS, EMAIL_TEMPLATES, handlePreview() (+3 more)
 
 ### Community 91 - "Utilitários de Data"
-Cohesion: 0.19
-Nodes (13): NfseArchiveDialog(), NfseCancelDialog(), NfseEditForm(), NfseDetailsSheet(), NfseWithRelations, statusBadgeVariant(), isE0014Error(), providerLabel() (+5 more)
+Cohesion: 0.16
+Nodes (14): Invoice, InvoiceTableRow(), InvoiceTableRowProps, InvoiceStatusBadge(), ContractService, ContractServicesSectionProps, Service, ServiceHistoryEntry (+6 more)
 
 ### Community 92 - "Toast (UI primitives)"
 Cohesion: 0.08
 Nodes (24): 13.1 Ativos (`assets`), 13.2 Licenças de Software, 13.3 Métricas de Dispositivos, 13. Módulo de Inventário, 16.1 Estrutura, 16. Base de Conhecimento, 17.1 Estrutura, 17. Gamificação (+16 more)
 
 ### Community 93 - "E-mail: Magic Link"
-Cohesion: 0.15
-Nodes (12): brandName, brandSubtitle, button, container, content, footer, h1, header (+4 more)
+Cohesion: 0.17
+Nodes (11): brandName, brandSubtitle, button, container, content, footer, h1, header (+3 more)
 
 ### Community 94 - "Doc: Auth/RBAC/RLS/Banco"
-Cohesion: 0.20
-Nodes (13): TechnicianMiniRanking(), GamificationGuard(), TicketTransferDialog(), evaluateFlag(), FeatureFlag, FLAGS_QUERY_KEY, fnv1a(), useFeatureFlag() (+5 more)
+Cohesion: 0.07
+Nodes (43): ContractForm(), derivedTermType(), LicenseForm(), ArticleFeedback(), ArticleFeedbackProps, ArticleForm(), AppSidebar(), ChangePasswordCard() (+35 more)
 
 ### Community 95 - "useDocDeviceSync.ts"
-Cohesion: 0.27
-Nodes (12): buildNfseValidation(), competenciaSchema, validateAliquota(), validateCnae(), validateCnpj(), validateCodigoTributacao(), validateCompetencia(), validateCpf() (+4 more)
+Cohesion: 0.40
+Nodes (4): DocDevice, MonitoredDevice, NETWORK_DEVICE_TYPES, UnifiedNetworkDevice
 
 ### Community 96 - "RequesterContactCard.tsx"
-Cohesion: 0.38
-Nodes (6): formatPhoneForDisplay(), formatPhoneForWhatsApp(), MonitoredDeviceRef, RequesterContact, RequesterContactCard(), RequesterContactCardProps
+Cohesion: 0.60
+Nodes (3): EmitParams, NFSE_BLOCKING_STATUSES, shouldBlockNewEmission()
 
 ### Community 97 - "Painel de Atendimento de Ticket"
-Cohesion: 0.11
-Nodes (25): AgingReportWidget(), BankAccountFormDialog(), BankAccountSelector(), BankReconciliationTab(), statusConfig, BankAccount, BillingBankAccountsTab(), EconomicIndicesWidget() (+17 more)
+Cohesion: 0.08
+Nodes (31): AgingReportWidget(), BankAccountSelector(), BankAccountSelectorProps, BankReconciliationTab(), BillingBankAccountsTab(), BillingInvoicesTab(), BillingServicesTab(), BillingTaxCodesTab() (+23 more)
 
 ### Community 98 - "tsconfig.json"
 Cohesion: 0.18
@@ -682,10 +678,6 @@ Nodes (10): compilerOptions, allowJs, noImplicitAny, noUnusedLocals, noUnusedPar
 ### Community 100 - "CertificateDashboardPage.tsx"
 Cohesion: 0.38
 Nodes (6): CertificateDashboardPage(), CertificateStatus, CompanyWithCertificate, getCertificateStatus(), getDaysRemaining(), statusConfig
-
-### Community 101 - "Doc: Monitoramento RMM/UniFi/CheckMK"
-Cohesion: 0.18
-Nodes (10): CategoriesTab(), CategoryFormData, CategoryRow, categorySchema, Category, SubcategoriesSection(), SubcategoriesSectionProps, Subcategory (+2 more)
 
 ### Community 102 - "package.json"
 Cohesion: 0.33
@@ -700,8 +692,8 @@ Cohesion: 0.11
 Nodes (18): [2026-05-31] — Refatoração da Edição de Contrato, Adicionado, Adicionado, Adicionado, Banco, Banco / Remediação (via Lovable MCP, 2026-07-10), Changelog, Corrigido (+10 more)
 
 ### Community 106 - "Diálogo Reset de Senha & Usuários"
-Cohesion: 0.22
-Nodes (14): BusinessHours, DEFAULT_BUSINESS_HOURS, SLAIndicator(), BusinessHours, calculateElapsedBusinessMinutes(), calculateRemainingBusinessMinutes(), calculateSLAStatus(), formatMinutesToDisplay() (+6 more)
+Cohesion: 0.20
+Nodes (15): BusinessHours, DEFAULT_BUSINESS_HOURS, SLAIndicator(), SLAIndicatorProps, BusinessHours, calculateElapsedBusinessMinutes(), calculateRemainingBusinessMinutes(), calculateSLAStatus() (+7 more)
 
 ### Community 107 - "useInvoices hook"
 Cohesion: 0.11
@@ -711,29 +703,21 @@ Nodes (19): 3.10 Inventario, 3.11 Base de Conhecimento (Knowledge Base), 3.12 Re
 Cohesion: 0.11
 Nodes (18): 4.1 Padrão Adotado, 4.2 Provedor de Integração, 4.3 Estrutura de Dados, 4.4 Edge Function `asaas-nfse` — Ações, 4.5 Regras de Retorno (PDF + XML), 4.6 Tratamento de Falhas, 4.7 Série e Numeração, 4.8 Tributação (+10 more)
 
-### Community 109 - "ContractFormData"
-Cohesion: 0.24
-Nodes (7): AppLayoutProps, Theme, BackgroundPattern, GlobalProgress, SessionExpiryIndicator(), SidebarProvider, SidebarTrigger
-
 ### Community 110 - "Feature Flags (useFeatureFlag)"
 Cohesion: 0.11
 Nodes (16): AuditLogsTab, CategoriesTab, ClientMappingsTab, CompanyTab, DepartmentsTab, EmailTemplatesTab, IntegrationsTab, MessageLogsTab (+8 more)
 
-### Community 111 - "Utilitários de Storage"
-Cohesion: 0.39
-Nodes (7): PermissionGateAll, PermissionGateAllProps, PermissionGateAny, PermissionGateAnyProps, PermissionGateProps, Module, ModuleAction
-
 ### Community 112 - "useSavedViews.ts"
-Cohesion: 0.13
-Nodes (18): AssetSelectionDialog(), TicketFilters(), TicketFiltersProps, StatCard(), StatCardProps, TicketStatsBar(), TicketStatsBarProps, loadViews() (+10 more)
+Cohesion: 0.09
+Nodes (26): AssetSelectionDialog(), priorityDot, statusColors, statusLabels, TicketMobileCard(), TicketMobileCardProps, TicketWithRelations, TicketPauseDialog() (+18 more)
 
 ### Community 113 - "Edge: Processar Invoices"
 Cohesion: 0.25
 Nodes (7): corsHeaders, ProcessingResult, ProcessInvoiceRequest, processInvoices(), supabase, supabaseServiceKey, supabaseUrl
 
 ### Community 114 - "useUnifiedNetworkDevices.ts"
-Cohesion: 0.08
-Nodes (26): ClientNetworkTab(), ClientNetworkTabProps, getDeviceIcon(), getDeviceTypeLabel(), SiteDeviceGrid(), ClientTechniciansList(), Device, NetworkTopologyMap() (+18 more)
+Cohesion: 0.43
+Nodes (7): ClientNetworkTab(), ClientNetworkTabProps, getDeviceIcon(), getDeviceTypeLabel(), SiteDeviceGrid(), UnifiConfigForm(), useUnifiedNetworkDevices()
 
 ### Community 115 - "Edge: Notificações (Telegram/WhatsApp)"
 Cohesion: 0.13
@@ -744,20 +728,16 @@ Cohesion: 0.25
 Nodes (3): EmailAttachment, EmailRequest, rateLimitMap
 
 ### Community 117 - "Doc: Infra/Build/PWA/Testes"
-Cohesion: 0.22
-Nodes (8): ResetPasswordDialog(), ClientUser, ClientUsersList(), ClientUsersListProps, EditFormData, editSchema, InviteFormData, inviteSchema
+Cohesion: 0.09
+Nodes (27): Mode, ResetPasswordDialog(), ResetPasswordDialogProps, ClientUser, ClientUsersListProps, EditFormData, editSchema, InviteFormData (+19 more)
 
 ### Community 118 - "logic.ts"
-Cohesion: 0.39
-Nodes (4): ADMIN_ROLES, AnomalyReport, detectAnomalies(), totalAnomalies()
+Cohesion: 0.47
+Nodes (3): AnomalyReport, detectAnomalies(), totalAnomalies()
 
 ### Community 119 - "DocTableLicenses"
-Cohesion: 0.13
-Nodes (14): CRED_ACCESS_TYPES, EMPTY, getAntivirusProgress(), getEmails(), INLINE_CRED_EMPTY, InlineCredentialForm(), InlineCredFormState, LICENSE_TYPES (+6 more)
-
-### Community 120 - "[Não publicado] - Faturamento: e-mail consolidado, ajuste de valor/desconto e reflexo na NFS-e"
-Cohesion: 0.28
-Nodes (8): ASAAS_STATUS_LABELS, ESTIMATED_TIMES, formatElapsedTime(), NfseProcessingIndicator(), NfseProcessingIndicatorProps, NfseProcessingStatusCell(), STATUS_PROGRESS, useCheckNfseStatus()
+Cohesion: 0.14
+Nodes (17): CRED_ACCESS_TYPES, DocTableLicenses(), EMPTY, getAntivirusProgress(), getEmails(), getExpiryBadge(), INLINE_CRED_EMPTY, InlineCredentialForm() (+9 more)
 
 ### Community 121 - "[Não publicado anterior] - Correção emissão Asaas (caso Calherão)"
 Cohesion: 0.50
@@ -766,10 +746,6 @@ Nodes (4): Adicionado, Corrigido, [Não publicado anterior] - Correção emissã
 ### Community 122 - "Aba de Convites Pendentes"
 Cohesion: 0.13
 Nodes (15): 2.1 Estrutura de Dados, 2.2 Tipos de Contrato (por Modelo de Suporte), 2.3 Regras de Ativação, Suspensão e Cancelamento, 2.4 Serviços do Contrato (`contract_services`), 2.5 Fluxo de Faturamento Automático, 2.6 Regras de Reajuste Anual, 2.7 Geração de Cobrança Inicial (Bootstrap), 2. Módulo de Contratos (+7 more)
-
-### Community 123 - "OAuthConsent.tsx"
-Cohesion: 0.44
-Nodes (8): NfseShareMenu(), downloadStorageFile(), downloadStorageFileSafe(), extractFilename(), getSignedUrl(), openStorageFile(), openStorageFileSafe(), resolveStoragePath()
 
 ### Community 124 - "Edge: Criptografia de Senha"
 Cohesion: 0.48
@@ -799,10 +775,6 @@ Nodes (12): 1. Backup nativo do Supabase (DEFINITIVO — recomendado), 2. Backup
 Cohesion: 0.40
 Nodes (4): DocAlert, DocAlertsPanel(), formatExpiryDate(), Props
 
-### Community 131 - "PageErrorBoundary"
-Cohesion: 0.15
-Nodes (7): PageErrorBoundary, unwrapEmbed(), AGING_COLORS, ClientRow, DelinquencyReportPageInner(), DelinquentClient, DelinquentInvoice
-
 ### Community 132 - "Edge: Fonte de Expiração"
 Cohesion: 0.33
 Nodes (3): corsHeaders, ExpirySource, SOURCES
@@ -816,20 +788,8 @@ Cohesion: 0.33
 Nodes (3): corsHeaders, ForgotPasswordRequest, rateLimitMap
 
 ### Community 135 - "Doc: Contratos & Reajustes"
-Cohesion: 0.29
-Nodes (6): ContractInvoicesSheet(), ContractInvoicesSheetProps, Invoice, statusConfig, SheetDescription, useInvoices()
-
-### Community 136 - "PendingInvitesTab.tsx"
-Cohesion: 0.38
-Nodes (6): deriveStatus(), extractError(), InviteRow, PendingInvitesTab(), roleColors, roleLabels
-
-### Community 137 - "TicketMobileCard.tsx"
-Cohesion: 0.29
-Nodes (6): priorityDot, statusColors, statusLabels, TicketMobileCard(), TicketMobileCardProps, TicketWithRelations
-
-### Community 138 - "Setup.tsx"
-Cohesion: 0.33
-Nodes (4): ColmeiaLogo(), ColmeiaLogoProps, SetupFormData, setupSchema
+Cohesion: 0.14
+Nodes (12): EventDetailsSheetProps, eventTypeColors, eventTypeLabels, EventWithClient, SheetDescription, CompositeTypes, Constants, Database (+4 more)
 
 ### Community 139 - "deno.json"
 Cohesion: 0.40
@@ -878,10 +838,6 @@ Nodes (3): Colmeia GSTI Social Share Card (og-image), PWA App Icon (Colmeia), Co
 ### Community 153 - "Exportação de Relatório Fiscal"
 Cohesion: 0.15
 Nodes (13): 7.10 Qualidade do pipeline (Infra), 7.11 Duplicacao de superficies e codigo morto, 7.12 Fluxos incompletos por design, 7.1 Agendamento (pg_cron) nao versionado — risco sistemico, 7.2 verify_jwt e webhooks — risco de quebra silenciosa, 7.3 Segredos em texto plano, 7.4 Sistema de SLA inoperante, 7.5 Perda de dados no merge de clientes (+5 more)
-
-### Community 154 - "MarkdownPreviewRenderer.tsx"
-Cohesion: 0.60
-Nodes (4): formatInline(), MarkdownPreviewRenderer(), MarkdownPreviewRendererProps, renderMarkdown()
 
 ### Community 178 - "3. Módulo Financeiro"
 Cohesion: 0.15
@@ -957,7 +913,7 @@ Nodes (6): Can I connect a custom domain to my Lovable project?, How can I deplo
 
 ### Community 198 - "ServiceCodeSelect"
 Cohesion: 0.08
-Nodes (40): EmitNfseDialog(), AsaasSettings, ClientOption, CompanyCfg, createInitialTributacao(), NfseAvulsaDialog(), categoryLabels, NfseServiceCode (+32 more)
+Nodes (42): AsaasSettings, DialogStep, EmitNfseDialog(), initialTributacao, NfseEditFormProps, AsaasSettings, ClientOption, CompanyCfg (+34 more)
 
 ### Community 200 - "21. Fluxos Completos do Sistema"
 Cohesion: 0.29
@@ -1008,28 +964,28 @@ Cohesion: 0.50
 Nodes (4): Corrigido, Mudado (conformidade fiscal), [Não publicado] - NFS-e: arquivamento em vez de exclusão (conformidade fiscal), UI — reorganização do painel da NFS-e (skill UI/UX Pro Max)
 
 ### Community 283 - "ContractForm.tsx"
-Cohesion: 0.15
-Nodes (23): ContractFormData, ContractFormProps, contractSchema, ContractWithClient, ContractAdjustmentSection(), ContractAdjustmentSectionProps, ContractBillingSection(), ContractBillingSectionProps (+15 more)
+Cohesion: 0.13
+Nodes (34): ContractFormData, ContractFormProps, contractSchema, ContractWithClient, ContractNotificationMessageForm(), ContractAdjustmentSection(), ContractAdjustmentSectionProps, ContractBillingSection() (+26 more)
 
 ## Knowledge Gaps
-- **1682 isolated node(s):** `Corrigido`, `Banco / Remediação (via Lovable MCP, 2026-07-10)`, `Adicionado`, `Corrigido`, `Banco` (+1677 more)
+- **1688 isolated node(s):** `version`, `sdk_version`, `path`, `type`, `issuer` (+1683 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **66 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **67 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Json` connect `Cliente HTTP Asaas & Logs` to `Formulário de Contratos`, `Tabelas de Documentação (Domínios/Provedores)`, `Widgets Financeiros (Aging/Índices)`, `Seções de Documentação (Cliente/Infra)`, `Edge: UniFi Sync (cloud/direct)`, `Diálogos de Emissão NFS-e`, `Tabelas Doc (CFTV/Credenciais) & Sheets`, `useAuth & Contexto de Autenticação`, `Forms de Config de Integrações`, `Filiais & Formulário de Cliente`, `Detalhes de Ticket & Saved Views`, `Logger`, `App Root & Providers (Realtime)`, `Relay UniFi (Hermes)`, `Calculadora de SLA & Indicador`, `Validação NFS-e`, `Edge: Webhook Banco Inter & Diálogos`, `Edge: Polling Asaas/Inter`, `Edge: Web Push VAPID`, `useSavedViews.ts`?**
-  _High betweenness centrality (0.071) - this node is a cross-community bridge._
-- **Why does `Button` connect `Diálogos de Pagamento & Contas Bancárias` to `Error Boundaries & Forms de Config`, `Abas de Faturamento & Códigos Fiscais`, `Formulário de Contratos`, `Painel de Alertas de Documentação`, `PageErrorBoundary`, `Documentação Técnica do Cliente`, `Formulários (Invoice/Event/Asset)`, `Formulário de Ticket do Cliente`, `Tabelas de Documentação (Domínios/Provedores)`, `PendingInvitesTab.tsx`, `Widgets Financeiros (Aging/Índices)`, `TicketMobileCard.tsx`, `Seções de Documentação (Cliente/Infra)`, `Inventário & Monitoramento`, `Rotas (AnimatedRoutes/Pages)`, `Sidebar & Navegação`, `Setup.tsx`, `Diálogos de Emissão NFS-e`, `Tabelas Doc (CFTV/Credenciais) & Sheets`, `Edge Functions (Batch/Resend)`, `Aba de Invoices & Filtros`, `Comboboxes (Serviço/Cliente NFS-e)`, `Popovers de Ações & Histórico de Invoice`, `ContractForm.tsx`, `Forms de Config de Integrações`, `Diálogos NFS-e (Arquivar/Cancelar) & Push`, `Cards de Reajuste de Contrato`, `Editor Markdown & Base de Conhecimento`, `Lista de Artigos & Skeletons`, `Rede do Cliente & Topologia`, `Doc: Segurança (Firewall/VLAN)`, `Alert Dialogs (Cancelar/Deletar Cliente)`, `Abas Financeiras (Bancos/Portal)`, `Ativos do Cliente (Assets)`, `Filiais & Formulário de Cliente`, `Aba SLA & use-toast`, `Tags & Aba de Detalhes de Ticket`, `Página de Configurações (Tabs)`, `Máquina de Estados de Cobrança (billing-fsm)`, `Portal do Cliente (Pages/Nav)`, `Logs de Auditoria (UI)`, `Tipos Supabase Gerados`, `AppLayout & Notificações Dropdown`, `Doc: Setores da Plataforma MSP`, `Indicadores Inline de Invoice`, `ServiceCodeSelect`, `Editor de Templates de E-mail`, `Validação NFS-e`, `Mesclagem de Clientes`, `Atendimento & Tempo de Ticket`, `Utilitários de Data`, `Doc: Auth/RBAC/RLS/Banco`, `RequesterContactCard.tsx`, `Painel de Atendimento de Ticket`, `CertificateDashboardPage.tsx`, `Doc: Monitoramento RMM/UniFi/CheckMK`, `ContractFormData`, `Feature Flags (useFeatureFlag)`, `useSavedViews.ts`, `useUnifiedNetworkDevices.ts`, `Doc: Infra/Build/PWA/Testes`, `DocTableLicenses`, `[Não publicado] - Faturamento: e-mail consolidado, ajuste de valor/desconto e reflexo na NFS-e`?**
-  _High betweenness centrality (0.052) - this node is a cross-community bridge._
-- **Why does `react` connect `Cliente HTTP Asaas & Logs` to `Dependências npm (vendor)`, `ServiceCodeSelect`, `Sidebar & Navegação`, `Widgets Financeiros (Aging/Índices)`, `Reconciliação & Utilitários`?**
-  _High betweenness centrality (0.039) - this node is a cross-community bridge._
-- **What connects `Corrigido`, `Banco / Remediação (via Lovable MCP, 2026-07-10)`, `Adicionado` to the rest of the system?**
-  _1687 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `Json` connect `Edge: Polling Asaas/Inter` to `Formulário de Contratos`, `Doc: Contratos & Reajustes`, `Edge: UniFi Sync (cloud/direct)`, `useAuth & Contexto de Autenticação`, `Aba de Invoices & Filtros`, `Doc: Segurança (Firewall/VLAN)`, `Abas Financeiras (Bancos/Portal)`, `Detalhes de Ticket & Saved Views`, `Logger`, `App Root & Providers (Realtime)`, `Relay UniFi (Hermes)`, `Cliente HTTP Asaas & Logs`, `Logs de Auditoria (UI)`, `Cliente API Asaas (edge)`, `Validação NFS-e`, `Edge: Web Push VAPID`, `Edge: E-mail Magic Link & Preview`, `useSavedViews.ts`, `Doc: Infra/Build/PWA/Testes`?**
+  _High betweenness centrality (0.092) - this node is a cross-community bridge._
+- **Why does `Button` connect `Diálogos de Pagamento & Contas Bancárias` to `Error Boundaries & Forms de Config`, `Abas de Faturamento & Códigos Fiscais`, `Formulário de Contratos`, `Painel de Alertas de Documentação`, `Documentação Técnica do Cliente`, `Doc: Contratos & Reajustes`, `Formulário de Ticket do Cliente`, `Tabelas de Documentação (Domínios/Provedores)`, `Formulários (Invoice/Event/Asset)`, `Widgets Financeiros (Aging/Índices)`, `Aba NFS-e & Status Asaas`, `Sidebar & Navegação`, `Inventário & Monitoramento`, `Rotas (AnimatedRoutes/Pages)`, `PermissionGate & RBAC UI`, `Diálogos de Emissão NFS-e`, `Tabelas Doc (CFTV/Credenciais) & Sheets`, `Edge Functions (Batch/Resend)`, `Aba de Invoices & Filtros`, `Comboboxes (Serviço/Cliente NFS-e)`, `ContractForm.tsx`, `Diálogos NFS-e (Arquivar/Cancelar) & Push`, `Cards de Reajuste de Contrato`, `Editor Markdown & Base de Conhecimento`, `Lista de Artigos & Skeletons`, `Rede do Cliente & Topologia`, `Doc: Segurança (Firewall/VLAN)`, `Alert Dialogs (Cancelar/Deletar Cliente)`, `Abas Financeiras (Bancos/Portal)`, `Reconciliação & Utilitários`, `Ativos do Cliente (Assets)`, `Filiais & Formulário de Cliente`, `Tabelas Doc (Dispositivos/Workstations)`, `Tags & Aba de Detalhes de Ticket`, `Máquina de Estados de Cobrança (billing-fsm)`, `Portal do Cliente (Pages/Nav)`, `Cliente HTTP Asaas & Logs`, `Logs de Auditoria (UI)`, `Tipos Supabase Gerados`, `Status Badges (Boleto/Contrato/NFS-e)`, `ServiceCodeSelect`, `Indicadores Inline de Invoice`, `Editor de Templates de E-mail`, `Validação NFS-e`, `Utilitários de Data`, `Doc: Auth/RBAC/RLS/Banco`, `CertificateDashboardPage.tsx`, `Feature Flags (useFeatureFlag)`, `useSavedViews.ts`, `useUnifiedNetworkDevices.ts`, `Doc: Infra/Build/PWA/Testes`, `DocTableLicenses`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `react` connect `Edge: E-mail Magic Link & Preview` to `Dependências npm (vendor)`, `ServiceCodeSelect`, `Sidebar & Navegação`, `Reconciliação & Utilitários`, `Doc: Auth/RBAC/RLS/Banco`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **What connects `version`, `sdk_version`, `path` to the rest of the system?**
+  _1693 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Diálogos de Pagamento & Contas Bancárias` be split into smaller, more focused modules?**
-  _Cohesion score 0.09021451660299735 - nodes in this community are weakly interconnected._
-- **Should `Error Boundaries & Forms de Config` be split into smaller, more focused modules?**
-  _Cohesion score 0.1471861471861472 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06349206349206349 - nodes in this community are weakly interconnected._
 - **Should `Abas de Faturamento & Códigos Fiscais` be split into smaller, more focused modules?**
-  _Cohesion score 0.07195121951219512 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06196078431372549 - nodes in this community are weakly interconnected._
+- **Should `Formulário de Contratos` be split into smaller, more focused modules?**
+  _Cohesion score 0.1103448275862069 - nodes in this community are weakly interconnected._

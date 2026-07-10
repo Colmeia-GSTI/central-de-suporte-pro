@@ -306,14 +306,23 @@ Deno.serve(async (req) => {
       const contractStartTime = Date.now();
 
       try {
-        // Check if invoice already exists for this contract and month
-        const { data: existingInvoice } = await supabase
+        // Check if invoice already exists for this contract and month.
+        // Excluir só 'cancelled': alinhado ao enum invoice_status e ao índice
+        // idx_invoices_contract_month_unique ('voided' não existe no enum e
+        // fazia a query falhar com 22P02; o erro engolido cegava o dedup e o
+        // gate de frequência — trimestrais cobrados todo mês até 2026-07-10).
+        const { data: existingInvoice, error: existingError } = await supabase
           .from("invoices")
           .select("id")
           .eq("contract_id", contract.id)
           .eq("reference_month", referenceMonth)
-          .not("status", "in", '("cancelled","voided")')
+          .neq("status", "cancelled")
           .limit(1);
+
+        // Fail-closed: sem resposta confiável, não arriscar fatura duplicada.
+        if (existingError) {
+          throw new Error(`Dedup check falhou: ${existingError.message}`);
+        }
 
         if (existingInvoice && existingInvoice.length > 0) {
           console.log(`[GEN-INVOICES] Fatura já existe para contrato ${contract.name} (${referenceMonth})`);
@@ -384,13 +393,18 @@ Deno.serve(async (req) => {
 
         if (intervalMonths > 1) {
           // Buscar última invoice deste contrato (qualquer mês)
-          const { data: lastInvoiceRows } = await supabase
+          const { data: lastInvoiceRows, error: lastInvoiceError } = await supabase
             .from("invoices")
             .select("reference_month")
             .eq("contract_id", contract.id)
-            .not("status", "in", '("cancelled","voided")')
+            .neq("status", "cancelled")
             .order("reference_month", { ascending: false })
             .limit(1);
+
+          // Fail-closed: sem resposta confiável, não arriscar cobrança fora do ciclo.
+          if (lastInvoiceError) {
+            throw new Error(`Gate de frequência falhou: ${lastInvoiceError.message}`);
+          }
 
           const lastReference = lastInvoiceRows?.[0]?.reference_month as string | undefined;
 
@@ -455,13 +469,17 @@ Deno.serve(async (req) => {
           );
 
           // Check if invoice already exists for the next month
-          const { data: nextExisting } = await supabase
+          const { data: nextExisting, error: nextExistingError } = await supabase
             .from("invoices")
             .select("id")
             .eq("contract_id", contract.id)
             .eq("reference_month", nextReferenceMonth)
-            .not("status", "in", '("cancelled","voided")')
+            .neq("status", "cancelled")
             .limit(1);
+
+          if (nextExistingError) {
+            throw new Error(`Dedup check (competência avançada) falhou: ${nextExistingError.message}`);
+          }
 
           if (nextExisting && nextExisting.length > 0) {
             console.log(`[GEN-INVOICES] Fatura já existe para ${contract.name} em ${nextReferenceMonth}, pulando`);
