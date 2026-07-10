@@ -82,6 +82,9 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 | 2026-07-08 | enum `email_processing_status` | `+ 'aguardando_nfse'` (estado do e-mail retido para envio consolidado boleto+nota) | Faturamento |
 | 2026-07-09 | `nfse_history.reissue_pending` | Nova coluna `boolean NOT NULL DEFAULT false` (gatilho da reemissão assíncrona de NFS-e por ajuste de valor) | Faturamento/NFS-e |
 | 2026-07-09 | `invoices` #663 (TOPOMEN) | Correção de valor `1500 → 750` (contrato revertido) + `nfse_status = NULL` (contrato sem NFS-e); auditado em `audit_logs` (`invoice_value_adjusted`) | Faturamento |
+| 2026-07-10 | `invoices` (62 registros) | Desarme de duplicação: `auto_nfse_emitted = true` em toda fatura com NFS-e viva e flag falsa (bug 4b4d552: geração emitia sem marcar a flag; webhook re-emitia no pagamento) | Faturamento/NFS-e |
+| 2026-07-10 | `nfse_history` (49 notas) | Cancelamento em lote via action `cancel` do asaas-nfse: 46 duplicatas (mantida a 1ª nota de cada fatura) + 3 de mar/2026 com alíquota 0% (mantida a reemissão correta). Desfecho: 32 canceladas na prefeitura; 17 negadas (E0822 fora do prazo) → soft-archive (`is_active=false` + `archived_reason`) e relatório ao contador. Auditado em `nfse_cancellation_log` | Faturamento/NFS-e |
+| 2026-07-10 | `uq_nfse_history_active_per_invoice` | Índice único parcial em `nfse_history(invoice_id) WHERE is_active AND status IN ('autorizada','processando','pendente')` — garantia dura contra NFS-e duplicada por fatura (espelho em `supabase/migrations/20260710210000_*.sql`) | Faturamento/NFS-e |
 
 ### Snapshot de crons ativos (pg_cron) — fonte da verdade é o banco (modelo MCP)
 > Verificado em 2026-06-29 via `SELECT * FROM cron.job`. Reproduzível via Lovable MCP se necessário.
@@ -366,6 +369,8 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 
 **Fluxo de dados**: UI -> asaas-nfse (emit/...) com service_role -> ensureCustomerSync -> resolve municipalServiceId -> nfse_history ('processando') -> POST /invoices -> espelha invoices.nfse_status. Webhook-asaas-nfse atualiza status, baixa PDF/XML, auto-emite NFS-e em PAYMENT_RECEIVED. Polling: poll-services / check_single_status. Compartilhamento: send-nfse-notification gera signed URLs. Certificados: CertificateManager -> parse-certificate + certificate-vault(encrypt) -> certificates + bucket.
 
+**Contrato de emissão (idempotência por fatura, desde 2026-07-10)**: `emit` com `invoice_id` e SEM `nfse_history_id`/`force_new_emission` é idempotente — se a fatura já tem nota viva (`is_active` e status `autorizada|processando|pendente`, cf. `NFSE_BLOCKING_STATUSES` em `asaas-nfse/logic.ts`), retorna `already_exists:true` com a nota existente em vez de emitir. Bypasses: `nfse_history_id` (reemissão/retry E0014) e `force_new_emission` (substituição pós-cancelamento). `invoices.auto_nfse_emitted` é gravada pelo próprio asaas-nfse no sucesso da emissão (fonte única; marcações nos callers são redundantes). Política: NFS-e emitida na geração da fatura (`generate-monthly-invoices`); o auto-emit do webhook de pagamento é apenas fallback quando nenhuma nota existe. Garantia dura: índice único parcial `uq_nfse_history_active_per_invoice` em `nfse_history(invoice_id)` (colisão 23505 devolve a nota vencedora).
+
 **Dependencias internas**: Faturamento/Billing, Contratos, Clientes, Configuracoes/Integracoes, Notificacoes, Monitoramento/poll-services.
 
 **Observacoes / Riscos**
@@ -378,7 +383,8 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 - Monolito (NFS-e + cobranca no mesmo arquivo).
 - STATUS_MAP divergente (CANCELLATION_DENIED -> 'autorizada' vs 'erro').
 - Hardcodes (URL do projeto, codigo '010701', CPF de teste).
-- Auto-emissao no webhook nao verifica resultado antes de marcar auto_nfse_emitted.
+- ~~Auto-emissao no webhook nao verifica resultado antes de marcar auto_nfse_emitted~~ → mitigado em 2026-07-10: `emit` é idempotente por fatura (ver "Contrato de emissão"); a flag é gravada pelo próprio asaas-nfse.
+- 1 contrato ativo emite NFS-e só no pagamento (`nfse_service_code` sem `nfse_enabled`) — divergência de guardas entre geração e webhook mantida de propósito; unificar exige decisão de negócio.
 - Campos NFS-e Nacional 2026 (danfse_url, chave_acesso etc.) nao populados.
 
 **Checklist de verificacao**

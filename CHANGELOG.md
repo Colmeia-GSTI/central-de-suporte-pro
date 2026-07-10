@@ -1,5 +1,19 @@
 # Changelog
 
+## [Não publicado] - NFS-e: correção da emissão duplicada + idempotência por fatura
+
+### Corrigido
+- **NFS-e emitida em duplicidade (bug crítico, origem no commit `4b4d552` de 2026-05-07).** A emissão na geração da fatura (`generate-monthly-invoices`) nunca marcava `invoices.auto_nfse_emitted`; ao liquidar o boleto, o `webhook-asaas-nfse` re-emitia a nota. Resultado auditado: **49 NFS-e autorizadas em duplicidade (R$ 37.161,58 declarados 2× à prefeitura)** entre mar–jul/2026, mais 18 faturas em aberto que duplicariam ao serem pagas.
+- **Correção (root cause):** a action `emit` do `asaas-nfse` agora é **idempotente por fatura** — com `invoice_id` e sem `nfse_history_id`/`force_new_emission`, se a fatura já tem nota viva (`autorizada|processando|pendente`) retorna `already_exists:true` com a nota existente. A flag `auto_nfse_emitted` passou a ser gravada pelo próprio `asaas-nfse` no sucesso (fonte única). Colisão de corrida (23505 no índice único) devolve a nota vencedora. Predicado puro em `asaas-nfse/logic.ts` (`shouldBlockNewEmission`) com teste da matriz de bypass.
+- **Política consolidada:** NFS-e emitida na **geração da fatura**; o auto-emit do webhook de pagamento vira apenas **fallback** quando nenhuma nota existe (reemissão, retry E0014 e avulsa preservados via bypasses).
+
+### Banco / Remediação (via Lovable MCP, 2026-07-10)
+- Desarme: `auto_nfse_emitted=true` em 62 faturas com nota viva e flag falsa.
+- Cancelamento em lote das 49 notas excedentes via action `cancel` (46 duplicatas: mantida a 1ª nota; 3 de mar/2026: mantida a reemissão com alíquota correta e cancelada a original com 0%). Desfecho: **32 canceladas (R$ 28.247,58)** e **17 negadas pela prefeitura — E0822 fora do prazo (R$ 8.914,00)** → soft-archive + relatório completo entregue ao contador. Auditoria em `nfse_cancellation_log`.
+- Índice único parcial `uq_nfse_history_active_per_invoice` em `nfse_history(invoice_id)` (garantia dura contra nova duplicidade).
+
+---
+
 ## [Não publicado] - Faturamento: e-mail consolidado, ajuste de valor/desconto e reflexo na NFS-e
 
 ### Adicionado
