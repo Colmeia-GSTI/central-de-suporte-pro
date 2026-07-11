@@ -193,6 +193,7 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 ## 8. Documentação de Referência
 
 - [`docs/MAPA_DE_SETORES.md`](docs/MAPA_DE_SETORES.md) — mapa de setores e integrações, com checklists de verificação (comece por aqui)
+- [`docs/REGRAS_DE_COBRANCA.md`](docs/REGRAS_DE_COBRANCA.md) — regras canônicas de cobrança recorrente, boleto e NFS-e (unicidade, preferências, frequências)
 - `SYSTEM_DOCUMENTATION.md` — documentação detalhada do sistema
 - `IMPLEMENTATION_GUIDE.md` — guia de implementação
 - `DEPLOYMENT_PLAYBOOK.md` — deploy, crons e operação

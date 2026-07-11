@@ -1,5 +1,16 @@
 # Changelog
 
+## [Não publicado] - Cobrança: dedup/gate de frequência cegos ('voided') + regras canônicas
+
+### Corrigido
+- **Dedup e gate de frequência cegos em produção (bug crítico).** Os filtros `status not in ("cancelled","voided")` do `generate-monthly-invoices` falhavam com 22P02 (`voided` não existe no enum `invoice_status`) e o erro era **engolido**: o gerador re-tentava o INSERT de toda fatura já emitida (~19/dia, segurados apenas pelo índice único) e o gate de frequência nunca via a última fatura — **contratos trimestrais cobrados todo mês** (faturas #662 Gayger e #785 Juremir de jul/2026 indevidas, com boleto+e-mail+NFS-e). Correção: `.neq("status","cancelled")` (alinha enum + índice) e fail-closed nos 3 pontos (erro de query aborta o contrato em vez de prosseguir às cegas).
+- **Remediação:** #662/#785 canceladas por completo (NFS-e 315/344, boletos no Asaas e faturas), com auditoria; nenhuma havia sido paga. Próximo ciclo correto dos trimestrais: 2026-09.
+
+### Adicionado
+- **`docs/REGRAS_DE_COBRANCA.md`** — regras canônicas do ciclo recorrência → fatura → boleto → NFS-e (unicidade por fatura, preferências de pagamento, nota opcional, frequências e datas), validadas contra produção em 2026-07-10.
+
+---
+
 ## [Não publicado] - NFS-e: correção da emissão duplicada + idempotência por fatura
 
 ### Corrigido

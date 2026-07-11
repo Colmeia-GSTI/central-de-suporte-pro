@@ -83,4 +83,11 @@ Todo contrato **ativo** com `monthly_value > 0` gera **uma fatura interna por ci
 
 ### Pendências conhecidas (2026-07-10)
 - Normalizar `payment_method` (`boleto`/`BOLETO`, `PIX`/`pix_manual`) — cosmético/relatórios.
-- Fatura #663 (Topomen) vencida sem boleto gerado (pós-ajuste de valor) — regenerar cobrança.
+- Fatura #663 (Topomen) vencida sem boleto gerado (pós-ajuste de valor) — decisão do
+  usuário em 2026-07-10: NÃO regenerar (cliente tende a pagar por depósito/baixa manual).
+
+### Remediação de 2026-07-10 (bug do gate de frequência)
+Faturas indevidas #662 (Gayger, R$ 150) e #785 (Juremir, R$ 75) de jul/2026 — trimestre
+já coberto pela fatura de jun — canceladas por completo: NFS-e (315 e 344) canceladas,
+boletos deletados no Asaas (`asaas_payment_cancelled`) e faturas `cancelled`
+(`audit_logs.invoice_cancelled`). Nenhuma havia sido paga. Próximo ciclo correto: 2026-09.

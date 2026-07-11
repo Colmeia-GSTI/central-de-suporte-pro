@@ -5,12 +5,12 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3349 nodes · 10089 edges · 251 communities (184 shown, 67 thin omitted)
+- 3349 nodes · 10083 edges · 249 communities (183 shown, 66 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 110 edges (avg confidence: 0.79)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cfbae316`
+- Built from commit: `e9b52319`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -115,11 +115,9 @@
 - [[_COMMUNITY_Painel de Atendimento de Ticket|Painel de Atendimento de Ticket]]
 - [[_COMMUNITY_tsconfig.json|tsconfig.json]]
 - [[_COMMUNITY_CertificateDashboardPage.tsx|CertificateDashboardPage.tsx]]
-- [[_COMMUNITY_Doc Monitoramento RMMUniFiCheckMK|Doc: Monitoramento RMM/UniFi/CheckMK]]
 - [[_COMMUNITY_package.json|package.json]]
 - [[_COMMUNITY_Lista de Tickets Recentes|Lista de Tickets Recentes]]
 - [[_COMMUNITY_Gerenciador de Certificados|Gerenciador de Certificados]]
-- [[_COMMUNITY_Diálogo Reset de Senha & Usuários|Diálogo Reset de Senha & Usuários]]
 - [[_COMMUNITY_useInvoices hook|useInvoices hook]]
 - [[_COMMUNITY_Diálogo de Reajuste de Contrato|Diálogo de Reajuste de Contrato]]
 - [[_COMMUNITY_Feature Flags (useFeatureFlag)|Feature Flags (useFeatureFlag)]]
@@ -271,17 +269,17 @@
   src/components/billing/RenegotiateInvoiceDialog.tsx → supabase/functions/sync-doc-devices/index.ts
 - `SecondCopyDialog()` --indirect_call--> `err()`  [INFERRED]
   src/components/billing/SecondCopyDialog.tsx → supabase/functions/sync-doc-devices/index.ts
+- `DeleteClientButton()` --indirect_call--> `err()`  [INFERRED]
+  src/components/clients/DeleteClientButton.tsx → supabase/functions/sync-doc-devices/index.ts
 - `MergeClientsDialog()` --indirect_call--> `err()`  [INFERRED]
   src/components/clients/MergeClientsDialog.tsx → supabase/functions/sync-doc-devices/index.ts
 - `upsertUnifiVlans()` --indirect_call--> `v()`  [INFERRED]
-  supabase/functions/sync-doc-devices/index.ts → src/components/clients/documentation/DocPdfExport.tsx
-- `upsertUnifiVpns()` --indirect_call--> `v()`  [INFERRED]
   supabase/functions/sync-doc-devices/index.ts → src/components/clients/documentation/DocPdfExport.tsx
 
 ## Import Cycles
 - None detected.
 
-## Communities (251 total, 67 thin omitted)
+## Communities (249 total, 66 thin omitted)
 
 ### Community 0 - "Diálogos de Pagamento & Contas Bancárias"
 Cohesion: 0.06
@@ -296,8 +294,8 @@ Cohesion: 0.06
 Nodes (39): BillingInvoicesTabProps, NfseByInvoice, CancelNfseDialog(), getDateRangeForPreset(), PaymentMethodFilter, PERIOD_OPTIONS, PeriodPreset, useInvoiceFilters() (+31 more)
 
 ### Community 3 - "Formulário de Contratos"
-Cohesion: 0.11
-Nodes (22): InvoiceForm(), InvoiceFormData, InvoiceFormProps, invoiceSchema, EventFormData, EventFormProps, eventSchema, ClientFormData (+14 more)
+Cohesion: 0.13
+Nodes (19): InvoiceForm(), InvoiceFormData, InvoiceFormProps, invoiceSchema, ClientFormData, clientSchema, AssetForm(), AssetFormData (+11 more)
 
 ### Community 4 - "Dependências npm (vendor)"
 Cohesion: 0.04
@@ -325,7 +323,7 @@ Nodes (41): BankAccountFormDialog(), statusConfig, BankAccount, Service, NfseSer
 
 ### Community 10 - "Sidebar & Navegação"
 Cohesion: 0.06
-Nodes (39): AppLayoutProps, Theme, adminMenuItems, clientMenuItems, financialMenuItems, mainMenuItems, MenuItemType, operationsMenuItems (+31 more)
+Nodes (41): AppLayoutProps, Theme, adminMenuItems, AppSidebar(), clientMenuItems, financialMenuItems, mainMenuItems, MenuItemType (+33 more)
 
 ### Community 11 - "Widgets Financeiros (Aging/Índices)"
 Cohesion: 0.09
@@ -340,8 +338,8 @@ Cohesion: 0.40
 Nodes (4): ArticleTableOfContentsProps, TOCItem, ScrollArea, ScrollBar
 
 ### Community 14 - "Inventário & Monitoramento"
-Cohesion: 0.09
-Nodes (29): blockButtons, headingButtons, MarkdownEditor(), MarkdownEditorProps, ToolbarButton, toolbarButtons, SOURCE_COLORS, SOURCE_LABELS (+21 more)
+Cohesion: 0.08
+Nodes (30): blockButtons, headingButtons, MarkdownEditor(), MarkdownEditorProps, ToolbarButton, toolbarButtons, SOURCE_COLORS, SOURCE_LABELS (+22 more)
 
 ### Community 15 - "Rotas (AnimatedRoutes/Pages)"
 Cohesion: 0.05
@@ -360,8 +358,8 @@ Cohesion: 0.04
 Nodes (54): Adicionado, Adicionado, Adicionado, Adicionado/Corrigido (PR-FIX-2 — Clientes sem cobrança + bug oculto cobrança avulsa — 2026-05-07), Adicionado (Fase 1 — Helpers + Status Badges Unificados — 2026-05-08), Adicionado (Fase 2 — Hooks Centralizados — 2026-05-08), Adicionado (Fase 3.A — Componentes Reusáveis para Tabs de Cobrança — 2026-05-08), Adicionado (Fase 3.B — Migração da tabela desktop do BillingInvoicesTab — 2026-05-08) (+46 more)
 
 ### Community 19 - "Diálogos de Emissão NFS-e"
-Cohesion: 0.11
-Nodes (23): InvoiceStatusFilterProps, STATUS_OPTIONS, categories, FormData, formSchema, ServiceCodeFormProps, priorityColors, priorityLabels (+15 more)
+Cohesion: 0.10
+Nodes (26): InvoiceStatusFilterProps, STATUS_OPTIONS, EventFormData, EventFormProps, eventSchema, categories, FormData, formSchema (+18 more)
 
 ### Community 20 - "Tabelas Doc (CFTV/Credenciais) & Sheets"
 Cohesion: 0.09
@@ -376,12 +374,12 @@ Cohesion: 0.09
 Nodes (19): C, CoverPage(), DataTable(), DocPdfData, DocPdfDocument(), Field(), formatDate(), now() (+11 more)
 
 ### Community 23 - "useAuth & Contexto de Autenticação"
-Cohesion: 0.21
-Nodes (19): BodySchema, CreateUserRequest, sanitizeString(), VALID_ROLES, validateRequest(), STAFF_ROLES, ADMIN_ROLES, InviteSchema (+11 more)
+Cohesion: 0.23
+Nodes (18): BodySchema, CreateUserRequest, sanitizeString(), VALID_ROLES, validateRequest(), STAFF_ROLES, InviteSchema, adminClient() (+10 more)
 
 ### Community 24 - "Aba de Invoices & Filtros"
-Cohesion: 0.09
-Nodes (29): ClientForm(), formatCNPJ(), ClientUsersList(), DeleteClientButton(), DuplicatesBanner(), extractError(), InviteStaffDialog(), NoContactButton() (+21 more)
+Cohesion: 0.12
+Nodes (23): ClientForm(), formatCNPJ(), ClientUsersList(), DeleteClientButton(), DuplicatesBanner(), TicketDetails(), TicketLinksSection(), useDebounce() (+15 more)
 
 ### Community 25 - "Comboboxes (Serviço/Cliente NFS-e)"
 Cohesion: 0.17
@@ -480,8 +478,8 @@ Cohesion: 0.11
 Nodes (20): formatPhoneForDisplay(), formatPhoneForWhatsApp(), RequesterContactCard(), TagBadge(), TagBadgeProps, Tag, TagsInput(), TagsInputProps (+12 more)
 
 ### Community 49 - "Página de Configurações (Tabs)"
-Cohesion: 0.33
-Nodes (5): ClientDocumentation(), renderSectionContent(), ALERT_TYPE_TO_SECTION, DocAlert, useDocAlerts()
+Cohesion: 0.18
+Nodes (12): extractError(), InviteStaffDialog(), NoContactButton(), TicketCommentsTab(), canPauseStatuses, canResolveStatuses, statusColors, statusLabels (+4 more)
 
 ### Community 50 - "Deno Runtime & Imports Externos"
 Cohesion: 0.10
@@ -657,7 +655,7 @@ Nodes (11): brandName, brandSubtitle, button, container, content, footer, h1, he
 
 ### Community 94 - "Doc: Auth/RBAC/RLS/Banco"
 Cohesion: 0.07
-Nodes (43): ContractForm(), derivedTermType(), LicenseForm(), ArticleFeedback(), ArticleFeedbackProps, ArticleForm(), AppSidebar(), ChangePasswordCard() (+35 more)
+Nodes (37): ClientDocumentation(), renderSectionContent(), ContractForm(), derivedTermType(), LicenseForm(), ArticleFeedback(), ArticleFeedbackProps, ArticleForm() (+29 more)
 
 ### Community 95 - "useDocDeviceSync.ts"
 Cohesion: 0.40
@@ -691,10 +689,6 @@ Nodes (18): Auditoria, Auditoria de roles, Catálogo de Ferramentas Administrati
 Cohesion: 0.11
 Nodes (18): [2026-05-31] — Refatoração da Edição de Contrato, Adicionado, Adicionado, Adicionado, Banco, Banco / Remediação (via Lovable MCP, 2026-07-10), Changelog, Corrigido (+10 more)
 
-### Community 106 - "Diálogo Reset de Senha & Usuários"
-Cohesion: 0.20
-Nodes (15): BusinessHours, DEFAULT_BUSINESS_HOURS, SLAIndicator(), SLAIndicatorProps, BusinessHours, calculateElapsedBusinessMinutes(), calculateRemainingBusinessMinutes(), calculateSLAStatus() (+7 more)
-
 ### Community 107 - "useInvoices hook"
 Cohesion: 0.11
 Nodes (19): 3.10 Inventario, 3.11 Base de Conhecimento (Knowledge Base), 3.12 Relatorios, Dashboards e Exportacao, 3.13 Gamificacao, 3.14 Portal do Cliente, 3.15 Configuracoes, Feature Flags e UI de Integracoes, 3.16 Auditoria, Seguranca e Logs, 3.17 Banco de Dados, Migrations e Schema (+11 more)
@@ -704,12 +698,12 @@ Cohesion: 0.11
 Nodes (18): 4.1 Padrão Adotado, 4.2 Provedor de Integração, 4.3 Estrutura de Dados, 4.4 Edge Function `asaas-nfse` — Ações, 4.5 Regras de Retorno (PDF + XML), 4.6 Tratamento de Falhas, 4.7 Série e Numeração, 4.8 Tributação (+10 more)
 
 ### Community 110 - "Feature Flags (useFeatureFlag)"
-Cohesion: 0.11
-Nodes (16): AuditLogsTab, CategoriesTab, ClientMappingsTab, CompanyTab, DepartmentsTab, EmailTemplatesTab, IntegrationsTab, MessageLogsTab (+8 more)
+Cohesion: 0.08
+Nodes (25): TicketTransferDialog(), evaluateFlag(), FeatureFlag, FLAGS_QUERY_KEY, fnv1a(), useFeatureFlag(), useFeatureFlags(), FeatureFlagsPage() (+17 more)
 
 ### Community 112 - "useSavedViews.ts"
-Cohesion: 0.09
-Nodes (26): AssetSelectionDialog(), priorityDot, statusColors, statusLabels, TicketMobileCard(), TicketMobileCardProps, TicketWithRelations, TicketPauseDialog() (+18 more)
+Cohesion: 0.07
+Nodes (36): AssetSelectionDialog(), BusinessHours, DEFAULT_BUSINESS_HOURS, SLAIndicator(), SLAIndicatorProps, priorityDot, statusColors, statusLabels (+28 more)
 
 ### Community 113 - "Edge: Processar Invoices"
 Cohesion: 0.25
@@ -732,8 +726,8 @@ Cohesion: 0.09
 Nodes (27): Mode, ResetPasswordDialog(), ResetPasswordDialogProps, ClientUser, ClientUsersListProps, EditFormData, editSchema, InviteFormData (+19 more)
 
 ### Community 118 - "logic.ts"
-Cohesion: 0.47
-Nodes (3): AnomalyReport, detectAnomalies(), totalAnomalies()
+Cohesion: 0.39
+Nodes (4): ADMIN_ROLES, AnomalyReport, detectAnomalies(), totalAnomalies()
 
 ### Community 119 - "DocTableLicenses"
 Cohesion: 0.14
@@ -968,24 +962,24 @@ Cohesion: 0.13
 Nodes (34): ContractFormData, ContractFormProps, contractSchema, ContractWithClient, ContractNotificationMessageForm(), ContractAdjustmentSection(), ContractAdjustmentSectionProps, ContractBillingSection() (+26 more)
 
 ## Knowledge Gaps
-- **1688 isolated node(s):** `version`, `sdk_version`, `path`, `type`, `issuer` (+1683 more)
+- **1688 isolated node(s):** `R1 — Recorrência gera fatura interna`, `R2 — Fatura conforme os produtos contratados`, `R3/R4 — Um boleto por fatura, com as opções do Asaas`, `R5 — Uma NFS-e por fatura, dos serviços contratados`, `R6 — Frequências e datas alternadas` (+1683 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **67 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **66 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Json` connect `Edge: Polling Asaas/Inter` to `Formulário de Contratos`, `Doc: Contratos & Reajustes`, `Edge: UniFi Sync (cloud/direct)`, `useAuth & Contexto de Autenticação`, `Aba de Invoices & Filtros`, `Doc: Segurança (Firewall/VLAN)`, `Abas Financeiras (Bancos/Portal)`, `Detalhes de Ticket & Saved Views`, `Logger`, `App Root & Providers (Realtime)`, `Relay UniFi (Hermes)`, `Cliente HTTP Asaas & Logs`, `Logs de Auditoria (UI)`, `Cliente API Asaas (edge)`, `Validação NFS-e`, `Edge: Web Push VAPID`, `Edge: E-mail Magic Link & Preview`, `useSavedViews.ts`, `Doc: Infra/Build/PWA/Testes`?**
-  _High betweenness centrality (0.092) - this node is a cross-community bridge._
-- **Why does `Button` connect `Diálogos de Pagamento & Contas Bancárias` to `Error Boundaries & Forms de Config`, `Abas de Faturamento & Códigos Fiscais`, `Formulário de Contratos`, `Painel de Alertas de Documentação`, `Documentação Técnica do Cliente`, `Doc: Contratos & Reajustes`, `Formulário de Ticket do Cliente`, `Tabelas de Documentação (Domínios/Provedores)`, `Formulários (Invoice/Event/Asset)`, `Widgets Financeiros (Aging/Índices)`, `Aba NFS-e & Status Asaas`, `Sidebar & Navegação`, `Inventário & Monitoramento`, `Rotas (AnimatedRoutes/Pages)`, `PermissionGate & RBAC UI`, `Diálogos de Emissão NFS-e`, `Tabelas Doc (CFTV/Credenciais) & Sheets`, `Edge Functions (Batch/Resend)`, `Aba de Invoices & Filtros`, `Comboboxes (Serviço/Cliente NFS-e)`, `ContractForm.tsx`, `Diálogos NFS-e (Arquivar/Cancelar) & Push`, `Cards de Reajuste de Contrato`, `Editor Markdown & Base de Conhecimento`, `Lista de Artigos & Skeletons`, `Rede do Cliente & Topologia`, `Doc: Segurança (Firewall/VLAN)`, `Alert Dialogs (Cancelar/Deletar Cliente)`, `Abas Financeiras (Bancos/Portal)`, `Reconciliação & Utilitários`, `Ativos do Cliente (Assets)`, `Filiais & Formulário de Cliente`, `Tabelas Doc (Dispositivos/Workstations)`, `Tags & Aba de Detalhes de Ticket`, `Máquina de Estados de Cobrança (billing-fsm)`, `Portal do Cliente (Pages/Nav)`, `Cliente HTTP Asaas & Logs`, `Logs de Auditoria (UI)`, `Tipos Supabase Gerados`, `Status Badges (Boleto/Contrato/NFS-e)`, `ServiceCodeSelect`, `Indicadores Inline de Invoice`, `Editor de Templates de E-mail`, `Validação NFS-e`, `Utilitários de Data`, `Doc: Auth/RBAC/RLS/Banco`, `CertificateDashboardPage.tsx`, `Feature Flags (useFeatureFlag)`, `useSavedViews.ts`, `useUnifiedNetworkDevices.ts`, `Doc: Infra/Build/PWA/Testes`, `DocTableLicenses`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `Json` connect `Edge: Polling Asaas/Inter` to `Formulário de Contratos`, `Doc: Contratos & Reajustes`, `Edge: UniFi Sync (cloud/direct)`, `useAuth & Contexto de Autenticação`, `Aba de Invoices & Filtros`, `Doc: Segurança (Firewall/VLAN)`, `Abas Financeiras (Bancos/Portal)`, `Detalhes de Ticket & Saved Views`, `Página de Configurações (Tabs)`, `Logger`, `App Root & Providers (Realtime)`, `Relay UniFi (Hermes)`, `Cliente HTTP Asaas & Logs`, `Logs de Auditoria (UI)`, `Cliente API Asaas (edge)`, `Validação NFS-e`, `Edge: Web Push VAPID`, `Edge: E-mail Magic Link & Preview`, `Doc: Infra/Build/PWA/Testes`?**
+  _High betweenness centrality (0.084) - this node is a cross-community bridge._
 - **Why does `react` connect `Edge: E-mail Magic Link & Preview` to `Dependências npm (vendor)`, `ServiceCodeSelect`, `Sidebar & Navegação`, `Reconciliação & Utilitários`, `Doc: Auth/RBAC/RLS/Banco`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
-- **What connects `version`, `sdk_version`, `path` to the rest of the system?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `dependencies` connect `Dependências npm (vendor)` to `Edge: E-mail Magic Link & Preview`, `App Root & Providers (Realtime)`, `package.json`?**
+  _High betweenness centrality (0.048) - this node is a cross-community bridge._
+- **What connects `R1 — Recorrência gera fatura interna`, `R2 — Fatura conforme os produtos contratados`, `R3/R4 — Um boleto por fatura, com as opções do Asaas` to the rest of the system?**
   _1693 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Diálogos de Pagamento & Contas Bancárias` be split into smaller, more focused modules?**
   _Cohesion score 0.06349206349206349 - nodes in this community are weakly interconnected._
 - **Should `Abas de Faturamento & Códigos Fiscais` be split into smaller, more focused modules?**
   _Cohesion score 0.06196078431372549 - nodes in this community are weakly interconnected._
 - **Should `Formulário de Contratos` be split into smaller, more focused modules?**
-  _Cohesion score 0.1103448275862069 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.12615384615384614 - nodes in this community are weakly interconnected._
