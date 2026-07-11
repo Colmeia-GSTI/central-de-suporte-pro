@@ -69,6 +69,40 @@ Todo contrato **ativo** com `monthly_value > 0` gera **uma fatura interna por ci
   `billing_frequency` por contrato. Não existe agenda global; cada contrato carrega
   suas próprias datas.
 
+## R7 — Ajustes são respeitados em todo o ciclo
+
+**Reajuste contratual** (`contract_adjustments`, cron `check-adjustments-daily` 10:00 UTC):
+- Lembretes em D-30/D-7/D-0 e diários até D+30 (idempotentes via `contract_history`).
+- Índice `FIXO` com percentual: **auto-aplica no D-0** via `apply-contract-adjustment`;
+  IGPM/IPCA/INPC: aplicação **manual** (aba Reajuste do contrato).
+- A aplicação atualiza `contracts.monthly_value`, reajusta `contract_services`
+  proporcionalmente, avança `adjustment_date` +1 ano e audita em
+  `contract_adjustments` + `contract_history`.
+- **Propagação**: o gerador lê `monthly_value` ao vivo → a fatura seguinte (e o boleto
+  e a NFS-e dela) já sai com o novo valor; trimestrais saem 3× o novo valor. O cron de
+  reajuste (10:00 UTC) roda ANTES da geração (11:00 UTC) — reajuste do dia entra na
+  fatura do próprio dia. Fatura já gerada antes da aplicação mantém o valor antigo
+  (comportamento esperado; vale a partir da competência seguinte).
+
+**Ajuste de valor/vencimento de fatura** (`EditInvoiceDialog`):
+- Exige motivo (≥10 chars), audita (`invoice_value_adjusted`), bloqueia vencimento no
+  passado quando há boleto.
+- **Propaga ao boleto**: `regenerate_payment` (cancela o antigo no Asaas) +
+  `create_payment` (novo boleto com valor/vencimento novos).
+- **Propaga à NFS-e** (opcional): `cancel_and_reissue_nfse` reemite a nota autorizada
+  com o novo valor (sujeito à janela de cancelamento da prefeitura).
+
+Ressalvas conhecidas (2026-07-10):
+- A regeneração do boleto é **não-atômica**: se o `create_payment` falhar após o
+  cancelamento do antigo, a fatura fica `boleto_status='pendente'` sem cobrança — e o
+  `auto-retry-failed-boletos` NÃO a recupera (só olha `'erro'`). Foi o que deixou a
+  fatura #663 sem boleto. Correção sugerida: incluir `pendente` sem `asaas_payment_id`
+  no filtro do auto-retry.
+- Lembretes de reajuste param em D+30 — reajuste esquecido além disso fica silencioso
+  (hoje: 0 contratos nessa condição; todos os 35 têm data futura).
+- `apply-contract-adjustment` não arredonda (ruído de float no histórico; o valor do
+  contrato arredonda pela coluna) e não tem trava contra dupla aplicação manual.
+
 ## Verificação (executada em 2026-07-10)
 
 | Regra | Resultado |
