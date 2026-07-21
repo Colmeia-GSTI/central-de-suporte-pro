@@ -12,10 +12,6 @@ interface AnimatedStatCardProps {
   isLoading?: boolean;
   index?: number;
   href?: string;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
 }
 
 export function AnimatedStatCard({
@@ -26,7 +22,6 @@ export function AnimatedStatCard({
   isLoading,
   index = 0,
   href,
-  trend,
 }: AnimatedStatCardProps) {
   const Wrapper = href ? Link : "div";
   const wrapperProps = href ? { to: href } : {};
@@ -78,19 +73,6 @@ export function AnimatedStatCard({
               >
                 {value}
               </motion.div>
-              {trend && (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 + 0.3 }}
-                  className={`text-xs flex items-center gap-1 ${
-                    trend.isPositive ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  <span>{trend.isPositive ? "↑" : "↓"}</span>
-                  <span>{trend.value}% vs ontem</span>
-                </motion.div>
-              )}
             </div>
           )}
         </CardContent>

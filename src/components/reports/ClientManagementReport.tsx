@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -31,7 +30,6 @@ import {
   DollarSign,
   Monitor,
   TrendingUp,
-  Download,
 } from "lucide-react";
 import { ExportButton } from "@/components/export/ExportButton";
 import { subDays, format } from "date-fns";

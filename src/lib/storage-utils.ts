@@ -134,15 +134,3 @@ export async function openStorageFile(storedPath: string): Promise<void> {
   const signedUrl = await getSignedUrl(storedPath, 3600);
   window.open(signedUrl, "_blank");
 }
-
-/**
- * Convenience wrapper that catches errors and shows a toast.
- */
-export async function openStorageFileSafe(storedPath: string, label = "arquivo"): Promise<void> {
-  try {
-    await openStorageFile(storedPath);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Erro desconhecido";
-    toast.error(`Erro ao abrir ${label}`, { description: msg });
-  }
-}

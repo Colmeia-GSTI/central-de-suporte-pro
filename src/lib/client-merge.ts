@@ -30,40 +30,6 @@ const isEmpty = (v: unknown): boolean =>
   v === null || v === undefined || (typeof v === "string" && v.trim() === "");
 
 /**
- * Resolve o valor final de cada campo aplicando a estratégia híbrida.
- * Retorna apenas os campos que mudam relativamente ao target.
- */
-export function resolveMergedFields(
-  source: MergeableClient,
-  target: MergeableClient,
-  overrides: Partial<Record<MergeableField, string>> = {},
-): Record<string, string | null> {
-  const result: Record<string, string | null> = {};
-
-  for (const field of MERGEABLE_FIELDS) {
-    const override = overrides[field];
-    if (override !== undefined && override !== null) {
-      result[field] = override;
-      continue;
-    }
-
-    const targetValue = target[field];
-    const sourceValue = source[field];
-
-    if (!isEmpty(targetValue)) {
-      // Mantém destino — não inclui no resultado (sem alteração)
-      continue;
-    }
-
-    if (!isEmpty(sourceValue)) {
-      result[field] = String(sourceValue);
-    }
-  }
-
-  return result;
-}
-
-/**
  * Para uso no preview/UI: retorna por campo qual será o valor final
  * e a fonte (target | source | override).
  */

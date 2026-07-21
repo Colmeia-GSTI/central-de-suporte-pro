@@ -10,7 +10,6 @@ export interface PortalTicket {
   satisfaction_rating: number | null;
   client_id: string | null;
   requester_contact_id: string | null;
-  ticket_categories: { name: string } | null;
   requester: { name: string } | null;
 }
 

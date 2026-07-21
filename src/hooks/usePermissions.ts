@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import { hasPermission, getAllowedActions, Module, ModuleAction, AppRole, PERMISSIONS_CONFIG } from "@/lib/permissions";
+import { hasPermission, Module, ModuleAction, AppRole, PERMISSIONS_CONFIG } from "@/lib/permissions";
 import { usePermissionOverrides } from "@/hooks/usePermissionOverrides";
 
 export function usePermissions() {
@@ -52,18 +52,6 @@ export function usePermissions() {
     return allActions.filter(action => can(module, action));
   };
 
-  const canViewModule = (module: Module): boolean => {
-    return can(module, "view");
-  };
-
-  const canEditModule = (module: Module): boolean => {
-    return can(module, "edit");
-  };
-
-  const canManageModule = (module: Module): boolean => {
-    return can(module, "manage");
-  };
-
   const isTechnicianOnly = (() => {
     const userRoles = roles as AppRole[];
     const hasTechnician = userRoles.includes("technician");
@@ -78,9 +66,6 @@ export function usePermissions() {
     canAny,
     canAll,
     getActions,
-    canViewModule,
-    canEditModule,
-    canManageModule,
     isTechnicianOnly,
     roles: roles as AppRole[],
   };

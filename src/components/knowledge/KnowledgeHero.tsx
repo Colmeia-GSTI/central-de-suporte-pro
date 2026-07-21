@@ -44,11 +44,6 @@ export function KnowledgeHero({ search, onSearchChange }: KnowledgeHeroProps) {
               "placeholder:text-muted-foreground/70"
             )}
           />
-          <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground bg-muted rounded">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </div>
         </div>
 
         {/* Quick stats */}

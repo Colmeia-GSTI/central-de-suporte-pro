@@ -34,7 +34,6 @@ interface TicketResolveDialogProps {
   ticketTitle: string;
   ticketCreatedAt: string;
   ticketStartedAt?: string | null;
-  firstResponseAt?: string | null;
   onSuccess?: () => void;
 }
 

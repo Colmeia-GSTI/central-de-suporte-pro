@@ -8,9 +8,8 @@ import {
   Calendar, 
   Globe, 
   Lock, 
-  Clock, 
-  Share2, 
-  Copy, 
+  Clock,
+  Copy,
   Check,
   ChevronRight,
   ThumbsUp 
@@ -176,10 +175,6 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
             <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-1.5 h-8 text-xs">
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? "Copiado!" : "Copiar link"}
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs">
-              <Share2 className="h-3.5 w-3.5" />
-              Compartilhar
             </Button>
           </div>
         </div>

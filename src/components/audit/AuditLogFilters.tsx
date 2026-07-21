@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
-export const AUDITED_TABLES = [
+const AUDITED_TABLES = [
   "auth.users",
   "user_roles",
   "invoices",
@@ -14,7 +14,7 @@ export const AUDITED_TABLES = [
   "integration_settings",
 ] as const;
 
-export const AUDITED_ACTIONS = ["INSERT", "UPDATE", "DELETE"] as const;
+const AUDITED_ACTIONS = ["INSERT", "UPDATE", "DELETE"] as const;
 
 export interface FiltersState {
   table: string;

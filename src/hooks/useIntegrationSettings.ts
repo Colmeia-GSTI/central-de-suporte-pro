@@ -95,5 +95,5 @@ export function useIntegrationSettings<T extends Record<string, unknown>>(
     setSettings((prev) => ({ ...prev, ...partial }));
   }, []);
 
-  return { settings, setSettings, patch, isActive, setIsActive, loading, loaded, load, save };
+  return { settings, patch, isActive, setIsActive, loading, loaded, save };
 }

@@ -38,7 +38,7 @@
  * - `"errors"`: campos de erro (boleto/nfse/email) — para BillingErrorsPanel
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
@@ -49,25 +49,6 @@ import type { Tables, Enums } from "@/integrations/supabase/types";
 export type Invoice = Tables<"invoices">;
 
 export interface InvoiceWithClient extends Invoice {
-  clients: { name: string } | null;
-}
-
-export interface InvoiceWithErrors extends Pick<
-  Invoice,
-  | "id"
-  | "invoice_number"
-  | "amount"
-  | "due_date"
-  | "status"
-  | "boleto_status"
-  | "boleto_error_msg"
-  | "billing_provider"
-  | "contract_id"
-  | "nfse_status"
-  | "nfse_error_msg"
-  | "email_status"
-  | "email_error_msg"
-> {
   clients: { name: string } | null;
 }
 
@@ -174,45 +155,4 @@ export function useInvoices(filters: UseInvoicesFilters = {}) {
       return data as unknown as InvoiceWithClient[];
     },
   });
-}
-
-/**
- * Hook para buscar 1 única invoice por ID. Inclui dados do cliente.
- * Cache compartilhado: invalidação em `["invoices", id]` reflete aqui também.
- */
-export function useInvoice(id: string | null | undefined) {
-  return useQuery({
-    queryKey: ["invoices", "by-id", id],
-    enabled: !!id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select(FIELDS_FULL)
-        .eq("id", id!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as unknown as InvoiceWithClient | null;
-    },
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// CACHE INVALIDATION HELPER
-// ─────────────────────────────────────────────────────────────────────
-
-/**
- * Hook utilitário para invalidar TODOS os caches de invoices após mutation.
- * Use após mutations que afetam invoices (markAsPaid, regenerateBoleto, etc.).
- *
- * @example
- * const invalidate = useInvalidateInvoices();
- * await markAsPaid(id);
- * invalidate();
- */
-export function useInvalidateInvoices() {
-  const queryClient = useQueryClient();
-  return () => {
-    queryClient.invalidateQueries({ queryKey: ["invoices"] });
-    queryClient.invalidateQueries({ queryKey: ["billing-counters"] });
-  };
 }

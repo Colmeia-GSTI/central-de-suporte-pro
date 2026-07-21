@@ -37,7 +37,6 @@ import { useTechnicianList } from "@/hooks/useTechnicianList";
 import { TicketTransferDialog } from "@/components/tickets/TicketTransferDialog";
 import { TicketPauseDialog } from "@/components/tickets/TicketPauseDialog";
 import { TicketResolveDialog } from "@/components/tickets/TicketResolveDialog";
-import { TicketRatingDialog } from "@/components/tickets/TicketRatingDialog";
 import { AssetSelectionDialog } from "@/components/tickets/AssetSelectionDialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { SLAIndicator } from "@/components/tickets/SLAIndicator";
@@ -104,7 +103,6 @@ export default function TicketsPage() {
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isPauseOpen, setIsPauseOpen] = useState(false);
   const [isResolveOpen, setIsResolveOpen] = useState(false);
-  const [isRatingOpen, setIsRatingOpen] = useState(false);
   const [isAssetDialogOpen, setIsAssetDialogOpen] = useState(false);
   const [pendingStartTicket, setPendingStartTicket] = useState<TicketWithRelations | null>(null);
 
@@ -849,14 +847,7 @@ export default function TicketsPage() {
               currentStatus={selectedTicket.status} categoryId={selectedTicket.category_id}
               clientId={selectedTicket.client_id} ticketTitle={selectedTicket.title}
               ticketCreatedAt={selectedTicket.created_at} ticketStartedAt={selectedTicket.started_at}
-              firstResponseAt={selectedTicket.first_response_at}
               onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); queryClient.invalidateQueries({ queryKey: ["ticket-detail", selectedTicketId] }); queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] }); setIsResolveOpen(false); }}
-            />
-            <TicketRatingDialog
-              open={isRatingOpen} onOpenChange={setIsRatingOpen}
-              ticketId={selectedTicket.id} ticketNumber={selectedTicket.ticket_number}
-              ticketTitle={selectedTicket.title}
-              onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tickets"] }); setSelectedTicketId(null); }}
             />
           </>
         )}

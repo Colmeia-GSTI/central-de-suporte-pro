@@ -1,7 +1,7 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-export interface AuditLogFilters {
+interface AuditLogFilters {
   tables?: string[];
   actions?: string[];
   userId?: string;

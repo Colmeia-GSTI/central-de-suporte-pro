@@ -170,139 +170,6 @@ class Logger {
   }
 
   /**
-   * Log payment generation operations
-   */
-  async paymentOperation(
-    invoiceId: string,
-    action: "boleto" | "pix" | "nfse",
-    provider: string,
-    status: "start" | "success" | "error",
-    error?: string,
-    persistToDb = false
-  ) {
-    const level: LogLevel = status === "error" ? "error" : "info";
-    const message = `Payment: ${action} via ${provider} - ${status}`;
-    
-    this.log(level, message, "Payment", { invoiceId, action, provider, status, error });
-
-    if (persistToDb) {
-      await this.persistToDatabase({
-        level,
-        module: "Payment",
-        action: `${action}_${provider}`,
-        message,
-        context: { invoice_id: invoiceId, provider },
-        error_details: error ? { message: error } : undefined,
-      });
-    }
-  }
-
-  /**
-   * Log NFS-e operations
-   */
-  async nfseOperation(
-    invoiceId: string | null,
-    action: "emit" | "cancel" | "query" | "download",
-    status: "start" | "success" | "error",
-    data?: {
-      nfse_number?: string;
-      error?: string;
-      provider?: string;
-    },
-    persistToDb = false
-  ) {
-    const level: LogLevel = status === "error" ? "error" : "info";
-    const message = `NFS-e: ${action} - ${status}`;
-    
-    this.log(level, message, "Nfse", { invoiceId, action, status, ...data });
-
-    if (persistToDb) {
-      await this.persistToDatabase({
-        level,
-        module: "Nfse",
-        action,
-        message,
-        context: { 
-          invoice_id: invoiceId,
-          nfse_number: data?.nfse_number,
-          provider: data?.provider
-        },
-        error_details: data?.error ? { message: data.error } : undefined,
-      });
-    }
-  }
-
-  /**
-   * Log integration operations (Banco Inter, Asaas, SMTP, etc)
-   */
-  async integrationOperation(
-    integration: string,
-    action: string,
-    status: "start" | "success" | "error",
-    data?: {
-      error?: string;
-      details?: Record<string, unknown>;
-    },
-    persistToDb = false
-  ) {
-    const level: LogLevel = status === "error" ? "error" : "info";
-    const message = `Integration: ${integration} - ${action} - ${status}`;
-
-    this.log(level, message, "Integration", { integration, action, status, ...data });
-
-    if (persistToDb) {
-      await this.persistToDatabase({
-        level,
-        module: "Integration",
-        action: `${integration}_${action}`,
-        message,
-        context: data?.details,
-        error_details: data?.error ? { message: data.error } : undefined,
-      });
-    }
-  }
-
-  /**
-   * Log invoice validation operations
-   */
-  async invoiceValidationLog(
-    executionId: string,
-    action: "validate" | "create" | "update",
-    isValid: boolean,
-    errors: Array<{ field: string; message: string; code: string }>,
-    warnings: Array<{ field: string; message: string }>,
-    persistToDb = false
-  ) {
-    const level: LogLevel = isValid ? "info" : "warn";
-    const message = `Invoice ${action}: ${isValid ? "valid" : "invalid"} (${errors.length} errors, ${warnings.length} warnings)`;
-
-    this.log(level, message, "Billing", {
-      execution_id: executionId,
-      action,
-      isValid,
-      errors,
-      warnings,
-    });
-
-    if (persistToDb) {
-      await this.persistToDatabase({
-        level,
-        module: "Billing",
-        action: `invoice_validation_${action}`,
-        message,
-        context: {
-          is_valid: isValid,
-          error_count: errors.length,
-          warning_count: warnings.length,
-          errors: errors.slice(0, 5), // Limit to first 5 errors for DB
-          warnings: warnings.slice(0, 5),
-        },
-        execution_id: executionId,
-      });
-    }
-  }
-
-  /**
    * Log invoice processing operations (boleto, NFS-e, email)
    */
   async invoiceProcessingLog(
@@ -395,10 +262,6 @@ class Logger {
       return [];
     }
   }
-
-  clearLogs() {
-    sessionStorage.removeItem(LOG_STORAGE_KEY);
-  }
 }
 
 export const logger = new Logger();
@@ -450,19 +313,3 @@ export async function retryWithBackoff<T>(
   // This should never be reached, but TypeScript needs it
   throw new Error("Retry exhausted");
 }
-
-// Production-safe console wrapper - suppresses logs in production
-export const devLog = {
-  log: (...args: unknown[]) => {
-    if (import.meta.env.DEV) console.log(...args);
-  },
-  warn: (...args: unknown[]) => {
-    if (import.meta.env.DEV) console.warn(...args);
-  },
-  error: (...args: unknown[]) => {
-    if (import.meta.env.DEV) console.error(...args);
-  },
-  debug: (...args: unknown[]) => {
-    if (import.meta.env.DEV) console.debug(...args);
-  },
-};

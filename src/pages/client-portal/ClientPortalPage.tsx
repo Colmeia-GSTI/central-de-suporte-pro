@@ -58,7 +58,7 @@ export default function ClientPortalPage() {
     queryFn: async () => {
       let q = supabase
         .from("tickets")
-        .select(`*, ticket_categories(name), requester:client_contacts!requester_contact_id(name)`)
+        .select(`*, requester:client_contacts!requester_contact_id(name)`)
         .eq("client_id", clientData!.id)
         .order("created_at", { ascending: false });
       if (!isClientMaster || viewMode === "my") q = q.eq("requester_contact_id", clientData!.contactId);

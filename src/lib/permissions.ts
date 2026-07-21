@@ -148,19 +148,6 @@ export function hasPermission(
   return roles.some((role) => allowedRoles.includes(role));
 }
 
-// Helper function to get all allowed actions for a role on a module
-export function getAllowedActions(
-  roles: AppRole[],
-  module: Module
-): ModuleAction[] {
-  const modulePermissions = PERMISSIONS_CONFIG[module];
-  if (!modulePermissions) return [];
-
-  return Object.entries(modulePermissions)
-    .filter(([_, allowedRoles]) => roles.some((role) => allowedRoles.includes(role)))
-    .map(([action]) => action as ModuleAction);
-}
-
 // Module metadata for UI display
 export const MODULE_METADATA: Record<Module, { label: string; description: string }> = {
   dashboard: {

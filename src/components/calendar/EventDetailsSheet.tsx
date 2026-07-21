@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, MapPin, User, Calendar, Trash2, Edit } from "lucide-react";
+import { Clock, MapPin, User, Calendar, Trash2 } from "lucide-react";
 import type { Tables, Enums } from "@/integrations/supabase/types";
 
 type EventWithClient = Tables<"calendar_events"> & {
@@ -42,14 +42,12 @@ interface EventDetailsSheetProps {
   event: EventWithClient | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit?: (event: EventWithClient) => void;
 }
 
 export function EventDetailsSheet({
   event,
   open,
   onOpenChange,
-  onEdit,
 }: EventDetailsSheetProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -150,16 +148,6 @@ export function EventDetailsSheet({
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">
-            {onEdit && (
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => onEdit(event)}
-              >
-                <Edit className="h-4 w-4 mr-2" />
-                Editar
-              </Button>
-            )}
             <Button
               variant="destructive"
               className="flex-1"

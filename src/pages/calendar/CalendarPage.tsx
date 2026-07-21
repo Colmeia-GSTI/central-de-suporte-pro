@@ -54,7 +54,6 @@ export default function CalendarPage() {
   const isMobile = useIsMobile();
   const { can } = usePermissions();
   const canCreate = can("calendar", "create");
-  const canEdit = can("calendar", "edit");
 
   // Auto-open creation form when navigating with ?action=new
   useEffect(() => {
