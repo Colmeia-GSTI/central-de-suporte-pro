@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireRole } from "../_shared/auth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,22 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Autorização: permite o caller interno service_role (cron check-contract-adjustments)
+    // OU um usuário autenticado com papel admin/financial. Antes: verify_jwt=false + service
+    // role sem checagem alguma => qualquer chamador aplicava reajuste arbitrário.
+    const authHeader = req.headers.get("Authorization");
+    const bearer = (authHeader || "").replace("Bearer ", "").trim();
+    const isInternal = bearer.length > 0 && bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isInternal) {
+      const auth = await requireRole(authHeader, ["admin", "financial"]);
+      if (!auth.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: auth.error || "Não autorizado" }),
+          { status: auth.status || 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
