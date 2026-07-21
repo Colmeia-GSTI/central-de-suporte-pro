@@ -7,8 +7,7 @@ const corsHeaders = {
 };
 
 interface CalendarRequest {
-  action: "auth_url" | "callback" | "sync_event" | "delete_event";
-  code?: string;
+  action: "auth_url" | "sync_event";
   redirect_uri?: string;
   event_id?: string;
   user_id?: string;
@@ -70,7 +69,7 @@ serve(async (req) => {
       );
     }
 
-    const { action, code, redirect_uri, event_id, user_id }: CalendarRequest = await req.json();
+    const { action, redirect_uri, event_id, user_id }: CalendarRequest = await req.json();
 
     switch (action) {
       case "auth_url": {
@@ -90,60 +89,6 @@ serve(async (req) => {
         authUrl.searchParams.set("state", user_id || "");
 
         return new Response(JSON.stringify({ auth_url: authUrl.toString() }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "callback": {
-        // Exchange code for tokens
-        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            code: code || "",
-            client_id: settings.client_id,
-            client_secret: settings.client_secret,
-            redirect_uri: redirect_uri || "",
-            grant_type: "authorization_code",
-          }),
-        });
-
-        if (!tokenResponse.ok) {
-          const errorText = await tokenResponse.text();
-          console.error("Token exchange error:", errorText);
-          throw new Error("Erro ao autenticar com Google");
-        }
-
-        const tokens = await tokenResponse.json();
-
-        // Get calendar list to find primary calendar
-        const calendarResponse = await fetch(
-          "https://www.googleapis.com/calendar/v3/users/me/calendarList/primary",
-          { headers: { Authorization: `Bearer ${tokens.access_token}` } }
-        );
-
-        const calendarData = await calendarResponse.json();
-
-        // Store integration info
-        const { error: upsertError } = await supabase
-          .from("google_calendar_integrations")
-          .upsert({
-            user_id: user_id,
-            access_token: tokens.access_token,
-            refresh_token: tokens.refresh_token,
-            token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-            calendar_id: calendarData.id || "primary",
-            sync_enabled: true,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "user_id" });
-
-        if (upsertError) {
-          console.error("Upsert error:", upsertError);
-          throw new Error("Erro ao salvar integração");
-        }
-
-        return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -262,39 +207,6 @@ serve(async (req) => {
           .eq("id", event_id);
 
         return new Response(JSON.stringify({ success: true, google_event: googleEventData }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "delete_event": {
-        const { data: integration } = await supabase
-          .from("google_calendar_integrations")
-          .select("user_id, access_token, refresh_token, token_expires_at, calendar_id")
-          .eq("user_id", user_id)
-          .single();
-
-        if (!integration) {
-          throw new Error("Integração não encontrada");
-        }
-
-        const { data: event } = await supabase
-          .from("calendar_events")
-          .select("google_event_id")
-          .eq("id", event_id)
-          .single();
-
-        if (event?.google_event_id) {
-          await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${integration.calendar_id}/events/${event.google_event_id}`,
-            {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${integration.access_token}` },
-            }
-          );
-        }
-
-        return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
