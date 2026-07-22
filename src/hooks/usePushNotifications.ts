@@ -6,7 +6,13 @@ import { logger } from "@/lib/logger";
 
 // VAPID public key - matches the private key in VAPID_PRIVATE_KEY secret
 // Generated using: npx web-push generate-vapid-keys
-const VAPID_PUBLIC_KEY = "BDQ4g_RaLdz1m7aQEEezyJ8OGEdpBMXqY9q3iKE0gHr3Q9mIPhNQ3NqzV8xzuPfRDKxT_G8kHy9sXB7CvKP_RvU";
+// IMPORTANTE: este valor DEVE bater com o VAPID_PUBLIC_KEY do backend
+// (supabase/functions/send-push-notification). Se rotacionar a chave, atualize os
+// DOIS lados (idealmente definindo VITE_VAPID_PUBLIC_KEY aqui e o secret no backend),
+// ou o envio de push quebra silenciosamente.
+const VAPID_PUBLIC_KEY =
+  import.meta.env.VITE_VAPID_PUBLIC_KEY ??
+  "BDQ4g_RaLdz1m7aQEEezyJ8OGEdpBMXqY9q3iKE0gHr3Q9mIPhNQ3NqzV8xzuPfRDKxT_G8kHy9sXB7CvKP_RvU";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);

@@ -24,7 +24,6 @@ const TagsTab = lazy(() => import("@/components/settings/TagsTab").then(m => ({ 
 const SLATab = lazy(() => import("@/components/settings/SLATab").then(m => ({ default: m.SLATab })));
 const SystemTab = lazy(() => import("@/components/settings/SystemTab").then(m => ({ default: m.SystemTab })));
 const IntegrationsTab = lazy(() => import("@/components/settings/IntegrationsTab").then(m => ({ default: m.IntegrationsTab })));
-const AuditLogsTab = lazy(() => import("@/components/settings/AuditLogsTab").then(m => ({ default: m.AuditLogsTab })));
 const ClientMappingsTab = lazy(() => import("@/components/settings/ClientMappingsTab").then(m => ({ default: m.ClientMappingsTab })));
 const NotificationRulesTab = lazy(() => import("@/components/settings/NotificationRulesTab").then(m => ({ default: m.NotificationRulesTab })));
 const MessageLogsTab = lazy(() => import("@/components/settings/MessageLogsTab").then(m => ({ default: m.MessageLogsTab })));
@@ -107,9 +106,15 @@ export default function SettingsPage() {
 
   const handleSelectTab = useCallback((id: string) => {
     setMobileMenuOpen(false);
+    // Itens que navegam para paginas dedicadas em vez de renderizar conteudo interno
     if (id === "users") {
       // Gestao de usuarios foi consolidada na pagina dedicada
       navigate("/settings/users");
+      return;
+    }
+    if (id === "audit") {
+      // Auditoria consolidada no viewer dedicado (/settings/audit-logs)
+      navigate("/settings/audit-logs");
       return;
     }
     setActiveTab(id);
@@ -163,7 +168,6 @@ export default function SettingsPage() {
       company: <CompanyTab />,
       integrations: <IntegrationsTab />,
       system: <SystemTab />,
-      audit: <AuditLogsTab />,
       notifications: <NotificationRulesTab />,
       "email-templates": <EmailTemplatesTab />,
       "message-logs": <MessageLogsTab />,

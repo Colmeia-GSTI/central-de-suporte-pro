@@ -60,13 +60,12 @@ export function useDocSync(clientId: string) {
 
       if (!mapping) return false;
 
-      const { data: settings } = await supabase
-        .from("integration_settings")
-        .select("is_active")
-        .eq("integration_type", "tactical_rmm")
-        .maybeSingle();
+      // Lê só o flag is_active via RPC (sem SELECT direto em integration_settings, cujo
+      // SELECT é restrito a admin/manager/financial por conter segredos no JSONB).
+      const { data: isActive } = await supabase
+        .rpc("get_integration_active", { p_type: "tactical_rmm" });
 
-      return !!settings?.is_active;
+      return !!isActive;
     },
     staleTime: 300_000,
   });

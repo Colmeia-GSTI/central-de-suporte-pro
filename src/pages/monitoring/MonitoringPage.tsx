@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDebounce } from "@/hooks/useDebounce";
-// Removed: useRealtimeMonitoring - now handled by unified realtime hook
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,7 +97,32 @@ export default function MonitoringPage() {
   // Debounce search to avoid excessive queries
   const debouncedSearch = useDebounce(search, 300);
 
-  // Real-time updates now handled by useUnifiedRealtime in App.tsx
+  // Realtime local: monitored_devices e monitoring_alerts NÃO são cobertos pelo
+  // useUnifiedRealtime (que assina apenas tickets/notifications). Assinatura desta
+  // página invalida as queries em INSERT/UPDATE/DELETE (prefixo cobre todas as
+  // variantes de queryKey de "devices"/"alerts").
+  useEffect(() => {
+    const channel = supabase
+      .channel("monitoring-page")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "monitored_devices" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["devices"] });
+          queryClient.invalidateQueries({ queryKey: ["devices-for-charts"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "monitoring_alerts" },
+        () => queryClient.invalidateQueries({ queryKey: ["alerts"] })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const { data: devices = [], isLoading: loadingDevices } = useQuery({
     queryKey: ["devices", debouncedSearch],
@@ -187,25 +211,18 @@ export default function MonitoringPage() {
     setIsRefreshing(true);
     try {
       // Trigger sync from integrations
-      const { data: checkmkSettings } = await supabase
-        .from("integration_settings")
-        .select("is_active")
-        .eq("integration_type", "checkmk")
-        .single();
-
-      const { data: tacticalSettings } = await supabase
-        .from("integration_settings")
-        .select("is_active")
-        .eq("integration_type", "tactical_rmm")
-        .single();
+      // is_active via RPC (SELECT direto em integration_settings é restrito a admin/manager/financial
+      // por conter segredos; a RPC também evita o erro de .single() quando a integração não existe).
+      const { data: checkmkActive } = await supabase.rpc("get_integration_active", { p_type: "checkmk" });
+      const { data: tacticalActive } = await supabase.rpc("get_integration_active", { p_type: "tactical_rmm" });
 
       const syncPromises: Promise<unknown>[] = [];
 
-      if (checkmkSettings?.is_active) {
+      if (checkmkActive) {
         syncPromises.push(supabase.functions.invoke("checkmk-sync", { body: { action: "sync" } }));
       }
 
-      if (tacticalSettings?.is_active) {
+      if (tacticalActive) {
         syncPromises.push(supabase.functions.invoke("tactical-rmm-sync", { body: { action: "sync" } }));
       }
 
