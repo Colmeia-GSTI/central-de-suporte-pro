@@ -5,6 +5,7 @@ import { BookOpen, ExternalLink, Lightbulb } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { sanitizePostgrestSearchTerm } from "@/lib/supabase-helpers";
 
 interface KBSuggestionsProps {
   title: string;
@@ -24,6 +25,7 @@ export function KBSuggestions({ title, description }: KBSuggestionsProps) {
       const words = debouncedSearch
         .toLowerCase()
         .split(/\s+/)
+        .map((w) => sanitizePostgrestSearchTerm(w))
         .filter((w) => w.length > 3)
         .slice(0, 6);
 

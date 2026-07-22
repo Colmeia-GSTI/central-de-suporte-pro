@@ -22,6 +22,7 @@ import { KnowledgePinnedCarousel } from "@/components/knowledge/KnowledgePinnedC
 import { KnowledgeArticleList } from "@/components/knowledge/KnowledgeArticleList";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { sanitizePostgrestSearchTerm } from "@/lib/supabase-helpers";
 import type { Tables } from "@/integrations/supabase/types";
 
 type ArticleWithCategory = Tables<"knowledge_articles"> & {
@@ -56,7 +57,8 @@ export default function KnowledgePage() {
         .select("*, knowledge_categories(name, icon), ticket_categories(name)");
 
       if (debouncedSearch) {
-        query = query.or(`title.ilike.%${debouncedSearch}%,content.ilike.%${debouncedSearch}%`);
+        const term = sanitizePostgrestSearchTerm(debouncedSearch);
+        query = query.or(`title.ilike.%${term}%,content.ilike.%${term}%`);
       }
 
       if (selectedCategory) {

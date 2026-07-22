@@ -41,7 +41,7 @@ Chave inexistente sempre retorna `false` — sem crash.
 2. `userId` está em `enabled_for_user_ids` → `true`
 3. `enabled_for_roles` definido e usuário não tem nenhuma dessas roles → `false`
 4. `rollout_percentage >= 100` → `true`
-5. `rollout_percentage <= 0` sem outras restrições → `true` (flag ligada para todos)
+5. `rollout_percentage <= 0` sem roles/whitelist → `false` (desligado). Para ligar para **todos**, use `rollout_percentage = 100`.
 6. Caso contrário, hash determinístico FNV-1a de `userId:key` → bucket 0-99 → liga se `bucket < rollout_percentage`
 
 O hash é determinístico: o mesmo usuário sempre cai no mesmo bucket para a mesma flag, garantindo experiência consistente em rollouts graduais.

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { sanitizePostgrestSearchTerm } from "@/lib/supabase-helpers";
 import { logger } from "@/lib/logger";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -212,11 +213,12 @@ export default function TicketsPage() {
       if (cursor) query = query.lt("created_at", cursor);
 
       if (debouncedSearch) {
+        const safeSearch = sanitizePostgrestSearchTerm(debouncedSearch);
         const searchNum = parseInt(debouncedSearch);
         if (!isNaN(searchNum)) {
-          query = query.or(`title.ilike.%${debouncedSearch}%,ticket_number.eq.${searchNum}`);
+          query = query.or(`title.ilike.%${safeSearch}%,ticket_number.eq.${searchNum}`);
         } else {
-          query = query.ilike("title", `%${debouncedSearch}%`);
+          query = query.ilike("title", `%${safeSearch}%`);
         }
       }
 

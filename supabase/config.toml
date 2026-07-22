@@ -35,3 +35,13 @@ project_id = "silefpsayliwqtoskkdz"
     verify_jwt = false
   [functions.update-user-email]
     verify_jwt = false
+  [functions.webhook-asaas-nfse]
+    verify_jwt = false
+  [functions.webhook-banco-inter]
+    verify_jwt = false
+  [functions.webhook-resend-status]
+    verify_jwt = false
+  [functions.webhook-telegram-status]
+    verify_jwt = false
+  [functions.webhook-whatsapp-status]
+    verify_jwt = false

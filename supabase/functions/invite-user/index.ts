@@ -42,6 +42,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: parsed.error.issues[0].message }, 400);
     }
     const { email, full_name, role, client_id } = parsed.data;
+
+    // Gate de escalonamento de privilégio: conceder o papel 'admin' exige que o
+    // solicitante SEJA admin. manager/financial podem convidar demais papéis,
+    // mas não podem criar novos admins.
+    if (role === "admin" && !(auth.roles ?? []).includes("admin")) {
+      return jsonResponse(
+        { error: "Apenas administradores podem conceder o papel de administrador." },
+        403,
+      );
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     const admin = makeAdminClient();

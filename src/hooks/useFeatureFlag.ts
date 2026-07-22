@@ -49,13 +49,11 @@ function evaluateFlag(
   const pct = flag.rollout_percentage ?? 0;
   if (pct >= 100) return true;
   if (pct <= 0) {
-    // Sem rollout definido mas roles/users matchearam: liberar
-    return Boolean(
-      (flag.enabled_for_roles && flag.enabled_for_roles.length > 0) ||
-        (flag.enabled_for_user_ids && flag.enabled_for_user_ids.length > 0)
-    )
-      ? true
-      : true; // enabled=true sem restrições => liga para todos
+    // Sem rollout gradual: só libera por targeting explícito.
+    // A whitelist de user_ids já retornou true acima (prioridade absoluta);
+    // aqui resta apenas o alvo por role — e quem chega neste ponto com roles
+    // definidas já passou o filtro (L43-46). Sem roles nem whitelist => desligado.
+    return Boolean(flag.enabled_for_roles && flag.enabled_for_roles.length > 0);
   }
 
   if (!userId) return false;

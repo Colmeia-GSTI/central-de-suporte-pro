@@ -34,7 +34,7 @@ import { DuplicatesBanner } from "@/components/clients/DuplicatesBanner";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatPhone } from "@/lib/utils";
+import { formatPhone, getErrorMessage } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
@@ -48,6 +48,18 @@ type Client = Tables<"clients"> & {
 
 const PAGE_SIZE = 25;
 
+// Bloqueios retornados por delete_client_safely (preview) — rótulos pt-BR
+type DeletePreview = {
+  can_delete: boolean;
+  blockers: Array<{ type: string; count: number }>;
+};
+
+const BLOCKER_LABELS: Record<string, string> = {
+  active_contracts: "contratos ativos",
+  open_tickets: "chamados abertos",
+  pending_invoices: "faturas pendentes/vencidas",
+};
+
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -56,6 +68,8 @@ export default function ClientsPage() {
     open: false,
     client: null,
   });
+  const [deletePreview, setDeletePreview] = useState<DeletePreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);
   
@@ -166,19 +180,27 @@ export default function ClientsPage() {
     }
   };
 
+  // Exclusão via RPC segura: checa bloqueios (contratos ativos, chamados
+  // abertos, faturas pendentes), grava auditoria e só então remove o cliente.
+  // Nunca faz hard-delete direto (CLAUDE.md §7).
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("clients").delete().eq("id", id);
+      const { error } = await supabase.rpc("delete_client_safely" as never, {
+        p_client_id: id,
+        p_preview: false,
+      } as never);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["clients-select"] });
+      queryClient.invalidateQueries({ queryKey: ["clients-with-active-billing"] });
       toast.success("Cliente excluído com sucesso");
       setDeleteConfirm({ open: false, client: null });
+      setDeletePreview(null);
     },
-    onError: () => {
-      toast.error("Erro ao excluir cliente");
+    onError: (err) => {
+      toast.error("Erro ao excluir cliente", { description: getErrorMessage(err) });
     },
   });
 
@@ -192,14 +214,32 @@ export default function ClientsPage() {
     setEditingClient(null);
   };
 
-  const handleDeleteClick = (client: Client) => {
+  const handleDeleteClick = async (client: Client) => {
+    setDeletePreview(null);
     setDeleteConfirm({ open: true, client });
+    setLoadingPreview(true);
+    try {
+      const { data, error } = await supabase.rpc("delete_client_safely" as never, {
+        p_client_id: client.id,
+        p_preview: true,
+      } as never);
+      if (error) throw error;
+      setDeletePreview(data as unknown as DeletePreview);
+    } catch (err) {
+      toast.error("Erro ao verificar bloqueios", { description: getErrorMessage(err) });
+      setDeleteConfirm({ open: false, client: null });
+    } finally {
+      setLoadingPreview(false);
+    }
   };
 
   const handleConfirmDelete = () => {
-    if (deleteConfirm.client) {
-      deleteMutation.mutate(deleteConfirm.client.id);
+    if (!deleteConfirm.client) return;
+    if (deletePreview && !deletePreview.can_delete) {
+      toast.error("Resolva os bloqueios antes de excluir este cliente");
+      return;
     }
+    deleteMutation.mutate(deleteConfirm.client.id);
   };
 
   return (
@@ -472,13 +512,24 @@ export default function ClientsPage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={deleteConfirm.open}
-        onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
+        onOpenChange={(open) => {
+          setDeleteConfirm({ ...deleteConfirm, open });
+          if (!open) setDeletePreview(null);
+        }}
         title="Excluir Cliente"
-        description={`Tem certeza que deseja excluir o cliente "${deleteConfirm.client?.name}"? Esta ação não pode ser desfeita.`}
+        description={
+          loadingPreview
+            ? "Verificando vínculos do cliente…"
+            : deletePreview && !deletePreview.can_delete
+            ? `Não é possível excluir "${deleteConfirm.client?.name}". Bloqueios: ${deletePreview.blockers
+                .map((b) => `${b.count} ${BLOCKER_LABELS[b.type] ?? b.type}`)
+                .join(", ")}. Resolva-os antes de excluir.`
+            : `Tem certeza que deseja excluir o cliente "${deleteConfirm.client?.name}"? A exclusão é registrada em auditoria e não pode ser desfeita.`
+        }
         confirmLabel="Excluir"
         variant="destructive"
         onConfirm={handleConfirmDelete}
-        isLoading={deleteMutation.isPending}
+        isLoading={loadingPreview || deleteMutation.isPending}
       />
     </AppLayout>
   );

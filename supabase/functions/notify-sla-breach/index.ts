@@ -9,8 +9,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Active statuses that can breach SLA
-const ACTIVE_STATUSES = ["open", "in_progress", "waiting", "no_contact"];
+// Active statuses that can breach SLA.
+// 'waiting'/'no_contact' são estados PAUSADOS (aguardando cliente/terceiros): o relógio de SLA
+// não corre. Como sla_deadline é estático e NÃO desconta pausas (ticket_pauses), incluí-los
+// geraria falso alarme. Melhoria futura: notify pause-aware subtraindo o tempo comercial pausado.
+const ACTIVE_STATUSES = ["open", "in_progress"];
 
 // Warning window before breach (minutes)
 const WARNING_MINUTES = 30;
@@ -177,10 +180,13 @@ serve(async (req) => {
           // Email for breaches or last 10 minutes
           if ((isBreached || minutesRemaining <= 10) && profile.notify_email && profile.email) {
             try {
-              await supabase.functions.invoke("send-email-smtp", {
+              await supabase.functions.invoke("send-email-resend", {
                 body: {
                   to: profile.email,
                   subject: title,
+                  related_type: "ticket",
+                  related_id: ticket.id,
+                  user_id: notifyUserId,
                   html: `
                     <h2>${title}</h2>
                     <p>${message}</p>
@@ -246,7 +252,22 @@ serve(async (req) => {
           .map((m) => m.user_id)
           .filter((id) => id !== notifyUserId); // don't double-notify if manager is also assignee
 
+        // Cooldown no escalonamento a gerentes: evita reinserir a notificação a cada execução
+        // do cron (5-10 min). Confere se algum gerente já recebeu breach deste ticket na janela.
+        let managersRecentlyNotified = false;
         if (managerIds.length > 0) {
+          const { data: recentMgr } = await supabase
+            .from("notifications")
+            .select("id")
+            .eq("related_id", ticket.id)
+            .eq("type", "sla_breach")
+            .in("user_id", managerIds)
+            .gte("created_at", cooldownCutoff)
+            .limit(1);
+          managersRecentlyNotified = !!recentMgr?.length;
+        }
+
+        if (managerIds.length > 0 && !managersRecentlyNotified) {
           const managerNotifs = managerIds.map((managerId) => ({
             user_id: managerId,
             title: `🚨 SLA Crítico: #${ticket.ticket_number}`,

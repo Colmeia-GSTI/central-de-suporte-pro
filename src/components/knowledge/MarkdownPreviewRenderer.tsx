@@ -12,6 +12,26 @@ export function MarkdownPreviewRenderer({ content }: MarkdownPreviewRendererProp
   return <>{renderMarkdown(content)}</>;
 }
 
+/**
+ * Sanitiza a URL de um link/imagem do markdown. Só permite protocolos seguros
+ * (http, https, mailto) e caminhos relativos/âncoras (sem esquema). Qualquer
+ * outro esquema — javascript:, data:, vbscript:, file:, etc. — vira "#",
+ * bloqueando XSS via href/src. Espaços e caracteres de controle que o browser
+ * ignora ao interpretar o esquema são removidos antes da checagem, evitando
+ * bypasses como "java\tscript:".
+ */
+function sanitizeUrl(url: string): string {
+  const forScheme = url
+    .trim()
+    .replace(/[\x00-\x20\x7f-\x9f]/g, "")
+    .toLowerCase();
+  const scheme = forScheme.match(/^([a-z][a-z0-9+.-]*):/)?.[1];
+  if (scheme && scheme !== "http" && scheme !== "https" && scheme !== "mailto") {
+    return "#";
+  }
+  return url;
+}
+
 function renderMarkdown(content: string): React.ReactNode[] {
   const lines = content.split("\n");
   const result: React.ReactNode[] = [];
@@ -47,7 +67,7 @@ function renderMarkdown(content: string): React.ReactNode[] {
       result.push(
         <figure key={i} className="my-5">
           <img
-            src={imageLineMatch[2]}
+            src={sanitizeUrl(imageLineMatch[2])}
             alt={imageLineMatch[1] || "Imagem"}
             className="max-w-full h-auto rounded-lg border border-border/40 shadow-sm"
             loading="lazy"
@@ -132,7 +152,7 @@ function formatInline(text: string): React.ReactNode {
       parts.push(
         <img
           key={key++}
-          src={imgMatch[2]}
+          src={sanitizeUrl(imgMatch[2])}
           alt={imgMatch[1] || "Imagem"}
           className="inline-block max-h-64 rounded border border-border/40"
           loading="lazy"
@@ -170,7 +190,7 @@ function formatInline(text: string): React.ReactNode {
     const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
     if (linkMatch) {
       parts.push(
-        <a key={key++} href={linkMatch[2]} className="text-primary underline underline-offset-2 hover:text-primary/80" target="_blank" rel="noopener noreferrer">
+        <a key={key++} href={sanitizeUrl(linkMatch[2])} className="text-primary underline underline-offset-2 hover:text-primary/80" target="_blank" rel="noopener noreferrer">
           {linkMatch[1]}
         </a>
       );

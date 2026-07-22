@@ -91,10 +91,13 @@ export function useDocSync(clientId: string) {
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["doc-sync-log", clientId] });
-    queryClient.invalidateQueries({ queryKey: ["doc-table", "doc_devices", clientId] });
-    queryClient.invalidateQueries({ queryKey: ["doc-table", "doc_vlans", clientId] });
-    queryClient.invalidateQueries({ queryKey: ["doc-table", "doc_firewall_rules", clientId] });
-    queryClient.invalidateQueries({ queryKey: ["doc-table", "doc_vpn", clientId] });
+    // Chaves reais: useDocTableCrud usa [tableName, clientId, filtro] e useDocSection
+    // usa [tableName, clientId]. Invalidar pelo prefixo [tableName, clientId] casa
+    // ambos (match parcial padrão do TanStack) e todas as variantes de filtro.
+    queryClient.invalidateQueries({ queryKey: ["doc_devices", clientId] });
+    queryClient.invalidateQueries({ queryKey: ["doc_vlans", clientId] });
+    queryClient.invalidateQueries({ queryKey: ["doc_firewall_rules", clientId] });
+    queryClient.invalidateQueries({ queryKey: ["doc_vpn", clientId] });
   };
 
   const runSync = async (action: "sync_trmm" | "sync_unifi" | "sync_all") => {

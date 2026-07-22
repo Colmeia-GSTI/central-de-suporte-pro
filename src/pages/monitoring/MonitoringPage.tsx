@@ -217,7 +217,7 @@ export default function MonitoringPage() {
 
       if (unifiControllers && unifiControllers.length > 0) {
         for (const ctrl of unifiControllers) {
-          syncPromises.push(supabase.functions.invoke("unifi-sync", { body: { action: "sync", controllerId: ctrl.id } }));
+          syncPromises.push(supabase.functions.invoke("unifi-sync", { body: { action: "sync", controller_id: ctrl.id } }));
         }
       }
 
