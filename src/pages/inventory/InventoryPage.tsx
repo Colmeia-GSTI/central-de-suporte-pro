@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { sanitizePostgrestSearchTerm } from "@/lib/supabase-helpers";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,7 +120,8 @@ export default function InventoryPage() {
         .order("name");
 
       if (debouncedSearch) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,serial_number.ilike.%${debouncedSearch}%`);
+        const safeSearch = sanitizePostgrestSearchTerm(debouncedSearch);
+        query = query.or(`name.ilike.%${safeSearch}%,serial_number.ilike.%${safeSearch}%`);
       }
 
       const { data, error } = await query;

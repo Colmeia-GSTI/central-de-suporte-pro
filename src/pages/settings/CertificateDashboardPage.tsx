@@ -41,6 +41,21 @@ interface CertificateRow {
   } | null;
 }
 
+interface CompanyWithCerts {
+  id: string;
+  razao_social: string | null;
+  cnpj: string | null;
+  certificates:
+    | {
+        id: string;
+        tipo: string | null;
+        validade: string | null;
+        uploaded_at: string | null;
+        is_primary: boolean | null;
+      }[]
+    | null;
+}
+
 type CertificateStatus = "valid" | "expiring" | "expired" | "not_configured";
 
 function getCertificateStatus(validade: string | null): CertificateStatus {
@@ -91,13 +106,26 @@ export default function CertificateDashboardPage() {
   const { data: certificates = [], isLoading } = useQuery({
     queryKey: ["certificate-dashboard"],
     queryFn: async () => {
+      // Lista TODAS as empresas (company_settings) com o certificado (se houver),
+      // para que empresas SEM certificado apareçam como "Não Configurado" em vez de sumir.
       const { data, error } = await supabase
-        .from("certificates")
-        .select("id, tipo, validade, uploaded_at, company_settings(razao_social, cnpj)")
-        .order("validade", { ascending: true });
+        .from("company_settings")
+        .select("id, razao_social, cnpj, certificates(id, tipo, validade, uploaded_at, is_primary)")
+        .order("razao_social", { ascending: true });
 
       if (error) throw error;
-      return data as CertificateRow[];
+
+      return ((data ?? []) as CompanyWithCerts[]).map((company): CertificateRow => {
+        const certs = company.certificates ?? [];
+        const cert = certs.find((c) => c.is_primary) ?? certs[0] ?? null;
+        return {
+          id: cert?.id ?? company.id,
+          tipo: cert?.tipo ?? null,
+          validade: cert?.validade ?? null,
+          uploaded_at: cert?.uploaded_at ?? null,
+          company_settings: { razao_social: company.razao_social, cnpj: company.cnpj },
+        };
+      });
     },
   });
 

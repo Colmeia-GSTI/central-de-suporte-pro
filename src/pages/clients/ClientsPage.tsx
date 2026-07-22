@@ -35,6 +35,7 @@ import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPhone, getErrorMessage } from "@/lib/utils";
+import { sanitizePostgrestSearchTerm } from "@/lib/supabase-helpers";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
@@ -104,7 +105,8 @@ export default function ClientsPage() {
       }
 
       if (debouncedSearch) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%,document.ilike.%${debouncedSearch}%,nickname.ilike.%${debouncedSearch}%`);
+        const safeSearch = sanitizePostgrestSearchTerm(debouncedSearch);
+        query = query.or(`name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%,document.ilike.%${safeSearch}%,nickname.ilike.%${safeSearch}%`);
       }
 
       const { data, error, count } = await query;
@@ -185,10 +187,10 @@ export default function ClientsPage() {
   // Nunca faz hard-delete direto (CLAUDE.md §7).
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("delete_client_safely" as never, {
+      const { error } = await supabase.rpc("delete_client_safely", {
         p_client_id: id,
         p_preview: false,
-      } as never);
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -219,10 +221,10 @@ export default function ClientsPage() {
     setDeleteConfirm({ open: true, client });
     setLoadingPreview(true);
     try {
-      const { data, error } = await supabase.rpc("delete_client_safely" as never, {
+      const { data, error } = await supabase.rpc("delete_client_safely", {
         p_client_id: client.id,
         p_preview: true,
-      } as never);
+      });
       if (error) throw error;
       setDeletePreview(data as unknown as DeletePreview);
     } catch (err) {

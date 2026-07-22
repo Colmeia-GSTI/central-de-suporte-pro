@@ -2,7 +2,7 @@ import { Phone, MessageCircle, Mail, User, Monitor, Pencil } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatPhone, stripPhone } from "@/lib/phone";
+import { formatPhone, stripPhone, phoneToWhatsApp } from "@/lib/phone";
 
 interface RequesterContact {
   id: string;
@@ -89,7 +89,7 @@ export function RequesterContactCard({
                     className="gap-2 h-7 text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
                     asChild
                   >
-                    <a href={`https://wa.me/55${contactPhone}`} target="_blank" rel="noopener noreferrer">
+                    <a href={`https://wa.me/${phoneToWhatsApp(contactPhone)}`} target="_blank" rel="noopener noreferrer">
                       <MessageCircle className="h-3 w-3" />
                       WhatsApp
                     </a>
@@ -151,7 +151,7 @@ export function RequesterContactCard({
                 asChild
               >
                 <a
-                  href={`https://wa.me/55${stripPhone(phoneNumber!)}`}
+                  href={`https://wa.me/${phoneToWhatsApp(phoneNumber!)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

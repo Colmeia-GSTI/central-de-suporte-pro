@@ -25,6 +25,15 @@ export function stripPhone(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+// Número no formato aceito pelo wa.me: DDI 55 + DDD + número, SEM duplicar o 55
+// quando o valor já vem com o país (12-13 dígitos, como os importados do WhatsApp/Asaas).
+export function phoneToWhatsApp(value: string | null | undefined): string {
+  const d = stripPhone(value ?? "");
+  if (!d) return "";
+  if ((d.length === 12 || d.length === 13) && d.startsWith("55")) return d;
+  return `55${d}`;
+}
+
 export function isPhoneValid(value: string): boolean {
   const d = stripPhone(value);
   return d.length === 10 || d.length === 11;

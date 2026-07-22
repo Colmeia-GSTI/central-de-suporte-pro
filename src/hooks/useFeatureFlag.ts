@@ -45,16 +45,13 @@ function evaluateFlag(
     if (!hasMatchingRole) return false;
   }
 
-  // Rollout gradual baseado em hash determinístico
+  // Rollout gradual baseado em hash determinístico.
+  // pct fora de (0,100) = sem limite gradual: a flag está habilitada e o usuário já
+  // passou whitelist (L40) e filtro de role (L43-46), então está LIGADA para ele.
+  // Isto inclui o caso "enabled=true sem rollout/roles/whitelist" => ligada para todos.
   const pct = flag.rollout_percentage ?? 0;
   if (pct >= 100) return true;
-  if (pct <= 0) {
-    // Sem rollout gradual: só libera por targeting explícito.
-    // A whitelist de user_ids já retornou true acima (prioridade absoluta);
-    // aqui resta apenas o alvo por role — e quem chega neste ponto com roles
-    // definidas já passou o filtro (L43-46). Sem roles nem whitelist => desligado.
-    return Boolean(flag.enabled_for_roles && flag.enabled_for_roles.length > 0);
-  }
+  if (pct <= 0) return true;
 
   if (!userId) return false;
   const bucket = fnv1a(`${userId}:${flag.key}`) % 100;
