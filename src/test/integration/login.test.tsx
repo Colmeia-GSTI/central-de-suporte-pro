@@ -20,9 +20,18 @@ vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ signIn: signInMock }),
 }));
 
-const toastMock = vi.fn();
-vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: toastMock }),
+const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), {
+    error: toastMock,
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    message: vi.fn(),
+    loading: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+  Toaster: () => null,
 }));
 
 vi.mock("@/integrations/supabase/client", async () => {
@@ -91,10 +100,8 @@ describe("Login flow", () => {
 
     await waitFor(() => {
       expect(toastMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "Erro ao entrar",
-          variant: "destructive",
-        }),
+        "Erro ao entrar",
+        expect.objectContaining({ description: expect.any(String) }),
       );
       expect(signInMock).not.toHaveBeenCalled();
     });

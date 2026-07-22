@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -20,7 +20,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 export default function ProfilePage() {
   const { user, profile, roles } = useAuth();
   const { getActions } = usePermissions();
-  const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -93,16 +92,13 @@ export default function ProfilePage() {
       // Save local preferences to localStorage
       localStorage.setItem(`notification_prefs_${user.id}`, JSON.stringify(localPrefs));
 
-      toast({
-        title: "Perfil atualizado",
+      toast.success("Perfil atualizado", {
         description: "Dados pessoais, canais e preferências de alerta salvos com sucesso.",
       });
     } catch (error) {
       logger.error("Error updating profile", "Profile", { error: String(error) });
-      toast({
-        title: "Erro ao salvar",
+      toast.error("Erro ao salvar", {
         description: "Não foi possível atualizar o perfil.",
-        variant: "destructive",
       });
     } finally {
       setIsLoading(false);

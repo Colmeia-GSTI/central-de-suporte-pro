@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ArticleFeedback } from "./ArticleFeedback";
 import { ArticleTableOfContents } from "./ArticleTableOfContents";
 import { MarkdownPreviewRenderer } from "./MarkdownPreviewRenderer";
@@ -39,7 +39,6 @@ function calculateReadingTime(content: string): number {
 
 export function ArticleViewer({ article }: ArticleViewerProps) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const hasIncrementedRef = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -93,7 +92,7 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
     const url = `${window.location.origin}/knowledge/${article.slug || article.id}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
-    toast({ title: "Link copiado!" });
+    toast.success("Link copiado!");
     setTimeout(() => setCopied(false), 2000);
   };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { logger } from "@/lib/logger";
 
 // VAPID public key - matches the private key in VAPID_PRIVATE_KEY secret
@@ -49,8 +49,7 @@ export interface PushNotificationState {
 
 export function usePushNotifications() {
   const { user } = useAuth();
-  const { toast } = useToast();
-  
+
   const [state, setState] = useState<PushNotificationState>({
     isSupported: false,
     isSubscribed: false,
@@ -164,10 +163,8 @@ export function usePushNotifications() {
   // Register service worker and subscribe to push
   const subscribe = useCallback(async () => {
     if (!user) {
-      toast({
-        title: "Erro",
+      toast.error("Erro", {
         description: "Você precisa estar logado para ativar notificações push.",
-        variant: "destructive",
       });
       return false;
     }
@@ -200,8 +197,7 @@ export function usePushNotifications() {
         }));
         // Don't show toast if blocked - UI will show instructions
         if (!isNowBlocked) {
-          toast({
-            title: "Permissão não concedida",
+          toast("Permissão não concedida", {
             description: "Você fechou a solicitação. Tente novamente quando quiser ativar.",
           });
         }
@@ -241,18 +237,15 @@ export function usePushNotifications() {
         isLoading: false,
       }));
 
-      toast({
-        title: "Notificações ativadas",
+      toast.success("Notificações ativadas", {
         description: "Você receberá alertas em tempo real neste dispositivo.",
       });
 
       return true;
     } catch (error) {
       logger.error("Error subscribing to push", "Push", { error: String(error) });
-      toast({
-        title: "Erro ao ativar notificações",
+      toast.error("Erro ao ativar notificações", {
         description: "Não foi possível configurar as notificações push.",
-        variant: "destructive",
       });
       setState(prev => ({ ...prev, isLoading: false }));
       return false;
@@ -287,18 +280,15 @@ export function usePushNotifications() {
         isLoading: false,
       }));
 
-      toast({
-        title: "Notificações desativadas",
+      toast.success("Notificações desativadas", {
         description: "Você não receberá mais alertas push neste dispositivo.",
       });
 
       return true;
     } catch (error) {
       logger.error("Error unsubscribing from push", "Push", { error: String(error) });
-      toast({
-        title: "Erro ao desativar notificações",
+      toast.error("Erro ao desativar notificações", {
         description: "Não foi possível desativar as notificações push.",
-        variant: "destructive",
       });
       setState(prev => ({ ...prev, isLoading: false }));
       return false;

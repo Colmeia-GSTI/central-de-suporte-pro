@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Eye, EyeOff, Hexagon } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Login() {
@@ -20,7 +20,6 @@ export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { toast } = useToast();
 
   // Consume `?next=` (used by the OAuth consent flow) or fall back to router state.
   const rawNext = new URLSearchParams(location.search).get("next");
@@ -40,16 +39,12 @@ export default function Login() {
         if (error) {
           if (error.message === "Email not confirmed") {
             setPendingConfirmEmail(loginIdentifier);
-            toast({
-              title: "Confirme seu email",
+            toast.error("Confirme seu email", {
               description: "Seu email ainda não foi confirmado. Use o botão abaixo para reenviar o link.",
-              variant: "destructive",
             });
           } else {
-            toast({
-              title: "Erro ao entrar",
+            toast.error("Erro ao entrar", {
               description: error.message === "Invalid login credentials" ? "Usuário ou senha incorretos" : error.message,
-              variant: "destructive",
             });
           }
           setIsLoading(false);
@@ -64,19 +59,15 @@ export default function Login() {
         if (error || data?.error) {
           const code = data?.error;
           if (code === "email_not_confirmed") {
-            toast({
-              title: "Confirme seu email",
+            toast.error("Confirme seu email", {
               description: "Seu email ainda não foi confirmado. Entre pelo seu e-mail para reenviar o link, ou contate o suporte.",
-              variant: "destructive",
             });
           } else if (code === "rate_limited") {
-            toast({
-              title: "Muitas tentativas",
+            toast.error("Muitas tentativas", {
               description: "Aguarde alguns minutos antes de tentar novamente.",
-              variant: "destructive",
             });
           } else {
-            toast({ title: "Erro ao entrar", description: "Usuário ou senha incorretos", variant: "destructive" });
+            toast.error("Erro ao entrar", { description: "Usuário ou senha incorretos" });
           }
           setIsLoading(false);
           return;
@@ -87,19 +78,17 @@ export default function Login() {
           refresh_token: data.refresh_token,
         });
         if (sessionError) {
-          toast({ title: "Erro ao entrar", description: "Não foi possível iniciar a sessão. Tente novamente.", variant: "destructive" });
+          toast.error("Erro ao entrar", { description: "Não foi possível iniciar a sessão. Tente novamente." });
           setIsLoading(false);
           return;
         }
       }
 
-      toast({ title: "Bem-vindo à Colmeia!", description: "Login realizado com sucesso." });
+      toast.success("Bem-vindo à Colmeia!", { description: "Login realizado com sucesso." });
       navigate(from, { replace: true });
     } catch (error) {
-      toast({
-        title: "Erro ao entrar",
+      toast.error("Erro ao entrar", {
         description: "Ocorreu um erro inesperado. Tente novamente.",
-        variant: "destructive",
       });
       setIsLoading(false);
     }
@@ -115,27 +104,27 @@ export default function Login() {
 
       if (error || data?.error === "rate_limited") {
         const isRate = data?.error === "rate_limited" || /429/.test(error?.message ?? "");
-        toast({
-          title: isRate ? "Aguarde um momento" : "Não foi possível reenviar",
-          description: isRate
-            ? "Aguarde alguns minutos antes de solicitar novamente."
-            : (data?.error || error?.message || "Tente novamente em instantes."),
-          variant: isRate ? "default" : "destructive",
-        });
+        if (isRate) {
+          toast("Aguarde um momento", {
+            description: "Aguarde alguns minutos antes de solicitar novamente.",
+          });
+        } else {
+          toast.error("Não foi possível reenviar", {
+            description: data?.error || error?.message || "Tente novamente em instantes.",
+          });
+        }
         return;
       }
 
       if (data?.already_confirmed) {
-        toast({
-          title: "Conta já ativada",
+        toast.success("Conta já ativada", {
           description: "Sua conta já está confirmada. Faça login normalmente.",
         });
         setPendingConfirmEmail(null);
         return;
       }
 
-      toast({
-        title: "Email enviado",
+      toast.success("Email enviado", {
         description: "Verifique sua caixa de entrada e spam.",
       });
       setPendingConfirmEmail(null);

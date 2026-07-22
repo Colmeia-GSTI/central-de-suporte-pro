@@ -23,7 +23,7 @@ import {
 import { Clock, Building2, Tag, Pencil, Save, X, CheckCircle, History, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { EntityHistoryTimeline, HistoryEntry } from "@/components/ui/EntityHistoryTimeline";
 import { TagsInput } from "@/components/tickets/TagsInput";
 import { TagBadge } from "@/components/tickets/TagBadge";
@@ -103,7 +103,6 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     asset_id: ticket.asset_id || "",
   });
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -256,11 +255,11 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
       queryClient.invalidateQueries({ queryKey: ["ticket-tags-assignments", ticket.id] });
       queryClient.invalidateQueries({ queryKey: ["ticket-recent-history", ticket.id] });
       setIsEditing(false);
-      toast({ title: "Chamado atualizado" });
+      toast.success("Chamado atualizado");
       onUpdate?.();
     },
     onError: () => {
-      toast({ title: "Erro ao atualizar chamado", variant: "destructive" });
+      toast.error("Erro ao atualizar chamado");
     },
   });
 
@@ -352,10 +351,8 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
     const oldStatus = formData.status;
     const allowed = validTransitions[oldStatus] || [];
     if (!allowed.includes(newStatus)) {
-      toast({
-        title: "Transição inválida",
+      toast.error("Transição inválida", {
         description: `Não é possível mudar de "${statusLabels[oldStatus]}" para "${statusLabels[newStatus as Enums<"ticket_status">]}"`,
-        variant: "destructive",
       });
       return;
     }
@@ -476,7 +473,7 @@ export function TicketDetailsTab({ ticket, onUpdate }: TicketDetailsTabProps) {
 
       } catch (err) {
         logger.error("[handleStatusChange] Failed", "Tickets", { error: String(err) });
-        toast({ title: "Erro ao alterar status", variant: "destructive" });
+        toast.error("Erro ao alterar status");
         // Revert local state
         setFormData((prev) => ({ ...prev, status: oldStatus }));
       }

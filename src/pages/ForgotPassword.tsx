@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft, Hexagon, Mail, CheckCircle, AlertCircle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function ForgotPassword() {
@@ -14,7 +14,6 @@ export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [noEmail, setNoEmail] = useState(false);
-  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,10 +26,8 @@ export default function ForgotPassword() {
       });
 
       if (error) {
-        toast({
-          title: "Erro",
+        toast.error("Erro", {
           description: "Não foi possível processar sua solicitação. Tente novamente.",
-          variant: "destructive",
         });
         setIsLoading(false);
         return;
@@ -40,10 +37,8 @@ export default function ForgotPassword() {
         if (data.noEmail) {
           setNoEmail(true);
         } else {
-          toast({
-            title: "Erro",
+          toast.error("Erro", {
             description: data.error,
-            variant: "destructive",
           });
         }
         setIsLoading(false);
@@ -52,10 +47,8 @@ export default function ForgotPassword() {
 
       setSuccess(true);
     } catch {
-      toast({
-        title: "Erro",
+      toast.error("Erro", {
         description: "Ocorreu um erro inesperado. Tente novamente.",
-        variant: "destructive",
       });
     }
 

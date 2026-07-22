@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { ContractServicesSection, ContractService } from "./ContractServicesSection";
 import { ContractNotificationMessageForm } from "./ContractNotificationMessageForm";
@@ -121,7 +121,6 @@ interface ContractFormProps {
 }
 
 export function ContractForm({ contract, initialData, onSuccess, onCancel }: ContractFormProps) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -420,10 +419,8 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
         if (invoiceError || !invoice) {
           // Antes o erro era engolido em silêncio (contrato criado, fatura some
           // sem aviso). Agora avisa; o contrato em si já foi criado com sucesso.
-          toast({
-            title: "Contrato criado, mas a primeira fatura não foi gerada",
+          toast.error("Contrato criado, mas a primeira fatura não foi gerada", {
             description: invoiceError?.message || "Gere a fatura manualmente na aba Faturas.",
-            variant: "destructive",
           });
         } else {
           if (data.generate_payment) {
@@ -456,18 +453,14 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
               });
               if (nfseError) throw nfseError;
               if (nfseResult && nfseResult.success === false) {
-                toast({
-                  title: "Contrato criado, mas a NFS-e não foi emitida",
+                toast.error("Contrato criado, mas a NFS-e não foi emitida", {
                   description: nfseResult.error || "Emita a nota manualmente na aba Faturas.",
-                  variant: "destructive",
                 });
               }
             } catch (nfseError) {
               console.error("[ContractForm] Erro ao gerar NFS-e:", nfseError);
-              toast({
-                title: "Contrato criado, mas a NFS-e não foi emitida",
+              toast.error("Contrato criado, mas a NFS-e não foi emitida", {
                 description: "Emita a nota manualmente na aba Faturas.",
-                variant: "destructive",
               });
             }
           }
@@ -495,18 +488,13 @@ export function ContractForm({ contract, initialData, onSuccess, onCancel }: Con
       if (contractData?.id) {
         queryClient.invalidateQueries({ queryKey: ["contract", contractData.id] });
       }
-      toast({
-        title: contractData ? "Contrato salvo" : "Contrato criado",
+      toast.success(contractData ? "Contrato salvo" : "Contrato criado", {
         description: "Operação realizada com sucesso",
       });
       onSuccess();
     },
     onError: (error) => {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro", { description: error.message });
     },
   });
 

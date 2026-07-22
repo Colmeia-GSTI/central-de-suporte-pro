@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
@@ -43,7 +43,6 @@ interface InvoiceFormProps {
 }
 
 export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<InvoiceFormData>({
@@ -118,11 +117,11 @@ export function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast({ title: "Fatura criada com sucesso" });
+      toast.success("Fatura criada com sucesso");
       onSuccess();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 

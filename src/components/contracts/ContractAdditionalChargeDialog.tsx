@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +62,6 @@ export function ContractAdditionalChargeDialog({
   contractName,
   contractMonthlyValue = 0,
 }: ContractAdditionalChargeDialogProps) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -127,17 +126,13 @@ export function ContractAdditionalChargeDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contract-additional-charges", contractId] });
-      toast({ title: "Valor adicional adicionado" });
+      toast.success("Valor adicional adicionado");
       setDescription("");
       setAmount(0);
       setReferenceMonth(format(addMonths(new Date(), 1), "yyyy-MM"));
     },
     onError: (error) => {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro", { description: error.message });
     },
   });
 
@@ -151,14 +146,10 @@ export function ContractAdditionalChargeDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contract-additional-charges", contractId] });
-      toast({ title: "Valor adicional removido" });
+      toast.success("Valor adicional removido");
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao remover",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao remover", { description: error.message });
     },
   });
 

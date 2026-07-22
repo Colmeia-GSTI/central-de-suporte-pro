@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { type PortalTicket, statusLabels, statusColors } from "./portal-types";
 
 interface Props {
@@ -16,7 +16,6 @@ interface Props {
 }
 
 export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: comments = [] } = useQuery({
@@ -53,11 +52,11 @@ export function ClientTicketDetailPanel({ ticket, currentUserId }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-comments"] });
-      toast({ title: "Comentário adicionado" });
+      toast.success("Comentário adicionado");
     },
     onError: (error: Error) => {
       console.error("[AddComment] Falha:", error);
-      toast({ title: "Erro ao enviar comentário", description: "Tente novamente.", variant: "destructive" });
+      toast.error("Erro ao enviar comentário", { description: "Tente novamente." });
     },
   });
 

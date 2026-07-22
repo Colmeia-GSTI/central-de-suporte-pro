@@ -21,7 +21,7 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Search, Loader2, Phone, MessageCircle, CheckCircle2, XCircle } from "lucide-react";
 import { cn, formatPhone, formatCEP, getErrorMessage } from "@/lib/utils";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -79,7 +79,6 @@ function formatCNPJ(value: string): string {
 }
 
 export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isSearching, setIsSearching] = useState(false);
@@ -154,10 +153,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     const document = form.getValues("document")?.replace(/\D/g, "");
     
     if (!document || document.length !== 14) {
-      toast({
-        title: "CNPJ inválido",
+      toast.error("CNPJ inválido", {
         description: "Digite um CNPJ válido com 14 dígitos",
-        variant: "destructive",
       });
       return;
     }
@@ -171,10 +168,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       if (error) throw error;
 
       if (data.status === "ERROR") {
-        toast({
-          title: "CNPJ não encontrado",
+        toast.error("CNPJ não encontrado", {
           description: data.message || "Não foi possível encontrar o CNPJ informado",
-          variant: "destructive",
         });
         return;
       }
@@ -189,16 +184,13 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       form.setValue("state", data.uf || "");
       form.setValue("zip_code", formatCEP(data.cep) || "");
 
-      toast({
-        title: "Dados preenchidos",
+      toast("Dados preenchidos", {
         description: "Os dados do CNPJ foram carregados com sucesso",
       });
     } catch (error: unknown) {
       logger.error("CNPJ lookup error", "Clients", { error: getErrorMessage(error) });
-      toast({
-        title: "Erro na consulta",
+      toast.error("Erro na consulta", {
         description: "Não foi possível consultar o CNPJ. Tente novamente.",
-        variant: "destructive",
       });
     } finally {
       setIsSearching(false);
@@ -209,10 +201,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     const whatsapp = form.getValues("whatsapp")?.replace(/\D/g, "");
     
     if (!whatsapp || whatsapp.length < 10) {
-      toast({
-        title: "Número inválido",
+      toast.error("Número inválido", {
         description: "Digite um número de WhatsApp válido",
-        variant: "destructive",
       });
       return;
     }
@@ -234,10 +224,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         setWhatsAppStatus('error');
         setWhatsAppMessage(data.error);
         form.setValue("whatsapp_validated", false);
-        toast({
-          title: "Erro na validação",
+        toast.error("Erro na validação", {
           description: data.error,
-          variant: "destructive",
         });
         return;
       }
@@ -246,18 +234,15 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
         setWhatsAppStatus('valid');
         setWhatsAppMessage("WhatsApp vinculado ao número");
         form.setValue("whatsapp_validated", true);
-        toast({
-          title: "WhatsApp verificado!",
+        toast("WhatsApp verificado!", {
           description: "O número possui WhatsApp vinculado",
         });
       } else {
         setWhatsAppStatus('invalid');
         setWhatsAppMessage("Número não possui WhatsApp");
         form.setValue("whatsapp_validated", false);
-        toast({
-          title: "WhatsApp não encontrado",
+        toast.error("WhatsApp não encontrado", {
           description: "Este número não possui WhatsApp vinculado",
-          variant: "destructive",
         });
       }
     } catch (error: unknown) {
@@ -266,10 +251,8 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       setWhatsAppStatus('error');
       setWhatsAppMessage("Erro ao validar");
       form.setValue("whatsapp_validated", false);
-      toast({
-        title: "Erro ao validar WhatsApp",
+      toast.error("Erro ao validar WhatsApp", {
         description: errorMsg || "Tente novamente mais tarde",
-        variant: "destructive",
       });
     } finally {
       setIsValidatingWhatsApp(false);
@@ -405,8 +388,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
               }
             };
             await Promise.all([worker(), worker(), worker()]);
-            toast({
-              title: "Boletos em regeneração",
+            toast("Boletos em regeneração", {
               description: `${pendingInvoices.length} boleto(s) pendente(s) serão recriado(s) com os novos dados.`,
             });
           }
@@ -437,8 +419,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["clients-select"] });
-      toast({
-        title: client ? "Cliente atualizado" : "Cliente criado",
+      toast.success(client ? "Cliente atualizado" : "Cliente criado", {
         description: "Operação realizada com sucesso",
       });
       onSuccess(clientId);
@@ -448,12 +429,10 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       const isDuplicateCnpj =
         err?.code === "23505" ||
         (err?.message?.includes("uq_clients_normalized_document") ?? false);
-      toast({
-        title: isDuplicateCnpj ? "CNPJ já cadastrado" : "Erro",
+      toast.error(isDuplicateCnpj ? "CNPJ já cadastrado" : "Erro", {
         description: isDuplicateCnpj
           ? "Este CNPJ já está cadastrado em outro cliente."
           : err?.message ?? "Erro desconhecido",
-        variant: "destructive",
       });
     },
   });

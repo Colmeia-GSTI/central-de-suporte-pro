@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Edit, Trash2, Clock } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -75,7 +75,6 @@ const priorityColors: Record<Enums<"ticket_priority">, string> = {
 export function SLATab() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSLA, setEditingSLA] = useState<SLAWithRelations | null>(null);
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<SLAFormData>({
@@ -163,11 +162,11 @@ export function SLATab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sla-configs"] });
-      toast({ title: editingSLA ? "SLA atualizado" : "SLA criado" });
+      toast.success(editingSLA ? "SLA atualizado" : "SLA criado");
       handleCloseForm();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 
@@ -178,7 +177,7 @@ export function SLATab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sla-configs"] });
-      toast({ title: "SLA excluído" });
+      toast.success("SLA excluído");
     },
   });
 

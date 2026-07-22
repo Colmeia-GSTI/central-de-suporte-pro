@@ -33,7 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Plus, Pencil, Trash2, Users, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface Department {
   id: string;
@@ -54,7 +54,6 @@ export function DepartmentsTab() {
     manager_id: "",
     is_active: true,
   });
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Fetch departments
@@ -126,11 +125,11 @@ export function DepartmentsTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["departments"] });
-      toast({ title: editingDept ? "Departamento atualizado" : "Departamento criado" });
+      toast.success(editingDept ? "Departamento atualizado" : "Departamento criado");
       handleCloseForm();
     },
     onError: (error) => {
-      toast({ title: error.message, variant: "destructive" });
+      toast.error(error.message);
     },
   });
 
@@ -141,11 +140,11 @@ export function DepartmentsTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["departments"] });
-      toast({ title: "Departamento excluído" });
+      toast.success("Departamento excluído");
       setDeleteConfirm(null);
     },
     onError: () => {
-      toast({ title: "Erro ao excluir departamento", variant: "destructive" });
+      toast.error("Erro ao excluir departamento");
     },
   });
 

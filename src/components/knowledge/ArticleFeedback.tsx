@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ThumbsUp, ThumbsDown, MessageSquare, Check } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface ArticleFeedbackProps {
@@ -14,7 +14,6 @@ interface ArticleFeedbackProps {
 
 export function ArticleFeedback({ articleId }: ArticleFeedbackProps) {
   const { user } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showComment, setShowComment] = useState(false);
   const [comment, setComment] = useState("");
@@ -69,16 +68,12 @@ export function ArticleFeedback({ articleId }: ArticleFeedbackProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["article-feedback", articleId] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
-      toast({ title: "Obrigado pelo feedback!" });
+      toast("Obrigado pelo feedback!");
       setShowComment(false);
       setComment("");
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao enviar feedback",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao enviar feedback", { description: error.message });
     },
   });
 

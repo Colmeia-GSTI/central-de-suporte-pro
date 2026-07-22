@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Star } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface TicketRatingDialogProps {
   open: boolean;
@@ -37,7 +37,6 @@ export function TicketRatingDialog({
   const [hoveredRating, setHoveredRating] = useState(0);
   const [comment, setComment] = useState("");
   const { user } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const ratingMutation = useMutation({
@@ -96,14 +95,14 @@ export function TicketRatingDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-tickets"] });
-      toast({ title: "Obrigado pela avaliação!" });
+      toast("Obrigado pela avaliação!");
       onOpenChange(false);
       setRating(5);
       setComment("");
       onSuccess?.();
     },
     onError: () => {
-      toast({ title: "Erro ao enviar avaliação", variant: "destructive" });
+      toast.error("Erro ao enviar avaliação");
     },
   });
 

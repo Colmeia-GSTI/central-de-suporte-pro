@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Clock, Plus, Trash2, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { Json } from "@/integrations/supabase/types";
 
 interface Shift {
@@ -69,7 +69,6 @@ const TIMEZONES = [
 export function BusinessHoursForm() {
   const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
   const [companyId, setCompanyId] = useState<string | null>(null);
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: companySettings, isLoading } = useQuery({
@@ -121,10 +120,10 @@ export function BusinessHoursForm() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["company-settings-hours"] });
-      toast({ title: "Horário comercial salvo com sucesso" });
+      toast.success("Horário comercial salvo com sucesso");
     },
     onError: () => {
-      toast({ title: "Erro ao salvar horário comercial", variant: "destructive" });
+      toast.error("Erro ao salvar horário comercial");
     },
   });
 
@@ -137,7 +136,7 @@ export function BusinessHoursForm() {
 
   const handleRemoveShift = (index: number) => {
     if (businessHours.shifts.length <= 1) {
-      toast({ title: "Pelo menos um turno é obrigatório", variant: "destructive" });
+      toast.error("Pelo menos um turno é obrigatório");
       return;
     }
     setBusinessHours((prev) => ({
@@ -166,10 +165,8 @@ export function BusinessHoursForm() {
     // Validate shifts
     for (const shift of businessHours.shifts) {
       if (shift.start >= shift.end) {
-        toast({
-          title: `Horário inválido no turno "${shift.name}"`,
+        toast.error(`Horário inválido no turno "${shift.name}"`, {
           description: "O horário de início deve ser anterior ao horário de término",
-          variant: "destructive",
         });
         return;
       }

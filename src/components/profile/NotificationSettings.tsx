@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { logger } from "@/lib/logger";
@@ -103,7 +103,6 @@ export function NotificationSettings({
   onLocalPrefChange,
 }: NotificationSettingsProps) {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [testingPush, setTestingPush] = useState(false);
 
   const {
@@ -133,9 +132,9 @@ export function NotificationSettings({
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.3);
 
-      toast({ title: "Som de teste", description: "Notificação sonora funcionando!" });
+      toast("Som de teste", { description: "Notificação sonora funcionando!" });
     } catch {
-      toast({ title: "Erro", description: "Não foi possível reproduzir o som", variant: "destructive" });
+      toast.error("Erro", { description: "Não foi possível reproduzir o som" });
     }
   }, [toast]);
 
@@ -156,23 +155,18 @@ export function NotificationSettings({
       if (error) throw error;
 
       if (data?.sent > 0) {
-        toast({
-          title: "Push enviado",
+        toast.success("Push enviado", {
           description: "Você deve receber a notificação em segundos.",
         });
       } else {
         // Improved feedback: subscription may have expired
-        toast({
-          title: "Nenhum dispositivo recebeu",
+        toast.error("Nenhum dispositivo recebeu", {
           description: "A assinatura pode ter expirado. Desative e reative o Push Nativo para corrigir.",
-          variant: "destructive",
         });
       }
     } catch (error: unknown) {
-      toast({
-        title: "Erro ao testar push",
+      toast.error("Erro ao testar push", {
         description: getErrorMessage(error),
-        variant: "destructive",
       });
     } finally {
       setTestingPush(false);

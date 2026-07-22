@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { MarkdownEditor } from "./MarkdownEditor";
@@ -55,7 +55,6 @@ interface ArticleFormProps {
 }
 
 export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [tagInput, setTagInput] = useState("");
@@ -126,11 +125,11 @@ export function ArticleForm({ article, onSuccess, onCancel }: ArticleFormProps) 
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-categories"] });
-      toast({ title: article ? "Artigo atualizado" : "Artigo criado" });
+      toast.success(article ? "Artigo atualizado" : "Artigo criado");
       onSuccess();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 

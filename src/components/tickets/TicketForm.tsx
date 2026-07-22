@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { TagsInput } from "@/components/tickets/TagsInput";
@@ -84,7 +84,6 @@ const emptyDevice: DeviceSelectorValue = {
 };
 
 export function TicketForm({ onSuccess, onCancel, initialData }: Props) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [ticketType, setTicketType] = useState<TicketType>("external");
@@ -254,14 +253,12 @@ export function TicketForm({ onSuccess, onCancel, initialData }: Props) {
       const label = ticketType === "task" ? "Tarefa criada!"
         : ticketType === "internal" ? "Chamado interno criado!"
         : "Chamado criado!";
-      toast({ title: label });
+      toast.success(label);
       onSuccess();
     },
     onError: (error: { message?: string }) => {
-      toast({
-        title: "Erro ao criar chamado",
+      toast.error("Erro ao criar chamado", {
         description: error?.message || "Tente novamente.",
-        variant: "destructive",
       });
     },
   });

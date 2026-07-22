@@ -17,7 +17,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ChevronDown, Settings2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { formatPhone, stripPhone } from "@/lib/phone";
@@ -59,7 +59,6 @@ export function ClientTicketForm({
   monitoredDevices, clientAssets, categories,
   onSuccess, onCancel,
 }: Props) {
-  const { toast } = useToast();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [device, setDevice] = useState<DeviceSelectorValue>(emptyDevice);
@@ -102,7 +101,7 @@ export function ClientTicketForm({
       return data;
     },
     onSuccess: () => {
-      toast({ title: "Chamado aberto com sucesso!" });
+      toast.success("Chamado aberto com sucesso!");
       clearDraft();
       form.reset();
       setDevice(emptyDevice);
@@ -123,10 +122,8 @@ export function ClientTicketForm({
         err?.hint ||
         (err?.code ? `Código ${err.code}` : "") ||
         "Erro desconhecido. Tente novamente em alguns segundos. Se persistir, entre em contato com o suporte.";
-      toast({
-        title: "Erro ao abrir chamado",
+      toast.error("Erro ao abrir chamado", {
         description,
-        variant: "destructive",
       });
     },
   });

@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Pause, Clock, UserX, Building } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { Enums } from "@/integrations/supabase/types";
 
 type PauseType = "manual" | "no_contact" | "third_party";
@@ -38,7 +38,6 @@ export function TicketPauseDialog({
   const [reason, setReason] = useState("");
   const [thirdPartyName, setThirdPartyName] = useState("");
   const [autoResumeHours, setAutoResumeHours] = useState("2");
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -136,16 +135,12 @@ export function TicketPauseDialog({
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-attendance-pauses", ticketId] });
-      toast({ title: "Chamado pausado com sucesso" });
+      toast.success("Chamado pausado com sucesso");
       handleClose();
       onSuccess?.();
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao pausar chamado",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao pausar chamado", { description: error.message });
     },
   });
 

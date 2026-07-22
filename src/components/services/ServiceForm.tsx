@@ -18,7 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { ServiceCodeSelect } from "@/components/nfse/ServiceCodeSelect";
 import { Calculator, Receipt, AlertTriangle, CheckCircle } from "lucide-react";
@@ -77,7 +77,6 @@ interface NfseValidation {
 }
 
 export function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [nfseValidation, setNfseValidation] = useState<NfseValidation>({
     isValid: false,
@@ -145,17 +144,14 @@ export function ServiceForm({ service, onSuccess, onCancel }: ServiceFormProps) 
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["services"] });
       queryClient.invalidateQueries({ queryKey: ["services-active"] });
-      toast({
-        title: service ? "Serviço atualizado" : "Serviço criado",
+      toast.success(service ? "Serviço atualizado" : "Serviço criado", {
         description: "Operação realizada com sucesso",
       });
       onSuccess();
     },
     onError: (error) => {
-      toast({
-        title: "Erro",
+      toast.error("Erro", {
         description: error.message,
-        variant: "destructive",
       });
     },
   });

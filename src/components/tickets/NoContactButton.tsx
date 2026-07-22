@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PhoneOff } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface NoContactButtonProps {
   ticketId: string;
@@ -32,7 +32,6 @@ export function NoContactButton({
   const [isOpen, setIsOpen] = useState(false);
   const [observation, setObservation] = useState("");
   const { user } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const noContactMutation = useMutation({
@@ -89,8 +88,7 @@ export function NoContactButton({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      toast({ 
-        title: "Sem contato registrado",
+      toast("Sem contato registrado", {
         description: "O cliente será notificado para entrar em contato."
       });
       setIsOpen(false);
@@ -98,7 +96,7 @@ export function NoContactButton({
       onSuccess?.();
     },
     onError: () => {
-      toast({ title: "Erro ao registrar sem contato", variant: "destructive" });
+      toast.error("Erro ao registrar sem contato");
     },
   });
 

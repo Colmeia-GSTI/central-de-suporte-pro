@@ -19,7 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Link2, Plus, X, ChevronDown, ExternalLink } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 
 interface TicketLinksSectionProps {
@@ -39,7 +39,6 @@ export function TicketLinksSection({ ticketId, ticketNumber }: TicketLinksSectio
   const [searchText, setSearchText] = useState("");
   const [linkType, setLinkType] = useState("related");
   const [searchResults, setSearchResults] = useState<{ id: string; ticket_number: number; title: string }[]>([]);
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const debouncedSearch = useDebounce(searchText, 300);
@@ -103,13 +102,10 @@ export function TicketLinksSection({ ticketId, ticketNumber }: TicketLinksSectio
       queryClient.invalidateQueries({ queryKey: ["ticket-links", ticketId] });
       setSearchText("");
       setSearchResults([]);
-      toast({ title: "Vínculo adicionado" });
+      toast.success("Vínculo adicionado");
     },
     onError: (e: Error) => {
-      toast({
-        title: e.message.includes("unique") ? "Este vínculo já existe" : "Erro ao adicionar vínculo",
-        variant: "destructive",
-      });
+      toast.error(e.message.includes("unique") ? "Este vínculo já existe" : "Erro ao adicionar vínculo");
     },
   });
 
@@ -121,9 +117,9 @@ export function TicketLinksSection({ ticketId, ticketNumber }: TicketLinksSectio
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-links", ticketId] });
-      toast({ title: "Vínculo removido" });
+      toast.success("Vínculo removido");
     },
-    onError: () => toast({ title: "Erro ao remover vínculo", variant: "destructive" }),
+    onError: () => toast.error("Erro ao remover vínculo"),
   });
 
   const statusColors: Record<string, string> = {

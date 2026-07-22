@@ -25,7 +25,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from "date-f
 import { EventForm } from "@/components/calendar/EventForm";
 import { FullCalendarWrapper } from "@/components/calendar/FullCalendarWrapper";
 import { EventDetailsSheet } from "@/components/calendar/EventDetailsSheet";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 
 type EventWithClient = Tables<"calendar_events"> & {
@@ -48,7 +48,6 @@ export default function CalendarPage() {
   const [isEventSheetOpen, setIsEventSheetOpen] = useState(false);
 
   const { user } = useAuth();
-  const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -100,14 +99,10 @@ export default function CalendarPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      toast({ title: "Evento atualizado" });
+      toast.success("Evento atualizado");
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao atualizar",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao atualizar", { description: error.message });
       // Refetch to reset the calendar
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
     },

@@ -25,7 +25,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface MonitoredDevice {
   id: string;
@@ -78,7 +78,6 @@ const alertLevelLabels: Record<string, string> = {
 
 export function InventoryOverview() {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Query: Contadores
@@ -186,10 +185,10 @@ export function InventoryOverview() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["active-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["inventory-counters"] });
-      toast({ title: "Alerta reconhecido" });
+      toast("Alerta reconhecido");
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 

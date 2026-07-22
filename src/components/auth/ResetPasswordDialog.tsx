@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, KeyRound, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface ResetPasswordDialogProps {
   open: boolean;
@@ -25,7 +25,6 @@ type Mode = "generate" | "manual";
 export function ResetPasswordDialog({
   open, onOpenChange, userId, userName, userEmail, onSuccess,
 }: ResetPasswordDialogProps) {
-  const { toast } = useToast();
   const [mode, setMode] = useState<Mode>("generate");
   const [manualPassword, setManualPassword] = useState("");
   const [notifyEmail, setNotifyEmail] = useState(true);
@@ -69,13 +68,11 @@ export function ResetPasswordDialog({
     onSuccess: (data) => {
       if (data.generated_password) {
         setGeneratedPassword(data.generated_password);
-        toast({
-          title: "Senha temporária gerada",
+        toast("Senha temporária gerada", {
           description: data.email_sent ? "Email de aviso enviado ao usuário." : "Copie e entregue a senha ao usuário.",
         });
       } else {
-        toast({
-          title: "Senha redefinida",
+        toast.success("Senha redefinida", {
           description: data.email_sent ? "Email de aviso enviado." : "Senha alterada com sucesso.",
         });
         onSuccess?.();
@@ -83,7 +80,7 @@ export function ResetPasswordDialog({
       }
     },
     onError: (err: Error) => {
-      toast({ title: "Erro ao redefinir senha", description: err.message, variant: "destructive" });
+      toast.error("Erro ao redefinir senha", { description: err.message });
     },
   });
 

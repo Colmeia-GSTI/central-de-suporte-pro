@@ -13,7 +13,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { DocDeviceLinkDialog } from "@/components/clients/DocDeviceLinkDialog";
@@ -47,7 +47,6 @@ interface AssetFormProps {
 }
 
 export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [linkDialogAsset, setLinkDialogAsset] = useState<{
     id: string; client_id: string; name: string; asset_type: string;
@@ -133,7 +132,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["assets"] });
       queryClient.invalidateQueries({ queryKey: ["inventory-counters"] });
-      toast({ title: asset ? "Ativo atualizado" : "Ativo criado" });
+      toast.success(asset ? "Ativo atualizado" : "Ativo criado");
 
       if (!asset) {
         // New asset — offer doc_device link
@@ -166,7 +165,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
       onSuccess();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 

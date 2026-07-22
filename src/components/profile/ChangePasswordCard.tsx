@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,6 @@ import { Loader2, KeyRound, Eye, EyeOff } from "lucide-react";
 
 export function ChangePasswordCard() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [current, setCurrent] = useState("");
@@ -28,15 +27,15 @@ export function ChangePasswordCard() {
     if (!user?.email) return;
 
     if (next.length < 8) {
-      toast({ title: "Senha muito curta", description: "Mínimo de 8 caracteres.", variant: "destructive" });
+      toast.error("Senha muito curta", { description: "Mínimo de 8 caracteres." });
       return;
     }
     if (next !== confirm) {
-      toast({ title: "Senhas não coincidem", description: "Confirme a nova senha corretamente.", variant: "destructive" });
+      toast.error("Senhas não coincidem", { description: "Confirme a nova senha corretamente." });
       return;
     }
     if (next === current) {
-      toast({ title: "Senha igual à atual", description: "Escolha uma senha diferente da atual.", variant: "destructive" });
+      toast.error("Senha igual à atual", { description: "Escolha uma senha diferente da atual." });
       return;
     }
 
@@ -48,7 +47,7 @@ export function ChangePasswordCard() {
         password: current,
       });
       if (signInError) {
-        toast({ title: "Senha atual incorreta", description: "Verifique e tente novamente.", variant: "destructive" });
+        toast.error("Senha atual incorreta", { description: "Verifique e tente novamente." });
         return;
       }
 
@@ -61,18 +60,11 @@ export function ChangePasswordCard() {
         .update({ must_change_password: false, updated_at: new Date().toISOString() })
         .eq("user_id", user.id);
 
-      toast({
-        title: "Senha alterada",
-        description: "Sua senha foi atualizada com sucesso.",
-      });
+      toast("Senha alterada", { description: "Sua senha foi atualizada com sucesso." });
       reset();
     } catch (error) {
       logger.error("Error changing password", "Profile", { error: String(error) });
-      toast({
-        title: "Erro ao alterar senha",
-        description: "Não foi possível atualizar sua senha. Tente novamente.",
-        variant: "destructive",
-      });
+      toast.error("Erro ao alterar senha", { description: "Não foi possível atualizar sua senha. Tente novamente." });
     } finally {
       setLoading(false);
     }

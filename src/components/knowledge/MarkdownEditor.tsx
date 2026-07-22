@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Bold,
   Italic,
@@ -72,7 +72,6 @@ export function MarkdownEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<string>("write");
   const [isUploading, setIsUploading] = useState(false);
-  const { toast } = useToast();
 
   const insertMarkdown = (prefix: string, suffix?: string, block?: boolean) => {
     const textarea = textareaRef.current;
@@ -109,12 +108,12 @@ export function MarkdownEditor({
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      toast({ title: "Arquivo inválido", description: "Selecione uma imagem (JPG, PNG, GIF, WebP).", variant: "destructive" });
+      toast.error("Arquivo inválido", { description: "Selecione uma imagem (JPG, PNG, GIF, WebP)." });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Imagem muito grande", description: "O tamanho máximo é 5MB.", variant: "destructive" });
+      toast.error("Imagem muito grande", { description: "O tamanho máximo é 5MB." });
       return;
     }
 
@@ -142,10 +141,10 @@ export function MarkdownEditor({
       const newLine = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
       onChange(before + newLine + imageMarkdown + "\n" + after);
 
-      toast({ title: "Imagem inserida com sucesso" });
+      toast.success("Imagem inserida com sucesso");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      toast({ title: "Erro ao enviar imagem", description: msg, variant: "destructive" });
+      toast.error("Erro ao enviar imagem", { description: msg });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

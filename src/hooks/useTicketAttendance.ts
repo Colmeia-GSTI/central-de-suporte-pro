@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { logger } from "@/lib/logger";
 import type { AttendanceData } from "@/lib/attendance-time";
 import {
@@ -31,7 +31,6 @@ export function useTicketAttendance({
   resolvedAt,
 }: UseTicketAttendanceOptions) {
   const { user } = useAuth();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [now, setNow] = useState(new Date());
 
@@ -142,12 +141,12 @@ export function useTicketAttendance({
       });
     },
     onSuccess: () => {
-      toast({ title: "Atendimento iniciado" });
+      toast("Atendimento iniciado");
       invalidateAll();
     },
     onError: (e) => {
       logger.error("Start attendance failed", "Tickets", { error: String(e) });
-      toast({ title: "Erro ao iniciar atendimento", variant: "destructive" });
+      toast.error("Erro ao iniciar atendimento");
     },
   });
 
@@ -193,12 +192,12 @@ export function useTicketAttendance({
       });
     },
     onSuccess: () => {
-      toast({ title: "Atendimento retomado" });
+      toast("Atendimento retomado");
       invalidateAll();
     },
     onError: (e) => {
       logger.error("Resume attendance failed", "Tickets", { error: String(e) });
-      toast({ title: "Erro ao retomar atendimento", variant: "destructive" });
+      toast.error("Erro ao retomar atendimento");
     },
   });
 

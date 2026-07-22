@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { User, Building2, Loader2, ArrowRightLeft } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface TicketTransferDialogProps {
   open: boolean;
@@ -47,7 +47,6 @@ export function TicketTransferDialog({
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [reason, setReason] = useState("");
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -165,16 +164,12 @@ export function TicketTransferDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
-      toast({ title: "Chamado transferido com sucesso" });
+      toast.success("Chamado transferido com sucesso");
       handleClose();
       onSuccess?.();
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao transferir chamado",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao transferir chamado", { description: error.message });
     },
   });
 
@@ -187,11 +182,11 @@ export function TicketTransferDialog({
 
   const handleTransfer = () => {
     if (transferType === "technician" && !selectedTechnicianId) {
-      toast({ title: "Selecione um técnico", variant: "destructive" });
+      toast.error("Selecione um técnico");
       return;
     }
     if (transferType === "department" && !selectedDepartmentId) {
-      toast({ title: "Selecione um departamento", variant: "destructive" });
+      toast.error("Selecione um departamento");
       return;
     }
     transferMutation.mutate();

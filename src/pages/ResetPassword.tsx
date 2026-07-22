@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Loader2, Hexagon, ArrowLeft, KeyRound, CheckCircle2, AlertCircle } from "lucide-react";
 import { logger } from "@/lib/logger";
 
@@ -14,7 +14,6 @@ type Status = "loading" | "ready" | "invalid" | "submitting" | "success";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [params] = useSearchParams();
   const isForced = params.get("forced") === "1";
 
@@ -73,11 +72,11 @@ export default function ResetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 8) {
-      toast({ title: "Senha muito curta", description: "Mínimo 8 caracteres.", variant: "destructive" });
+      toast.error("Senha muito curta", { description: "Mínimo 8 caracteres." });
       return;
     }
     if (password !== confirm) {
-      toast({ title: "Senhas não conferem", variant: "destructive" });
+      toast.error("Senhas não conferem");
       return;
     }
     setStatus("submitting");
@@ -100,7 +99,7 @@ export default function ResetPassword() {
       }
 
       setStatus("success");
-      toast({ title: "Senha redefinida!", description: "Faça login com a nova senha." });
+      toast.success("Senha redefinida!", { description: "Faça login com a nova senha." });
 
       // Desloga e leva pro login pra evitar sessão de recovery ativa
       await supabase.auth.signOut();
@@ -108,7 +107,7 @@ export default function ResetPassword() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao redefinir senha";
       logger.error("[ResetPassword] update failed", "Auth", { error: msg });
-      toast({ title: "Erro ao redefinir senha", description: msg, variant: "destructive" });
+      toast.error("Erro ao redefinir senha", { description: msg });
       setStatus("ready");
     }
   };

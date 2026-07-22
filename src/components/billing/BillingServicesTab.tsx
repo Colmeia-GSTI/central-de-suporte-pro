@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Search, Wrench, Edit, Trash2, Calculator, X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ServiceForm } from "@/components/services/ServiceForm";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -57,7 +57,6 @@ export function BillingServicesTab() {
     open: false,
     service: null,
   });
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: services = [], isLoading } = useQuery({
@@ -88,11 +87,11 @@ export function BillingServicesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["services"] });
-      toast({ title: "Serviço desativado com sucesso" });
+      toast.success("Serviço desativado com sucesso");
       setDeleteConfirm({ open: false, service: null });
     },
     onError: () => {
-      toast({ title: "Erro ao desativar serviço", variant: "destructive" });
+      toast.error("Erro ao desativar serviço");
     },
   });
 
@@ -106,10 +105,10 @@ export function BillingServicesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["services"] });
-      toast({ title: "Serviço reativado com sucesso" });
+      toast.success("Serviço reativado com sucesso");
     },
     onError: () => {
-      toast({ title: "Erro ao reativar serviço", variant: "destructive" });
+      toast.error("Erro ao reativar serviço");
     },
   });
 

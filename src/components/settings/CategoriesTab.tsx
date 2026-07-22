@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Tags } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -53,7 +53,6 @@ type CategoryRow = Pick<Tables<"ticket_categories">, "id" | "name" | "descriptio
 export function CategoriesTab() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryRow | null>(null);
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<CategoryFormData>({
@@ -100,11 +99,11 @@ export function CategoriesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-categories"] });
-      toast({ title: editingCategory ? "Categoria atualizada" : "Categoria criada" });
+      toast.success(editingCategory ? "Categoria atualizada" : "Categoria criada");
       handleCloseForm();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 
@@ -115,7 +114,7 @@ export function CategoriesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-categories"] });
-      toast({ title: "Categoria excluída" });
+      toast.success("Categoria excluída");
     },
   });
 

@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, UserCheck, Calendar } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { format } from "date-fns";
@@ -58,7 +58,6 @@ export function ClientTechniciansList({ clientId }: ClientTechniciansListProps) 
     open: false,
     assignment: null,
   });
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Fetch assigned technicians
@@ -142,12 +141,12 @@ export function ClientTechniciansList({ clientId }: ClientTechniciansListProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-technicians", clientId] });
       queryClient.invalidateQueries({ queryKey: ["available-technicians", clientId] });
-      toast({ title: "Técnico vinculado com sucesso" });
+      toast.success("Técnico vinculado com sucesso");
       setIsDialogOpen(false);
       setSelectedTechnicianId("");
     },
     onError: (error: unknown) => {
-      toast({ title: "Erro ao vincular técnico", description: getErrorMessage(error), variant: "destructive" });
+      toast.error("Erro ao vincular técnico", { description: getErrorMessage(error) });
     },
   });
 
@@ -159,11 +158,11 @@ export function ClientTechniciansList({ clientId }: ClientTechniciansListProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-technicians", clientId] });
       queryClient.invalidateQueries({ queryKey: ["available-technicians", clientId] });
-      toast({ title: "Técnico desvinculado" });
+      toast("Técnico desvinculado");
       setDeleteConfirm({ open: false, assignment: null });
     },
     onError: () => {
-      toast({ title: "Erro ao desvincular técnico", variant: "destructive" });
+      toast.error("Erro ao desvincular técnico");
     },
   });
 

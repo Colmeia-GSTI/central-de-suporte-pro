@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
@@ -50,7 +50,6 @@ interface EventFormProps {
 }
 
 export function EventForm({ selectedDate, onSuccess, onCancel }: EventFormProps) {
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -109,11 +108,11 @@ export function EventForm({ selectedDate, onSuccess, onCancel }: EventFormProps)
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      toast({ title: "Evento criado com sucesso" });
+      toast.success("Evento criado com sucesso");
       onSuccess();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 

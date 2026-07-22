@@ -40,7 +40,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatTimeHMS, formatTimeFriendly } from "@/lib/attendance-time";
 import { useTicketAttendance } from "@/hooks/useTicketAttendance";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Enums } from "@/integrations/supabase/types";
 
@@ -235,7 +235,6 @@ function ManualTimeSection({ ticketId, canEdit }: { ticketId: string; canEdit: b
   const [manualDescription, setManualDescription] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -294,8 +293,8 @@ function ManualTimeSection({ ticketId, canEdit }: { ticketId: string; canEdit: b
       });
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] }); toast({ title: "Tempo registrado" }); resetTimer(); },
-    onError: () => { toast({ title: "Erro ao salvar tempo", variant: "destructive" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] }); toast("Tempo registrado"); resetTimer(); },
+    onError: () => { toast.error("Erro ao salvar tempo"); },
   });
 
   const saveManualMutation = useMutation({
@@ -314,8 +313,8 @@ function ManualTimeSection({ ticketId, canEdit }: { ticketId: string; canEdit: b
       });
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] }); toast({ title: "Tempo registrado" }); setIsManualDialogOpen(false); resetManualForm(); },
-    onError: (error) => { toast({ title: error.message || "Erro ao salvar tempo", variant: "destructive" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] }); toast("Tempo registrado"); setIsManualDialogOpen(false); resetManualForm(); },
+    onError: (error) => { toast.error(error.message || "Erro ao salvar tempo"); },
   });
 
   const deleteMutation = useMutation({
@@ -323,8 +322,8 @@ function ManualTimeSection({ ticketId, canEdit }: { ticketId: string; canEdit: b
       const { error } = await supabase.from("ticket_time_entries").delete().eq("id", entryId);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] }); toast({ title: "Registro excluído" }); setDeleteConfirm(null); },
-    onError: () => { toast({ title: "Erro ao excluir", variant: "destructive" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["ticket-time-entries", ticketId] }); toast.success("Registro excluído"); setDeleteConfirm(null); },
+    onError: () => { toast.error("Erro ao excluir"); },
   });
 
   return (
@@ -365,7 +364,7 @@ function ManualTimeSection({ ticketId, canEdit }: { ticketId: string; canEdit: b
                       </Button>
                       <Button
                         size="sm"
-                        onClick={() => elapsedSeconds >= 60 ? saveStopwatchMutation.mutate() : (toast({ title: "Tempo mínimo: 1 minuto", variant: "destructive" }), resetTimer())}
+                        onClick={() => elapsedSeconds >= 60 ? saveStopwatchMutation.mutate() : (toast.error("Tempo mínimo: 1 minuto"), resetTimer())}
                         disabled={saveStopwatchMutation.isPending}
                         className="h-8 w-8 p-0"
                       >

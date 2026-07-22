@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import { DraftRecoveryBanner } from "@/components/ui/DraftRecoveryBanner";
 import { useAuth } from "@/hooks/useAuth";
@@ -85,7 +85,6 @@ interface LicenseFormProps {
 }
 
 export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
@@ -148,15 +147,12 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
       setShowKey(true);
       form.setValue("license_key", data || "");
       
-      toast({
-        title: "Chave revelada",
+      toast("Chave revelada", {
         description: "Acesso registrado em auditoria.",
       });
     } catch (error: unknown) {
-      toast({
-        title: "Erro ao revelar chave",
+      toast.error("Erro ao revelar chave", {
         description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
       });
     } finally {
       setLoadingKey(false);
@@ -200,11 +196,11 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["licenses"] });
       queryClient.invalidateQueries({ queryKey: ["inventory-counters"] });
-      toast({ title: license ? "Licença atualizada" : "Licença criada" });
+      toast.success(license ? "Licença atualizada" : "Licença criada");
       onSuccess();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 

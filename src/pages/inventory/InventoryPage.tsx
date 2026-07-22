@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Search, Monitor, Key, Shield, Edit, Trash2, LayoutDashboard } from "lucide-react";
 import { InventoryOverview } from "@/components/inventory/InventoryOverview";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { AssetForm } from "@/components/inventory/AssetForm";
 import { LicenseForm } from "@/components/inventory/LicenseForm";
@@ -107,7 +107,6 @@ export default function InventoryPage() {
     open: false,
     license: null,
   });
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const debouncedSearch = useDebounce(search, 300);
 
@@ -183,11 +182,11 @@ export default function InventoryPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assets"] });
-      toast({ title: "Ativo excluído com sucesso" });
+      toast.success("Ativo excluído com sucesso");
       setDeleteAssetConfirm({ open: false, asset: null });
     },
     onError: (error) => {
-      toast({ title: "Erro ao excluir ativo", description: error.message, variant: "destructive" });
+      toast.error("Erro ao excluir ativo", { description: error.message });
     },
   });
 
@@ -198,11 +197,11 @@ export default function InventoryPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["licenses"] });
-      toast({ title: "Licença excluída com sucesso" });
+      toast.success("Licença excluída com sucesso");
       setDeleteLicenseConfirm({ open: false, license: null });
     },
     onError: (error) => {
-      toast({ title: "Erro ao excluir licença", description: error.message, variant: "destructive" });
+      toast.error("Erro ao excluir licença", { description: error.message });
     },
   });
 

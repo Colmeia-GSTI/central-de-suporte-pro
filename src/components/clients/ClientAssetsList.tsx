@@ -27,8 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Plus, Edit, Trash2, Monitor, Server, Laptop, Printer, Wifi, HardDrive, FileText, AlertTriangle, Link2 } from "lucide-react";
 import { SourceBadge } from "./documentation/shared/SourceBadge";
-import { useToast } from "@/hooks/use-toast";
-import { toast as sonnerToast } from "sonner";
+import { toast, toast as sonnerToast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -163,7 +162,6 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     ip_address?: string | null; location?: string | null; notes?: string | null;
   } | null>(null);
   const [manualLinkDialog, setManualLinkDialog] = useState<{ open: boolean; assetId: string }>({ open: false, assetId: "" });
-  const { toast } = useToast();
   const { syncFieldsToDoc } = useDocDeviceSync();
   const queryClient = useQueryClient();
 
@@ -364,7 +362,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
       queryClient.invalidateQueries({ queryKey: ["client-assets", clientId] });
       const wasEditing = !!editingAsset;
       const editedAsset = editingAsset;
-      toast({ title: wasEditing ? "Ativo atualizado" : "Ativo adicionado" });
+      toast.success(wasEditing ? "Ativo atualizado" : "Ativo adicionado");
       handleCloseForm();
 
       if (wasEditing && editedAsset?.doc_device_id) {
@@ -419,7 +417,7 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
       }
     },
     onError: (error: unknown) => {
-      toast({ title: "Erro", description: getErrorMessage(error), variant: "destructive" });
+      toast.error("Erro", { description: getErrorMessage(error) });
     },
   });
 
@@ -430,11 +428,11 @@ export function ClientAssetsList({ clientId }: ClientAssetsListProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-assets", clientId] });
-      toast({ title: "Ativo excluído" });
+      toast.success("Ativo excluído");
       setDeleteConfirm({ open: false, asset: null });
     },
     onError: () => {
-      toast({ title: "Erro ao excluir ativo", variant: "destructive" });
+      toast.error("Erro ao excluir ativo");
     },
   });
 

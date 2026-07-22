@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Loader2, PhoneOff, Clock, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -18,7 +18,6 @@ interface NoContactSettings {
 }
 
 export function NoContactCheckConfigForm() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: config, isLoading } = useQuery({
@@ -77,16 +76,13 @@ export function NoContactCheckConfigForm() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integration-settings", "no_contact_check"] });
-      toast({
-        title: "Configuração salva",
+      toast.success("Configuração salva", {
         description: "As configurações de verificação de 'Sem Contato' foram atualizadas.",
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao salvar",
+      toast.error("Erro ao salvar", {
         description: error.message,
-        variant: "destructive",
       });
     },
   });
@@ -99,16 +95,13 @@ export function NoContactCheckConfigForm() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["integration-settings", "no_contact_check"] });
-      toast({
-        title: "Verificação executada",
+      toast("Verificação executada", {
         description: data?.message || "A verificação foi concluída com sucesso.",
       });
     },
     onError: (error) => {
-      toast({
-        title: "Erro na verificação",
+      toast.error("Erro na verificação", {
         description: error.message,
-        variant: "destructive",
       });
     },
   });

@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Calculator, Edit, Power, PowerOff } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ServiceCodeForm } from "@/components/nfse/ServiceCodeForm";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,7 +40,6 @@ export function BillingTaxCodesTab() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCode, setEditingCode] = useState<NfseServiceCode | null>(null);
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: codes = [], isLoading } = useQuery({
@@ -90,10 +89,10 @@ export function BillingTaxCodesTab() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["nfse-service-codes"] });
-      toast({ title: variables.ativo ? "Código ativado" : "Código desativado" });
+      toast.success(variables.ativo ? "Código ativado" : "Código desativado");
     },
     onError: () => {
-      toast({ title: "Erro ao atualizar código", variant: "destructive" });
+      toast.error("Erro ao atualizar código");
     },
   });
 

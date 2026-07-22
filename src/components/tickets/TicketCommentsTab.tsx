@@ -18,7 +18,7 @@ import {
 import { User, Lock, Zap, Search, Paperclip, X as XIcon, FileText, Image as ImageIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 
 interface TicketCommentsTabProps {
@@ -33,7 +33,6 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
   const [macroPopoverOpen, setMacroPopoverOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const debouncedMacroSearch = useDebounce(macroSearch, 200);
@@ -178,10 +177,10 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
       setComment("");
       setIsInternal(false);
       setPendingFiles([]);
-      toast({ title: "Comentário adicionado" });
+      toast.success("Comentário adicionado");
     },
     onError: () => {
-      toast({ title: "Erro ao adicionar comentário", variant: "destructive" });
+      toast.error("Erro ao adicionar comentário");
     },
   });
 
@@ -195,7 +194,7 @@ export function TicketCommentsTab({ ticketId, ticketCreatedBy }: TicketCommentsT
     const MAX = 10 * 1024 * 1024; // 10 MB
     const valid = files.filter((f) => {
       if (f.size > MAX) {
-        toast({ title: `"${f.name}" excede 10MB`, variant: "destructive" });
+        toast.error(`"${f.name}" excede 10MB`);
         return false;
       }
       return true;

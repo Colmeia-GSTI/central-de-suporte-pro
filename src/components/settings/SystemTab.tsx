@@ -14,12 +14,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tv, RefreshCw, Copy } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { BusinessHoursForm } from "./BusinessHoursForm";
 import type { Tables } from "@/integrations/supabase/types";
 
 export function SystemTab() {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: tvConfig } = useQuery({
@@ -46,7 +45,7 @@ export function SystemTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tv-dashboard-config"] });
-      toast({ title: "Configuração salva" });
+      toast.success("Configuração salva");
     },
   });
 
@@ -62,14 +61,14 @@ export function SystemTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tv-dashboard-config"] });
-      toast({ title: "Token regenerado" });
+      toast("Token regenerado");
     },
   });
 
   const copyTVUrl = () => {
     const url = `${window.location.origin}/tv-dashboard`;
     navigator.clipboard.writeText(url);
-    toast({ title: "URL copiada para a área de transferência" });
+    toast.success("URL copiada para a área de transferência");
   };
 
   return (

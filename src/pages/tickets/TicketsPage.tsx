@@ -28,7 +28,7 @@ import {
   Play, X, LayoutList, Kanban, ChevronDown, Users, AlertCircle,
   SlidersHorizontal,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { TicketDetails } from "@/components/tickets/TicketDetails";
 import { TicketsKanbanView } from "@/components/tickets/TicketsKanbanView";
 import { TicketStatsBar } from "@/components/tickets/TicketStatsBar";
@@ -107,7 +107,6 @@ export default function TicketsPage() {
   const [isAssetDialogOpen, setIsAssetDialogOpen] = useState(false);
   const [pendingStartTicket, setPendingStartTicket] = useState<TicketWithRelations | null>(null);
 
-  const { toast } = useToast();
   const { user } = useAuth();
   const { can } = usePermissions();
   const canManageTickets = can("tickets", "manage");
@@ -131,10 +130,10 @@ export default function TicketsPage() {
     onSuccess: (_, { ids, status }) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
-      toast({ title: `${ids.length} chamado(s) atualizado(s) para "${statusLabels[status as Enums<"ticket_status">] || status}"` });
+      toast.success(`${ids.length} chamado(s) atualizado(s) para "${statusLabels[status as Enums<"ticket_status">] || status}"`);
       setSelectedIds(new Set());
     },
-    onError: () => toast({ title: "Erro ao atualizar status em lote", variant: "destructive" }),
+    onError: () => toast.error("Erro ao atualizar status em lote"),
   });
 
   const bulkPriorityMutation = useMutation({
@@ -144,10 +143,10 @@ export default function TicketsPage() {
     },
     onSuccess: (_, { ids }) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      toast({ title: `Prioridade de ${ids.length} chamado(s) atualizada` });
+      toast.success(`Prioridade de ${ids.length} chamado(s) atualizada`);
       setSelectedIds(new Set());
     },
-    onError: () => toast({ title: "Erro ao atualizar prioridade em lote", variant: "destructive" }),
+    onError: () => toast.error("Erro ao atualizar prioridade em lote"),
   });
 
   const bulkAssignMutation = useMutation({
@@ -158,10 +157,10 @@ export default function TicketsPage() {
     onSuccess: (_, { ids }) => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
-      toast({ title: `${ids.length} chamado(s) atribuído(s)` });
+      toast(`${ids.length} chamado(s) atribuído(s)`);
       setSelectedIds(new Set());
     },
-    onError: () => toast({ title: "Erro ao atribuir chamados em lote", variant: "destructive" }),
+    onError: () => toast.error("Erro ao atribuir chamados em lote"),
   });
 
   const { data: staffMembers = [] } = useTechnicianList();
@@ -334,13 +333,13 @@ export default function TicketsPage() {
       queryClient.invalidateQueries({ queryKey: ["ticket-stats-bar"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-attendance-sessions", ticketId] });
       queryClient.invalidateQueries({ queryKey: ["ticket-history", ticketId] });
-      toast({ title: "Atendimento iniciado" });
+      toast("Atendimento iniciado");
       setSelectedTicketInitialTab("comments");
       setSelectedTicketId(ticketId);
       setPendingStartTicket(null);
       setIsAssetDialogOpen(false);
     },
-    onError: () => toast({ title: "Erro ao iniciar atendimento", variant: "destructive" }),
+    onError: () => toast.error("Erro ao iniciar atendimento"),
   });
 
   const handleStartTicket = (e: React.MouseEvent, ticket: TicketWithRelations) => {
@@ -533,7 +532,7 @@ export default function TicketsPage() {
               const name = window.prompt("Nome para esta vista:");
               if (!name?.trim()) return;
               saveView(name.trim(), { status: statusFilter, priority: priorityFilter, technician: technicianFilter, client: clientFilter, search });
-              toast({ title: `Vista "${name.trim()}" salva` });
+              toast.success(`Vista "${name.trim()}" salva`);
             }}
             activeFilterCount={activeFilterCount}
           />

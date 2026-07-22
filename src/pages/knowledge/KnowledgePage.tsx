@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Plus } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { ArticleForm } from "@/components/knowledge/ArticleForm";
 import { ArticleViewer } from "@/components/knowledge/ArticleViewer";
@@ -44,7 +44,6 @@ export default function KnowledgePage() {
     article: null,
   });
   
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const debouncedSearch = useDebounce(search, 300);
 
@@ -103,15 +102,11 @@ export default function KnowledgePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-categories"] });
-      toast({ title: "Artigo excluído com sucesso" });
+      toast.success("Artigo excluído com sucesso");
       setDeleteConfirm({ open: false, article: null });
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao excluir artigo",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao excluir artigo", { description: error.message });
     },
   });
 

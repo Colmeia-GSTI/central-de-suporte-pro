@@ -19,7 +19,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface IntegrationStatus {
   type: string;
@@ -43,7 +43,6 @@ const INTEGRATION_META: Record<string, { name: string; icon: React.ReactNode; ca
 };
 
 export function IntegrationStatusPanel() {
-  const { toast } = useToast();
   const [syncing, setSyncing] = useState<string | null>(null);
 
   const { data: integrations, isLoading, refetch } = useQuery({
@@ -80,10 +79,8 @@ export function IntegrationStatusPanel() {
           functionName = "checkmk-sync";
           break;
         default:
-          toast({
-            title: "Sincronização não disponível",
+          toast.error("Sincronização não disponível", {
             description: "Esta integração não suporta sincronização manual",
-            variant: "destructive",
           });
           return;
       }
@@ -100,17 +97,14 @@ export function IntegrationStatusPanel() {
         .update({ last_sync_at: new Date().toISOString() })
         .eq("integration_type", integrationType);
 
-      toast({
-        title: "Sincronização concluída",
+      toast.success("Sincronização concluída", {
         description: `${INTEGRATION_META[integrationType]?.name} sincronizado com sucesso`,
       });
 
       refetch();
     } catch (error) {
-      toast({
-        title: "Erro na sincronização",
+      toast.error("Erro na sincronização", {
         description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
       });
     } finally {
       setSyncing(null);

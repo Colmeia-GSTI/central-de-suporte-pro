@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -49,7 +49,6 @@ export function EventDetailsSheet({
   open,
   onOpenChange,
 }: EventDetailsSheetProps) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const deleteMutation = useMutation({
@@ -62,15 +61,11 @@ export function EventDetailsSheet({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      toast({ title: "Evento excluído" });
+      toast.success("Evento excluído");
       onOpenChange(false);
     },
     onError: (error) => {
-      toast({
-        title: "Erro ao excluir",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Erro ao excluir", { description: error.message });
     },
   });
 

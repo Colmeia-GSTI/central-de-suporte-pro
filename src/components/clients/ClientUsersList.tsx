@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PermissionGate } from "@/components/auth/PermissionGate";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { formatPhone } from "@/lib/utils";
 import { Plus, Users, Pencil, Key, Trash2, UserCheck, UserX, Clock, MessageCircle, Bell, BellOff, Loader2 } from "lucide-react";
 import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
@@ -66,7 +66,6 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
   const [resetPasswordUser, setResetPasswordUser] = useState<ClientUser | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const inviteForm = useForm<InviteFormData>({
@@ -109,12 +108,12 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
       queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
       queryClient.invalidateQueries({ queryKey: ["pending-invites-count"] });
-      toast({ title: "Convite enviado", description: "O usuário receberá um email para criar a própria senha." });
+      toast.success("Convite enviado", { description: "O usuário receberá um email para criar a própria senha." });
       setInviteOpen(false);
       inviteForm.reset({ name: "", email: "", role: "client" });
     },
     onError: (error: Error) =>
-      toast({ title: "Erro ao enviar convite", description: error.message, variant: "destructive" }),
+      toast.error("Erro ao enviar convite", { description: error.message }),
   });
 
   const updateUserMutation = useMutation({
@@ -136,11 +135,11 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
-      toast({ title: "Usuário atualizado com sucesso!" });
+      toast.success("Usuário atualizado com sucesso!");
       setEditingUser(null);
     },
     onError: (error: Error) =>
-      toast({ title: "Erro ao atualizar usuário", description: error.message, variant: "destructive" }),
+      toast.error("Erro ao atualizar usuário", { description: error.message }),
   });
 
   const deleteUserMutation = useMutation({
@@ -166,11 +165,11 @@ export function ClientUsersList({ clientId }: ClientUsersListProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-users", clientId] });
-      toast({ title: "Usuário removido com sucesso!" });
+      toast.success("Usuário removido com sucesso!");
       setDeleteConfirm(null);
     },
     onError: (error: Error) =>
-      toast({ title: "Erro ao remover usuário", description: error.message, variant: "destructive" }),
+      toast.error("Erro ao remover usuário", { description: error.message }),
   });
 
   const handleEdit = (user: ClientUser) => {

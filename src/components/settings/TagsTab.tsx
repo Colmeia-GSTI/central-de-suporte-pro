@@ -21,7 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Tag, Lock } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -65,7 +65,6 @@ const COLOR_PRESETS = [
 export function TagsTab() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<TicketTag | null>(null);
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<TagFormData>({
@@ -110,14 +109,14 @@ export function TagsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-tags-admin"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-tags"] });
-      toast({ title: editingTag ? "Tag atualizada" : "Tag criada" });
+      toast.success(editingTag ? "Tag atualizada" : "Tag criada");
       handleCloseForm();
     },
     onError: (error: Error) => {
       if (error.message.includes("duplicate")) {
-        toast({ title: "Erro", description: "Já existe uma tag com este nome", variant: "destructive" });
+        toast.error("Erro", { description: "Já existe uma tag com este nome" });
       } else {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
+        toast.error("Erro", { description: error.message });
       }
     },
   });
@@ -130,10 +129,10 @@ export function TagsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-tags-admin"] });
       queryClient.invalidateQueries({ queryKey: ["ticket-tags"] });
-      toast({ title: "Tag excluída" });
+      toast.success("Tag excluída");
     },
     onError: () => {
-      toast({ title: "Erro ao excluir tag", variant: "destructive" });
+      toast.error("Erro ao excluir tag");
     },
   });
 

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Building2, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
 interface InviteInfo {
@@ -29,7 +29,6 @@ export default function SetupAccountPage() {
   const [params] = useSearchParams();
   const token = params.get("token");
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,11 +57,11 @@ export default function SetupAccountPage() {
     e.preventDefault();
     if (!info?.valid || !info.email || !token) return;
     if (password.length < 8) {
-      toast({ title: "Senha muito curta", description: "Mínimo 8 caracteres.", variant: "destructive" });
+      toast.error("Senha muito curta", { description: "Mínimo 8 caracteres." });
       return;
     }
     if (password !== confirm) {
-      toast({ title: "Senhas não conferem", variant: "destructive" });
+      toast.error("Senhas não conferem");
       return;
     }
     setSubmitting(true);
@@ -78,10 +77,8 @@ export default function SetupAccountPage() {
 
     if (signUpErr) {
       setSubmitting(false);
-      toast({
-        title: "Não foi possível criar a conta",
+      toast.error("Não foi possível criar a conta", {
         description: signUpErr.message,
-        variant: "destructive",
       });
       return;
     }
@@ -97,10 +94,8 @@ export default function SetupAccountPage() {
       // (isso deixaria o usuário criado sem role/empresa). O admin pode ativar
       // manualmente em Configurações → Convites pendentes → "Ativar manualmente".
       setSubmitting(false);
-      toast({
-        title: "Não foi possível ativar a conta automaticamente",
+      toast.error("Não foi possível ativar a conta automaticamente", {
         description: "Avise o administrador para concluir a ativação. Detalhe: " + signInErr.message,
-        variant: "destructive",
       });
       return;
     }
@@ -109,15 +104,13 @@ export default function SetupAccountPage() {
     const { data: result, error: acceptErr } = await supabase.rpc("accept_invite", { p_token: token });
     if (acceptErr) {
       setSubmitting(false);
-      toast({
-        title: "Erro ao ativar conta",
+      toast.error("Erro ao ativar conta", {
         description: acceptErr.message,
-        variant: "destructive",
       });
       return;
     }
 
-    toast({ title: "Conta ativada com sucesso!" });
+    toast.success("Conta ativada com sucesso!");
     const redirect = (result as { redirect?: string })?.redirect || "/";
     navigate(redirect);
   };

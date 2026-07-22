@@ -17,7 +17,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Plus, Edit, Trash2, ChevronRight, ChevronDown, FolderTree } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -66,7 +66,6 @@ export function SubcategoriesSection({ categories }: SubcategoriesSectionProps) 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSubcategory, setEditingSubcategory] = useState<Subcategory | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const form = useForm<SubcategoryFormData>({
@@ -120,11 +119,11 @@ export function SubcategoriesSection({ categories }: SubcategoriesSectionProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-subcategories"] });
-      toast({ title: editingSubcategory ? "Subcategoria atualizada" : "Subcategoria criada" });
+      toast.success(editingSubcategory ? "Subcategoria atualizada" : "Subcategoria criada");
       handleCloseForm();
     },
     onError: (error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast.error("Erro", { description: error.message });
     },
   });
 
@@ -135,10 +134,10 @@ export function SubcategoriesSection({ categories }: SubcategoriesSectionProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ticket-subcategories"] });
-      toast({ title: "Subcategoria excluída" });
+      toast.success("Subcategoria excluída");
     },
     onError: () => {
-      toast({ title: "Erro ao excluir subcategoria", variant: "destructive" });
+      toast.error("Erro ao excluir subcategoria");
     },
   });
 

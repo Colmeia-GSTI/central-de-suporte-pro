@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Edit, Trash2, MapPin, Phone, Mail, Star, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -108,7 +108,6 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
     branch: ClientBranch | null;
   }>({ open: false, branch: null });
   const [isFetchingCep, setIsFetchingCep] = useState(false);
-  const { toast } = useToast();
 
   const lookupCep = async (rawCep: string) => {
     const cep = (rawCep ?? "").replace(/\D/g, "");
@@ -125,10 +124,8 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
       if (!res.ok) throw new Error("Erro na consulta de CEP");
       const data = await res.json();
       if (data.erro) {
-        toast({
-          title: "CEP não encontrado",
+        toast.error("CEP não encontrado", {
           description: "Verifique o CEP digitado.",
-          variant: "destructive",
         });
         return;
       }
@@ -150,10 +147,8 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
         form.setValue("state", data.uf ?? "");
       }
     } catch {
-      toast({
-        title: "Erro na consulta",
+      toast.error("Erro na consulta", {
         description: "Não foi possível consultar o CEP. Tente novamente.",
-        variant: "destructive",
       });
     } finally {
       setIsFetchingCep(false);
@@ -197,26 +192,20 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
 
   const handleMutationError = (error: unknown) => {
     if (isUniqueViolation(error, "uniq_client_branches_main_per_client")) {
-      toast({
-        title: "Já existe uma sede",
+      toast.error("Já existe uma sede", {
         description:
           "Já existe uma sede para este cliente. Desmarque a sede atual antes de marcar outra.",
-        variant: "destructive",
       });
       return;
     }
     if (isUniqueViolation(error, "uniq_client_branches_name_per_client")) {
-      toast({
-        title: "Nome duplicado",
+      toast.error("Nome duplicado", {
         description: "Já existe uma filial com este nome para este cliente.",
-        variant: "destructive",
       });
       return;
     }
-    toast({
-      title: "Erro",
+    toast.error("Erro", {
       description: getErrorMessage(error),
-      variant: "destructive",
     });
   };
 
@@ -225,10 +214,10 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
     try {
       if (editing) {
         await update({ id: editing.id, ...payload });
-        toast({ title: "Filial atualizada" });
+        toast.success("Filial atualizada");
       } else {
         await create(payload);
-        toast({ title: "Filial adicionada" });
+        toast.success("Filial adicionada");
       }
       handleClose();
     } catch (error) {
@@ -238,11 +227,9 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
 
   const handleDeleteRequest = (branch: ClientBranch) => {
     if (branch.is_main && items.length > 1) {
-      toast({
-        title: "Não é possível excluir a Sede",
+      toast.error("Não é possível excluir a Sede", {
         description:
           "Marque outra filial como Sede antes de excluir esta.",
-        variant: "destructive",
       });
       return;
     }
@@ -253,7 +240,7 @@ export function ClientBranchesList({ clientId }: ClientBranchesListProps) {
     if (!deleteConfirm.branch) return;
     try {
       await remove(deleteConfirm.branch.id);
-      toast({ title: "Filial excluída" });
+      toast.success("Filial excluída");
       setDeleteConfirm({ open: false, branch: null });
     } catch (error) {
       handleMutationError(error);
