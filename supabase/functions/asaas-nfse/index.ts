@@ -1,5 +1,13 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { NFSE_BLOCKING_STATUSES, shouldBlockNewEmission } from "./logic.ts";
+import {
+  NFSE_BLOCKING_STATUSES,
+  shouldBlockNewEmission,
+  normalizeServiceCode,
+  parseStatusDescription,
+  normalizeCompetencia,
+  extractStreetFromAddress,
+  extractNumberFromAddress,
+} from "./logic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,77 +72,6 @@ const ERROR_CODES = {
   DPS_DUPLICADA: "NFS-e duplicada - já emitida no Asaas",
 } as const;
 
-// ============ NORMALIZE SERVICE CODE ============
-function normalizeServiceCode(code: string): string {
-  // CORREÇÃO DEFINITIVA: NÃO remover zeros à esquerda
-  // O código "010701" deve ser mantido como "010701" para match correto com a municipalidade
-  return code.replace(/[.\s\-]/g, "");
-}
-
-// ============ KNOWN PREFEITURA ERRORS ============
-interface KnownError {
-  code: string;
-  title: string;
-  message: string;
-  action: string;
-}
-
-const KNOWN_PREFEITURA_ERRORS: Record<string, KnownError> = {
-  E0014: {
-    code: "DPS_DUPLICADA",
-    title: "Nota Fiscal já existe",
-    message: "Esta NFS-e já foi emitida anteriormente com os mesmos dados no provedor Asaas.",
-    action: "VERIFY_EXTERNAL",
-  },
-  E0001: {
-    code: "CERT_INVALIDO",
-    title: "Certificado digital inválido",
-    message: "Verifique os dados do certificado digital.",
-    action: "CHECK_CERTIFICATE",
-  },
-  E0002: {
-    code: "DADOS_INCOMPLETOS",
-    title: "Dados incompletos",
-    message: "Verifique os dados do prestador ou tomador.",
-    action: "CHECK_DATA",
-  },
-};
-
-// Parse error code from prefeitura status description
-function parseStatusDescription(statusDescription: string | null): {
-  codigo: string | null;
-  descricao: string;
-  acao: string | null;
-  knownError: KnownError | null;
-} {
-  if (!statusDescription) {
-    return { codigo: null, descricao: "Erro desconhecido", acao: null, knownError: null };
-  }
-  
-  // Extract code from format "Código: E0014\r\nDescrição: ..."
-  const codigoMatch = statusDescription.match(/C[oó]digo:\s*(\w+)/i);
-  const descMatch = statusDescription.match(/Descri[cç][aã]o:\s*(.+?)(?:\r?\n|$)/i);
-  
-  const codigo = codigoMatch?.[1] || null;
-  const descricao = descMatch?.[1]?.trim() || statusDescription;
-  
-  // Check if it's a known error
-  const knownError = codigo ? KNOWN_PREFEITURA_ERRORS[codigo] || null : null;
-  
-  // Map known actions
-  const acoesConhecidas: Record<string, string> = {
-    E0014: "Verifique se a nota já existe no Asaas e use 'Vincular Nota Existente'",
-    E0001: "Verifique os dados do certificado digital",
-    E0002: "Verifique os dados do prestador e tomador de serviço",
-  };
-  
-  return {
-    codigo,
-    descricao,
-    acao: codigo ? acoesConhecidas[codigo] || null : null,
-    knownError,
-  };
-}
 
 interface AsaasSettings {
   api_key: string;
@@ -162,34 +99,6 @@ const ASAAS_URLS = {
   production: "https://api.asaas.com/v3",
 };
 
-// Helper to normalize competencia to full date format (YYYY-MM-DD)
-function normalizeCompetencia(competencia?: string): string {
-  if (!competencia) {
-    return new Date().toISOString().slice(0, 10);
-  }
-  // If already full date format (YYYY-MM-DD), return as-is
-  if (/^\d{4}-\d{2}-\d{2}$/.test(competencia)) {
-    return competencia;
-  }
-  // If month format (YYYY-MM), append -01
-  if (/^\d{4}-\d{2}$/.test(competencia)) {
-    return `${competencia}-01`;
-  }
-  // Default to current date
-  return new Date().toISOString().slice(0, 10);
-}
-
-// ============ ADDRESS HELPERS ============
-function extractStreetFromAddress(address: string): string {
-  // Remove o número do endereço (ex: "RUA X, 123" -> "RUA X")
-  return address.replace(/,?\s*\d+\s*(-.*)?$/, "").trim() || address;
-}
-
-function extractNumberFromAddress(address: string): string | null {
-  // Extrai número do endereço (ex: "RUA X, 123" -> "123")
-  const match = address.match(/,?\s*(\d+)\s*(?:-|$)/);
-  return match ? match[1] : null;
-}
 
 // ============ CUSTOMER SYNC FOR NFS-e ============
 interface ClientData {
