@@ -14,54 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _billing_hotfix_backup_pix_contamination: {
-        Row: {
-          backup_id: string
-          record_id: string
-          snapshot: Json
-          table_name: string
-          taken_at: string
-        }
-        Insert: {
-          backup_id?: string
-          record_id: string
-          snapshot: Json
-          table_name: string
-          taken_at?: string
-        }
-        Update: {
-          backup_id?: string
-          record_id?: string
-          snapshot?: Json
-          table_name?: string
-          taken_at?: string
-        }
-        Relationships: []
-      }
-      _billing_migration_backup_inter_to_asaas: {
-        Row: {
-          backup_id: string
-          record_id: string
-          snapshot: Json
-          table_name: string
-          taken_at: string
-        }
-        Insert: {
-          backup_id?: string
-          record_id: string
-          snapshot: Json
-          table_name: string
-          taken_at?: string
-        }
-        Update: {
-          backup_id?: string
-          record_id?: string
-          snapshot?: Json
-          table_name?: string
-          taken_at?: string
-        }
-        Relationships: []
-      }
       alert_escalation_settings: {
         Row: {
           client_id: string | null
@@ -5439,35 +5391,6 @@ export type Database = {
         }
         Relationships: []
       }
-      technician_badges: {
-        Row: {
-          badge_id: string
-          earned_at: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          badge_id: string
-          earned_at?: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          badge_id?: string
-          earned_at?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "technician_badges_badge_id_fkey"
-            columns: ["badge_id"]
-            isOneToOne: false
-            referencedRelation: "badges"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       technician_points: {
         Row: {
           created_at: string
@@ -6894,20 +6817,6 @@ export type Database = {
         Returns: Json
       }
       auto_reconcile_bank_entries: { Args: never; Returns: Json }
-      calculate_penalties: {
-        Args: {
-          p_amount: number
-          p_due_date: string
-          p_fine_pct?: number
-          p_monthly_interest_pct?: number
-        }
-        Returns: {
-          days_overdue: number
-          fine: number
-          interest: number
-          total: number
-        }[]
-      }
       change_user_role: {
         Args: {
           new_role: Database["public"]["Enums"]["app_role"]
@@ -7014,6 +6923,7 @@ export type Database = {
           total_invoiced: number
         }[]
       }
+      get_integration_active: { Args: { p_type: string }; Returns: boolean }
       get_integration_health_stats: { Args: never; Returns: Json }
       get_invite_info: { Args: { p_token: string }; Returns: Json }
       get_invoice_report_stats: { Args: { start_date: string }; Returns: Json }
