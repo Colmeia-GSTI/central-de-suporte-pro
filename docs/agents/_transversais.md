@@ -593,7 +593,7 @@ Google Calendar (OAuth sem callback/sync), certificados A1 (cadastro sem consumo
 ## Divergências de documentação conhecidas (auditoria 2026-07-21)
 
 Corrigir ou tratar ao editar os docs de origem (ver AUDITORIA Parte E):
-- `IMPLEMENTATION_GUIDE.md` documenta um recurso de S3 (`s3-storage.ts`, `S3StorageConfigForm.tsx`, edge `test-s3-connection`) que **não existe** no repositório.
+- ✅ **Corrigido (2026-07-22):** `IMPLEMENTATION_GUIDE.md` documentava um recurso de S3 (`s3-storage.ts`, `S3StorageConfigForm.tsx`, edge `test-s3-connection`) **inexistente** — seção corrigida.
 - O antigo MAPA citava a edge `admin-cancel-asaas-payment`, **inexistente** em `supabase/functions/`.
 - `TESTING.md` referencia `src/test/mocks/http.ts`, **removido** na limpeza (Fase 2) por ser órfão.
 - Contagem "60 edge functions" desatualizada: há **59** diretórios em `supabase/functions/` (incl. `_shared` e `mcp`).

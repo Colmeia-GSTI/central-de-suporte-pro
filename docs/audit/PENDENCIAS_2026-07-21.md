@@ -5,6 +5,23 @@ Tags: `[cód]` corrige via Git · `[banco]` via Lovable MCP · `[cfg+deploy]` co
 
 ---
 
+## 🟩 RESOLUÇÃO (2026-07-22) — Tiers 1–6 trabalhados em paralelo com revisão adversarial
+
+Cada tier foi atacado com workflows **implementador → revisor adversarial** por item (agentes independentes), DB via Lovable MCP com revisor dedicado, **guard tsc+vitest** por tier, e commit + deploy por tier. Fixes de banco registrados em [`docs/agents/_transversais.md §2.1`](../agents/_transversais.md).
+
+- **Tier 1 (10) — ✅ todos resolvidos e no ar.** SLA inoperante (trigger horário-comercial + backfill), inventário licenças, `useDocSync`, unifi param, feature flag rollout=0, webhooks `verify_jwt` (5), hard-delete de cliente, XSS + injeção `.or()` na KB, escalonamento `invite-user`.
+- **Tier 2 (7) — ✅ 5 resolvidos · 1 revertido · 1 deferido.** RPC atômica de views (#13), race `renegotiate` (#12), role checks em edges (#16), anonimização `delete-user` (#17, bug real: FK SET NULL), clipboard de credenciais (#11). **Revertido:** idempotência `batch-process` (#15 — causava regressão e era redundante: `asaas-nfse` já reusa o pagamento). **Deferido:** #14 RLS de segredos (fix arquitetural — tighten cego quebra monitoramento/doc-sync).
+- **Tier 3 (13) — ✅ 12 resolvidos · 1 sem-edição (decisão correta).** badgeIcons, `technician_points`, portal financeiro/contato, contratos RLS×UI + consistência + idempotência FIXO, anomalias `warn`/casing, tipos AdditionalCharges, no-contact timestamp, inventário counters/tipos, export escaping. **+ bug real achado na revisão** (`markAsPaid` em `ContractInvoiceActionsMenu` passava só o id). **Sem-edição:** #27 baixa parcial (o "marcar pago rápido" é integral por design).
+- **Tier 4 — parcial.** ✅ Dashboard de certificado passa a ler a fonte certa (`certificates`). **Deferidos (projeto grande / risco > benefício):** split do monólito `asaas-nfse`, consolidação de toast (56 arquivos), dois viewers de auditoria, dedup de gestão de ativos, dedup de multa/juros e geração de pagamento, realtime de monitoramento, VAPID single-source.
+- **Tier 5 — parcial.** ✅ Removidos: edge órfã `generate-invoice-payments`, leituras mortas `boleto_status==='processando'` (4 sites), métodos mortos do logger (`getLogs`/`invoiceProcessingLog`). **Deferidos (drop de schema destrutivo, `types.ts` é gerado, benefício marginal):** enum `billing_reminder`, tabela `technician_badges`, colunas Google Calendar + `calendar_events.invoice_id`, `not_helpful_count`, RPC `calculate_penalties`, tabelas de backup `_billing_*`.
+- **Tier 6 — ✅.** `IMPLEMENTATION_GUIDE.md` (S3 inexistente), `SECURITY.md` + `SYSTEM_DOCUMENTATION.md` (`useSecureAction`), `TESTING.md` (contagens/mocks).
+
+**Aguardam sua decisão** (não executados por serem destrutivos ou refactor grande, com recomendação registrada): **#14 RLS de segredos** (mover segredos p/ backend); **drops de schema** (Tier 5); **refactors grandes** (Tier 4).
+
+---
+
+---
+
 ## ✅ Já resolvido nesta sessão (para contexto)
 - Código morto: 58 símbolos/blocos removidos (frontend/lib) + 4 arquivos órfãos.
 - Edges limpas + deployadas: `asaas-nfse` (4 actions), `google-calendar` (callback/delete_event), `certificate-vault` (decrypt).

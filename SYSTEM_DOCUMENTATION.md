@@ -873,7 +873,7 @@ Permite sobrescrever permissões padrão por role+módulo+ação:
 
 1. **Frontend — `PermissionGate`:** Componente React que oculta/mostra UI baseado em permissões. **Apenas UX — nunca segurança.**
 2. **Frontend — `usePermissions`:** Hook que verifica permissões com suporte a overrides.
-3. **Frontend — `useSecureAction`:** Hook que valida permissões antes de executar mutations.
+3. **Frontend — `usePermissions` / `PermissionGate`:** validam permissões na UI antes de exibir/executar ações (a proteção real é RLS + edge functions).
 4. **Backend — RLS:** Todas as tabelas têm Row-Level Security com funções `has_role()`, `is_staff()`, `is_financial_admin()`, `is_technician_only()`, `client_owns_record()`.
 5. **Edge Functions:** Validam Authorization header e roles antes de processar.
 

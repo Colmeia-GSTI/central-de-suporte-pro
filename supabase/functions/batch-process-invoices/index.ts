@@ -233,7 +233,7 @@ async function processInvoices(
           }
           const hasBoleto = !!freshInvoice?.boleto_url || !!freshInvoice?.boleto_barcode;
           const hasPix = !!freshInvoice?.pix_code;
-          const boletoProcessando = freshInvoice?.boleto_status === "pendente" || freshInvoice?.boleto_status === "processando";
+          const boletoProcessando = freshInvoice?.boleto_status === "pendente";
           if (boletoProcessando && !hasBoleto && !hasPix) {
             blockedArtifacts.push("boleto_pendente");
           }

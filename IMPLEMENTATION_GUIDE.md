@@ -4,6 +4,8 @@
 
 Este documento descreve as implementações realizadas para adicionar um sistema completo de gestão e processamento de faturas com indicadores visuais de status, processamento em lote e integração com S3-compatível (Netskope, AWS S3, MinIO, etc).
 
+> ⚠️ **Status (2026-07-22): a integração de storage S3-compatível descrita neste guia NÃO foi implementada / foi removida.** Os artefatos de código citados — `src/lib/s3-storage.ts`, `src/components/settings/S3StorageConfigForm.tsx` e a edge function `test-s3-connection` — **não existem no repositório** (verificado por grep/glob). O armazenamento de documentos em produção usa o bucket do **Supabase/Lovable Cloud** (`nfse-files`), não S3 externo. As menções a "Storage S3", `storage_config` e conexão S3 nas seções abaixo (§1.3–1.4, §2.2, §3.3–3.4, Fluxo 3, §5–§7) referem-se a essa feature não implementada. O processamento de faturas em lote (`batch-process-invoices`, `useBatchProcessing`, `BillingInvoicesTab`) existe e permanece válido.
+
 ## 🗄️ 1. MIGRAÇÕES DE BANCO DE DADOS
 
 ### Arquivo de Migração Criado:
@@ -124,7 +126,9 @@ const response = await supabase.functions.invoke("batch-process-invoices", {
 });
 ```
 
-#### 2.2 `test-s3-connection`
+#### 2.2 `test-s3-connection` — ⚠️ NÃO IMPLEMENTADO / REMOVIDO
+> Esta edge function **não existe** em `supabase/functions/` (verificado por glob). Faz parte da integração S3 não implementada — ver nota de status no topo. Descrição mantida apenas como referência histórica.
+
 **Arquivo:** `supabase/functions/test-s3-connection/index.ts`
 
 **Funcionalidade:** Testa conexão com S3-compatível
@@ -195,7 +199,9 @@ interface InvoiceActionIndicatorsProps {
 - [ ] Enviar por Email
 - [ ] Enviar por WhatsApp
 
-#### 3.3 `S3StorageConfigForm.tsx`
+#### 3.3 `S3StorageConfigForm.tsx` — ⚠️ NÃO IMPLEMENTADO / REMOVIDO
+> Este componente **não existe** em `src/components/settings/` (verificado por glob). Faz parte da integração S3 não implementada — ver nota de status no topo.
+
 **Localização:** `src/components/settings/S3StorageConfigForm.tsx`
 
 **Funcionalidade:** Formulário para configurar storage S3-compatível
@@ -207,7 +213,9 @@ interface InvoiceActionIndicatorsProps {
 - URLs assinadas temporárias
 - Ativação/desativação de configurações
 
-#### 3.4 Biblioteca S3: `s3-storage.ts`
+#### 3.4 Biblioteca S3: `s3-storage.ts` — ⚠️ NÃO IMPLEMENTADO / REMOVIDO
+> Esta biblioteca **não existe** em `src/lib/` (verificado por glob). Faz parte da integração S3 não implementada — ver nota de status no topo.
+
 **Localização:** `src/lib/s3-storage.ts`
 
 **Funcionalidade:** Client para integração com S3-compatível

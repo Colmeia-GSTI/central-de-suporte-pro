@@ -30,14 +30,15 @@ import { ptBR } from "date-fns/locale";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 
-interface CompanyWithCertificate {
+interface CertificateRow {
   id: string;
-  razao_social: string;
-  cnpj: string;
-  certificado_validade: string | null;
-  certificado_arquivo_url: string | null;
-  certificado_uploaded_at: string | null;
-  certificado_tipo: string | null;
+  tipo: string | null;
+  validade: string | null;
+  uploaded_at: string | null;
+  company_settings: {
+    razao_social: string | null;
+    cnpj: string | null;
+  } | null;
 }
 
 type CertificateStatus = "valid" | "expiring" | "expired" | "not_configured";
@@ -87,23 +88,23 @@ const statusConfig = {
 };
 
 export default function CertificateDashboardPage() {
-  const { data: companies = [], isLoading } = useQuery({
+  const { data: certificates = [], isLoading } = useQuery({
     queryKey: ["certificate-dashboard"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("company_settings")
-        .select("id, razao_social, cnpj, certificado_validade, certificado_arquivo_url, certificado_uploaded_at, certificado_tipo")
-        .order("razao_social");
-      
+        .from("certificates")
+        .select("id, tipo, validade, uploaded_at, company_settings(razao_social, cnpj)")
+        .order("validade", { ascending: true });
+
       if (error) throw error;
-      return data as CompanyWithCertificate[];
+      return data as CertificateRow[];
     },
   });
 
   // Calculate stats
-  const stats = companies.reduce(
-    (acc, company) => {
-      const status = getCertificateStatus(company.certificado_validade);
+  const stats = certificates.reduce(
+    (acc, cert) => {
+      const status = getCertificateStatus(cert.validade);
       acc[status]++;
       acc.total++;
       return acc;
@@ -251,7 +252,7 @@ export default function CertificateDashboardPage() {
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     </TableRow>
                   ))
-                ) : companies.length === 0 ? (
+                ) : certificates.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8">
                       <Shield className="mx-auto h-12 w-12 text-muted-foreground/50" />
@@ -267,30 +268,30 @@ export default function CertificateDashboardPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  companies.map((company) => {
-                    const status = getCertificateStatus(company.certificado_validade);
-                    const daysRemaining = getDaysRemaining(company.certificado_validade);
+                  certificates.map((cert) => {
+                    const status = getCertificateStatus(cert.validade);
+                    const daysRemaining = getDaysRemaining(cert.validade);
                     const config = statusConfig[status];
                     const StatusIcon = config.icon;
 
                     return (
-                      <TableRow key={company.id}>
+                      <TableRow key={cert.id}>
                         <TableCell className="font-medium">
-                          {company.razao_social || "-"}
+                          {cert.company_settings?.razao_social || "-"}
                         </TableCell>
                         <TableCell className="font-mono text-sm">
-                          {company.cnpj || "-"}
+                          {cert.company_settings?.cnpj || "-"}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {company.certificado_tipo || "A1"}
+                            {cert.tipo || "A1"}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {company.certificado_validade ? (
+                          {cert.validade ? (
                             <div className="flex items-center gap-1.5">
                               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                              {format(new Date(company.certificado_validade), "dd/MM/yyyy", { locale: ptBR })}
+                              {format(new Date(cert.validade), "dd/MM/yyyy", { locale: ptBR })}
                             </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -317,9 +318,9 @@ export default function CertificateDashboardPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {company.certificado_uploaded_at ? (
+                          {cert.uploaded_at ? (
                             <span className="text-sm text-muted-foreground">
-                              {format(new Date(company.certificado_uploaded_at), "dd/MM/yyyy", { locale: ptBR })}
+                              {format(new Date(cert.uploaded_at), "dd/MM/yyyy", { locale: ptBR })}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>

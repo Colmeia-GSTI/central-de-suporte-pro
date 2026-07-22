@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     const client = clientData;
     const hasBoleto = !!invoice.boleto_barcode || !!invoice.boleto_url;
     const hasPix = !!invoice.pix_code;
-    const boletoEmProcessamento = invoice.boleto_status === "pendente" || invoice.boleto_status === "processando";
+    const boletoEmProcessamento = invoice.boleto_status === "pendente";
 
     // === BLOQUEIO DE ARTEFATOS ===
     const blockedReasons: string[] = [];

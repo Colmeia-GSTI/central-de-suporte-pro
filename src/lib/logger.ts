@@ -169,43 +169,6 @@ class Logger {
     }
   }
 
-  /**
-   * Log invoice processing operations (boleto, NFS-e, email)
-   */
-  async invoiceProcessingLog(
-    executionId: string,
-    invoiceId: string,
-    step: "validation" | "numbering" | "boleto" | "nfse" | "email",
-    status: "start" | "success" | "error",
-    details?: Record<string, unknown>
-  ) {
-    const level: LogLevel = status === "error" ? "error" : status === "start" ? "debug" : "info";
-    const message = `Invoice ${invoiceId}: ${step} - ${status}`;
-
-    this.log(level, message, "Billing", {
-      execution_id: executionId,
-      invoice_id: invoiceId,
-      step,
-      status,
-      ...details,
-    });
-
-    // Always persist invoice processing logs
-    await this.persistToDatabase({
-      level,
-      module: "Billing",
-      action: `invoice_processing_${step}`,
-      message,
-      context: {
-        invoice_id: invoiceId,
-        step,
-        status,
-        ...details,
-      },
-      execution_id: executionId,
-    });
-  }
-
   // ==========================================
   // DATABASE PERSISTENCE
   // ==========================================
@@ -249,18 +212,6 @@ class Logger {
    */
   generateExecutionId(): string {
     return crypto.randomUUID();
-  }
-
-  /**
-   * Retrieve stored logs from sessionStorage
-   */
-  getLogs(): LogEntry[] {
-    try {
-      const stored = sessionStorage.getItem(LOG_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
   }
 }
 

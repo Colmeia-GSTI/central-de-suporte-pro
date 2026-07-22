@@ -260,7 +260,6 @@ export function IntegrationStatusPanel() {
           {[
             { name: "Verificação de SLA", description: "Notifica sobre chamados próximos de violar o SLA", fn: "notify-sla-breach" },
             { name: "Reajuste de Contratos", description: "Verifica contratos com reajuste pendente", fn: "check-contract-adjustments" },
-            { name: "Geração de Faturas", description: "Gera faturas mensais automaticamente", fn: "generate-invoice-payments" },
             { name: "Polling de Serviços", description: "Monitora status de serviços externos", fn: "poll-services" },
           ].map((cron) => (
             <Card key={cron.fn}>

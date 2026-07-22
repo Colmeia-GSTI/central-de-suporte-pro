@@ -88,7 +88,6 @@ const typeIcons = {
 function mapBoletoStatus(status: Enums<"boleto_processing_status"> | null): "success" | "error" | "pending" | "skipped" {
   if (!status || status === "pendente") return "pending";
   if (status === "gerado" || status === "enviado" || status === "registrado") return "success";
-  if (status === "processando") return "pending";
   if (status === "erro") return "error";
   return "pending";
 }
@@ -119,11 +118,9 @@ function buildProcessingSteps(invoice: InvoiceWithDetails): ProcessingStep[] {
     title: "Boleto Bancário",
     description: boletoGenerated
       ? `Boleto gerado - ${invoice.boleto_status === "enviado" ? "Enviado ao cliente" : invoice.boleto_status === "registrado" ? "Registrado no banco" : "Disponível"}`
-      : invoice.boleto_status === "erro" 
+      : invoice.boleto_status === "erro"
         ? "Erro na geração do boleto"
-        : invoice.boleto_status === "processando"
-          ? "Processando no banco..."
-          : "Aguardando geração",
+        : "Aguardando geração",
     timestamp: invoice.boleto_sent_at,
     errorMessage: invoice.boleto_error_msg,
   });

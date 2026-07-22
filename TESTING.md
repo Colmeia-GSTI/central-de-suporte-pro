@@ -2,7 +2,7 @@
 
 ## Visão geral
 
-Este projeto tem uma rede de segurança automatizada que cobre **5 fluxos críticos** para evitar regressões grandes antes que cheguem à produção.
+Este projeto tem uma rede de segurança automatizada — **12 arquivos de teste, 78 testes** (Vitest) — cobrindo os fluxos críticos (integração) e utilitários/hooks (unidade) para evitar regressões grandes antes que cheguem à produção.
 
 Os testes rodam em **Vitest + jsdom**, com mocks do Supabase client (não tocam rede real). Cada teste roda em isolamento — não dependem de ordem nem de estado externo.
 
@@ -17,20 +17,30 @@ Os testes rodam em **Vitest + jsdom**, com mocks do Supabase client (não tocam 
 ## Estrutura
 
 ```
-src/test/
-  setup.ts                 # matchMedia stub + jest-dom
-  mocks/
-    supabase.ts           # createSupabaseMock() chainable
-    http.ts               # mockFetchOnce() para chamadas externas
-  helpers/
-    render.tsx            # renderWithProviders (QueryClient + MemoryRouter)
-    factories.ts          # makeUser, makeClient, makeContract, makeInvoice, makeTicketFormData
-  integration/
-    login.test.tsx                  # 3 testes — fluxo de login (frontend)
-    create-ticket.test.tsx          # 3 testes — buildTicketPayload (lógica pura)
-    generate-invoices.test.ts       # 3 testes — edge function logic
-    notify-due-invoices.test.ts     # 3 testes — edge function logic
-    resend-confirmation.test.ts     # 3 testes — edge function logic
+src/                                   # 12 arquivos, 78 testes (vitest: src/**/*.test.{ts,tsx})
+  test/
+    setup.ts                 # matchMedia stub + jest-dom
+    mocks/
+      supabase.ts           # createSupabaseMock() chainable
+    helpers/
+      render.tsx            # renderWithProviders (QueryClient + MemoryRouter)
+      factories.ts          # makeUser, makeClient, makeContract, makeInvoice, makeTicketFormData
+    integration/           # 8 arquivos, 25 testes
+      login.test.tsx                  # 4 — fluxo de login (frontend)
+      generate-invoices.test.ts       # 3 — edge function logic
+      notify-due-invoices.test.ts     # 3 — edge function logic
+      resend-confirmation.test.ts     # 3 — edge function logic
+      audit-logs.test.ts              # 3 — logs de auditoria
+      user-management.test.ts         # 2 — gestão de usuários
+      merge-clients.test.ts           # 4 — merge de clientes
+      delinquency-page.test.tsx       # 3 — página de inadimplência
+  lib/
+    date.test.ts                      # 19 — utilidades de data
+    billing-fsm.test.ts               # 8 — máquina de estados de cobrança
+  hooks/
+    useAuth.test.tsx                  # 11 — hook de autenticação
+  components/auth/
+    ProtectedRoute.test.tsx           # 15 — guard de rota
 ```
 
 ## Refator habilitado pelos testes
@@ -44,7 +54,7 @@ Para tornar lógicas testáveis sem rodar Deno nem renderizar componentes inteir
 
 ```bash
 bun test                       # todos os testes
-bunx vitest run src/test/integration   # só os 5 fluxos críticos
+bunx vitest run src/test/integration   # só os testes de integração (8 arquivos)
 bunx vitest run --coverage     # com relatório de cobertura
 bunx vitest                    # modo watch
 ```
@@ -62,7 +72,7 @@ bunx vitest                    # modo watch
 
 ## Convenções
 
-- Cada fluxo tem 3 testes: **happy path**, **erro de input**, **erro de backend / edge case**.
+- Cada fluxo de integração cobre pelo menos **happy path**, **erro de input** e **erro de backend / edge case** (tipicamente 3+ testes; alguns fluxos têm mais).
 - Cada teste deve rodar em **< 500ms** (use mocks, evite timers reais).
 - **Zero flakiness:** não depender de ordem de execução, de horário do sistema (use `Date.now()` apenas via factories), nem de rede.
 - Use `renderWithProviders()` para componentes — já injeta QueryClient e Router.

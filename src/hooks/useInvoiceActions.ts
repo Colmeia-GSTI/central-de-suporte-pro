@@ -139,7 +139,7 @@ export function useInvoiceActions() {
     // Boleto em processamento sem dados
     const hasBoleto = !!invoice.boleto_url || !!invoice.boleto_barcode;
     const hasPix = !!invoice.pix_code;
-    const boletoProcessando = invoice.boleto_status === "pendente" || invoice.boleto_status === "processando";
+    const boletoProcessando = invoice.boleto_status === "pendente";
     if (boletoProcessando && !hasBoleto && !hasPix) {
       reasons.push("Boleto em processamento");
     }
