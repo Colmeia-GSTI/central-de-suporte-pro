@@ -6921,6 +6921,10 @@ export type Database = {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
       }
+      compute_sla_deadline: {
+        Args: { p_created: string; p_hours: number }
+        Returns: string
+      }
       create_staff_ticket: {
         Args: {
           p_asset_description?: string
