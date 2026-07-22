@@ -270,8 +270,16 @@ function DelinquencyReportPageInner() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      toast.success(`Cobrança enviada para ${selectedClients.size} cliente(s)`);
+    onSuccess: (data, channel) => {
+      const sent = (channel === "email" ? data?.email?.sent : data?.whatsapp?.sent) ?? 0;
+      const failed = (channel === "email" ? data?.email?.failed : data?.whatsapp?.failed) ?? 0;
+      if (sent > 0) {
+        toast.success(`${sent} cobrança(s) enviada(s)${failed ? `, ${failed} falha(s)` : ""}`);
+      } else {
+        toast.error("Nenhuma cobrança enviada", {
+          description: failed ? `${failed} falha(s)` : "Verifique os contatos dos clientes selecionados",
+        });
+      }
       setSelectedClients(new Set());
     },
     onError: (error) => {

@@ -10,9 +10,8 @@ import { NoContactCheckConfigForm } from "./integrations/NoContactCheckConfigFor
 import { ResendConfigForm } from "./integrations/ResendConfigForm";
 import { IntegrationStatusPanel } from "./integrations/IntegrationStatusPanel";
 import { LogsViewerTab } from "./LogsViewerTab";
-import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail, Wifi } from "lucide-react";
+import { Building2, Activity, MessageSquare, Settings2, LayoutDashboard, FileText, Calendar, Mail } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { UnifiConfigForm } from "./integrations/UnifiConfigForm";
 
 export function IntegrationsTab() {
   return (
@@ -52,10 +51,6 @@ export function IntegrationsTab() {
               <Activity className="h-4 w-4" />
               Monitor
             </TabsTrigger>
-            <TabsTrigger value="rede" className="flex items-center gap-2 min-w-max">
-              <Wifi className="h-4 w-4" />
-              Rede
-            </TabsTrigger>
             <TabsTrigger value="automacao" className="flex items-center gap-2 min-w-max">
               <Settings2 className="h-4 w-4" />
               Automação
@@ -93,10 +88,6 @@ export function IntegrationsTab() {
         <TabsContent value="monitoramento" className="space-y-4 mt-4">
           <CheckMkConfigForm />
           <TacticalRmmConfigForm />
-        </TabsContent>
-
-        <TabsContent value="rede" className="space-y-4 mt-4">
-          <UnifiConfigForm />
         </TabsContent>
 
         <TabsContent value="automacao" className="space-y-4 mt-4">
