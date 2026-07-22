@@ -132,3 +132,24 @@ Legenda: **CORRIGIDO** · **JÁ-RESOLVIDO** (verificado que já estava ok) · **
 - `config.toml` `verify_jwt` — **VERIFICADO-OK**: todos os webhooks externos (`webhook-*`) são `false`; as edges de cron herdam `true` **corretamente** — os 6 crons que as chamam passam `Authorization: Bearer` (confirmado via MCP). Sem gap.
 
 **Resultado:** nenhuma pendência acionável em aberto. Bugs (Tier 1–3) todos corrigidos; dívida técnica e itens de schema dispostos (corrigidos ou fechados com justificativa registrada).
+
+---
+
+## 🔍 Revisão de código xhigh (2026-07-22) — 11 achados, 9 corrigidos / 2 pulados
+
+Revisão multi-agente (workflow, xhigh) da branch: 11 defeitos distintos — em boa parte regressões introduzidas pelas próprias correções desta sessão. Guard: tsc=0, vitest 78, `deno check`/`deno test` verdes.
+
+**Corrigidos (9):**
+1. `notify-due-invoices` — gate de auth dava 401 no cron (que passava a **anon**). O cron passou a autenticar com a **service_role key do Vault** (`email_queue_service_role_key`) → `isInternal=true`. Lembretes de vencimento restaurados. *(fix via MCP no cron; gate da edge mantido.)*
+2. `notify-sla-breach` — `'waiting'` (status ATIVO) fora de `ACTIVE_STATUSES` → breaches não alertavam. Reincluído (pausas reais `no_contact`/`waiting_third_party` seguem fora).
+3. `useFeatureFlag` — flag habilitada sem rollout/roles/whitelist virava **OFF**. `pct<=0` → LIGADA.
+4. `batch-collection` / `DelinquencyReportPage` — botão de cobrança em lote sem `PermissionGate` deixava **manager** tomar 401. Botão gated em `financial:create` (backend `admin/financial` estava **correto** — não afrouxado).
+5. `CertificateDashboardPage` — empresa sem certificado sumia (query em `certificates`). Passou a `company_settings` LEFT JOIN certificado → todas as empresas aparecem.
+6. Busca sem sanitização em clients/inventory/monitoring `.or(...ilike...)` — `sanitizePostgrestSearchTerm` aplicado (antes só tickets/knowledge).
+7. Link wa.me com DDI 55 duplicado — novo helper `phoneToWhatsApp` em `phone.ts`.
+8. `asaas-nfse normalizeCompetencia` — default usava data **UTC** (drift de dia à noite/fim de mês); passou a usar a data de `America/Sao_Paulo`.
+11. `delete_client_safely` — casts `as never` removidos (types.ts já tipa a RPC; restaura type-safety no caminho destrutivo).
+
+**Pulados (2, com justificativa):**
+9. `ArticleViewer` — restaurar o fallback reintroduziria a **race** que o Tier 2 (#13) corrigiu; contagem de views é best-effort e a RPC atômica é o caminho canônico.
+10. Gate de auth duplicado em 3 edges (`apply-contract-adjustment`/`batch-collection`/`notify-due-invoices`) — **cleanup**; extrair helper forçaria redeploy de 3 edges de dinheiro sem mudança de comportamento. Extrair quando uma delas precisar de mudança funcional.
