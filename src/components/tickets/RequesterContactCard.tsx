@@ -2,6 +2,7 @@ import { Phone, MessageCircle, Mail, User, Monitor, Pencil } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { formatPhone, stripPhone } from "@/lib/phone";
 
 interface RequesterContact {
   id: string;
@@ -25,22 +26,6 @@ interface RequesterContactCardProps {
   contactPhoneIsWhatsapp?: boolean | null;
   monitoredDevice?: MonitoredDeviceRef | null;
   deviceHostnameText?: string | null;
-}
-
-function formatPhoneForWhatsApp(phone: string): string {
-  // Remove all non-numeric characters
-  return phone.replace(/\D/g, "");
-}
-
-function formatPhoneForDisplay(phone: string): string {
-  const cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 11) {
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
-  }
-  if (cleaned.length === 10) {
-    return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
-  }
-  return phone;
 }
 
 export function RequesterContactCard({
@@ -94,7 +79,7 @@ export function RequesterContactCard({
                 <Button variant="outline" size="sm" className="gap-2 h-7" asChild>
                   <a href={`tel:${contactPhone}`}>
                     <Phone className="h-3 w-3" />
-                    {formatPhoneForDisplay(contactPhone)}
+                    {formatPhone(contactPhone)}
                   </a>
                 </Button>
                 {contactPhoneIsWhatsapp && (
@@ -153,9 +138,9 @@ export function RequesterContactCard({
                 className="gap-2"
                 asChild
               >
-                <a href={`tel:${formatPhoneForWhatsApp(phoneNumber!)}`}>
+                <a href={`tel:${stripPhone(phoneNumber!)}`}>
                   <Phone className="h-4 w-4" />
-                  {formatPhoneForDisplay(phoneNumber!)}
+                  {formatPhone(phoneNumber!)}
                 </a>
               </Button>
               
@@ -166,7 +151,7 @@ export function RequesterContactCard({
                 asChild
               >
                 <a
-                  href={`https://wa.me/55${formatPhoneForWhatsApp(phoneNumber!)}`}
+                  href={`https://wa.me/55${stripPhone(phoneNumber!)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

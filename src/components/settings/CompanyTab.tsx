@@ -5,6 +5,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { getErrorMessage } from "@/lib/utils";
+import { formatPhone } from "@/lib/phone";
 import { toast } from "sonner";
 import { useFormPersistence } from "@/hooks/useFormPersistence";
 import {
@@ -212,14 +213,6 @@ export default function CompanyTab() {
   const formatCEP = (value: string) => {
     const numbers = value.replace(/\D/g, "").slice(0, 8);
     return numbers.replace(/(\d{5})(\d)/, "$1-$2");
-  };
-
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, "").slice(0, 11);
-    if (numbers.length <= 10) {
-      return numbers.replace(/(\d{2})(\d{4})(\d)/, "($1) $2-$3");
-    }
-    return numbers.replace(/(\d{2})(\d{5})(\d)/, "($1) $2-$3");
   };
 
   const searchCNPJ = async () => {
