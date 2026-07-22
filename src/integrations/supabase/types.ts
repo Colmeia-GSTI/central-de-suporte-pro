@@ -7052,6 +7052,10 @@ export type Database = {
         Args: { p_comment?: string; p_ticket_id: string }
         Returns: undefined
       }
+      increment_article_views: {
+        Args: { article_id: string }
+        Returns: undefined
+      }
       is_financial_admin: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       is_technician_only: { Args: { _user_id: string }; Returns: boolean }
