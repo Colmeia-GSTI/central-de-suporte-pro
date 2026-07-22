@@ -102,18 +102,8 @@ Deno.serve(async (req) => {
     const today = new Date();
     const newInvoices = [];
 
-    // Get next invoice number
-    // ponytail: MAX+1 tem race sob concorrência (dois renegocia simultâneos → invoice_number duplicado);
-    // upgrade path: sequence/serial no banco. Não corrigido aqui (tratado separadamente).
-    const { data: lastInvoice } = await supabase
-      .from("invoices")
-      .select("invoice_number")
-      .order("invoice_number", { ascending: false })
-      .limit(1)
-      .single();
-
-    let nextNumber = (lastInvoice?.invoice_number || 0) + 1;
-
+    // invoice_number é atribuído pelo default do banco (nextval('invoices_invoice_number_seq')),
+    // não calculado aqui — evita race de MAX+1 duplicado sob renegociações concorrentes.
     for (let i = 0; i < number_of_installments; i++) {
       const dueDate = new Date(today);
       dueDate.setMonth(dueDate.getMonth() + i + 1);
@@ -123,7 +113,6 @@ Deno.serve(async (req) => {
       newInvoices.push({
         client_id: invoice.client_id,
         contract_id: invoice.contract_id,
-        invoice_number: nextNumber + i,
         amount: i === number_of_installments - 1 ? lastInstallmentValue : installmentValue,
         due_date: dueDateStr,
         status: "pending",

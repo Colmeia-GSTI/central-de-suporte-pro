@@ -47,15 +47,20 @@ export function DocTableCredentials({ clientId }: Props) {
   const [form, setForm] = useState<Omit<CredRow, "id">>(EMPTY);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [revealId, setRevealId] = useState<string | null>(null);
 
   const openNew = () => { setEditingItem(null); setForm({ ...EMPTY }); setShowPassword(false); setDrawerOpen(true); };
   const openEdit = (item: CredRow) => { setEditingItem(item); setForm({ ...EMPTY, ...item }); setShowPassword(false); setDrawerOpen(true); };
   const handleSave = async () => { if (editingItem) await update({ id: editingItem.id, ...form } as any); else await create(form as any); setDrawerOpen(false); };
 
-  const copyToClipboard = async (text: string | null) => {
+  const copyPassword = async (text: string | null) => {
     if (!text) return;
-    try { await navigator.clipboard.writeText(text); toast.success("Copiado para a área de transferência"); }
-    catch { toast.error("Erro ao copiar"); }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.warning("Senha copiada — cole com cuidado", { description: "A área de transferência será limpa em ~30s." });
+      // Best-effort: limpa o clipboard após ~30s para reduzir exposição da senha.
+      setTimeout(() => { navigator.clipboard.writeText("").catch(() => {}); }, 30000);
+    } catch { toast.error("Erro ao copiar"); }
   };
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
@@ -71,7 +76,7 @@ export function DocTableCredentials({ clientId }: Props) {
           <TableHeader><TableRow><TableHead>Tipo</TableHead><TableHead>Sistema</TableHead><TableHead>Usuário</TableHead><TableHead>MFA</TableHead><TableHead>Obs</TableHead></TableRow></TableHeader>
           <TableBody>
             {items.map((item) => (
-              <Collapsible key={item.id} open={expandedId === item.id} onOpenChange={(o) => setExpandedId(o ? item.id : null)} asChild>
+              <Collapsible key={item.id} open={expandedId === item.id} onOpenChange={(o) => { setExpandedId(o ? item.id : null); if (!o) setRevealId(null); }} asChild>
                 <>
                   <CollapsibleTrigger asChild>
                     <TableRow className="cursor-pointer hover:bg-muted/30">
@@ -92,8 +97,11 @@ export function DocTableCredentials({ clientId }: Props) {
                             <div>
                               <span className="text-xs text-muted-foreground">Senha</span>
                               <div className="flex items-center gap-2">
-                                <p className="font-mono">••••••••</p>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); copyToClipboard(item.password_encrypted); }}>
+                                <p className="font-mono break-all">{revealId === item.id ? (item.password_encrypted || "—") : "••••••••"}</p>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" title={revealId === item.id ? "Ocultar senha" : "Mostrar senha"} onClick={(e) => { e.stopPropagation(); setRevealId(revealId === item.id ? null : item.id); }}>
+                                  {revealId === item.id ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" title="Copiar senha" onClick={(e) => { e.stopPropagation(); copyPassword(item.password_encrypted); }}>
                                   <Copy className="h-3 w-3" />
                                 </Button>
                               </div>

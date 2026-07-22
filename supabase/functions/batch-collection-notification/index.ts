@@ -11,6 +11,7 @@ import {
   getEmailTemplate,
 } from "../_shared/email-helpers.ts";
 import { logInvoiceNotification } from "../_shared/notification-logger.ts";
+import { requireRole } from "../_shared/auth-helpers.ts";
 
 interface BatchRequest {
   invoice_ids: string[];
@@ -40,6 +41,23 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Autorização: permite o caller interno service_role OU um usuário autenticado
+    // com papel admin/financial. Chamada pelo frontend (BillingInvoicesTab /
+    // DelinquencyReport) com JWT do usuário — sem este gate qualquer usuário
+    // autenticado dispararia cobranças em massa.
+    const authHeader = req.headers.get("Authorization");
+    const bearer = (authHeader || "").replace("Bearer ", "").trim();
+    const isInternal = bearer.length > 0 && bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isInternal) {
+      const auth = await requireRole(authHeader, ["admin", "financial"]);
+      if (!auth.ok) {
+        return new Response(
+          JSON.stringify({ error: auth.error || "Não autorizado" }),
+          { status: auth.status || 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);

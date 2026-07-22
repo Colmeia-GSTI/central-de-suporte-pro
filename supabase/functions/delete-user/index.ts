@@ -32,15 +32,26 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", user_id);
 
+    // Captura os contatos vinculados ANTES do delete: a FK client_contacts.user_id
+    // → auth.users é ON DELETE SET NULL, então o delete abaixo zera user_id e um
+    // filtro por user_id depois não casaria mais nenhuma linha.
+    const { data: linkedContacts } = await admin
+      .from("client_contacts")
+      .select("id")
+      .eq("user_id", user_id);
+
     const { error: deleteError } = await admin.auth.admin.deleteUser(user_id);
     if (deleteError) {
       console.error("[delete-user] Error:", deleteError.message);
       return jsonResponse({ error: "Erro ao excluir usuário" }, 500);
     }
 
-    await admin.from("client_contacts")
-      .update({ user_id: null, is_active: false })
-      .eq("user_id", user_id);
+    const contactIds = (linkedContacts ?? []).map((c) => c.id);
+    if (contactIds.length > 0) {
+      await admin.from("client_contacts")
+        .update({ user_id: null, is_active: false })
+        .in("id", contactIds);
+    }
 
     await logAudit(admin, {
       table_name: "auth.users",

@@ -11,6 +11,7 @@ import {
   getEmailTemplate,
 } from "../_shared/email-helpers.ts";
 import { logInvoiceNotification } from "../_shared/notification-logger.ts";
+import { requireRole } from "../_shared/auth-helpers.ts";
 
 interface Invoice {
   id: string;
@@ -36,6 +37,21 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Autorização: cron interno (service_role) OU usuário autenticado admin/financial.
+    // Sem este gate a função ficaria aberta a qualquer chamador com JWT válido.
+    const authHeader = req.headers.get("Authorization");
+    const bearer = (authHeader || "").replace("Bearer ", "").trim();
+    const isInternal = bearer.length > 0 && bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!isInternal) {
+      const auth = await requireRole(authHeader, ["admin", "financial"]);
+      if (!auth.ok) {
+        return new Response(
+          JSON.stringify({ error: auth.error || "Não autorizado" }),
+          { status: auth.status || 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""

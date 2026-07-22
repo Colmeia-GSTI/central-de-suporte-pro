@@ -61,18 +61,10 @@ export function ArticleViewer({ article }: ArticleViewerProps) {
 
   const incrementViewsMutation = useMutation({
     mutationFn: async () => {
-      try {
-        const { error } = await supabase.rpc("increment_article_views", {
-          article_id: article.id,
-        });
-        if (error) throw error;
-      } catch {
-        const { error } = await supabase
-          .from("knowledge_articles")
-          .update({ views: (article.views || 0) + 1 })
-          .eq("id", article.id);
-        if (error) throw error;
-      }
+      const { error } = await supabase.rpc("increment_article_views", {
+        article_id: article.id,
+      });
+      if (error) console.error("Erro ao incrementar visualizações:", error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-articles"] });
