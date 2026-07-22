@@ -132,6 +132,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
     onSuccess: async (_: void, data: AssetFormData) => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-counters"] });
       toast({ title: asset ? "Ativo atualizado" : "Ativo criado" });
 
       if (!asset) {
@@ -213,6 +214,8 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
                       <SelectItem value="printer">Impressora</SelectItem>
                       <SelectItem value="switch">Switch</SelectItem>
                       <SelectItem value="router">Roteador</SelectItem>
+                      <SelectItem value="software">Software</SelectItem>
+                      <SelectItem value="license">Licença</SelectItem>
                       <SelectItem value="other">Outro</SelectItem>
                     </SelectContent>
                   </Select>

@@ -30,6 +30,8 @@ import {
   QrCode,
   FileText,
   Download,
+  RefreshCw,
+  XCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -65,6 +67,14 @@ const statusConfig: Record<string, { icon: React.ReactNode; className: string }>
   cancelled: {
     icon: null,
     className: "bg-muted text-muted-foreground",
+  },
+  renegotiated: {
+    icon: <RefreshCw className="h-3 w-3" />,
+    className: "bg-blue-500/20 text-blue-400 border-blue-500/40",
+  },
+  lost: {
+    icon: <XCircle className="h-3 w-3" />,
+    className: "bg-gray-500/20 text-gray-400 border-gray-500/40",
   },
 };
 

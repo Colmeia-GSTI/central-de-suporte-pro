@@ -188,6 +188,9 @@ export function InventoryOverview() {
       queryClient.invalidateQueries({ queryKey: ["inventory-counters"] });
       toast({ title: "Alerta reconhecido" });
     },
+    onError: (error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    },
   });
 
   const formatLastSeen = (date: string | null) => {

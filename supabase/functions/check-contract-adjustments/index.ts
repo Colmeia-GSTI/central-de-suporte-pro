@@ -114,6 +114,18 @@ Deno.serve(async (req) => {
             },
           });
           if (response.error) throw new Error(response.error.message);
+
+          // Idempotency: grava o mesmo marcador de bucket dos lembretes para o
+          // d-0 aplicado hoje. Sem isso, o gate acima (action='adjustment_reminder'
+          // + changes.bucket) nunca encontra registro para o FIXO e uma segunda
+          // execução no mesmo dia reaplicaria o reajuste.
+          await supabase.from("contract_history").insert({
+            contract_id: contract.id,
+            action: "adjustment_reminder",
+            changes: { bucket, diff_days: diffDays, applied: true, adjustment_date: contract.adjustment_date },
+            comment: "Reajuste FIXO aplicado automaticamente",
+          });
+
           results.push({ contract: contract.name, status: "applied", bucket });
           continue;
         }

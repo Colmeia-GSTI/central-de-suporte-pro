@@ -79,12 +79,18 @@ export function TicketRatingDialog({
 
         if (ticket?.assigned_to) {
           const pointsToAward = rating === 5 ? 15 : 10;
-          await supabase.from("technician_points").insert({
-            user_id: ticket.assigned_to,
-            points: pointsToAward,
-            reason: `Avaliação ${rating}/5 no chamado #${ticketNumber}`,
-            ticket_id: ticketId,
-          });
+          const { error: pointsError } = await supabase
+            .from("technician_points")
+            .insert({
+              user_id: ticket.assigned_to,
+              points: pointsToAward,
+              reason: `Avaliação ${rating}/5 no chamado #${ticketNumber}`,
+              ticket_id: ticketId,
+            });
+
+          if (pointsError) {
+            logger.warn("Failed to award technician points", "Tickets", { error: pointsError.message });
+          }
         }
       }
     },

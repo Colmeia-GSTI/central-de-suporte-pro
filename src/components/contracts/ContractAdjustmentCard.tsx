@@ -5,6 +5,7 @@ import { TrendingUp, Calendar, Info, Pencil, RefreshCw, AlertCircle } from "luci
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrencyBRLWithSymbol } from "@/lib/currency";
+import { useAuth } from "@/hooks/useAuth";
 import { useContractAdjustmentHistory } from "@/hooks/useContractAdjustmentHistory";
 import { ContractAdjustmentDialog } from "./ContractAdjustmentDialog";
 import { ContractRenegotiationDialog } from "./ContractRenegotiationDialog";
@@ -62,6 +63,13 @@ export function ContractAdjustmentCard({ contract }: ContractAdjustmentCardProps
   const [configOpen, setConfigOpen] = useState(false);
 
   const { data: history = [], isLoading } = useContractAdjustmentHistory(contract.id);
+
+  // Espelha a RLS do banco para não exibir ações que resultariam em erro de permissão:
+  // - contract_adjustments (Aplicar Reajuste): admin OU financial.
+  // - contracts (Renegociação / Editar Configuração): admin, manager OU financial.
+  const { isAdmin, hasRole } = useAuth();
+  const canApplyAdjustment = isAdmin || hasRole("financial");
+  const canManageContract = canApplyAdjustment || hasRole("manager");
 
   const indexCode = contract.adjustment_index || "IGPM";
   const indexLabel = INDEX_LABEL[indexCode] ?? indexCode;
@@ -181,20 +189,24 @@ export function ContractAdjustmentCard({ contract }: ContractAdjustmentCardProps
         />
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button type="button" size="sm" onClick={() => setApplyOpen(true)} className="gap-1.5 h-8">
-            <TrendingUp className="h-3.5 w-3.5" />
-            Aplicar Reajuste
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => setRenegOpen(true)} className="gap-1.5 h-8">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Registrar Renegociação
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setConfigOpen(true)} className="gap-1.5 h-8">
-            <Pencil className="h-3.5 w-3.5" />
-            Editar Configuração
-          </Button>
-        </div>
+        {canManageContract && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {canApplyAdjustment && (
+              <Button type="button" size="sm" onClick={() => setApplyOpen(true)} className="gap-1.5 h-8">
+                <TrendingUp className="h-3.5 w-3.5" />
+                Aplicar Reajuste
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => setRenegOpen(true)} className="gap-1.5 h-8">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Registrar Renegociação
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setConfigOpen(true)} className="gap-1.5 h-8">
+              <Pencil className="h-3.5 w-3.5" />
+              Editar Configuração
+            </Button>
+          </div>
+        )}
 
         <ContractAdjustmentHistoryList entries={history} isLoading={isLoading} />
 

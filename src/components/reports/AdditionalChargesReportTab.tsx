@@ -12,6 +12,38 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCurrency } from "@/lib/currency";
 
+interface AdditionalChargesReportTabProps {
+  startDate: Date;
+}
+
+interface ReportData {
+  by_client: Array<{
+    client_id: string;
+    client_name: string;
+    charge_count: number;
+    total_amount: number;
+  }>;
+  totals: {
+    total_count: number;
+    total_amount: number;
+  };
+  avulsas: {
+    total_count: number;
+    total_amount: number;
+  };
+  monthly: Array<{
+    month: string;
+    additional_amount: number;
+    recurring_amount: number;
+  }>;
+  upsell_candidates: Array<{
+    client_id: string;
+    client_name: string;
+    avulsa_count: number;
+    avulsa_total: number;
+  }>;
+}
+
 export function AdditionalChargesReportTab({ startDate }: AdditionalChargesReportTabProps) {
   const endDate = useMemo(() => new Date(), []);
 

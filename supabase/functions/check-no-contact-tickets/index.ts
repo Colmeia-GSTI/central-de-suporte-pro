@@ -179,26 +179,58 @@ serve(async (req) => {
       }
     }
 
-    // 2. Tickets em "no_contact" há mais de 24h - primeiro lembrete
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    // 2. Tickets em "no_contact" — lembretes de recontato (24h / 48h para o técnico)
+    // Âncora do "tempo sem contato" = created_at da ÚLTIMA transição para
+    // 'no_contact' em ticket_history. É imutável (append-only) e comum aos dois fluxos
+    // de entrada (NoContactButton e TicketPauseDialog). NÃO usamos tickets.updated_at:
+    // o trigger update_tickets_updated_at o reescreve em qualquer edição do chamado,
+    // reiniciando indevidamente o relógio. Fallback: updated_at, caso falte histórico.
+    const nowMs = Date.now();
+    const cutoff24hMs = nowMs - 24 * 60 * 60 * 1000;
+    const cutoff48hMs = nowMs - 48 * 60 * 60 * 1000;
 
-    const { data: ticketsNoContact, error: ticketsError } = await supabase
+    const { data: allNoContact, error: ticketsError } = await supabase
       .from("tickets")
       .select(`id, title, ticket_number, assigned_to, updated_at`)
-      .eq("status", "no_contact")
-      .lt("updated_at", twentyFourHoursAgo);
+      .eq("status", "no_contact");
 
     if (ticketsError) {
       console.error("Error fetching no_contact tickets:", ticketsError);
     }
 
-    console.log(`Found ${ticketsNoContact?.length || 0} tickets in no_contact for 24h+`);
+    // Momento da última entrada em 'no_contact' por chamado (histórico mais recente)
+    const noContactSince = new Map<string, string>();
+    const noContactIds = (allNoContact || []).map((t) => t.id);
+    if (noContactIds.length > 0) {
+      const { data: transitions, error: historyError } = await supabase
+        .from("ticket_history")
+        .select("ticket_id, created_at")
+        .in("ticket_id", noContactIds)
+        .eq("new_status", "no_contact")
+        .order("created_at", { ascending: false });
 
-    for (const ticket of (ticketsNoContact || []) as TicketData[]) {
+      if (historyError) {
+        console.error("Error fetching no_contact transitions:", historyError);
+      }
+
+      for (const h of transitions || []) {
+        if (!noContactSince.has(h.ticket_id)) {
+          noContactSince.set(h.ticket_id, h.created_at as string);
+        }
+      }
+    }
+
+    // Resolve a âncora (histórico → fallback updated_at) e mantém só quem passou de 24h
+    const ticketsNoContact = ((allNoContact || []) as TicketData[])
+      .map((t) => ({ ...t, noContactSince: noContactSince.get(t.id) ?? t.updated_at }))
+      .filter((t) => new Date(t.noContactSince).getTime() < cutoff24hMs);
+
+    console.log(`Found ${ticketsNoContact.length} tickets in no_contact for 24h+`);
+
+    for (const ticket of ticketsNoContact) {
       if (!ticket.assigned_to) continue;
 
-      const isOver48h = new Date(ticket.updated_at) < new Date(fortyEightHoursAgo);
+      const isOver48h = new Date(ticket.noContactSince).getTime() < cutoff48hMs;
       const reminderType = isOver48h ? "48h" : "24h";
 
       // Verificar se já existe notificação recente (12h) para evitar spam

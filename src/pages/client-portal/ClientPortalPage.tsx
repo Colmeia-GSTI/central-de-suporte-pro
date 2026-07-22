@@ -37,6 +37,9 @@ export default function ClientPortalPage() {
         .from("client_contacts")
         .select("client_id, id, name, phone, whatsapp, notify_whatsapp, clients(*)")
         .eq("user_id", user?.id)
+        .order("is_active", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(1)
         .maybeSingle();
       if (contact?.clients) {
         const c = contact.clients as unknown as Tables<"clients">;

@@ -86,6 +86,9 @@ Deno.serve(async (req) => {
         index_value,
         old_monthly_value: contract.monthly_value,
         new_monthly_value: newMonthlyValue,
+        // Cron/sistema: sem usuário aplicador. Grava explicitamente para o registro
+        // ficar consistente com o reajuste manual da UI (que grava applied_by).
+        applied_by: null,
         notes: notes || null,
       });
 

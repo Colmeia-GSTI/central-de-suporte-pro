@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     const total = totalAnomalies(report);
 
     await admin.from("application_logs").insert({
-      level: total > 0 ? "warning" : "info",
+      level: total > 0 ? "warn" : "info",
       module: "auth",
       action: "detect_anomalies",
       message: total > 0 ? `${total} anomalia(s) detectada(s)` : "Nenhuma anomalia",

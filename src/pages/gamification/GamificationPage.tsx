@@ -14,8 +14,7 @@ import {
   Award,
   Zap,
   Shield,
-  Clock,
-  ThumbsUp,
+  BookOpen,
 } from "lucide-react";
 
 const levelConfig = {
@@ -27,11 +26,12 @@ const levelConfig = {
 };
 
 const badgeIcons: Record<string, React.ReactNode> = {
-  velocista: <Zap className="h-6 w-6" />,
-  guardiao_sla: <Shield className="h-6 w-6" />,
-  maratonista: <Clock className="h-6 w-6" />,
-  cinco_estrelas: <Star className="h-6 w-6" />,
-  resolvedor: <ThumbsUp className="h-6 w-6" />,
+  zap: <Zap className="h-6 w-6" />,
+  shield: <Shield className="h-6 w-6" />,
+  star: <Star className="h-6 w-6" />,
+  trophy: <Trophy className="h-6 w-6" />,
+  award: <Award className="h-6 w-6" />,
+  "book-open": <BookOpen className="h-6 w-6" />,
 };
 
 export default function GamificationPage() {

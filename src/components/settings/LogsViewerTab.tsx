@@ -89,6 +89,17 @@ const moduleLabels: Record<string, string> = {
   General: "Geral",
 };
 
+// O casing do módulo varia por origem: edges e triggers gravam minúsculo ("auth", "billing").
+// Resolve o rótulo de forma case-insensitive, mantendo o valor cru como fallback.
+const moduleLabelsByLower: Record<string, string> = Object.fromEntries(
+  Object.entries(moduleLabels).map(([key, value]) => [key.toLowerCase(), value])
+);
+const getModuleLabel = (module: string): string =>
+  moduleLabelsByLower[module.toLowerCase()] ?? module;
+
+// Logs históricos gravaram "warning"; o nível canônico é "warn" (ver src/lib/logger.ts).
+const normalizeLevel = (level: string): string => (level === "warning" ? "warn" : level);
+
 export function LogsViewerTab() {
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState("all");
@@ -105,11 +116,15 @@ export function LogsViewerTab() {
         .limit(100);
 
       if (levelFilter !== "all") {
-        query = query.eq("level", levelFilter);
+        // "Alerta" abrange logs históricos gravados como "warning" além do canônico "warn".
+        query = levelFilter === "warn"
+          ? query.in("level", ["warn", "warning"])
+          : query.eq("level", levelFilter);
       }
 
       if (moduleFilter !== "all") {
-        query = query.eq("module", moduleFilter);
+        // ilike (sem wildcards) faz match exato case-insensitive: casa "auth" com o filtro "Auth".
+        query = query.ilike("module", moduleFilter);
       }
 
       if (search) {
@@ -169,7 +184,7 @@ export function LogsViewerTab() {
   };
 
   const errorCount = logs.filter((l) => l.level === "error").length;
-  const warnCount = logs.filter((l) => l.level === "warn").length;
+  const warnCount = logs.filter((l) => normalizeLevel(l.level) === "warn").length;
 
   return (
     <div className="space-y-6">
@@ -325,7 +340,7 @@ export function LogsViewerTab() {
               </TableHeader>
               <TableBody>
                 {logs.map((log) => {
-                  const config = levelConfig[log.level] || levelConfig.info;
+                  const config = levelConfig[normalizeLevel(log.level)] || levelConfig.info;
                   return (
                     <TableRow
                       key={log.id}
@@ -345,7 +360,7 @@ export function LogsViewerTab() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm">{moduleLabels[log.module] || log.module}</span>
+                        <span className="text-sm">{getModuleLabel(log.module)}</span>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm font-mono text-muted-foreground">
@@ -388,7 +403,7 @@ export function LogsViewerTab() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {selectedLog && levelConfig[selectedLog.level]?.icon}
+              {selectedLog && levelConfig[normalizeLevel(selectedLog.level)]?.icon}
               Detalhes do Log
             </DialogTitle>
           </DialogHeader>
@@ -404,7 +419,7 @@ export function LogsViewerTab() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Módulo</p>
-                  <p>{moduleLabels[selectedLog.module] || selectedLog.module}</p>
+                  <p>{getModuleLabel(selectedLog.module)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Ação</p>

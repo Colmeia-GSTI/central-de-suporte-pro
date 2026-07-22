@@ -199,6 +199,7 @@ export function LicenseForm({ license, onSuccess, onCancel }: LicenseFormProps) 
     onSuccess: () => {
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-counters"] });
       toast({ title: license ? "Licença atualizada" : "Licença criada" });
       onSuccess();
     },

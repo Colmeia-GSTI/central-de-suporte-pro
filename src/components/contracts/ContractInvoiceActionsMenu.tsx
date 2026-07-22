@@ -149,7 +149,7 @@ export function ContractInvoiceActionsMenu({ invoice, clientName }: ContractInvo
           )}
 
           {/* Marcar como Pago */}
-          <DropdownMenuItem onClick={() => markAsPaidMutation.mutate(invoice.id)} disabled={isProcessing}>
+          <DropdownMenuItem onClick={() => markAsPaidMutation.mutate({ invoiceId: invoice.id, amount: invoice.amount })} disabled={isProcessing}>
             <CheckCircle2 className="mr-2 h-4 w-4" />
             Marcar como Pago
           </DropdownMenuItem>
