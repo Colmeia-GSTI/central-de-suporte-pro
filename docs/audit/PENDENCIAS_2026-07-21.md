@@ -95,3 +95,40 @@ Cada tier foi atacado com workflows **implementador → revisor adversarial** po
 
 ## Riscos transversais (ver `docs/agents/_transversais.md §7`)
 - `pg_cron` não versionado em migrations (confirmado ativo no banco via snapshot); `config.toml` incompleto (várias edges herdam `verify_jwt=true` — ver Tier 1.6, tickets, monitoring, nfse webhook, mcp).
+
+---
+
+## ✅ Fechamento (2026-07-22) — disposição final de TODOS os itens
+
+Legenda: **CORRIGIDO** · **JÁ-RESOLVIDO** (verificado que já estava ok) · **VERIFICADO-OK** (sem defeito) · **FECHADO-POR-DESIGN** (decisão consciente: custo/risco > benefício, ou comportamento intencional).
+
+### Tier 4 — dívida técnica
+- Toast → Sonner — **CORRIGIDO** (Onda 2; 54 arquivos, −202 linhas).
+- Split `asaas-nfse` — **CORRIGIDO** (Onda 2; helpers puros → `logic.ts`, guard `deno test` 18/18 + revisor, deployado).
+- `formatPhone` dedup — **CORRIGIDO** (fonte única `src/lib/phone.ts`; utils re-exporta; inline de CompanyTab/RequesterContactCard removidos).
+- Viewers de auditoria — **CORRIGIDO** (Onda 1; `AuditLogsTab` legado removido).
+- Certificado fonte dupla — **CORRIGIDO** (dashboard passa a ler `certificates`).
+- VAPID hardcoded — **CORRIGIDO** (Onda 1; `VITE_VAPID_PUBLIC_KEY`).
+- Realtime `/monitoring` — **CORRIGIDO** (Onda 1; assina devices/alerts + publicação).
+- Multa/juros + geração de pagamento — **FECHADO-POR-DESIGN**: cálculo de encargos é server-side (Asaas); "2%/1% a.m." são rótulos de exibição, não lógica duplicada. Geração de pagamento vive em edges de dinheiro distintas (mensal/2ª-via/manual) com contexto próprio; unificar exigiria deploy de várias edges de cobrança por ganho marginal.
+- Gestão de ativos (`AssetForm` vs `ClientAssetsList`); `BusinessHoursForm` em 2 abas — **FECHADO-POR-DESIGN**: contextos distintos (inventário global vs detalhe do cliente), sem duplicação de regra.
+- `corsHeaders` no `_shared`; convenção `logic.ts` — **FECHADO-POR-DESIGN**: centralizar `corsHeaders` obrigaria redeploy das ~41 edges (desproporcional p/ const de 3 linhas); `logic.ts` é aplicado por-edge ao tocar (asaas-nfse já migrado).
+- Componentes grandes (ClientForm, logger, DocSectionSecurity) — **FECHADO-POR-DESIGN**: refactor alto-churn, guard fraco (sem e2e), risco de regressão > benefício; fatiar ao haver mudança funcional na área.
+- sync UniFi 'direct' (edge vs relay) — **FECHADO-POR-DESIGN**: caminhos intencionais (direct p/ controladora alcançável; relay Hermes p/ on-prem atrás de firewall).
+
+### Tier 5 — schema/banco
+- `generate-invoice-payments`, dead reads 'processando', logger methods, backups `_billing_*`, `technician_badges`, `calculate_penalties` — **CORRIGIDO** (removidos; verificados sem caller/FK/trigger).
+- 5 skeletons mortos em `loading-skeleton.tsx` — **JÁ-RESOLVIDO**: já removidos; sobra só `CardSkeleton`, em uso (KnowledgeArticleList/Page).
+- SECURITY DEFINER sem `SET search_path` — **JÁ-RESOLVIDO**: auditado via MCP — **52/52** funções SECDEF já têm `SET search_path`.
+- Órfãos mantidos (enum `billing_reminder`, colunas Google Calendar, `not_helpful_count`, `badges.description`) — **FECHADO-POR-DESIGN**: uso real (trigger escreve `not_helpful_count`) ou drop arriscado (valor de enum); `types.ts` stale até regenerar (0 refs de código).
+- `action 'delete_record'` (asaas-nfse) — **FECHADO-POR-DESIGN**: stub de deprecação intencional (comentado, conformidade fiscal); manter dá resposta clara a callers antigos.
+- `action 'sync_event'` (google-calendar) — **FECHADO-POR-DESIGN**: handler sem chamador claro no frontend; remover exige deploy de edge por ganho marginal.
+
+### Tier 6 — docs
+- **CORRIGIDO** (IMPLEMENTATION_GUIDE/SECURITY/SYSTEM_DOCUMENTATION/TESTING); README boilerplate é cosmético.
+
+### Riscos transversais
+- `pg_cron` não versionado — **FECHADO-POR-DESIGN**: gestão via MCP é a escolha do projeto (fonte da verdade = banco); snapshot em `_transversais.md §crons` mantido atual (10 jobs, 2026-07-22).
+- `config.toml` `verify_jwt` — **VERIFICADO-OK**: todos os webhooks externos (`webhook-*`) são `false`; as edges de cron herdam `true` **corretamente** — os 6 crons que as chamam passam `Authorization: Bearer` (confirmado via MCP). Sem gap.
+
+**Resultado:** nenhuma pendência acionável em aberto. Bugs (Tier 1–3) todos corrigidos; dívida técnica e itens de schema dispostos (corrigidos ou fechados com justificativa registrada).

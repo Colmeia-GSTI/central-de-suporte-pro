@@ -85,7 +85,10 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 | 2026-07-22 | `ALTER POLICY "Staff can view integration settings" ON integration_settings` (SELECT) | Segurança (#14) — **fecha o leak**: SELECT restrito de `is_staff` (incluía **technician**) para `admin OR manager OR financial` via `has_role`. Impede technician de ler segredos (api_key/bot_token) no JSONB. Reads técnicos (monitoramento/doc-sync) migrados para a RPC `get_integration_active` **antes** deste ALTER. Edges leem via service_role (bypassam RLS, sem impacto). **Residual conhecido:** policies de INSERT/UPDATE/DELETE seguem `is_staff` (integridade, não era o leak de confidencialidade auditado; UI de config já é admin/manager). | Segurança |
 
 ### Snapshot de crons ativos (pg_cron) — fonte da verdade é o banco (modelo MCP)
-> Verificado em 2026-06-29 via `SELECT * FROM cron.job`. Reproduzível via Lovable MCP se necessário.
+> Verificado em 2026-07-22 via `SELECT * FROM cron.job` (10 jobs ativos). Reproduzível via Lovable MCP.
+> **Design:** crons geridos por MCP (não versionados em migrations por escolha — a fonte da verdade é o banco).
+> Todos os jobs que chamam edge via `net.http_post` passam `Authorization: Bearer`; por isso as edges de cron
+> **corretamente** herdam `verify_jwt=true` no `config.toml` (só os `webhook-*` externos ficam `false`).
 
 | jobname | schedule | função |
 |---|---|---|
@@ -98,6 +101,7 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 | unifi-sync-hourly | `0 * * * *` | unifi-sync |
 | auto-retry-failed-boletos | `0 11,15,19,23 * * *` | auto-retry-failed-boletos |
 | update-overdue-status | `0 3 * * *` | (UPDATE invoices overdue) |
+| process-email-queue | `5 seconds` | (processa fila de e-mail via SQL) |
 
 ---
 
