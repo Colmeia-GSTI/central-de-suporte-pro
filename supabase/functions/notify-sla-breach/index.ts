@@ -10,10 +10,12 @@ const corsHeaders = {
 };
 
 // Active statuses that can breach SLA.
-// 'waiting'/'no_contact' são estados PAUSADOS (aguardando cliente/terceiros): o relógio de SLA
-// não corre. Como sla_deadline é estático e NÃO desconta pausas (ticket_pauses), incluí-los
-// geraria falso alarme. Melhoria futura: notify pause-aware subtraindo o tempo comercial pausado.
-const ACTIVE_STATUSES = ["open", "in_progress"];
+// 'waiting' (Aguardando) é ATIVO — o SLA segue correndo. É pausável (canPauseStatuses inclui
+// 'waiting'), mas não é uma pausa em si: as pausas produzem 'no_contact' e 'waiting_third_party'.
+// Esses dois SIM têm o relógio parado e ficam de fora para não gerar falso alarme sobre o
+// sla_deadline estático, que não desconta pausas (ticket_pauses). Melhoria futura: notify
+// pause-aware subtraindo o tempo comercial pausado.
+const ACTIVE_STATUSES = ["open", "in_progress", "waiting"];
 
 // Warning window before breach (minutes)
 const WARNING_MINUTES = 30;
@@ -82,7 +84,9 @@ serve(async (req) => {
       throw ticketsError;
     }
 
-    const tickets = (ticketsData || []) as TicketRow[];
+    // PostgREST tipa a relação to-one `clients` como array na inferência, mas em runtime é objeto;
+    // o cast reflete o shape real (TicketRow.clients = objeto). `unknown` evita o falso TS2352.
+    const tickets = (ticketsData || []) as unknown as TicketRow[];
     console.log(`[notify-sla-breach] Found ${tickets.length} ticket(s) at risk`);
 
     if (tickets.length === 0) {

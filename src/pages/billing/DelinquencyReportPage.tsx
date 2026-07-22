@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -485,26 +486,28 @@ function DelinquencyReportPageInner() {
                 <span className="text-sm font-medium">
                   {selectedClients.size} cliente(s) selecionado(s)
                 </span>
-                <div className="ml-auto flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => sendBatchCollection.mutate("email")}
-                    disabled={sendBatchCollection.isPending}
-                  >
-                    <Mail className="mr-2 h-4 w-4" />
-                    Enviar Email
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => sendBatchCollection.mutate("whatsapp")}
-                    disabled={sendBatchCollection.isPending}
-                  >
-                    <MessageSquare className="mr-2 h-4 w-4" />
-                    Enviar WhatsApp
-                  </Button>
-                </div>
+                <PermissionGate module="financial" action="create">
+                  <div className="ml-auto flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendBatchCollection.mutate("email")}
+                      disabled={sendBatchCollection.isPending}
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Enviar Email
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendBatchCollection.mutate("whatsapp")}
+                      disabled={sendBatchCollection.isPending}
+                    >
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Enviar WhatsApp
+                    </Button>
+                  </div>
+                </PermissionGate>
               </div>
             )}
 

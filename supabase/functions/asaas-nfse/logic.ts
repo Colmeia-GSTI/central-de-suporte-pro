@@ -92,10 +92,17 @@ export function parseStatusDescription(statusDescription: string | null): {
   };
 }
 
+// Data de hoje no fuso America/Sao_Paulo. As edge functions rodam em UTC; sem isto a
+// competência "hoje" pula um dia à noite (BRT = UTC-3) e, no fim do mês, cai no mês seguinte.
+function todaySaoPaulo(): string {
+  // en-CA formata como YYYY-MM-DD; timeZone garante a data-calendário de SP.
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
 // Helper to normalize competencia to full date format (YYYY-MM-DD)
 export function normalizeCompetencia(competencia?: string): string {
   if (!competencia) {
-    return new Date().toISOString().slice(0, 10);
+    return todaySaoPaulo();
   }
   // If already full date format (YYYY-MM-DD), return as-is
   if (/^\d{4}-\d{2}-\d{2}$/.test(competencia)) {
@@ -105,8 +112,8 @@ export function normalizeCompetencia(competencia?: string): string {
   if (/^\d{4}-\d{2}$/.test(competencia)) {
     return `${competencia}-01`;
   }
-  // Default to current date
-  return new Date().toISOString().slice(0, 10);
+  // Default to current date (fuso de SP)
+  return todaySaoPaulo();
 }
 
 // ============ ADDRESS HELPERS ============
