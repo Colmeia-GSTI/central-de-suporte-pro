@@ -26,7 +26,7 @@ dist-ssr
 # npm lockfile — projeto usa bun (bun.lockb)
 package-lock.json
 
-# Playwright MCP output (snapshots/screenshots efêmeros de teste)
+# Screenshots/artefatos efêmeros de teste na raiz
 .playwright-mcp/
 /boleto-*.png
 /mobile-*.png
@@ -34,5 +34,5 @@ package-lock.json
 # Claude Code — settings locais por-máquina
 .claude/settings.local.json
 
-# graphify — backups datados (o grafo principal fica versionado)
-graphify-out/20*/
+# graphify — grafo gerado localmente (regenerar com `graphify update .`), não versionado
+graphify-out/

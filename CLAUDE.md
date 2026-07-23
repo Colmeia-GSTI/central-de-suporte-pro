@@ -5,6 +5,6 @@
 >
 > - Documentação por módulo: [`docs/agents/`](docs/agents/)
 > - Domínios transversais (maturidade, **registro de alterações de banco**, crons, integrações, riscos): [`docs/agents/_transversais.md`](docs/agents/_transversais.md)
-> - Auditoria e proposta de limpeza (2026-07-21): [`docs/audit/`](docs/audit/)
+> - Operação (implantação, crons, backup): [`docs/ops/`](docs/ops/)
 
 @AGENTS.md

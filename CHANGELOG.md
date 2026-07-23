@@ -1,5 +1,45 @@
 # Changelog
 
+## [Não publicado] - Limpeza geral do repositório (2026-07-23)
+
+### Removido
+- **Docs legados da raiz** (~2.4 mil linhas): `SYSTEM_DOCUMENTATION.md`, `IMPLEMENTATION_GUIDE.md`,
+  `ADMIN_TOOLS.md`, `SECURITY.md`, `TESTING.md`, `FEATURE_FLAGS.md`. Conteúdo vivo já estava em
+  `docs/agents/`; o que restava estava **errado** — `SECURITY.md` citava `src/lib/security.ts` e
+  `src/lib/api-error-handler.ts`, `TESTING.md` citava `src/lib/ticket-payload.ts` e `ADMIN_TOOLS.md`
+  a edge `create-client-user`, **nenhum deles existente**. `FEATURE_FLAGS.md` documentava a ordem de
+  avaliação antiga, contrariando o fix de `rollout=0` de 2026-07-22.
+- **`docs/audit/`** (2196 linhas) — auditoria/limpeza/pendências de 2026-07-21, todas executadas e
+  encerradas. As decisões conscientes ("fechado por design") foram preservadas em
+  `docs/agents/_transversais.md` §8 para não voltarem como achado novo.
+- **`docs/MAPA_DE_SETORES.md`** — redirecionamento morto de 14 linhas.
+- `playwright-mcp-healthcheck.ps1` e screenshots de debug soltos na raiz (`boleto-*.png`, `mobile-*.png`).
+- **`graphify-out/` saiu do versionamento** (~35 MB / 59 arquivos de artefato gerado e já desatualizado).
+  Continua em disco; regenerar com `graphify update .`.
+
+### Modificado
+- `README.md` reescrito — era o boilerplate do Lovable com `REPLACE_WITH_PROJECT_ID` e comandos `npm`.
+- `docs/ops/` criado: `DEPLOYMENT_PLAYBOOK.md` e `BACKUP_PROCEDURE.md` movidos da raiz (mantidos por
+  conterem operação que não existe em `docs/agents/`: secrets, SQL dos crons, runbook, onboarding, SLA).
+- `PRODUCT_IDEAS.md` → `docs/PRODUCT_IDEAS.md`.
+- `AGENTS.md`/`CLAUDE.md`: índice de documentação atualizado; contagem de edges corrigida (59 → **57**).
+- `docs/agents/_transversais.md`: §7.1 (pg_cron) e §7.11 (código morto) marcados como resolvidos —
+  contradiziam o trabalho já concluído; §8 (decisões fechadas) e §9 (divergências) adicionados.
+- `docs/agents/configuracoes.md`: ordem de avaliação de feature flag alinhada ao código atual.
+
+### Descoberto (não corrigido — decisão pendente)
+- **`bun run build` no Windows corrompe `supabase/functions/mcp/index.ts`.** O `mcpPlugin()` do
+  `@lovable.dev/mcp-js` não resolve o caminho absoluto do Windows e emite
+  `import mcp from "npm:C:\\Users\\...\\src\\lib\\mcp\\index.ts"` — bundle de 8 linhas que quebraria a
+  edge `mcp` em produção (as 4 ferramentas somem). Reproduzível a cada build. Documentado em
+  `AGENTS.md` §6.8 com a mitigação (`git restore` após build local).
+
+### Verificado
+- Varredura de órfãos em `src/`: **zero arquivos sem importador** (os 3 detectados são entrypoints —
+  `main.tsx`, `test/setup.ts`, `lib/mcp/index.ts`). Nenhuma edge órfã: `auto-retry-failed-boletos` e
+  `check-doc-expiries` são acionadas por cron.
+- Guards: `tsc --noEmit` 0 erros · 78 testes passando · `bun run build` ok · todos os links markdown resolvem.
+
 ## [Não publicado] - Cobrança: dedup/gate de frequência cegos ('voided') + regras canônicas
 
 ### Corrigido

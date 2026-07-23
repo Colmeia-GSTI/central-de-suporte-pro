@@ -38,8 +38,8 @@ Idioma do produto e da comunicação: **português do Brasil (pt-BR)**.
 - **Gerenciador de pacotes**: **bun** (`bun@1.1.30`, lockfile `bun.lockb`)
 - **Testes**: Vitest + Testing Library (jsdom)
 
-Números do backend (auditoria 2026-07-21): **59 diretórios** em `supabase/functions/`
-(incl. `_shared` e `mcp`); ~109 tabelas, RLS, RPCs e migrations versionadas —
+Números do backend (verificado 2026-07-23): **57 diretórios** em `supabase/functions/`
+(incl. `_shared` e `mcp`), **164 migrations**; ~109 tabelas, RLS e RPCs —
 detalhe em [`docs/agents/banco-schema.md`](docs/agents/banco-schema.md).
 
 ---
@@ -112,14 +112,14 @@ src/
     supabase/        # client.ts e types.ts — AMBOS GERADOS, não editar à mão
   test/              # helpers, mocks, testes de integração
 supabase/
-  functions/         # ~59 edge functions Deno (index.ts + logic.ts + *_test.ts)
+  functions/         # 57 edge functions Deno (index.ts + logic.ts + *_test.ts)
     _shared/         # auth-helpers, email-helpers, notification-logger, email-templates
   migrations/        # migrations SQL versionadas (fonte da verdade do schema)
 relay-unifi/         # relay "Hermes" para controladoras UniFi on-prem (ver RUNBOOK_HERMES.md)
 public/              # assets estáticos, pwa-icons, sw-push.js
 docs/
   agents/            # documentação por módulo (este guia) + _transversais.md
-  audit/             # relatório de auditoria e proposta de limpeza (2026-07-21)
+  ops/               # playbook de implantação e procedimento de backup
 ```
 
 Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/hooks`).
@@ -173,6 +173,19 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 
 ---
 
+### 6.8 Armadilha: `bun run build` no Windows corrompe o bundle MCP
+
+`vite.config.ts` roda `mcpPlugin()`, que regenera `supabase/functions/mcp/index.ts` a partir de
+`src/lib/mcp/`. **No Windows o plugin falha**: em vez de inlinear as 4 ferramentas, emite
+`import mcp from "npm:C:\\Users\\...\\src\\lib\\mcp\\index.ts"` — um bundle de 8 linhas que quebraria
+a edge `mcp` em produção (verificado 2026-07-23, reproduzível a cada build).
+
+**Regra:** depois de qualquer `bun run build` local, rode
+`git restore supabase/functions/mcp/index.ts` antes de commitar. Nunca commite esse arquivo
+com ~8 linhas — a versão correta tem ~157 e contém as 4 ferramentas inlineadas.
+
+---
+
 ## 7. O que NÃO fazer
 
 - **Nunca** hardcode API keys/segredos no frontend — use secrets do Lovable Cloud / Supabase.
@@ -211,21 +224,26 @@ Aliases de import: **`@` → `src/`** (ex.: `@/components`, `@/lib/utils`, `@/ho
 | Libs/hooks/UI/edge compartilhados | [compartilhados.md](docs/agents/compartilhados.md) |
 | **Transversais** (maturidade, banco, crons, integrações, riscos) | [_transversais.md](docs/agents/_transversais.md) |
 
-### Auditoria e limpeza (2026-07-21)
-- [`docs/audit/AUDITORIA_2026-07-21.md`](docs/audit/AUDITORIA_2026-07-21.md) — relatório completo (inventário, fluxos, código morto, divergências).
-- [`docs/audit/LIMPEZA_PROPOSTA_2026-07-21.md`](docs/audit/LIMPEZA_PROPOSTA_2026-07-21.md) — itens `seguro-remover` (Fase 2 executada) e `revisar-com-usuário` (pendentes de decisão).
-
-### Referência complementar (raiz)
+### Regras de negócio e operação
 - [`docs/REGRAS_DE_COBRANCA.md`](docs/REGRAS_DE_COBRANCA.md) — regras canônicas de cobrança/boleto/NFS-e.
-- `SYSTEM_DOCUMENTATION.md`, `IMPLEMENTATION_GUIDE.md`, `DEPLOYMENT_PLAYBOOK.md`, `SECURITY.md`, `TESTING.md`, `FEATURE_FLAGS.md`, `ADMIN_TOOLS.md`, `BACKUP_PROCEDURE.md` — docs históricos (podem conter drift; ver AUDITORIA Parte E).
-- `relay-unifi/RUNBOOK_HERMES.md` — operação do relay UniFi (bot `hermes@colmeiagsti.com.br` — **não remover**, quebra a integração UniFi).
-- `CHANGELOG.md` — histórico de mudanças (mantenha atualizado em mudanças relevantes).
+- [`docs/ops/DEPLOYMENT_PLAYBOOK.md`](docs/ops/DEPLOYMENT_PLAYBOOK.md) — secrets, setup de integrações, SQL dos crons, runbook de troubleshooting, onboarding de cliente, SLA de incidentes.
+- [`docs/ops/BACKUP_PROCEDURE.md`](docs/ops/BACKUP_PROCEDURE.md) — backup/restauração do banco.
+- [`relay-unifi/RUNBOOK_HERMES.md`](relay-unifi/RUNBOOK_HERMES.md) — operação do relay UniFi (bot `hermes@colmeiagsti.com.br` — **não remover**, quebra a integração UniFi).
+- [`docs/PRODUCT_IDEAS.md`](docs/PRODUCT_IDEAS.md) — ideias para um futuro remix SaaS multi-tenant (não é roadmap atual).
+- [`CHANGELOG.md`](CHANGELOG.md) — histórico de mudanças (mantenha atualizado em mudanças relevantes).
+
+> **Limpeza de 2026-07-23:** os docs históricos da raiz (`SYSTEM_DOCUMENTATION.md`, `IMPLEMENTATION_GUIDE.md`,
+> `SECURITY.md`, `TESTING.md`, `FEATURE_FLAGS.md`, `ADMIN_TOOLS.md`), o antigo `docs/MAPA_DE_SETORES.md` e os
+> relatórios de `docs/audit/` foram **removidos**: seu conteúdo vivo está em `docs/agents/` e o que restava
+> estava desatualizado (citavam arquivos e edges inexistentes). Recuperáveis no histórico do git.
 
 ---
 
 ## 9. graphify (grafo de conhecimento)
 
 O projeto tem um grafo em `graphify-out/` (god nodes, comunidades, relações cross-file).
+**Não é versionado** (gitignorado desde 2026-07-23 — são ~35 MB de artefato gerado): rode
+`graphify update .` para criar/atualizar o seu localmente.
 
 - Para perguntas sobre a base, rode `graphify query "<pergunta>"` antes de ler/grepar código-fonte. Use `graphify path "<A>" "<B>"` para relações e `graphify explain "<conceito>"` para conceitos focados.
 - Use `graphify-out/wiki/index.md` (se existir) para navegação ampla.

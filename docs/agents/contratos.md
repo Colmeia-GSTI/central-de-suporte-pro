@@ -1,7 +1,7 @@
 # Contratos e Reajustes
 
 > Módulo da hierarquia **[AGENTS.md](../../AGENTS.md)** · Domínios transversais em [_transversais.md](./_transversais.md).
-> Fonte: re-auditoria de 2026-07-21 — ver [docs/audit/AUDITORIA_2026-07-21.md](../audit/AUDITORIA_2026-07-21.md). Regras de negócio detalhadas de cobrança em [docs/REGRAS_DE_COBRANCA.md](../REGRAS_DE_COBRANCA.md).
+> Fonte: re-auditoria completa do código (2026-07-21). Regras de negócio detalhadas de cobrança em [docs/REGRAS_DE_COBRANCA.md](../REGRAS_DE_COBRANCA.md).
 
 ## Escopo
 
@@ -10,7 +10,7 @@ Módulo funcional e majoritariamente em uso. O reajuste manual é feito 100% cli
 ## Integrações
 
 - Banco Central do Brasil — SGS (séries IGPM=189, IPCA=433, INPC=188) via fetch-economic-indices, sem credenciais (fetch público)
-- pg_cron + pg_net — agendamento de check-contract-adjustments e fetch-economic-indices (SQL documentado em DEPLOYMENT_PLAYBOOK.md; não presente em migrations)
+- pg_cron + pg_net — agendamento de check-contract-adjustments e fetch-economic-indices (SQL documentado em docs/ops/DEPLOYMENT_PLAYBOOK.md; não presente em migrations)
 - Asaas (indireto) — NextAsaasInvoicePreview mostra a próxima cobrança recalculada com o valor reajustado
 
 ## Fluxos (rota → componente → hook → edge → tabela)
@@ -80,8 +80,8 @@ Módulo funcional e majoritariamente em uso. O reajuste manual é feito 100% cli
 
 ## Notas de divergência (auditoria vs MAPA antigo)
 
-- MAPA (L278/L287) afirma 'Agendamento ausente no código (sem cron.schedule nas migrations)'. Confere para migrations (só criam economic_indices/contract_adjustments), MAS o cron.schedule EXISTE em DEPLOYMENT_PLAYBOOK.md:161 (check) e :170 (fetch) — 'ausente no código' é impreciso; está no playbook, não em migration.
-- Horário do cron diverge entre docs: MAPA §Crons (L96) diz check-contract-adjustments '0 10 * * *' (bate com comentário do edge 'Runs daily at 10h UTC'), mas DEPLOYMENT_PLAYBOOK.md:161 diz '0 7 * * *'. Fonte real (cron.job no DB) NÃO verificada (regra: não consultar banco).
+- MAPA (L278/L287) afirma 'Agendamento ausente no código (sem cron.schedule nas migrations)'. Confere para migrations (só criam economic_indices/contract_adjustments), MAS o cron.schedule EXISTE em docs/ops/DEPLOYMENT_PLAYBOOK.md:161 (check) e :170 (fetch) — 'ausente no código' é impreciso; está no playbook, não em migration.
+- Horário do cron diverge entre docs: MAPA §Crons (L96) diz check-contract-adjustments '0 10 * * *' (bate com comentário do edge 'Runs daily at 10h UTC'), mas docs/ops/DEPLOYMENT_PLAYBOOK.md:161 diz '0 7 * * *'. Fonte real (cron.job no DB) NÃO verificada (regra: não consultar banco).
 - MAPA (L262) lista EconomicIndicesWidget como frontend do módulo Contratos, mas o componente só é montado no setor Billing (BillingPage:199 -> BankReconciliationTab:225); nenhuma página/rota de contracts o consome.
 - Demais afirmações do MAPA conferem com o código: duplicação edge vs client-side (L276), edge não grava applied_by nem adjustment_percentage (L277), UI nunca chama a edge (L271/L276), verify_jwt=false nas 3 edges (L281), check-contract-adjustments não lê economic_indices (L1353), cron do fetch só no playbook sem migration (L1349).
 

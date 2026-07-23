@@ -3,7 +3,7 @@
 > Fonte canônica das regras de negócio do ciclo de cobrança. Validada contra o
 > sistema em 2026-07-10 (ver §Verificação). Implementação: `generate-monthly-invoices`
 > (cron diário 11:00 UTC), `asaas-nfse`, `webhook-asaas-nfse`, `manual-payment`.
-> Complementa `docs/MAPA_DE_SETORES.md` §3.5/§3.6.
+> Complementa [docs/agents/faturamento.md](agents/faturamento.md) e [docs/agents/nfse-certificados.md](agents/nfse-certificados.md).
 
 ## R1 — Recorrência gera fatura interna
 

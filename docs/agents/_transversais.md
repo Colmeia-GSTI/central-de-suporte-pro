@@ -1,7 +1,7 @@
 # Domínios transversais — Central de Suporte Pro (Colmeia)
 
 > Referência transversal da hierarquia **[AGENTS.md](../../AGENTS.md)**. Reúne o que NÃO é específico de um módulo: painel de maturidade, **registro de alterações de banco** (log operacional — mantenha atualizado aqui), snapshot de crons, matriz/detalhe de integrações, mapa de edge functions e riscos transversais.
-> Conteúdo migrado de `docs/MAPA_DE_SETORES.md` (seções §2, §2.1, §4–§7) na consolidação de 2026-07-21. O detalhamento por setor foi para `docs/agents/<módulo>.md`; a auditoria completa está em [docs/audit/AUDITORIA_2026-07-21.md](../audit/AUDITORIA_2026-07-21.md).
+> Consolidado a partir do antigo `docs/MAPA_DE_SETORES.md` na re-auditoria de 2026-07-21; o detalhamento por setor foi para `docs/agents/<módulo>.md`. Menções ao "MAPA" e à "auditoria" no texto abaixo e nos docs de módulo se referem a esses documentos, **removidos na limpeza de 2026-07-23** — recuperáveis no histórico do git (`git log -- docs/audit/`).
 
 ---
 
@@ -546,9 +546,12 @@ Reutilizar antes de criar · evitar redundância · otimizar com critério · li
 
 ## 7. Riscos Transversais e Proximos Passos
 
-### 7.1 Agendamento (pg_cron) nao versionado — risco sistemico
+### 7.1 Agendamento (pg_cron) — ✅ resolvido / fechado por design (2026-07-22)
 
-Quase todos os setores dependem de jobs pg_cron que NAO estao nas migrations (so existem no DEPLOYMENT_PLAYBOOK/painel): SLA (notify-sla-breach, check-no-contact-tickets), faturamento (generate-monthly-invoices, notify-due-invoices, calculate-invoice-penalties, auto-retry-failed-boletos, update-overdue-status), contratos (check-contract-adjustments, fetch-economic-indices), documentacao (check-doc-expiries), reconciliacao (poll-services), monitoramento (tactical/checkmk/unifi-sync), e o detector de anomalias (a migration so faz `unschedule`). **Proximo passo**: auditar `cron.job` no ambiente, versionar os agendamentos em migrations e confirmar que cada cron passa JWT de service-role.
+Os jobs pg_cron não estão em migrations **por escolha do projeto**: a fonte da verdade é o banco, gerido via
+MCP do Lovable (ver §8). O risco real — cron chamando edge com JWT errado — foi auditado e corrigido:
+`cron.job` inspecionado (10 jobs ativos, snapshot em §crons) e todos passam `Authorization: Bearer`
+com service-role. Manter o snapshot de §crons atualizado a cada mudança de agendamento.
 
 ### 7.2 verify_jwt e webhooks — risco de quebra silenciosa
 
@@ -582,13 +585,18 @@ RPCs de relatorio financeiro (get_invoice_report_stats etc.) e de ranking sao SE
 
 `audit_logs` tem INSERT WITH CHECK (true) (linhas forjaveis), redacao so para integration_settings, trigger que engole erros, e o detector de anomalias com bug de level invalido. **Proximo passo**: restringir INSERT a service_role/is_staff, estender redacao, corrigir o level e checar erros de insert.
 
-### 7.10 Qualidade do pipeline (Infra)
+### 7.10 Qualidade do pipeline (Infra) — parcialmente resolvido
 
-Type-check nao roda (build so `vite build`; tsconfig quebrado por vitest/globals), ESLint com no-unused-vars off, sem CI, cobertura de testes estreita (5 arquivos, 4 de 59 edges). Isso mascarou bugs reais (ex.: AdditionalChargesReportTab sem tipos). **Proximo passo**: adicionar `tsc --noEmit` + lint ao build/CI e ampliar a extracao de logic.ts testavel.
+`bunx tsc --noEmit` roda limpo (baseline 0, verificado 2026-07-22) e `deno test` cobre as edges tocadas,
+mas **nenhum dos dois está no build nem em CI** — continuam sendo guards manuais. ESLint segue com
+`no-unused-vars` off. **Proximo passo**: adicionar `tsc --noEmit` + lint a um CI mínimo.
 
-### 7.11 Duplicacao de superficies e codigo morto
+### 7.11 Duplicacao de superficies e codigo morto — ✅ resolvido (2026-07-21/23)
 
-Gestao de usuarios em duas surfaces, logica de reajuste e de geracao de pagamento duplicadas, dead branches do Banco Inter, send-notification orfa, tabelas orfas (doc_backup/antivirus_solutions, backups _billing_*), e UI morta (Compartilhar/⌘K na KB, billing_reminder no calendario, Garantias no Inventario, metas/badges na Gamificacao). **Proximo passo**: consolidar surfaces, eleger fontes unicas de regra de negocio e remover artefatos mortos (incluindo os backups residuais ja vencidos, regenerando types.ts).
+Código morto removido nas Fases 2 e na limpeza de 2026-07-23: `send-notification`, tabelas órfãs
+(`doc_backup_solutions`/`doc_antivirus_solutions`, backups `_billing_*`), UI morta e docs legados.
+Varredura de 2026-07-23 confirma **zero arquivos órfãos em `src/`** (os 3 sem importador são entrypoints:
+`main.tsx`, `test/setup.ts`, `lib/mcp/index.ts`). As duplicações que restam estão fechadas por design (§8).
 
 ### 7.12 Fluxos incompletos por design
 
@@ -597,10 +605,37 @@ Google Calendar (OAuth sem callback/sync), certificados A1 (cadastro sem consumo
 
 ---
 
-## Divergências de documentação conhecidas (auditoria 2026-07-21)
+## 8. Decisões fechadas — não refazer
 
-Corrigir ou tratar ao editar os docs de origem (ver AUDITORIA Parte E):
-- ✅ **Corrigido (2026-07-22):** `IMPLEMENTATION_GUIDE.md` documentava um recurso de S3 (`s3-storage.ts`, `S3StorageConfigForm.tsx`, edge `test-s3-connection`) **inexistente** — seção corrigida.
-- O antigo MAPA citava a edge `admin-cancel-asaas-payment`, **inexistente** em `supabase/functions/`.
-- `TESTING.md` referencia `src/test/mocks/http.ts`, **removido** na limpeza (Fase 2) por ser órfão.
-- Contagem "60 edge functions" desatualizada: há **59** diretórios em `supabase/functions/` (incl. `_shared` e `mcp`).
+Itens que a auditoria levantou e que foram **conscientemente encerrados** (custo/risco > benefício, ou
+comportamento intencional). Registrados aqui para não voltarem como "achado novo" numa próxima revisão.
+Reabrir só com motivo funcional novo.
+
+- **Multa/juros e geração de pagamento duplicados** — cálculo de encargos é server-side (Asaas); "2%/1% a.m."
+  são rótulos de exibição, não regra duplicada. Geração de pagamento vive em edges de dinheiro distintas
+  (mensal / 2ª via / manual) com contexto próprio; unificar exigiria redeploy de várias edges de cobrança.
+- **`AssetForm` vs `ClientAssetsList`; `BusinessHoursForm` em 2 abas** — contextos distintos (inventário global
+  vs detalhe do cliente), sem duplicação de regra.
+- **`corsHeaders` fora do `_shared`** — centralizar obrigaria redeploy de ~41 edges por uma const de 3 linhas.
+- **Convenção `logic.ts`** — aplicada por-edge ao tocar na edge (asaas-nfse já migrado), não em varredura.
+- **Componentes grandes (`ClientForm`, `logger`, `DocSectionSecurity`)** — refactor de alto churn com guard fraco
+  (sem e2e); fatiar quando houver mudança funcional na área.
+- **Sync UniFi `direct` vs relay** — caminhos intencionais: `direct` p/ controladora alcançável, relay Hermes
+  p/ on-prem atrás de firewall.
+- **Órfãos de schema mantidos** (`billing_reminder`, colunas Google Calendar, `not_helpful_count`,
+  `badges.description`) — uso real (trigger escreve `not_helpful_count`) ou drop arriscado (valor de enum).
+- **`action 'delete_record'` (asaas-nfse)** — stub de deprecação intencional (conformidade fiscal); responde
+  claramente a callers antigos.
+- **`action 'sync_event'` (google-calendar)** — sem chamador no frontend; remover exige deploy de edge por ganho marginal.
+- **`pg_cron` não versionado em migrations** — gestão via MCP do Lovable é a escolha do projeto (fonte da
+  verdade = banco). O snapshot em §crons é mantido atual (10 jobs, verificado 2026-07-22).
+- **`ArticleViewer` sem fallback de contagem** — o fallback reintroduziria a race não-atômica; a RPC é a fonte canônica.
+
+---
+
+## 9. Divergências de documentação conhecidas
+
+- A contagem "59/60 edge functions" citada em textos antigos está desatualizada: há **57** diretórios em
+  `supabase/functions/` (incl. `_shared` e `mcp`).
+- Textos antigos citam as edges `admin-cancel-asaas-payment`, `generate-invoice-payments`, `resolve-username`,
+  `update-overdue-status` e `send-notification` — **nenhuma existe** em `supabase/functions/`.

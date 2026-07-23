@@ -1,73 +1,46 @@
-# Welcome to your Lovable project
+# Central de Suporte Pro (Colmeia)
 
-## Project info
+Plataforma MSP (Managed Service Provider) que cobre o ciclo de ponta a ponta de um provedor de TI:
+chamados/SLA, gestão de clientes e documentação técnica, contratos com reajuste, faturamento com
+cobrança (boleto/PIX) e NFS-e, monitoramento de rede (RMM/UniFi/CheckMK), base de conhecimento,
+portal do cliente, gamificação e relatórios — com notificação multicanal
+(e-mail/WhatsApp/Telegram/push).
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+Idioma do produto: **português do Brasil (pt-BR)**.
 
-## How can I edit this code?
+## Stack
 
-There are several ways of editing your application.
+React 18 + TypeScript · Vite · Tailwind CSS + shadcn/ui · TanStack Query · React Hook Form + Zod ·
+Supabase (Postgres + RLS, Auth, Storage, Realtime, Edge Functions Deno) provisionado via
+**Lovable Cloud** · PWA (vite-plugin-pwa + Web Push) · Vitest.
 
-**Use Lovable**
+Gerenciador de pacotes: **bun**.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Comandos
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+bun install            # instalar dependências
+bun run dev            # servidor de desenvolvimento
+bun run build          # build de produção
+bun run lint           # ESLint
+bun run test           # testes (vitest run)
+bunx tsc --noEmit      # type-check (não roda no build — rode manualmente ao mexer em tipos)
 ```
 
-**Edit a file directly in GitHub**
+## Plataforma
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+O backend é **Lovable Cloud** (Supabase). O push ao GitHub sincroniza o código-fonte e o Lovable
+buildá/deploya o **frontend**, mas **não redeploya as Edge Functions Deno** — o deploy delas é
+disparado via o agente do Lovable. Alterações de banco (schema e dados) são feitas
+**exclusivamente pelo MCP do Lovable**.
 
-**Use GitHub Codespaces**
+## Documentação
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Ponto de entrada: **[AGENTS.md](AGENTS.md)** — visão geral, stack, regras da Lovable Cloud,
+convenções de código, o que não fazer e índice de navegação.
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Por módulo: [`docs/agents/`](docs/agents/)
+- Transversais (maturidade, registro de alterações de banco, crons, integrações, riscos): [`docs/agents/_transversais.md`](docs/agents/_transversais.md)
+- Operação (implantação, secrets, troubleshooting, backup): [`docs/ops/`](docs/ops/)
+- Regras de cobrança: [`docs/REGRAS_DE_COBRANCA.md`](docs/REGRAS_DE_COBRANCA.md)
+- Histórico: [`CHANGELOG.md`](CHANGELOG.md)

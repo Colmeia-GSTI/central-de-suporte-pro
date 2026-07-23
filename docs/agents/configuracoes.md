@@ -1,7 +1,7 @@
 # Configurações, Feature Flags e Integrações
 
 > Módulo da hierarquia **[AGENTS.md](../../AGENTS.md)** · Domínios transversais em [_transversais.md](./_transversais.md).
-> Fonte: re-auditoria de 2026-07-21 — ver [docs/audit/AUDITORIA_2026-07-21.md](../audit/AUDITORIA_2026-07-21.md). Regras de negócio detalhadas de cobrança em [docs/REGRAS_DE_COBRANCA.md](../REGRAS_DE_COBRANCA.md).
+> Fonte: re-auditoria completa do código (2026-07-21). Regras de negócio detalhadas de cobrança em [docs/REGRAS_DE_COBRANCA.md](../REGRAS_DE_COBRANCA.md).
 
 ## Escopo
 
@@ -35,7 +35,7 @@ Módulo do centro administrativo (/settings com abas lazy), UI de todas as integ
 
 ## Regras de negócio
 
-- Ordem de avaliação de flag: disabled→false; user em enabled_for_user_ids→true (prioridade absoluta); enabled_for_roles definido e sem match→false; rollout≥100→true; senão bucket FNV-1a(userId:key)%100 < rollout — src/hooks/useFeatureFlag.ts:36-63
+- Ordem de avaliação de flag: flag inexistente ou `enabled=false`→false; user em `enabled_for_user_ids`→true (prioridade absoluta); `enabled_for_roles` definido e sem match→false; `rollout_percentage` fora de (0,100) — inclusive 0/nulo — →true (flag ligada sem limite gradual); senão bucket FNV-1a(`userId:key`)%100 < rollout — src/hooks/useFeatureFlag.ts:36-58
 - Hash determinístico FNV-1a 32-bit para rollout gradual consistente por usuário — src/hooks/useFeatureFlag.ts:22-29,62
 - Rollout clampado 0-100 no salvamento; chave em snake_case imutável na edição — src/pages/settings/FeatureFlagsPage.tsx:76 e :246 (disabled={!!form.id})
 - integration_settings tem 1 linha por integration_type (upsert): update se existe, senão insert — src/hooks/useIntegrationSettings.ts:56-79
