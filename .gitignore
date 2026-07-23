@@ -1,4 +1,25 @@
-# Logs
+# =============================================================================
+# O que NÃO vai para o git.
+#
+# Critério: o Lovable buildá o frontend a partir deste repo. Só precisa entrar
+# aqui o que o build precisa. Artefato gerado, cache, saída de teste e
+# configuração de máquina ficam de fora.
+#
+# ATENÇÃO — o que PARECE ignorável mas NÃO é:
+#   .env                  → o Lovable versiona (só chaves VITE_* publicáveis). Removê-lo quebra o build.
+#   .lovable/             → manifest do MCP gerado pelo Lovable. Faz parte da integração.
+#   supabase/migrations/  → registro histórico do schema.
+#   bun.lockb             → lockfile do gerenciador de pacotes do projeto.
+# =============================================================================
+
+# --- Dependências e build ---
+node_modules
+dist
+dist-ssr
+dev-dist
+*.tsbuildinfo
+
+# --- Logs ---
 logs
 *.log
 npm-debug.log*
@@ -7,32 +28,44 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# --- Saída de teste ---
+coverage/
 
-# Editor directories and files
+# --- Env locais (o .env versionado pelo Lovable NÃO entra aqui) ---
+*.local
+.env.local
+.env.*.local
+
+# --- Lockfile de outro gerenciador (o projeto usa bun) ---
+package-lock.json
+
+# --- Editores ---
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# npm lockfile — projeto usa bun (bun.lockb)
-package-lock.json
+# --- Cruft de SO e de sync (o repo vive dentro do Nextcloud) ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*conflicted copy*
+*.~lock.*
 
-# Screenshots/artefatos efêmeros de teste na raiz
+# --- Claude Code ---
+# settings.json, rules/, skills/ e hooks/ SÃO versionados (config compartilhada do time).
+# Só o que é por-máquina/pessoal fica de fora:
+.claude/settings.local.json
+CLAUDE.local.md
+
+# --- Artefatos efêmeros de teste/depuração ---
 .playwright-mcp/
 /boleto-*.png
 /mobile-*.png
 
-# Claude Code — settings locais por-máquina
-.claude/settings.local.json
-
-# graphify — grafo gerado localmente (regenerar com `graphify update .`), não versionado
+# --- graphify: grafo gerado localmente (recriar com `graphify update .`) ---
 graphify-out/

@@ -1,5 +1,47 @@
 # Changelog
 
+## [Não publicado] - Correção de curso: contexto de agentes na estrutura recomendada (2026-07-23)
+
+Reestrutura a configuração de agentes seguindo a documentação oficial da Anthropic
+(memory / best practices). O problema: **261 linhas eram carregadas em toda sessão**
+(`CLAUDE.md` + `@AGENTS.md`), acima da meta de 200 — e acima disso a aderência cai e
+as regras importantes se perdem no ruído.
+
+### Adicionado
+- **`.claude/rules/`** — regras com `paths` no frontmatter, carregadas **só** ao tocar nos arquivos:
+  `frontend.md` (`src/**`), `edge-functions.md` (`supabase/functions/**`),
+  `banco-de-dados.md` (`supabase/migrations/**`, `src/integrations/supabase/**`).
+- **`.claude/skills/`** — procedimentos multi-passo, carregados só quando invocados:
+  `/deploy-edge` (push não deploya edge — inclui o timeout enganoso do `send_message`),
+  `/alterar-banco` (MCP do Lovable + registro no log), `/guards` (tsc + vitest + deno).
+- **Hook `check-mcp-bundle.sh`** — bloqueia commit do bundle MCP corrompido pelo build do Windows.
+  Testado nos dois cenários (íntegro → permite; 8 linhas → bloqueia com instrução de correção).
+- **`docs/integracoes-externas.md`** — documentação oficial de cada API de terceiro
+  (Asaas, Banco Inter, Evolution, Telegram, Resend, RMM, CheckMK, UniFi, ReceitaWS, BCB SGS,
+  Google Calendar), com modelo de auth, ambientes e armadilhas. Complementa a matriz do
+  `_transversais.md` §4 (que mapeia edges/webhooks/secrets) sem duplicá-la.
+- **`docs/agents/README.md`** — índice dos 20 docs de módulo, movido para fora do `AGENTS.md`.
+
+### Modificado
+- **`AGENTS.md`: 251 → 127 linhas.** Saiu o que a doc oficial manda excluir: árvore de diretórios
+  (derivável do código), convenções por área (→ `.claude/rules/`), tabela de módulos
+  (→ `docs/agents/README.md`) e a seção graphify (**duplicava** o `CLAUDE.md` do diretório pai —
+  instrução repetida em dois níveis faz o agente escolher uma ao acaso). Ficou o que é
+  não-inferível: comandos, guards, as 3 vias do Lovable Cloud, princípios e armadilhas.
+- **`CLAUDE.md`: 10 → 46 linhas** — deixou de ser só um ponteiro. Agora documenta **o que carrega
+  quando**, as skills disponíveis e onde cada tipo de instrução deve ser escrita.
+- **Carga por sessão: 261 → 173 linhas** (−34%), dentro da meta de 200.
+- **`.gitignore`** reescrito com critério explícito e adições: `dev-dist`, `coverage/`,
+  `*.tsbuildinfo`, `.env.local`, `CLAUDE.local.md`, cruft de Windows/Nextcloud
+  (`desktop.ini`, `Thumbs.db`, `*conflicted copy*`).
+
+### Verificado
+- **`.env` NÃO deve ser gitignorado** — foi commitado pelo bot do Lovable (`gpt-engineer-app`) e
+  contém só chaves `VITE_*` publicáveis; removê-lo quebra o build. `.lovable/` idem (manifest do MCP).
+  Ambos documentados no topo do `.gitignore` para não serem "limpos" por engano no futuro.
+- Removido `.playwright-mcp/` do disco (123 arquivos, 5.9 MB de snapshots efêmeros de 08–09/jul).
+- Guards: `tsc` 0 erros · 78 testes · todos os links markdown resolvem.
+
 ## [Não publicado] - Limpeza geral do repositório (2026-07-23)
 
 ### Removido

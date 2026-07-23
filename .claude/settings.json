@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "C:/Users/USUARIO/.local/bin/graphify.EXE hook-guard search"
+          },
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-mcp-bundle.sh\""
           }
         ]
       },
